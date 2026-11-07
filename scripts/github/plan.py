@@ -255,7 +255,7 @@ def reconcile_issues(plan, items, dependencies):
             gh("issue", "edit", number, "-R", repo, "--parent", parent)
 
         blocked_by = blocked_by_numbers(issue)
-        for dependency in sorted(dependencies.get(number, ()) - blocked_by):
+        for dependency in sorted(dependencies.get(number, set()) - blocked_by):
             gh("issue", "edit", number, "-R", repo, "--add-blocked-by", dependency)
 
         print(f"Reconciled #{number}: {kind} / {stage or 'portfolio'}")

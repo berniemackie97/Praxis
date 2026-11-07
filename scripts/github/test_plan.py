@@ -62,6 +62,12 @@ class RoadmapValidationTests(unittest.TestCase):
 
 
 class ReconciliationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.plan = json.loads(
+            Path(__file__).with_name("roadmap.json").read_text(encoding="utf-8")
+        )
+
     def test_blocking_relationships_use_nodes_not_mapping_keys(self):
         issue = {
             "number": 19,
@@ -116,6 +122,70 @@ class ReconciliationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Refusing incomplete reconciliation"):
             reconcile_issues(plan, items, {19: {15}})
         execute.assert_not_called()
+
+    def test_all_planned_dependencies_apply_without_mutating_completed_metadata(self):
+        plan = self.plan
+        items, dependencies = validate(plan)
+        titles = {m["stage"]: m["title"] for m in plan["milestones"]}
+        existing = self._existing_issue_rows(items, titles)
+
+        with patch("plan.gh_json", return_value=existing), patch("plan.gh") as execute:
+            reconcile_issues(plan, items, dependencies)
+
+        actual = {
+            (call.args[2], call.args[6])
+            for call in execute.call_args_list
+        }
+        expected = {
+            (number, blocker)
+            for number, blockers in dependencies.items()
+            for blocker in blockers
+        }
+        self.assertEqual(expected, actual)
+        self.assertEqual(len(expected), execute.call_count)
+        for call in execute.call_args_list:
+            self.assertEqual("issue", call.args[0])
+            self.assertEqual("edit", call.args[1])
+            self.assertEqual("--add-blocked-by", call.args[5])
+
+    def test_reapplying_complete_roadmap_makes_no_changes(self):
+        plan = self.plan
+        items, dependencies = validate(plan)
+        titles = {m["stage"]: m["title"] for m in plan["milestones"]}
+        existing = self._existing_issue_rows(items, titles, dependencies)
+
+        with patch("plan.gh_json", return_value=existing), patch("plan.gh") as execute:
+            reconcile_issues(plan, items, dependencies)
+
+        execute.assert_not_called()
+
+    @staticmethod
+    def _existing_issue_rows(items, titles, dependencies=None):
+        dependencies = dependencies or {}
+        return [
+            {
+                "number": number,
+                "title": f"[{(metadata['kind'] or 'task').title()}] Fixture",
+                "labels": [
+                    {"name": f"kind:{metadata['kind'] or 'task'}"},
+                    {"name": f"area:{metadata['area']}"},
+                    *([{"name": "needs:decision"}] if number == 50 else []),
+                ],
+                "milestone": (
+                    {"title": titles[metadata['stage']]}
+                    if metadata["stage"] else None
+                ),
+                "parent": (
+                    {"number": metadata["parent"]}
+                    if metadata["parent"] else None
+                ),
+                "blockedBy": {
+                    "nodes": [{"number": blocker} for blocker in sorted(dependencies.get(number, ()))],
+                    "totalCount": len(dependencies.get(number, ())),
+                },
+            }
+            for number, metadata in items.items()
+        ]
 
     @patch("plan.ensure_views")
     @patch("plan.gh")
