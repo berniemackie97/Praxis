@@ -9,11 +9,15 @@
 
 Use issue title prefixes to distinguish types without requiring external software. Existing GitHub labels may provide secondary classification. A rejected or hypothetical behavior is a risk or spike, not a bug.
 
-## Suggested board views
+## GitHub Project
 
-GitHub Projects fields: Status (Backlog, Ready, In progress, In review, Blocked, Done), Priority (P0, P1, P2), Stage (M0–M7), and Type (Epic, Story, Task, Spike, Bug). Views: roadmap, active sprint, blocked, bugs, release gate.
+The private [Praxis Roadmap](https://github.com/users/berniemackie97/projects/3) project is linked to the repository. Initial work items and the foundation PR were submitted to the board.
 
-Board fields and repository labels must be configured through the GitHub administration interface. Issue titles and links remain authoritative even without Projects features.
+Use its built-in Status and issue classifications where available. Custom fields Stage (M0–M7) and Priority (P0–P3) were created. An additional custom field named Type was rejected as a reserved name; issue title prefixes remain the stable type convention.
+
+Suggested views: roadmap by Stage, active work by Status, blocked, bugs, and release gate. Project field values and views require explicit configuration; do not infer their state from issue titles.
+
+GitHub issues remain authoritative for acceptance criteria, dependencies, closure and PR relationships even if the board is temporarily unavailable.
 
 ## Completion
 
