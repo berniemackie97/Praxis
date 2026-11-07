@@ -1,0 +1,372 @@
+{
+  "repository": "berniemackie97/Praxis",
+  "project": {
+    "owner": "berniemackie97",
+    "number": 3
+  },
+  "milestones": [
+    {
+      "stage": "M0",
+      "title": "M0 — Foundation and decisions",
+      "description": "Reproducible service, engineering workflow, product requirements, hosting/privacy/recovery decision gate. Exit: foundation CI and acceptance criteria verified."
+    },
+    {
+      "stage": "M1",
+      "title": "M1 — Private and portable knowledge",
+      "description": "Trust/identity contract, exportable records, original attachment integrity and recovery. Exit: security gates and full portable collection round-trip."
+    },
+    {
+      "stage": "M2",
+      "title": "M2 — Secure multi-device synchronization",
+      "description": "Versioned conflict-safe incremental synchronization across authorized devices. Exit: multi-client adversarial convergence, authorization and recovery tests."
+    },
+    {
+      "stage": "M3",
+      "title": "M3 — Obsidian device integration",
+      "description": "Desktop/mobile Obsidian interoperability. Exit: real-device offline/reconnect, vault export/restore and conflict UX validated."
+    },
+    {
+      "stage": "M4",
+      "title": "M4 — Capture and retrieval",
+      "description": "Provenance-preserving ingestion, source-scoped search and evidence-based retrieval. Exit: reproducible relevance and reindex validation."
+    },
+    {
+      "stage": "M5",
+      "title": "M5 — Authorized intelligence",
+      "description": "Grounded model use, scoped connector actions and durable workflows. Exit: permissions, audits, prompt-injection and failure-mode tests."
+    },
+    {
+      "stage": "M6",
+      "title": "M6 — First-party clients",
+      "description": "Independent cross-platform Praxis clients with interoperable offline storage. Exit: operating without Obsidian demonstrated on supported platforms."
+    },
+    {
+      "stage": "M7",
+      "title": "M7 — Operational readiness",
+      "description": "Backup/restore, deployment, migration, observability and realistic resilience. Exit: rehearsed recovery, measured resource bounds and release gates."
+    }
+  ],
+  "epics": [
+    {
+      "issue": 2,
+      "stage": "M0",
+      "area": "delivery"
+    },
+    {
+      "issue": 3,
+      "stage": "M1",
+      "area": "security"
+    },
+    {
+      "issue": 4,
+      "stage": "M2",
+      "area": "sync"
+    },
+    {
+      "issue": 5,
+      "stage": "M3",
+      "area": "obsidian"
+    },
+    {
+      "issue": 6,
+      "stage": "M4",
+      "area": "capture"
+    },
+    {
+      "issue": 7,
+      "stage": "M5",
+      "area": "automation"
+    },
+    {
+      "issue": 8,
+      "stage": "M6",
+      "area": "clients"
+    },
+    {
+      "issue": 9,
+      "stage": "M7",
+      "area": "operations"
+    }
+  ],
+  "features": [
+    {
+      "issue": 53,
+      "epic": 3,
+      "area": "security",
+      "children": [
+        13,
+        15
+      ]
+    },
+    {
+      "issue": 54,
+      "epic": 3,
+      "area": "knowledge",
+      "children": [
+        14,
+        16
+      ]
+    },
+    {
+      "issue": 55,
+      "epic": 4,
+      "area": "sync",
+      "children": [
+        17,
+        21
+      ]
+    },
+    {
+      "issue": 56,
+      "epic": 4,
+      "area": "sync",
+      "children": [
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "issue": 57,
+      "epic": 5,
+      "area": "obsidian",
+      "children": [
+        22,
+        25
+      ]
+    },
+    {
+      "issue": 58,
+      "epic": 5,
+      "area": "obsidian",
+      "children": [
+        23,
+        24
+      ]
+    },
+    {
+      "issue": 59,
+      "epic": 6,
+      "area": "capture",
+      "children": [
+        26,
+        27,
+        30
+      ]
+    },
+    {
+      "issue": 60,
+      "epic": 6,
+      "area": "retrieval",
+      "children": [
+        28,
+        29
+      ]
+    },
+    {
+      "issue": 61,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        31,
+        33
+      ]
+    },
+    {
+      "issue": 62,
+      "epic": 7,
+      "area": "automation",
+      "children": [
+        32,
+        34,
+        35
+      ]
+    },
+    {
+      "issue": 63,
+      "epic": 8,
+      "area": "clients",
+      "children": [
+        36,
+        38
+      ]
+    },
+    {
+      "issue": 64,
+      "epic": 8,
+      "area": "clients",
+      "children": [
+        37,
+        39
+      ]
+    },
+    {
+      "issue": 65,
+      "epic": 9,
+      "area": "operations",
+      "children": [
+        40,
+        41
+      ]
+    },
+    {
+      "issue": 66,
+      "epic": 9,
+      "area": "operations",
+      "children": [
+        46,
+        47
+      ]
+    }
+  ],
+  "direct_work": [
+    {
+      "issue": 10,
+      "epic": 2
+    },
+    {
+      "issue": 11,
+      "epic": 2
+    },
+    {
+      "issue": 12,
+      "epic": 2
+    },
+    {
+      "issue": 50,
+      "epic": 2
+    },
+    {
+      "issue": 67,
+      "epic": 2
+    }
+  ],
+  "dependencies": {
+    "13": [
+      50
+    ],
+    "15": [
+      13,
+      50
+    ],
+    "16": [
+      14
+    ],
+    "17": [
+      13,
+      14
+    ],
+    "18": [
+      15,
+      17
+    ],
+    "19": [
+      15,
+      17,
+      40,
+      41
+    ],
+    "20": [
+      16,
+      17
+    ],
+    "21": [
+      17
+    ],
+    "22": [
+      18,
+      19
+    ],
+    "23": [
+      22
+    ],
+    "24": [
+      23
+    ],
+    "25": [
+      16,
+      22
+    ],
+    "26": [
+      22
+    ],
+    "27": [
+      14,
+      15
+    ],
+    "28": [
+      27
+    ],
+    "29": [
+      28
+    ],
+    "31": [
+      13
+    ],
+    "32": [
+      15,
+      31
+    ],
+    "33": [
+      28,
+      32
+    ],
+    "34": [
+      32
+    ],
+    "35": [
+      30,
+      32
+    ],
+    "36": [
+      23
+    ],
+    "37": [
+      28,
+      38
+    ],
+    "38": [
+      17
+    ],
+    "39": [
+      37
+    ],
+    "40": [
+      15,
+      16
+    ],
+    "41": [
+      15
+    ],
+    "46": [
+      14
+    ],
+    "47": [
+      18,
+      20,
+      25
+    ]
+  },
+  "priorities": {
+    "M0": "P1",
+    "M1": "P1",
+    "M2": "P1",
+    "M3": "P2",
+    "M4": "P2",
+    "M5": "P2",
+    "M6": "P3",
+    "M7": "P2"
+  },
+  "priority_overrides": {
+    "13": "P0",
+    "15": "P0",
+    "16": "P0",
+    "17": "P0",
+    "40": "P0",
+    "41": "P0",
+    "50": "P0",
+    "53": "P0",
+    "55": "P0",
+    "65": "P1"
+  }
+}
