@@ -6,7 +6,7 @@ Praxis is a local-first knowledge and automation platform. Obsidian is the first
 
 The repository contains a .NET 10 HTTP service with process liveness checks and a separate `Praxis.Knowledge` library for portable Markdown note identities, immutable revision histories and validated local archive import/export.
 
-Authentication, persistent records, synchronization, attachments, search and agent execution are **not implemented**. The archive library does not send data to any service.
+Authentication, durable storage, synchronization, search and agent execution are **not implemented**. The local archive library can preserve original attachments but does not send data to any service.
 
 ## Development
 
@@ -26,7 +26,9 @@ dotnet run --project src/Praxis.Api
 
 `NoteRecord.Create(path, markdown)` creates a stable UUID and first revision. `record.Revise(newPath, markdown)` creates the next immutable revision, keeping the original snapshot. `NoteArchive.Write(stream, records)` exports a versioned ZIP with JSON manifest and separate Markdown revision entries; `NoteArchive.Read(stream)` validates and restores the records.
 
-The [archive contract](docs/decisions/0004-portable-note-archive.md) documents its limits, integrity checks and compatibility rules. It does not replace an Obsidian vault, synchronize devices, or include attachments yet.
+`AttachmentRecord.Create(path, bytes)` creates a stable binary identity; `Rename` preserves its original bytes and ID. A `KnowledgeCollection` combines note histories, binary attachments and explicit note/attachment references. `NoteArchive.WriteCollection` and `ReadCollection` round-trip a version-two archive containing all of them, while the version-one note-only APIs remain compatible.
+
+The [note archive contract](docs/decisions/0004-portable-note-archive.md) and [attachment contract](docs/decisions/0005-attachment-collection-archive.md) document formats, integrity checks and capacity limits. These are local interchange operations, not an Obsidian vault adapter, a live backup service or multi-device synchronization.
 
 ## Project direction
 

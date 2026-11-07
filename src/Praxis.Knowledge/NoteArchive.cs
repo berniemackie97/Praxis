@@ -6,9 +6,8 @@ using System.Text.Json.Serialization;
 
 namespace Praxis.Knowledge;
 
-public static class NoteArchive
+public static partial class NoteArchive
 {
-    private const int FormatVersion = 1;
     private const int MaxNotes = 10_000;
     private const int MaxRevisions = 50_000;
     private const int MaxNoteBytes = 8 * 1024 * 1024;
@@ -28,83 +27,73 @@ public static class NoteArchive
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(records);
+        WriteCore(destination, PrepareNotes(records), null);
+    }
 
+    public static IReadOnlyList<NoteRecord> Read(Stream source) => ReadCore(source, false).Notes;
+
+    private static NoteRecord[] PrepareNotes(IEnumerable<NoteRecord> records)
+    {
         var notes = records.Take(MaxNotes + 1).ToArray();
-        ValidateCollection(notes);
+        ValidateNotes(notes);
         Array.Sort(notes, (left, right) => left.Id.CompareTo(right.Id));
+        return notes;
+    }
 
-        long totalBytes = 0;
+    private static List<ArchiveNote> DescribeNotes(NoteRecord[] notes, ref long totalBytes)
+    {
+        var result = new List<ArchiveNote>(notes.Length);
         foreach (var note in notes)
         {
+            var entry = new ArchiveNote { Id = note.Id };
             foreach (var revision in note.Revisions)
             {
-                var length = Utf8.GetByteCount(revision.Markdown);
-                if (length > MaxNoteBytes || (totalBytes += length) > MaxTotalBytes)
+                var bytes = Utf8.GetBytes(revision.Markdown);
+                if (bytes.Length > MaxNoteBytes || (totalBytes += bytes.Length) > MaxTotalBytes)
                 {
                     throw new InvalidDataException("The note collection exceeds archive limits.");
                 }
-            }
-        }
 
-        var manifest = new ArchiveManifest { FormatVersion = FormatVersion };
-        using var archive = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
-
-        foreach (var note in notes)
-        {
-            var noteManifest = new ArchiveNote { Id = note.Id };
-            foreach (var revision in note.Revisions)
-            {
-                var entryName = EntryName(note.Id, revision.Number);
-                var bytes = Utf8.GetBytes(revision.Markdown);
-                using (var payload = archive.CreateEntry(entryName, CompressionLevel.Optimal).Open())
-                {
-                    payload.Write(bytes);
-                }
-
-                noteManifest.Revisions.Add(new ArchiveRevision
+                entry.Revisions.Add(new ArchiveRevision
                 {
                     Number = revision.Number,
                     Path = revision.Path,
-                    Entry = entryName,
+                    Entry = NoteEntryName(note.Id, revision.Number),
                     Length = bytes.Length,
                     Sha256 = Hash(bytes)
                 });
             }
 
-            manifest.Notes.Add(noteManifest);
+            result.Add(entry);
         }
 
-        var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
-        if (manifestBytes.Length > MaxManifestBytes || totalBytes + manifestBytes.Length > MaxTotalBytes)
-        {
-            throw new InvalidDataException("The archive manifest exceeds size limits.");
-        }
-
-        using var manifestStream = archive.CreateEntry("manifest.json", CompressionLevel.Optimal).Open();
-        manifestStream.Write(manifestBytes);
+        return result;
     }
 
-    public static IReadOnlyList<NoteRecord> Read(Stream source)
+    private static void WriteNotes(ZipArchive archive, NoteRecord[] notes, IReadOnlyList<ArchiveNote> entries)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        if (!source.CanRead || !source.CanSeek)
+        for (var noteIndex = 0; noteIndex < notes.Length; noteIndex++)
         {
-            throw new ArgumentException("Archive input must be readable and seekable.", nameof(source));
+            for (var index = 0; index < notes[noteIndex].Revisions.Count; index++)
+            {
+                var bytes = Utf8.GetBytes(notes[noteIndex].Revisions[index].Markdown);
+                using var payload = archive.CreateEntry(entries[noteIndex].Revisions[index].Entry!,
+                    CompressionLevel.Optimal).Open();
+                payload.Write(bytes);
+            }
         }
+    }
 
-        if (source.Length > MaxArchiveFileBytes)
-        {
-            throw new InvalidDataException("The archive file exceeds size limits.");
-        }
-
-        using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
-
-        if (archive.Entries.Count > MaxRevisions + 1)
+    private static ArchiveManifest ReadManifest(
+        ZipArchive archive, bool allowAttachments,
+        out Dictionary<string, ZipArchiveEntry> entries, out long totalBytes)
+    {
+        if (archive.Entries.Count > MaxRevisions + (allowAttachments ? MaxAttachments : 0) + 1)
         {
             throw new InvalidDataException("The archive contains too many entries.");
         }
 
-        var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
         foreach (var entry in archive.Entries)
         {
             if (!entries.TryAdd(entry.FullName, entry))
@@ -130,21 +119,26 @@ public static class NoteArchive
             throw new InvalidDataException("The archive manifest is invalid.", exception);
         }
 
-        if (manifest.FormatVersion != FormatVersion)
+        if (manifest.FormatVersion != 1 && !(allowAttachments && manifest.FormatVersion == 2))
         {
             throw new NotSupportedException("The archive format version is not supported.");
         }
 
+        totalBytes = manifestBytes.Length;
+        return manifest;
+    }
+
+    private static List<NoteRecord> ReadNotes(
+        ArchiveManifest manifest, IReadOnlyDictionary<string, ZipArchiveEntry> entries,
+        HashSet<string> consumed, ref long totalBytes)
+    {
         if (manifest.Notes is null || manifest.Notes.Count > MaxNotes)
         {
             throw new InvalidDataException("The archive note list is invalid.");
         }
 
-        var consumed = new HashSet<string>(StringComparer.Ordinal) { "manifest.json" };
         var notes = new List<NoteRecord>(manifest.Notes.Count);
-        long totalBytes = manifestBytes.Length;
         var revisionCount = 0;
-
         foreach (var note in manifest.Notes)
         {
             if (note is null || note.Revisions is null || note.Revisions.Count == 0 ||
@@ -165,19 +159,18 @@ public static class NoteArchive
 
                 try
                 {
-                    NotePath.Validate(revision.Path);
+                    PortablePath.Validate(revision.Path, markdown: true);
                 }
                 catch (ArgumentException exception)
                 {
                     throw new InvalidDataException("The archive contains an invalid note path.", exception);
                 }
 
-                var expectedName = EntryName(note.Id, revision.Number);
-                if (!string.Equals(revision.Entry, expectedName, StringComparison.Ordinal) ||
-                    !consumed.Add(revision.Entry) ||
-                    !entries.TryGetValue(revision.Entry, out var payload))
+                var expected = NoteEntryName(note.Id, revision.Number);
+                if (!string.Equals(revision.Entry, expected, StringComparison.Ordinal) ||
+                    !consumed.Add(expected) || !entries.TryGetValue(expected, out var payload))
                 {
-                    throw new InvalidDataException("The archive contains an invalid or missing content entry.");
+                    throw new InvalidDataException("The archive contains an invalid or missing note entry.");
                 }
 
                 if ((totalBytes += revision.Length) > MaxTotalBytes || payload.Length != revision.Length)
@@ -211,16 +204,11 @@ public static class NoteArchive
             }
         }
 
-        if (consumed.Count != entries.Count)
-        {
-            throw new InvalidDataException("The archive contains unreferenced entries.");
-        }
-
-        ValidateCollection(notes);
-        return notes.AsReadOnly();
+        ValidateNotes(notes);
+        return notes;
     }
 
-    private static void ValidateCollection(IReadOnlyCollection<NoteRecord> notes)
+    private static void ValidateNotes(IReadOnlyCollection<NoteRecord> notes)
     {
         if (notes.Count > MaxNotes)
         {
@@ -230,7 +218,6 @@ public static class NoteArchive
         var ids = new HashSet<Guid>();
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var revisionCount = 0;
-
         foreach (var note in notes)
         {
             if (note is null || !ids.Add(note.Id) || !paths.Add(note.Current.Path) ||
@@ -259,14 +246,18 @@ public static class NoteArchive
         return bytes;
     }
 
-    private static string EntryName(Guid id, int number) => $"notes/{id:N}/{number:D8}.md";
+    private static string NoteEntryName(Guid id, int number) => $"notes/{id:N}/{number:D8}.md";
 
-    private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
+    private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
     private sealed class ArchiveManifest
     {
         public int FormatVersion { get; set; }
-        public List<ArchiveNote> Notes { get; set; } = [];
+        public List<ArchiveNote>? Notes { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ArchiveAttachment>? Attachments { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<AttachmentReference>? References { get; set; }
     }
 
     private sealed class ArchiveNote
@@ -278,6 +269,15 @@ public static class NoteArchive
     private sealed class ArchiveRevision
     {
         public int Number { get; set; }
+        public string? Path { get; set; }
+        public string? Entry { get; set; }
+        public int Length { get; set; }
+        public string? Sha256 { get; set; }
+    }
+
+    private sealed class ArchiveAttachment
+    {
+        public Guid Id { get; set; }
         public string? Path { get; set; }
         public string? Entry { get; set; }
         public int Length { get; set; }
