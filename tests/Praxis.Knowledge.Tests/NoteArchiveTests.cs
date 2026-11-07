@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Praxis.Knowledge;
 using Xunit;
 
@@ -126,6 +128,72 @@ public sealed class NoteArchiveTests
         ReplaceEntry(archive, "manifest.json", _ => Encoding.UTF8.GetBytes("{"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
+    }
+
+    [Fact]
+    public void ReadsIndependentVersionOneArchive()
+    {
+        var id = Guid.NewGuid();
+        using var archive = IndependentArchive(id, "Examples/fixture.md", Encoding.UTF8.GetBytes("# Fixture\r\n"));
+
+        var note = Assert.Single(NoteArchive.Read(archive));
+        Assert.Equal(id, note.Id);
+        Assert.Equal("Examples/fixture.md", note.Current.Path);
+        Assert.Equal("# Fixture\r\n", note.Current.Markdown);
+    }
+
+    [Fact]
+    public void InvalidUtf8IsRejectedEvenWhenHashMatches()
+    {
+        using var archive = IndependentArchive(Guid.NewGuid(), "bad.md", [0xff]);
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
+    }
+
+    [Fact]
+    public void OversizedNoteIsRejectedBeforeWriting()
+    {
+        var note = NoteRecord.Create("large.md", new string('x', 8 * 1024 * 1024 + 1));
+        using var archive = new MemoryStream();
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.Write(archive, [note]));
+        Assert.Equal(0, archive.Length);
+    }
+
+    private static MemoryStream IndependentArchive(Guid id, string path, byte[] content)
+    {
+        var entryName = $"notes/{id:N}/00000001.md";
+        var hash = Convert.ToHexStringLower(SHA256.HashData(content));
+        var manifest = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            formatVersion = 1,
+            notes = new[]
+            {
+                new
+                {
+                    id,
+                    revisions = new[]
+                    {
+                        new { number = 1, path, entry = entryName, length = content.Length, sha256 = hash }
+                    }
+                }
+            }
+        });
+
+        var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var payload = zip.CreateEntry(entryName).Open())
+            {
+                payload.Write(content);
+            }
+
+            using var index = zip.CreateEntry("manifest.json").Open();
+            index.Write(manifest);
+        }
+
+        stream.Position = 0;
+        return stream;
     }
 
     private static MemoryStream Export(params NoteRecord[] records)

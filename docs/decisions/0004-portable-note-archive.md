@@ -12,7 +12,7 @@ Obsidian filenames can change, files may be edited offline, and future clients m
 - Every edit or rename creates an immutable, numbered revision. Revision numbering starts at one and is contiguous within a record.
 - A note's current path is metadata, not an archive entry path or database identity. Paths use normalized, portable relative Markdown names with forward slashes. Current paths must be distinct case-insensitively within a collection.
 - Local export/import uses a ZIP archive of original Markdown text revisions and a versioned JSON manifest. Markdown is serialized as UTF-8; the text, line endings, Unicode, filename history, identity, and revision sequence round-trip.
-- Revision entries are addressed by note UUID and revision number, never by untrusted manifest paths. The manifest includes each entry's UTF-8 byte length and SHA-256 digest.
+- Revision entries are addressed by note UUID and revision number, never by untrusted manifest paths. The manifest includes each entry's UTF-8 byte length and SHA-256 digest. The digest detects corruption but does not authenticate the archive: an attacker who can replace the content and manifest can recalculate it.
 - Readers reject unknown manifest versions, unrecognized fields, unexpected ZIP entries, invalid paths, duplicate identities/paths, noncontiguous revisions, oversized data, invalid UTF-8 and mismatched hashes. They do not extract ZIP paths to disk.
 - Writers and readers leave caller-owned streams open. Callers are responsible for committing a completed archive atomically; an interrupted ZIP write is not a valid backup.
 
