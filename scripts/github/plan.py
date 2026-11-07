@@ -313,10 +313,11 @@ def reconcile_project(plan, project, items, issues):
         if options and not required.issubset(options):
             raise RuntimeError(f"{field_name} field is missing required options.")
 
-    existing = gh_json("project", "item-list", number, "--owner", owner,
-                       "--format", "json", "--limit", "200",
-                       "--field", "Stage", "--field", "Priority",
-                       "--field", "Status")["items"]
+    listing = gh_json("project", "item-list", number, "--owner", owner,
+                      "--format", "json", "--limit", "200")
+    existing = listing["items"]
+    if len(existing) != listing["totalCount"]:
+        raise RuntimeError("Project item list is truncated; refusing reconciliation.")
     project_items = {
         entry["content"]["url"]: entry
         for entry in existing if isinstance(entry.get("content"), dict)
@@ -340,7 +341,7 @@ def reconcile_project(plan, project, items, issues):
         ):
             if value is None:
                 continue
-            current = entry.get(field, entry.get(field.lower()))
+            current = entry.get(field.lower())
             if isinstance(current, dict):
                 current = current.get("name")
             if current == value:
@@ -351,7 +352,7 @@ def reconcile_project(plan, project, items, issues):
             gh("project", "item-edit", number, "--owner", owner,
                "--url", url, "--field", field, "--value", value)
 
-        current_status = entry.get("status", entry.get("Status"))
+        current_status = entry.get("status")
         if isinstance(current_status, dict):
             current_status = current_status.get("name")
         target_status = "Done" if issues[issue_number]["state"] == "CLOSED" else backlog
@@ -364,7 +365,7 @@ def reconcile_project(plan, project, items, issues):
 
     ensure_views(project["id"])
 
-    if not project.get("description"):
+    if not project.get("shortDescription"):
         gh("project", "edit", number, "--owner", owner,
            "--description", "Praxis product delivery: milestone gates, linked features, verified engineering work.")
 
