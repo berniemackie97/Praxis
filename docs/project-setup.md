@@ -40,7 +40,7 @@ gh issue view 19 -R berniemackie97/Praxis --json blockedBy
 gh project view 3 --owner berniemackie97 --web
 \`\`\`
 
-Expected: eight distinct M0–M7 milestones, fourteen feature issues, native roadmap/epic/feature/child relationships, a linked critical path and classified board items. The current plan tracks 59 unique nonduplicate issues, including the program index; the number changes only with reviewed roadmap changes.
+Expected: eight distinct M0–M7 milestones, fourteen feature issues, native roadmap/epic/feature/child relationships, a linked critical path and classified board items. The current plan tracks 60 unique nonduplicate issues, including the program index and setup regression #71; the number changes only with reviewed roadmap changes.
 
 GitHub Projects currently reserves the field name \`Type\`; kind labels plus issue title prefixes cover personal repository classification. Native organization issue types are not required.
 
@@ -49,3 +49,7 @@ GitHub Projects currently reserves the field name \`Type\`; kind labels plus iss
 The setup creates project views but does not assign fictional target dates, turn on untrusted automation, or install integrations. Group the Delivery Board by Status and the Milestone Portfolio by Stage in the Projects UI if preferred; the source-of-truth milestones remain GitHub repository milestones.
 
 Automatic issue-close workflows may be configured using GitHub's built-in project automation. Do not introduce a write-scoped personal access token into Actions merely to update a board.
+
+## Project field export
+
+The project reconciliation command uses `gh project item-list --format json` without `--field`, because those flags are mutually exclusive. GitHub CLI includes the existing single-select field values in the JSON result as camel-cased keys (`stage`, `priority`, `status`). The script checks the returned item count against `totalCount` before changing field values, and retains existing nonempty values. An existing project description is read from `shortDescription`; it is not overwritten.

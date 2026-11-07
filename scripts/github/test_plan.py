@@ -17,13 +17,14 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(59, len(items))
+        self.assertEqual(60, len(items))
         self.assertEqual(8, len(self.plan["milestones"]))
         self.assertEqual(14, len(self.plan["features"]))
         self.assertEqual(1, items[2]["parent"])
         self.assertEqual(3, items[54]["parent"])
         self.assertEqual(54, items[14]["parent"])
         self.assertEqual({15, 17, 40, 41}, dependencies[19])
+        self.assertEqual({71}, dependencies[67])
 
     def test_duplicate_child_is_rejected(self):
         data = copy.deepcopy(self.plan)
@@ -190,6 +191,98 @@ class ReconciliationTests(unittest.TestCase):
     @patch("plan.ensure_views")
     @patch("plan.gh")
     @patch("plan.gh_json")
+    def test_project_item_export_uses_compatible_flags(self, fetch, execute, views):
+        url = "https://github.com/berniemackie97/Praxis/issues/71"
+
+        def response(*args):
+            if args[1] == "field-list":
+                return {"fields": [
+                    {"name": "Stage", "options": [{"name": f"M{i}"} for i in range(8)]},
+                    {"name": "Priority", "options": [{"name": f"P{i}"} for i in range(4)]},
+                    {"name": "Status", "options": [{"name": "Todo"}, {"name": "Done"}]},
+                ]}
+            if args[1] == "item-list":
+                return {"items": [], "totalCount": 0}
+            if args[1] == "item-add":
+                return {"id": "PVTI_new", "content": {"url": url}}
+            raise AssertionError(f"Unexpected command: {args}")
+
+        fetch.side_effect = response
+        plan = {"repository": "berniemackie97/Praxis",
+                "project": {"owner": "berniemackie97", "number": 3}}
+        project = {"id": "PVT_test", "shortDescription": "Owner description"}
+        items = {71: {"stage": "M0", "priority": "P1"}}
+        issues = {71: {"state": "OPEN"}}
+
+        reconcile_project(plan, project, items, issues)
+
+        listing = [call.args for call in fetch.call_args_list
+                   if call.args[1] == "item-list"]
+        self.assertEqual([(
+            "project", "item-list", 3, "--owner", "berniemackie97",
+            "--format", "json", "--limit", "200"
+        )], listing)
+        writes = [call.args for call in execute.call_args_list]
+        self.assertEqual(3, len(writes))
+        self.assertEqual({("Stage", "M0"), ("Priority", "P1"), ("Status", "Todo")},
+                         {(args[-3], args[-1]) for args in writes})
+        views.assert_called_once_with("PVT_test")
+
+    @patch("plan.ensure_views")
+    @patch("plan.gh")
+    @patch("plan.gh_json")
+    def test_project_item_export_rejects_truncation_without_writes(
+            self, fetch, execute, views):
+        def response(*args):
+            if args[1] == "field-list":
+                return {"fields": [
+                    {"name": "Stage", "options": [{"name": f"M{i}"} for i in range(8)]},
+                    {"name": "Priority", "options": [{"name": f"P{i}"} for i in range(4)]},
+                    {"name": "Status", "options": [{"name": "Todo"}, {"name": "Done"}]},
+                ]}
+            return {"items": [], "totalCount": 2}
+
+        fetch.side_effect = response
+        plan = {"repository": "berniemackie97/Praxis",
+                "project": {"owner": "berniemackie97", "number": 3}}
+        with self.assertRaisesRegex(RuntimeError, "truncated"):
+            reconcile_project(plan, {"id": "PVT_test"}, {}, {})
+        execute.assert_not_called()
+        views.assert_not_called()
+
+    @patch("plan.ensure_views")
+    @patch("plan.gh")
+    @patch("plan.gh_json")
+    def test_closed_project_item_uses_done_without_overwriting_values(
+            self, fetch, execute, views):
+        issue_url = "https://github.com/berniemackie97/Praxis/issues/14"
+
+        def response(*args):
+            if args[1] == "field-list":
+                return {"fields": [
+                    {"name": "Stage", "options": [{"name": f"M{i}"} for i in range(8)]},
+                    {"name": "Priority", "options": [{"name": f"P{i}"} for i in range(4)]},
+                    {"name": "Status", "options": [{"name": "Todo"}, {"name": "Done"}]},
+                ]}
+            return {"totalCount": 1, "items": [{
+                "content": {"url": issue_url}, "stage": "M1",
+                "priority": "P0", "status": "Todo",
+            }]}
+
+        fetch.side_effect = response
+        plan = {"repository": "berniemackie97/Praxis",
+                "project": {"owner": "berniemackie97", "number": 3}}
+        reconcile_project(plan, {"id": "PVT_test", "shortDescription": "Existing"},
+                          {14: {"stage": "M1", "priority": "P1"}},
+                          {14: {"state": "CLOSED"}})
+        execute.assert_called_once_with(
+            "project", "item-edit", 3, "--owner", "berniemackie97",
+            "--url", issue_url, "--field", "Status", "--value", "Done"
+        )
+
+    @patch("plan.ensure_views")
+    @patch("plan.gh")
+    @patch("plan.gh_json")
     def test_project_existing_fields_and_status_are_preserved(self, fetch, execute, views):
         issue_url = "https://github.com/berniemackie97/Praxis/issues/19"
 
@@ -201,16 +294,16 @@ class ReconciliationTests(unittest.TestCase):
                     {"name": "Status", "options": [{"name": "Todo"}, {"name": "In progress"}, {"name": "Done"}]},
                 ]}
             if args[1] == "item-list":
-                return {"items": [{
-                    "content": {"url": issue_url}, "Stage": "M2",
-                    "Priority": "P0", "status": "In progress"
+                return {"totalCount": 1, "items": [{
+                    "id": "PVTI_existing", "content": {"url": issue_url},
+                    "stage": "M2", "priority": "P0", "status": "In progress"
                 }]}
             raise AssertionError(f"Unexpected GitHub command: {args}")
 
         fetch.side_effect = response
         plan = {"repository": "berniemackie97/Praxis",
                 "project": {"owner": "berniemackie97", "number": 3}}
-        project = {"id": "PVT_test", "description": "Existing project"}
+        project = {"id": "PVT_test", "shortDescription": "Existing project"}
         items = {19: {"stage": "M2", "priority": "P1"}}
         issues = {19: {"state": "OPEN"}}
 
