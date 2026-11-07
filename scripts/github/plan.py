@@ -81,13 +81,11 @@ def validate(plan):
         epics[number] = epic
         add(number, "epic", 1, epic["stage"], epic["area"])
 
-    features = set()
     for feature in plan["features"]:
         number, epic_number = feature["issue"], feature["epic"]
         if epic_number not in epics:
             raise ValueError(f"Unknown epic #{epic_number} for feature #{number}.")
         add(number, "feature", epic_number, epics[epic_number]["stage"], feature["area"])
-        features.add(number)
 
     for feature in plan["features"]:
         for number in feature["children"]:
@@ -301,7 +299,9 @@ def reconcile_project(plan, project, items, issues):
             raise RuntimeError(f"{field_name} field is missing required options.")
 
     existing = gh_json("project", "item-list", number, "--owner", owner,
-                       "--format", "json", "--limit", "200")["items"]
+                       "--format", "json", "--limit", "200",
+                       "--field", "Stage", "--field", "Priority",
+                       "--field", "Status")["items"]
     project_items = {
         entry["content"]["url"]: entry
         for entry in existing if isinstance(entry.get("content"), dict)
