@@ -40,7 +40,7 @@ gh issue view 19 -R berniemackie97/Praxis --json blockedBy
 gh project view 3 --owner berniemackie97 --web
 \`\`\`
 
-Expected: eight distinct M0–M7 milestones, fourteen feature issues, native roadmap/epic/feature/child relationships, a linked critical path and classified board items. The current plan tracks 60 unique nonduplicate issues, including the program index and setup regression #71; the number changes only with reviewed roadmap changes.
+Expected: eight distinct M0–M7 milestones, fourteen feature issues, native roadmap/epic/feature/child relationships, a linked critical path and classified board items. The current plan tracks 61 unique nonduplicate issues, including the program index and setup regressions #71 and #73; the number changes only with reviewed roadmap changes.
 
 GitHub Projects currently reserves the field name \`Type\`; kind labels plus issue title prefixes cover personal repository classification. Native organization issue types are not required.
 
@@ -53,3 +53,17 @@ Automatic issue-close workflows may be configured using GitHub's built-in projec
 ## Project field export
 
 The project reconciliation command uses `gh project item-list --format json` without `--field`, because those flags are mutually exclusive. GitHub CLI includes the existing single-select field values in the JSON result as camel-cased keys (`stage`, `priority`, `status`). The script checks the returned item count against `totalCount` before changing field values, and retains existing nonempty values. An existing project description is read from `shortDescription`; it is not overwritten.
+
+## GraphQL API quota and partial runs
+
+GitHub enforces hourly and secondary GraphQL write limits. The setup checks the available GraphQL points **before** making changes; if capacity is insufficient it stops with GitHub's UTC reset timestamp instead of retrying repeatedly. Do not rerun a rate-limited command until GitHub reports available capacity. Check your current rate status using:
+
+```sh
+gh api rate_limit --jq '.resources.graphql | {remaining, reset}'
+```
+
+For Project changes the script reads item/field/option IDs once and batches up to eight additions or field-value updates into each GraphQL mutation request. It avoids invoking `gh project item-edit` for every individual field, and introduces a pause between mutating batches to respect GitHub's secondary limits. Existing user-set values remain authoritative; completed issues are moved to Done only where that option exists. Each rerun rereads GitHub state and applies only remaining changes. Errors stop the run; there are no automatic retry loops or hidden reauthentication attempts.
+
+The script also reconciles partially created Project views: an existing view without a filter can be finished without creating a duplicate, while an existing custom filter is preserved.
+
+The previously created milestones, labels, issue relationships and Project items are not deleted or reset. A successful CI run verifies the code and mock API contracts; it cannot establish whether the owner's GitHub GraphQL quota has recovered or whether the private Project application has completed.
