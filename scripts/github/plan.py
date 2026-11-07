@@ -5,6 +5,8 @@ import argparse
 import json
 import re
 import subprocess
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 PLAN_PATH = Path(__file__).with_name("roadmap.json")
@@ -261,17 +263,58 @@ def reconcile_issues(plan, items, dependencies):
         print(f"Reconciled #{number}: {kind} / {stage or 'portfolio'}")
 
 
+def check_graphql_capacity(minimum):
+    quota = gh_json("api", "rate_limit")["resources"]["graphql"]
+    if quota["remaining"] < minimum:
+        reset = datetime.fromtimestamp(quota["reset"], timezone.utc).isoformat()
+        raise RuntimeError(
+            f"GraphQL quota is {quota['remaining']} points; {minimum} required "
+            f"before further writes. Rate limit resets at {reset}. "
+            "Existing changes are retained. Do not repeatedly retry while limited."
+        )
+
+
+def graphql_mutations(operations):
+    results = {}
+    for offset in range(0, len(operations), 8):
+        if offset:
+            time.sleep(1)
+        chunk = operations[offset:offset + 8]
+        query = "mutation {\n" + "\n".join(
+            f"  {alias}: {expression}" for alias, expression in chunk
+        ) + "\n}"
+        response = gh_json("api", "graphql", "-f", f"query={query}")
+        if response.get("errors"):
+            raise RuntimeError(
+                f"Project mutation batch {offset // 8 + 1} failed: "
+                f"{response['errors']}. Rerun to reconcile successful earlier batches."
+            )
+
+        data = response["data"]
+        for alias, _ in chunk:
+            if data.get(alias) is None:
+                raise RuntimeError(
+                    f"Missing result for {alias}; reread the Project before retrying."
+                )
+            results[alias] = data[alias]
+        print(f"Applied Project mutation batch {offset // 8 + 1}.")
+    return results
+
+
 def ensure_views(project_id):
     query = """query($projectId: ID!) {
       node(id: $projectId) {
-        ... on ProjectV2 { views(first: 50) { nodes { id name } } }
+        ... on ProjectV2 { views(first: 50) {
+          totalCount nodes { id name filter }
+        } }
       }
     }"""
     data = gh_json("api", "graphql", "-f", f"query={query}", "-f",
                    f"projectId={project_id}")
-    existing = {
-        view["name"] for view in data["data"]["node"]["views"]["nodes"]
-    }
+    views = data["data"]["node"]["views"]
+    if len(views["nodes"]) != views["totalCount"]:
+        raise RuntimeError("Project views are truncated; refusing reconciliation.")
+    existing = {view["name"]: view for view in views["nodes"]}
     create = """mutation($projectId: ID!, $name: String!,
                         $layout: ProjectV2ViewLayout!) {
       createProjectV2View(input: {
@@ -284,33 +327,51 @@ def ensure_views(project_id):
       }
     }"""
     for name, layout, filter_query in VIEWS:
-        if name in existing:
+        view = existing.get(name)
+        if view is None:
+            check_graphql_capacity(10)
+            created = gh_json(
+                "api", "graphql", "-f", f"query={create}", "-f",
+                f"projectId={project_id}", "-f", f"name={name}", "-f", f"layout={layout}"
+            )
+            view = {"id": created["data"]["createProjectV2View"]["projectV2View"]["id"],
+                    "filter": None}
+            print(f"Created view: {name}")
+            time.sleep(1)
+
+        if view["filter"] == filter_query:
             continue
-        result = gh_json(
-            "api", "graphql", "-f", f"query={create}", "-f",
-            f"projectId={project_id}", "-f", f"name={name}", "-f", f"layout={layout}"
-        )
-        view_id = result["data"]["createProjectV2View"]["projectV2View"]["id"]
-        gh("api", "graphql", "-f", f"query={update}", "-f", f"id={view_id}",
-           "-f", f"filter={filter_query}")
-        print(f"Created view: {name}")
+        if view["filter"]:
+            print(f"Preserved custom view filter: {name}")
+            continue
+        check_graphql_capacity(10)
+        gh_json("api", "graphql", "-f", f"query={update}", "-f", f"id={view['id']}",
+                "-f", f"filter={filter_query}")
+        print(f"Configured view: {name}")
+        time.sleep(1)
 
 
 def reconcile_project(plan, project, items, issues):
     repo = plan["repository"]
     owner, number = plan["project"]["owner"], plan["project"]["number"]
 
-    fields = gh_json("project", "field-list", number, "--owner", owner,
-                     "--format", "json", "--limit", "100")["fields"]
+    field_response = gh_json("project", "field-list", number, "--owner", owner,
+                             "--format", "json", "--limit", "100")
+    fields = field_response["fields"]
+    if len(fields) != field_response["totalCount"]:
+        raise RuntimeError("Project fields are truncated; refusing reconciliation.")
     by_name = {field["name"]: field for field in fields}
     if not {"Stage", "Priority", "Status"}.issubset(by_name):
         raise RuntimeError("Project must contain Stage, Priority and Status fields.")
+    options = {
+        name: {value["name"]: value["id"] for value in by_name[name]["options"]}
+        for name in ("Stage", "Priority", "Status")
+    }
     for field_name, required in (
         ("Stage", {f"M{i}" for i in range(8)}),
         ("Priority", {"P0", "P1", "P2", "P3"}),
     ):
-        options = {value["name"] for value in by_name[field_name].get("options", [])}
-        if options and not required.issubset(options):
+        if not required.issubset(options[field_name]):
             raise RuntimeError(f"{field_name} field is missing required options.")
 
     listing = gh_json("project", "item-list", number, "--owner", owner,
@@ -323,49 +384,90 @@ def reconcile_project(plan, project, items, issues):
         for entry in existing if isinstance(entry.get("content"), dict)
         and entry["content"].get("url")
     }
-    statuses = {value["name"] for value in by_name["Status"].get("options", [])}
     backlog = next((value for value in ("Todo", "Backlog", "Ready")
-                    if value in statuses), None)
+                    if value in options["Status"]), None)
 
+    missing = [
+        issue_number for issue_number in sorted(items)
+        if f"https://github.com/{repo}/issues/{issue_number}" not in project_items
+    ]
+    if missing:
+        for issue_number in missing:
+            if not issues[issue_number].get("id"):
+                raise RuntimeError(f"Issue #{issue_number} is missing its GraphQL ID.")
+
+    # One preflight for the complete planned batch workload, before creating items.
+    maximum_changes = len(missing) + 3 * len(items)
+    if maximum_changes:
+        check_graphql_capacity(max(50, 5 * ((maximum_changes + 7) // 8) + 20))
+
+    if missing:
+        add_operations = [
+            (f"add{index}",
+             "addProjectV2ItemById(input: {"
+             f"projectId: {json.dumps(project['id'])}, "
+             f"contentId: {json.dumps(issues[issue_number]['id'])}"
+             "}) { item { id } }")
+            for index, issue_number in enumerate(missing)
+        ]
+        added = graphql_mutations(add_operations)
+        for index, issue_number in enumerate(missing):
+            url = f"https://github.com/{repo}/issues/{issue_number}"
+            project_items[url] = {
+                "id": added[f"add{index}"]["item"]["id"],
+                "content": {"url": url}
+            }
+
+    changes = []
     for issue_number, metadata in sorted(items.items()):
         url = f"https://github.com/{repo}/issues/{issue_number}"
-        entry = project_items.get(url)
-        if entry is None:
-            entry = gh_json("project", "item-add", number, "--owner", owner,
-                            "--url", url, "--format", "json")
-            print(f"Added to board: #{issue_number}")
-
-        for field, value in (
+        entry = project_items[url]
+        item_id = entry["id"]
+        for field_name, value in (
             ("Stage", metadata["stage"]),
             ("Priority", metadata["priority"]),
         ):
             if value is None:
                 continue
-            current = entry.get(field.lower())
-            if isinstance(current, dict):
-                current = current.get("name")
+            current = entry.get(field_name.lower())
             if current == value:
                 continue
             if current:
-                print(f"Retained existing {field}={current} on #{issue_number}")
+                print(f"Preserved existing {field_name}={current} on #{issue_number}")
                 continue
-            gh("project", "item-edit", number, "--owner", owner,
-               "--url", url, "--field", field, "--value", value)
+            changes.append((item_id, by_name[field_name]["id"], options[field_name][value]))
 
         current_status = entry.get("status")
-        if isinstance(current_status, dict):
-            current_status = current_status.get("name")
         target_status = "Done" if issues[issue_number]["state"] == "CLOSED" else backlog
-        if target_status and target_status in statuses and (
+        if target_status and (
             not current_status or
             (issues[issue_number]["state"] == "CLOSED" and current_status != "Done")
         ):
-            gh("project", "item-edit", number, "--owner", owner,
-               "--url", url, "--field", "Status", "--value", target_status)
+            changes.append((item_id, by_name["Status"]["id"], options["Status"][target_status]))
+
+    if missing and changes:
+        time.sleep(1)
+
+    if changes:
+        operations = [
+            (f"set{index}",
+             "updateProjectV2ItemFieldValue(input: {"
+             f"projectId: {json.dumps(project['id'])}, "
+             f"itemId: {json.dumps(item_id)}, "
+             f"fieldId: {json.dumps(field_id)}, "
+             f"value: {{singleSelectOptionId: {json.dumps(option_id)}}}"
+             "}) { projectV2Item { id } }")
+            for index, (item_id, field_id, option_id) in enumerate(changes)
+        ]
+        updated = graphql_mutations(operations)
+        for index, (item_id, _, _) in enumerate(changes):
+            if updated[f"set{index}"]["projectV2Item"]["id"] != item_id:
+                raise RuntimeError("Project field response item identity mismatch.")
 
     ensure_views(project["id"])
 
     if not project.get("shortDescription"):
+        check_graphql_capacity(10)
         gh("project", "edit", number, "--owner", owner,
            "--description", "Praxis product delivery: milestone gates, linked features, verified engineering work.")
 
@@ -384,6 +486,7 @@ def main():
     if not args.apply:
         return
 
+    check_graphql_capacity(20)
     project = verify_target(plan)
     print(f"Authorized target: {plan['repository']} / "
           f"{plan['project']['owner']} project #{plan['project']['number']}")
@@ -394,7 +497,7 @@ def main():
         issue["number"]: issue
         for issue in gh_json(
             "issue", "list", "-R", plan["repository"], "--state", "all",
-            "--limit", "200", "--json", "number,state"
+            "--limit", "200", "--json", "number,state,id"
         )
     }
     reconcile_project(plan, project, items, issues)
