@@ -160,6 +160,17 @@ public sealed class NoteArchiveTests
         Assert.Equal(0, archive.Length);
     }
 
+    [Fact]
+    public void ExcessiveRecordInputIsRejectedWithoutEnumeratingItAll()
+    {
+        var note = NoteRecord.Create("note.md", "content");
+        using var archive = new MemoryStream();
+
+        Assert.Throws<InvalidDataException>(() =>
+            NoteArchive.Write(archive, Enumerable.Repeat(note, int.MaxValue)));
+        Assert.Equal(0, archive.Length);
+    }
+
     private static MemoryStream IndependentArchive(Guid id, string path, byte[] content)
     {
         var entryName = $"notes/{id:N}/00000001.md";

@@ -29,7 +29,7 @@ public static class NoteArchive
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(records);
 
-        var notes = records.ToArray();
+        var notes = records.Take(MaxNotes + 1).ToArray();
         ValidateCollection(notes);
         Array.Sort(notes, (left, right) => left.Id.CompareTo(right.Id));
 
@@ -217,7 +217,7 @@ public static class NoteArchive
         }
 
         ValidateCollection(notes);
-        return notes;
+        return notes.AsReadOnly();
     }
 
     private static void ValidateCollection(IReadOnlyCollection<NoteRecord> notes)
