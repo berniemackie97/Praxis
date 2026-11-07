@@ -21,3 +21,5 @@ jobs:
       - run: dotnet build Praxis.slnx -c Release --no-restore
       - run: dotnet test Praxis.slnx -c Release --no-build --no-restore
       - run: dotnet format Praxis.slnx --verify-no-changes --no-restore
+      - run: python3 scripts/github/plan.py
+      - run: python3 -m unittest discover -s scripts/github -p test_plan.py -v
