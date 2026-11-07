@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -322,6 +323,77 @@ class ProjectReconciliationTests(unittest.TestCase):
                 reconcile_project(self.plan(), {"id": "PVT_project"}, {}, {})
             mutations.assert_not_called()
             views.assert_not_called()
+
+    def test_full_roadmap_project_setup_and_complete_rerun(self):
+        plan = json.loads(
+            Path(__file__).with_name("roadmap.json").read_text(encoding="utf-8")
+        )
+        items, _ = validate(plan)
+        state = {}
+        all_issues = {
+            number: {"state": "CLOSED" if number in (10, 11, 12, 14) else "OPEN",
+                     "id": f"I_{number}"}
+            for number in items
+        }
+        created = []
+        updated = []
+
+        def fetch(*args):
+            if args[1] == "field-list":
+                return self.fields()
+            if args[1] == "item-list":
+                return {"totalCount": len(state), "items": list(state.values())}
+            raise AssertionError(f"Unexpected command: {args}")
+
+        def apply_operations(operations):
+            result = {}
+            for alias, expression in operations:
+                if alias.startswith("add"):
+                    content_id = re.search(r'contentId: "([^"]+)"', expression).group(1)
+                    number = int(content_id.removeprefix("I_"))
+                    url = f"https://github.com/berniemackie97/Praxis/issues/{number}"
+                    item_id = f"PVTI_{number}"
+                    state[url] = {"id": item_id, "content": {"url": url}}
+                    created.append(number)
+                    result[alias] = {"item": {"id": item_id}}
+                else:
+                    item_id = re.search(r'itemId: "([^"]+)"', expression).group(1)
+                    field_id = re.search(r'fieldId: "([^"]+)"', expression).group(1)
+                    option_id = re.search(
+                        r'singleSelectOptionId: "([^"]+)"', expression
+                    ).group(1)
+                    number = int(item_id.removeprefix("PVTI_"))
+                    url = f"https://github.com/berniemackie97/Praxis/issues/{number}"
+                    field = field_id.removeprefix("PVTSSF_")
+                    values = {
+                        "stage": option_id.removeprefix("stage"),
+                        "priority": option_id.removeprefix("priority"),
+                    }
+                    state[url][field] = (
+                        f"M{values['stage']}" if field == "stage" else
+                        f"P{values['priority']}" if field == "priority" else
+                        option_id.title()
+                    )
+                    updated.append((number, field))
+                    result[alias] = {"projectV2Item": {"id": item_id}}
+            return result
+
+        with (patch("plan.gh_json", side_effect=fetch),
+              patch("plan.graphql_mutations", side_effect=apply_operations) as graph,
+              patch("plan.check_graphql_capacity"),
+              patch("plan.ensure_views") as views,
+              patch("plan.time.sleep"),
+              patch("plan.gh") as shell):
+            project = {"id": "PVT_project", "shortDescription": "Owner description"}
+            reconcile_project(plan, project, items, all_issues)
+            self.assertEqual(set(items), set(created))
+            self.assertEqual(2 * (len(items) - 1) + len(items), len(updated))
+            self.assertEqual(2, graph.call_count)
+            graph.reset_mock()
+            reconcile_project(plan, project, items, all_issues)
+            graph.assert_not_called()
+            shell.assert_not_called()
+            self.assertEqual(2, views.call_count)
 
     def test_mutations_are_grouped_into_eight_operations_per_request(self):
         operations = [(f"m{i}", f'updateProjectV2ItemFieldValue(input: {{projectId: "P"}}) {{ projectV2Item {{ id }} }}')

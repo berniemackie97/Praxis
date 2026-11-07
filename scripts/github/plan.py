@@ -445,6 +445,9 @@ def reconcile_project(plan, project, items, issues):
         ):
             changes.append((item_id, by_name["Status"]["id"], options["Status"][target_status]))
 
+    if missing and changes:
+        time.sleep(1)
+
     if changes:
         operations = [
             (f"set{index}",
