@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Praxis.Api/Praxis.Api.csproj" />
+    <Project Path="src/Praxis.Knowledge/Praxis.Knowledge.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
+    <Project Path="tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj" />
   </Folder>
 </Solution>
