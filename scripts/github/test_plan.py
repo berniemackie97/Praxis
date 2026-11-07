@@ -62,6 +62,12 @@ class RoadmapValidationTests(unittest.TestCase):
 
 
 class ReconciliationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.plan = json.loads(
+            Path(__file__).with_name("roadmap.json").read_text(encoding="utf-8")
+        )
+
     def test_blocking_relationships_use_nodes_not_mapping_keys(self):
         issue = {
             "number": 19,
@@ -118,7 +124,7 @@ class ReconciliationTests(unittest.TestCase):
         execute.assert_not_called()
 
     def test_all_planned_dependencies_apply_without_mutating_completed_metadata(self):
-        plan = RoadmapValidationTests.plan
+        plan = self.plan
         items, dependencies = validate(plan)
         titles = {m["stage"]: m["title"] for m in plan["milestones"]}
         existing = self._existing_issue_rows(items, titles)
@@ -143,7 +149,7 @@ class ReconciliationTests(unittest.TestCase):
             self.assertEqual("--add-blocked-by", call.args[5])
 
     def test_reapplying_complete_roadmap_makes_no_changes(self):
-        plan = RoadmapValidationTests.plan
+        plan = self.plan
         items, dependencies = validate(plan)
         titles = {m["stage"]: m["title"] for m in plan["milestones"]}
         existing = self._existing_issue_rows(items, titles, dependencies)
