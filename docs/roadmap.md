@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-The GitHub [master roadmap](https://github.com/berniemackie97/Praxis/issues/1) and its epic/story/task issues track delivery. Each stage ends in a tested, usable outcome rather than a collection of unintegrated components.
+The GitHub [master roadmap](https://github.com/berniemackie97/Praxis/issues/1), the [Praxis Roadmap project](https://github.com/users/berniemackie97/projects/3), and epic/story/task issues track delivery. Each stage ends in a tested, usable outcome rather than a collection of unintegrated components.
 
 | Stage | Epic | Outcome |
 | --- | --- | --- |
@@ -27,6 +27,8 @@ The GitHub [master roadmap](https://github.com/berniemackie97/Praxis/issues/1) a
 ## Engineering order
 
 Threat modeling and canonical identity precede sync writes. A defined sync contract precedes Obsidian adapters. Stable records and permission rules precede ingestion and retrieval. Explicit authorization precedes agent writes or external actions. Operational safeguards develop alongside each feature, not only at the end.
+
+The [requirements and decision gates](requirements.md) distinguish confirmed commitments from constraints that need a concrete decision. [Platform verification](platform-verification.md) defines evidence required before advertising each target platform.
 
 ## Unresolved choices
 
