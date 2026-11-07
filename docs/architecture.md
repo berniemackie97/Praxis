@@ -25,6 +25,12 @@ Praxis is a client-independent knowledge and automation platform. Obsidian is th
 
 These are responsibilities, not separate projects or deployable services. A modular monolith is the default until tests and measurements justify additional components.
 
+## Security baseline
+
+The [threat model](security/threat-model.md) identifies data assets, attacker capabilities, trust boundaries, prioritized threats and verification ownership. [ADR 0003](decisions/0003-processing-trust-boundaries.md) requires opt-in remote processing and forbids assuming that server-readable data is end-to-end encrypted.
+
+The concrete deployment and encryption model remains open in [#50](https://github.com/berniemackie97/Praxis/issues/50). Until its prerequisites are satisfied, no private-data remote synchronization or external model disclosure is authorized.
+
 ## Initial implementation
 
 Only a process liveness endpoint and its HTTP integration test exist. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync semantics exist yet.
@@ -39,4 +45,4 @@ Only a process liveness endpoint and its HTTP integration test exist. This endpo
 - Mobile plugin lifecycle and background work constraints
 - Measurable retrieval quality, model routing, and costs
 
-See [delivery roadmap](roadmap.md) and [decision records](decisions/0001-client-independence.md).
+See [delivery roadmap](roadmap.md) and the [decision records](decisions/0001-client-independence.md).
