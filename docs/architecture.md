@@ -31,17 +31,19 @@ The [threat model](security/threat-model.md) identifies data assets, attacker ca
 
 The concrete deployment and encryption model remains open in [#50](https://github.com/berniemackie97/Praxis/issues/50). Until its prerequisites are satisfied, no private-data remote synchronization or external model disclosure is authorized.
 
-## Initial implementation
+## Local knowledge baseline
 
-Only a process liveness endpoint and its HTTP integration test exist. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync semantics exist yet.
+`Praxis.Knowledge` implements immutable local Markdown note identities, revisions and a versioned ZIP interchange format. [ADR 0004](decisions/0004-portable-note-archive.md) specifies paths, integrity checks, compatibility rules and resource limits. The archive contains note history, **not** binary attachments or deletion state. It does not implement storage, sync, encryption, a vault watcher or remote endpoints.
+
+The HTTP application exposes only a process liveness endpoint with its integration test. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync semantics exist yet.
 
 ## Pending decisions
 
 - Hosting location and device access strategy
 - Trust, encryption, and on-device/server-side processing boundaries
-- Record revision semantics and storage format
+- Attachment identity, original binary storage, and deletion/tombstone semantics
 - Authentication, device enrollment, revocation, and recovery
-- Sync transport, cursor rules, conflict handling, and attachment transactions
+- Sync transport, cursors, concurrency conflicts, and attachment transactions
 - Mobile plugin lifecycle and background work constraints
 - Measurable retrieval quality, model routing, and costs
 
