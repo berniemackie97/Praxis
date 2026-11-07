@@ -14,6 +14,7 @@ public static class NoteArchive
     private const int MaxNoteBytes = 8 * 1024 * 1024;
     private const int MaxManifestBytes = 8 * 1024 * 1024;
     private const long MaxTotalBytes = 256L * 1024 * 1024;
+    private const long MaxArchiveFileBytes = 288L * 1024 * 1024;
 
     private static readonly UTF8Encoding Utf8 = new(false, true);
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -86,6 +87,16 @@ public static class NoteArchive
     public static IReadOnlyList<NoteRecord> Read(Stream source)
     {
         ArgumentNullException.ThrowIfNull(source);
+        if (!source.CanRead || !source.CanSeek)
+        {
+            throw new ArgumentException("Archive input must be readable and seekable.", nameof(source));
+        }
+
+        if (source.Length > MaxArchiveFileBytes)
+        {
+            throw new InvalidDataException("The archive file exceeds size limits.");
+        }
+
         using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
 
         if (archive.Entries.Count > MaxRevisions + 1)

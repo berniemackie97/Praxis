@@ -29,7 +29,7 @@ Format v1 supports **Markdown notes only**. Attachment identity, binary byte pre
 
 ## Limits
 
-A single archive supports at most 10,000 notes, 50,000 revisions, 8 MiB per note revision, 8 MiB of manifest, and 256 MiB of uncompressed Markdown and manifest bytes combined. These are protective bounds for the initial interchange format, not product-wide capacity promises. Large-scale streaming/partitioning needs measured requirements and a separate design.
+A single archive supports at most 10,000 notes, 50,000 revisions, 8 MiB per note revision, 8 MiB of manifest, 256 MiB of uncompressed Markdown and manifest bytes combined, and 288 MiB of ZIP file input. Import requires a readable, seekable stream; callers receiving a network stream must first spool it with an independent size limit. These are protective bounds for the initial interchange format, not product-wide capacity promises. Large-scale streaming/partitioning needs measured requirements and a separate design.
 
 ## Consequences
 
