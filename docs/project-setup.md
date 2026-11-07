@@ -23,7 +23,9 @@ python3 scripts/github/plan.py --apply
 
 \`--apply\` creates missing milestones, labels, issue parent/dependency links, board items and views. It assigns missing Stage/Priority metadata and aligns closed issues to Done when that status exists. It never adds another user or collaborator and never merges a PR.
 
-The script can be rerun after interruption. It preserves nonempty user-defined priority/stage fields, existing issue milestones and parent links, and already created views. If a conflict is discovered, execution stops rather than overwriting the existing configuration. The command's progress output indicates where to resume.
+The script can be rerun after interruption. It preserves nonempty user-defined priority/stage fields, existing issue milestones and parent links, and already created views. If a conflict is discovered, execution stops rather than overwriting the existing configuration. Dependency reconciliation reads GitHub CLI's `blockedBy.nodes` and checks `totalCount`; if the API returns only a partial relationship list, setup stops without guessing missing blockers. The command's progress output indicates where to resume.
+
+If an earlier run created the milestones and labels but stopped while reconciling issues, do **not** delete or recreate those resources. Update your local checkout to the reviewed fix and rerun the same `--apply` command.
 
 ## Verification
 
