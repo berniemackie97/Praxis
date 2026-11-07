@@ -194,6 +194,21 @@ def ensure_labels(plan):
         print(f"Created label: {label}")
 
 
+def blocked_by_numbers(issue):
+    relationship = issue["blockedBy"]
+    if relationship is None:
+        return set()
+
+    nodes = relationship["nodes"]
+    total = relationship["totalCount"]
+    if len(nodes) != total:
+        raise RuntimeError(
+            f"Issue #{issue['number']} has {total} blocking dependencies, "
+            f"but GitHub CLI returned only {len(nodes)}. Refusing incomplete reconciliation."
+        )
+    return {node["number"] for node in nodes}
+
+
 def reconcile_issues(plan, items, dependencies):
     repo = plan["repository"]
     issues = {
@@ -239,7 +254,7 @@ def reconcile_issues(plan, items, dependencies):
                 raise RuntimeError(f"Issue #{number} already has parent #{assigned}.")
             gh("issue", "edit", number, "-R", repo, "--parent", parent)
 
-        blocked_by = {entry["number"] for entry in issue.get("blockedBy") or []}
+        blocked_by = blocked_by_numbers(issue)
         for dependency in sorted(dependencies.get(number, ()) - blocked_by):
             gh("issue", "edit", number, "-R", repo, "--add-blocked-by", dependency)
 
