@@ -1,0 +1,42 @@
+# Architecture baseline
+
+Praxis is a client-independent knowledge and automation platform. Obsidian is the first supported editor; first-party clients will use the same versioned contracts.
+
+## Invariants
+
+1. Personal information is independently exportable in documented, portable formats.
+2. Local editing remains possible without network access.
+3. Synchronization retries cannot duplicate effects or overwrite conflicting edits silently.
+4. Concurrent writes, renames, deletions, and stale clients require explicit conflict semantics.
+5. Search indexes and embeddings can be rebuilt from canonical records.
+6. Agents have no implicit write or external-action permissions.
+7. Ingested data retains provenance, access scope, and deletion semantics.
+8. Server-side plaintext access, encryption, and external inference must be consciously authorized.
+9. Recovery procedures must restore notes, attachments, versions, identity, and keys consistently.
+
+## Logical boundaries
+
+- **Knowledge:** canonical content, stable identities, revisions, attachments, and source provenance.
+- **Synchronization:** device identity, authenticated change exchange, cursors, conflict policy, and replay.
+- **Ingestion:** scoped source adapters, normalization, and duplicate detection.
+- **Retrieval:** keyword/semantic indexing, access filtering, and citation-grounded results.
+- **Execution:** permitted model usage, tool operations, approvals, and workflow history.
+- **Operations:** backups, restore verification, instrumentation, and secure deployment.
+
+These are responsibilities, not separate projects or deployable services. A modular monolith is the default until tests and measurements justify additional components.
+
+## Initial implementation
+
+Only a process liveness endpoint and its HTTP integration test exist. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync semantics exist yet.
+
+## Pending decisions
+
+- Hosting location and device access strategy
+- Trust, encryption, and on-device/server-side processing boundaries
+- Record revision semantics and storage format
+- Authentication, device enrollment, revocation, and recovery
+- Sync transport, cursor rules, conflict handling, and attachment transactions
+- Mobile plugin lifecycle and background work constraints
+- Measurable retrieval quality, model routing, and costs
+
+See [delivery roadmap](roadmap.md) and [decision records](decisions/0001-client-independence.md).
