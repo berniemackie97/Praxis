@@ -1,6 +1,6 @@
 # Product requirements and decision gates
 
-This document separates product commitments from unverified assumptions. It is the baseline for [requirements spike #12](https://github.com/berniemackie97/Praxis/issues/12), not an implementation contract for unresolved architecture.
+This document separates product commitments from unverified assumptions. The initial requirements baseline is tracked by [#12](https://github.com/berniemackie97/Praxis/issues/12); outstanding deployment and privacy decisions remain tracked in [#50](https://github.com/berniemackie97/Praxis/issues/50).
 
 ## Confirmed product direction
 
@@ -12,8 +12,9 @@ This document separates product commitments from unverified assumptions. It is t
 | R04 | Editing and capture must function without network access. | Edits survive termination while offline and reconcile safely after reconnection. |
 | R05 | Concurrent device activity must not silently discard user-authored changes. | Deterministic tests cover simultaneous edits, stale writes, rename/edit and delete/edit conflicts. |
 | R06 | Derived indexes and model outputs cannot be the sole copy of source content. | Rebuild succeeds from canonical sources without embedding-provider dependence. |
-| R07 | AI tools and connectors require explicit authorization, scoped credentials and recoverable audit history. | Unauthorized tool calls and sensitive data access are rejected in integration tests. |
+| R07 | Agent tools and connectors require explicit authorization, scoped credentials and recoverable audit history. | Unauthorized tool calls and sensitive data access are rejected in integration tests. |
 | R08 | Complexity and ongoing cost require demonstrated benefit. | Add each infrastructure dependency only with a measurable benefit, failure model and maintenance cost. |
+| R09 | Private content cannot leave the device without explicit trust/processing authorization. | Negative tests demonstrate no unauthorized upload, indexing, inference, connector transfer, or tool action. |
 
 These requirements describe the destination. They do not imply that each platform and capability is implemented in the first release.
 
@@ -47,13 +48,13 @@ These requirements describe the destination. They do not imply that each platfor
 
 | Decision | Needed before | Status |
 | --- | --- | --- |
-| Hosting: always-on home machine, VPS, or hybrid; how mobile devices reach it | Production authentication and sync transport | Open |
-| Monthly recurring cost ceiling for hosting, storage, and model calls | Provider and deployment commitments | Open |
-| Private-data policy: device-only, trusted server, or separately encrypted collections | Key custody, threat model and search architecture | Open |
-| Data loss/recovery objectives and acceptable manual intervention | Revision retention, backups and account recovery | Open |
-| Physical devices available for platform testing versus long-term platform targets | Real-device acceptance | Open |
-| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | Open |
-| Single-user/household/multi-user needs and sharing boundaries | Account model and authorization | Open |
+| Hosting: always-on home machine, VPS, or hybrid; how mobile devices reach it | Production authentication and sync transport | Open in #50 |
+| Monthly recurring cost ceiling for hosting, storage, and model calls | Provider and deployment commitments | Open in #50 |
+| Private-data policy: device-only, trusted server, or separately encrypted collections | Key custody, threat model and search architecture | Open in #50 |
+| Data loss/recovery objectives and acceptable manual intervention | Revision retention, backups and account recovery | Open in #50 |
+| Physical devices available for platform testing versus long-term platform targets | Real-device acceptance | Open in #50 |
+| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | Open in #50 |
+| Single-user/household/multi-user needs and sharing boundaries | Account model and authorization | Open in #50 |
 
 Do not record defaults as approved owner decisions. An ADR is accepted only when its tradeoffs and required evidence have been reviewed.
 
@@ -62,7 +63,7 @@ Do not record defaults as approved owner decisions. An ADR is accepted only when
 1. [Threat model](https://github.com/berniemackie97/Praxis/issues/13): plaintext trust, device authorization, keys, revocation and recovery.
 2. [Canonical record specification](https://github.com/berniemackie97/Praxis/issues/14): identity, revisions, deletions, attachment references, lossless export.
 3. [Sync specification](https://github.com/berniemackie97/Praxis/issues/17): change ordering, cursors, retry safety, clock skew and conflicts.
-4. A representative device/workload profile and a chosen cost ceiling, measured rather than assumed.
+4. [Deployment decision](https://github.com/berniemackie97/Praxis/issues/50): representative device/workload profile, privacy model and chosen cost ceiling.
 
 ## Acceptance policy
 
