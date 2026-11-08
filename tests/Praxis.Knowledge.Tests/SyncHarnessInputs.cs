@@ -14,6 +14,9 @@ internal static class SyncHarnessInputs
         => new(1, Epoch, device, operation, record, revision,
             action, path, body, DateTimeOffset.UnixEpoch);
 
+    internal static Guid TestOperationId(int number)
+        => Guid.Parse($"77777777-7777-4777-8777-{number:D12}");
+
     internal static Guid NextGuid(Random random)
     {
         var bytes = new byte[16];

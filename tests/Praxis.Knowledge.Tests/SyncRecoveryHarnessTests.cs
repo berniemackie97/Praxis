@@ -10,7 +10,7 @@ public sealed class SyncRecoveryHarnessTests
     {
         var server = new SyncContractFixture(Epoch);
         var device = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var operation = NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+        var operation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "first.md", "local content");
         device.Queue(operation);
         var durable = device.Checkpoint();
@@ -37,7 +37,7 @@ public sealed class SyncRecoveryHarnessTests
         var server = new SyncContractFixture(Epoch);
         var client = OfflineSyncReplica.Start(Epoch, SecondDevice);
         Assert.Equal(ApplyStatus.Applied,
-            server.Apply(NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+            server.Apply(NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
                 SyncAction.Upsert, "content.md", "body")).Status);
         var delivered = server.Pull(Epoch, 0, 10);
         var durable = client.Checkpoint();
@@ -68,7 +68,7 @@ public sealed class SyncRecoveryHarnessTests
         for (var index = 0; index < 3; index++)
         {
             var record = Guid.Parse($"00000000-0000-4000-8000-{index + 1:D12}");
-            var mutation = NewMutation(FirstDevice, Guid.NewGuid(), record, 0,
+            var mutation = NewMutation(FirstDevice, TestOperationId(index + 1), record, 0,
                 SyncAction.Upsert, $"note-{index}.md", $"{index}");
             Assert.Equal(ApplyStatus.Applied, server.Apply(mutation).Status);
         }
@@ -100,12 +100,12 @@ public sealed class SyncRecoveryHarnessTests
     public void InvalidAcceptedReceiptCannotRemoveAnUnacknowledgedOperation()
     {
         var client = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var mutation = NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+        var mutation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "note.md", "pending data");
         client.Queue(mutation);
 
         var mismatched = new SyncReply(ApplyStatus.Applied, 1,
-            new SyncRecord(Guid.NewGuid(), 1, "note.md", "wrong identity", false));
+            new SyncRecord(Guid.Empty, 1, "note.md", "wrong identity", false));
 
         Assert.Throws<InvalidDataException>(() => client.Acknowledge(mutation, mismatched));
         Assert.Equal(mutation, Assert.Single(client.Pending));
@@ -129,16 +129,16 @@ public sealed class SyncRecoveryHarnessTests
         var server = new SyncContractFixture(Epoch);
         var client = OfflineSyncReplica.Start(Epoch, SecondDevice);
         Assert.Equal(ApplyStatus.Applied,
-            server.Apply(NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+            server.Apply(NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
                 SyncAction.Upsert, "note.md", "original")).Status);
         client.CommitPage(server.Pull(Epoch, 0, 5));
 
-        var pending = NewMutation(SecondDevice, Guid.NewGuid(), SharedRecord, 1,
+        var pending = NewMutation(SecondDevice, TestOperationId(2), SharedRecord, 1,
             SyncAction.Upsert, "note.md", "my offline contribution");
         client.Queue(pending);
         var checkpoint = client.Checkpoint();
         Assert.Equal(ApplyStatus.Applied,
-            server.Apply(NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 1,
+            server.Apply(NewMutation(FirstDevice, TestOperationId(3), SharedRecord, 1,
                 SyncAction.Delete, null, null)).Status);
         server.PruneThrough(2);
 
@@ -165,7 +165,7 @@ public sealed class SyncRecoveryHarnessTests
     {
         var server = new SyncContractFixture(Epoch);
         var client = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var pending = NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+        var pending = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "offline.md", "not uploaded");
         client.Queue(pending);
         var durable = client.Checkpoint();

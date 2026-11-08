@@ -27,7 +27,7 @@ public sealed class SyncConflictHarnessTests
             OfflineSyncReplica.Start(Epoch, SecondDevice),
             OfflineSyncReplica.Start(Epoch, ThirdDevice)
         };
-        var created = NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+        var created = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "original.md", "original");
         Assert.Equal(ApplyStatus.Applied, server.Apply(created).Status);
         foreach (var client in clients)
@@ -102,9 +102,9 @@ public sealed class SyncConflictHarnessTests
         var server = new SyncContractFixture(Epoch);
         var first = OfflineSyncReplica.Start(Epoch, FirstDevice);
         var second = OfflineSyncReplica.Start(Epoch, SecondDevice);
-        var a = NewMutation(FirstDevice, Guid.NewGuid(), SharedRecord, 0,
+        var a = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "shared.md", "A");
-        var b = NewMutation(SecondDevice, Guid.NewGuid(),
+        var b = NewMutation(SecondDevice, TestOperationId(2),
             Guid.Parse("ffffffff-ffff-4fff-8fff-ffffffffffff"), 0,
             SyncAction.Upsert, "SHARED.md", "B");
         first.Queue(a);
@@ -119,7 +119,7 @@ public sealed class SyncConflictHarnessTests
         Assert.Equal("B", Assert.Single(second.Conflicts).Mutation.Body);
         Assert.Equal(1, server.HeadSequence);
 
-        var resolved = b with { OperationId = Guid.NewGuid(), Path = "second.md" };
+        var resolved = b with { OperationId = TestOperationId(3), Path = "second.md" };
         second.Queue(resolved);
         second.Acknowledge(resolved, server.Apply(resolved));
 
