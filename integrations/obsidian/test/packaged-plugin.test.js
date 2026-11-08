@@ -118,6 +118,14 @@ test('package is reproducible and ships only a self-contained entry and manifest
     assert.match(instance.source, /"\.\/main": function/);
 });
 
+test('packaging refuses to overwrite previous builds or source files', async t => {
+    const host = await loadPackage(t);
+    const previous = await fs.readFile(path.join(host.output, 'main.js'));
+    await assert.rejects(packagePlugin(host.output), /already exists/);
+    assert.deepEqual(await fs.readFile(path.join(host.output, 'main.js')), previous);
+    await assert.rejects(packagePlugin(path.resolve(__dirname, '..')), /must not overlap/);
+});
+
 test('onload registers commands but defers vault events until layout is ready', async t => {
     const host = await loadPackage(t);
     assert.deepEqual(host.plugin.commands.map(command => command.id),
