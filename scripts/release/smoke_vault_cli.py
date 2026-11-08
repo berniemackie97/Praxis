@@ -2,6 +2,7 @@
 """Exercise the published local vault CLI against real files, without a network service."""
 
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -96,15 +97,25 @@ def main():
 
         (source / "Notes/first.md").write_bytes(b"# No image embed\n")
         accepted_archive = root / "accepted-removal.zip"
-        run(executable, "plan", source, next_archive, expected=1)
+        reviewed = run(executable, "plan", source, next_archive)
+        if "1 removed" not in reviewed.stdout:
+            raise AssertionError(f"Lost link was not disclosed: {reviewed.stdout}")
+        pair = re.search(r"noteId=([0-9a-f-]{36}).*attachmentId=([0-9a-f-]{36})",
+                         reviewed.stdout)
+        if pair is None:
+            raise AssertionError(f"Missing exact reviewable identity pair: {reviewed.stdout}")
+
         run(executable, "update", source, next_archive, accepted_archive, expected=1)
         if accepted_archive.exists():
             raise AssertionError("Unapproved link removal published an archive.")
-        reviewed = run(executable, "plan", source, next_archive, "--accept-link-removals")
-        if "1 removed" not in reviewed.stdout:
-            raise AssertionError(f"Lost link was not disclosed: {reviewed.stdout}")
+
+        allowed = root / "approved-unlinks.json"
+        allowed.write_text(json.dumps([{
+            "noteId": pair.group(1),
+            "attachmentId": pair.group(2)
+        }]), encoding="utf-8")
         run(executable, "update", source, next_archive, accepted_archive,
-            "--accept-link-removals")
+            "--approve-unlinks", allowed)
         verified = run(executable, "verify", accepted_archive)
         if "Tracked 0 vault attachment references" not in verified.stdout:
             raise AssertionError(f"Approved removal was not persisted: {verified.stdout}")
