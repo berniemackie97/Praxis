@@ -26,6 +26,12 @@ function filePath(value) {
     return value;
 }
 
+function coveredByFolderMove(moves, from, to) {
+    return moves.some(move => move.isFolder &&
+        from.startsWith(move.fromPath + '/') &&
+        to === move.toPath + from.slice(move.fromPath.length));
+}
+
 class ArchiveSession {
     constructor(vault, backup, assembly, runner, dotnetExecutablePath) {
         this.vault = vault;
@@ -39,6 +45,7 @@ class ArchiveSession {
         this.activity = 0;
         this.active = null;
         this.closed = false;
+        this.folderMoves = [];
     }
 
     static async open({ vaultPath, backupDirectory, cliAssemblyPath,
@@ -95,9 +102,19 @@ class ArchiveSession {
         if (typeof isFolder !== 'boolean') {
             throw new Error('The rename event type is invalid.');
         }
+        if (coveredByFolderMove(this.folderMoves, from, to)) {
+            return;
+        }
+        if (isFolder) {
+            if (this.folderMoves.length >= MaxRenames) {
+                throw new Error('Too many pending folder moves.');
+            }
+            this.folderMoves.push({ fromPath: from, toPath: to, isFolder: true });
+        }
 
         return this._enqueue(async state => {
-            if (state.current === null || from === to) {
+            if (state.current === null || from === to ||
+                coveredByFolderMove(state.renames, from, to)) {
                 return;
             }
 
@@ -179,6 +196,7 @@ class ArchiveSession {
             state.current = name;
             state.renames = [];
             await this._writeState(state);
+            this.folderMoves = [];
             return { archive: destination, output: result };
         });
     }
