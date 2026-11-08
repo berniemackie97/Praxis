@@ -37,6 +37,8 @@ The concrete deployment and encryption model remains open in [#50](https://githu
 
 The [versioned sync contract](decisions/0006-versioned-sync-protocol.md) specifies expected revisions, tombstones, operation receipts and ordered cursors. Test-only reference and adversarial multi-device fixtures exercise these semantics, including lost acknowledgments and interrupted pulls; they do not implement persistence, authentication or remote synchronization. See the [adversarial test guide](testing/sync-adversarial.md) for evidence and limitations.
 
+A [durable local note journal](decisions/0008-durable-offline-note-journal.md) now records pending edits, conflict state, accepted receipts, and the applied cursor across restarts. Its latest-note projection is not a full revision history or authenticated remote-sync implementation. Adapter and device integration remain open in #38 and #50.
+
 The HTTP application exposes only a process liveness endpoint with its integration test. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync service exists yet.
 
 ## Pending decisions

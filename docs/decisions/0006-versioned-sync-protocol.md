@@ -84,6 +84,6 @@ The selected plaintext-versus-ciphertext processing model determines which valid
 
 ## Executable acceptance
 
-The test-only fixture in tests/Praxis.Knowledge.Tests models accepted revisions, operation receipts, tombstones, conflicting edits, rename collisions, clock skew, pagination, cursor expiry and epoch/version rejection. It is **not** a synchronization engine, an authentication system, a persistence guarantee or an end-to-end recovery test. Deterministic multi-device failure schedules are documented in [the adversarial test guide](../testing/sync-adversarial.md) (#21); this still does not validate real persistent or network transport.
+The test-only fixture in tests/Praxis.Knowledge.Tests models accepted revisions, operation receipts, tombstones, conflicting edits, rename collisions, clock skew, pagination, cursor expiry and epoch/version rejection. It is **not** a synchronization engine, an authentication system, a persistence guarantee or an end-to-end recovery test. [ADR 0008](0008-durable-offline-note-journal.md) separately defines the explicit local checkpoint, offline outbox and restart behavior. Deterministic multi-device failure schedules are documented in [the adversarial test guide](../testing/sync-adversarial.md) (#21); this still does not validate real persistent or network transport.
 
 References: RFC 9110 section 13.1.1 (strong conditional writes and lost-update prevention), RFC 9562 (UUID format and security considerations).
