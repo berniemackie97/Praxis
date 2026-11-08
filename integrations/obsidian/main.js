@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const {
-    FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile
+    FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder
 } = require('obsidian');
 const { ArchiveSession } = require('./archive-session');
 
@@ -89,13 +89,12 @@ module.exports = class PraxisPlugin extends Plugin {
             }
 
             this.registerEvent(this.app.vault.on('rename', (file, previousPath) => {
-                if (!(file instanceof TFile)) {
+                if (file instanceof TFile || file instanceof TFolder) {
+                    void this.recordRename(previousPath, file.path, file instanceof TFolder);
+                } else {
                     this.session?.changed();
-                    new Notice('Praxis: folder renames need explicit CLI mapping before the next update.');
-                    return;
+                    new Notice('Praxis: unsupported rename event needs manual review.');
                 }
-
-                void this.recordRename(previousPath, file.path);
             }));
             for (const event of ['create', 'modify', 'delete']) {
                 this.registerEvent(this.app.vault.on(event, () => this.session?.changed()));
@@ -158,10 +157,10 @@ module.exports = class PraxisPlugin extends Plugin {
         return session;
     }
 
-    async recordRename(previous, current) {
+    async recordRename(previous, current, isFolder = false) {
         try {
             const session = await this.getSession();
-            await session.recordRename(previous, current);
+            await session.recordRename(previous, current, isFolder);
         } catch (error) {
             new Notice('Praxis: rename tracking failed: ' + error.message);
         }
