@@ -272,6 +272,25 @@ public sealed class SyncContractTests
     }
 
     [Fact]
+    public void IncompatibleEpochMigrationRejectsOldCursorsAndPendingOperations()
+    {
+        var original = new SyncContractFixture(Collection);
+        var pending = Mutation(Note, 0, SyncAction.Upsert, "note.md", "offline");
+        Apply(original, pending);
+        var oldCursor = original.HeadSequence;
+
+        var newEpoch = Guid.Parse("44444444-4444-4444-8444-444444444444");
+        var restored = new SyncContractFixture(newEpoch);
+
+        Assert.Equal(PullStatus.WrongCollectionEpoch,
+            restored.Pull(Collection, oldCursor, 10).Status);
+        Assert.Equal(ApplyStatus.WrongCollectionEpoch, restored.Apply(pending).Status);
+        Assert.Empty(restored.Snapshot().Records);
+        Assert.Equal(0, restored.HeadSequence);
+        Assert.NotEqual(original.CollectionEpoch, restored.CollectionEpoch);
+    }
+
+    [Fact]
     public void InvalidRequestsAndRejectedWritesNeverChangeSequence()
     {
         var fixture = new SyncContractFixture(Collection);
