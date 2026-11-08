@@ -39,6 +39,8 @@ The [versioned sync contract](decisions/0006-versioned-sync-protocol.md) specifi
 
 A [durable local note journal](decisions/0008-durable-offline-note-journal.md) now records pending edits, conflict state, accepted receipts, and the applied cursor across restarts. Its latest-note projection is not a full revision history or authenticated remote-sync implementation. Adapter and device integration remain open in #38 and #50.
 
+A [local vault exchange](decisions/0009-local-vault-capture-restore.md) captures complete Markdown folders and binary originals into the collection archive and restores them to a new directory without overwriting existing data. It is not a live Obsidian adapter, semantic link resolver, identity-preserving rescan or encrypted backup service.
+
 The HTTP application exposes only a process liveness endpoint with its integration test. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync service exists yet.
 
 ## Pending decisions
