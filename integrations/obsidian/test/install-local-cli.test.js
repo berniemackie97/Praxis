@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const { execFileSync } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -23,7 +24,8 @@ test('installer preflight uses the real .NET CLI before writing an Obsidian plug
     const result = await installLocal({
         vaultPath: vault,
         archiveDirectory: archives,
-        cliAssemblyPath: assembly
+        cliAssemblyPath: assembly,
+        dotnetExecutablePath: execFileSync('which', ['dotnet'], { encoding: 'utf8' }).trim()
     });
 
     assert.deepEqual(await fs.readdir(result.pluginDirectory),
@@ -35,4 +37,6 @@ test('installer preflight uses the real .NET CLI before writing an Obsidian plug
     const settings = JSON.parse(await fs.readFile(path.join(result.pluginDirectory, 'data.json')));
     assert.equal(settings.backupDirectory, await fs.realpath(archives));
     assert.equal(settings.cliAssemblyPath, await fs.realpath(assembly));
+    assert.equal(settings.dotnetExecutablePath,
+        await fs.realpath(execFileSync('which', ['dotnet'], { encoding: 'utf8' }).trim()));
 });
