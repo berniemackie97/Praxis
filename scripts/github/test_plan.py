@@ -18,7 +18,7 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(89, len(items))
+        self.assertEqual(93, len(items))
         self.assertEqual(59, items[100]["parent"])
         self.assertEqual(59, items[122]["parent"])
         self.assertEqual(59, items[124]["parent"])
@@ -27,6 +27,17 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("P1", items[122]["priority"])
         self.assertIn(122, dependencies[100])
         self.assertIn(124, dependencies[100])
+        self.assertIn(126, dependencies[100])
+        self.assertIn(128, dependencies[100])
+        self.assertEqual({124}, dependencies[126])
+        self.assertEqual({126}, dependencies[128])
+        self.assertEqual({99, 100, 129}, dependencies[107])
+        self.assertEqual({100, 101, 102, 103, 106, 107, 108, 129}, dependencies[130])
+        self.assertEqual(59, items[126]["parent"])
+        self.assertEqual(59, items[128]["parent"])
+        self.assertEqual(64, items[129]["parent"])
+        self.assertEqual(64, items[130]["parent"])
+        self.assertEqual("security", items[129]["area"])
         self.assertEqual({122}, dependencies[124])
         self.assertEqual({99}, dependencies[122])
         self.assertEqual("knowledge", items[100]["area"])
@@ -39,7 +50,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual({101, 109, 111}, dependencies[26])
         self.assertNotIn(22, dependencies[26])
         self.assertEqual({14, 16, 102}, dependencies[27])
-        self.assertEqual([99, 100, 102, 101, 103, 106, 107, 108],
+        self.assertEqual([99, 122, 124, 126, 128, 100, 102, 101, 103, 106, 129, 107, 108, 130],
                          self.plan["delivery_lanes"][0]["issues"])
         self.assertEqual(57, items[94]["parent"])
         self.assertEqual("P1", items[94]["priority"])
