@@ -6,7 +6,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog
 {
-    private static List<LocalSnapshotObject> ReadSnapshotObjects(string catalogPath)
+    private static List<LocalSnapshotObject> ReadSnapshotObjects(string catalogPath, int catalogVersion)
     {
         using var snapshot = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -16,12 +16,12 @@ public sealed partial class LocalCatalog
         }.ToString());
         snapshot.Open();
         VerifyIntegrity(snapshot);
-        if (Convert.ToInt32(Scalar(snapshot, "PRAGMA user_version")) != CurrentSchemaVersion)
+        if (Convert.ToInt32(Scalar(snapshot, "PRAGMA user_version")) != catalogVersion)
         {
             throw new NotSupportedException("The snapshot catalog schema is not supported.");
         }
 
-        VerifySchema(snapshot, CurrentSchemaVersion);
+        VerifySchema(snapshot, catalogVersion);
         using (var receipts = Command(snapshot, """
             SELECT COUNT(*) FROM ingest_requests r
             LEFT JOIN items i ON i.source_id = r.source_id
