@@ -138,6 +138,51 @@ public sealed class LocalSourceIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task CommittedFileReplayMustRespectTheCurrentByteLimit()
+    {
+        var file = Path.Combine(workspace, "replayed.bin");
+        File.WriteAllBytes(file, [1, 2, 3, 4]);
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var intake = new LocalSourceIntake(catalog);
+        var original = await intake.ImportFileAsync(file, 4, "file-request");
+
+        File.WriteAllBytes(file, [9]);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            intake.ImportFileAsync(file, 1, "file-request"));
+
+        Assert.Single(catalog.ListProcessingJobs());
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadObject(dataRoot, original.Sha256));
+        Assert.Equal(original, await intake.ImportFileAsync(file, 4, "file-request"));
+    }
+
+    [Fact]
+    public async Task CommittedFolderReplayMustRespectTheCurrentBatchBudget()
+    {
+        var selected = Path.Combine(workspace, "replayed-folder");
+        Directory.CreateDirectory(selected);
+        var firstPath = Path.Combine(selected, "a.bin");
+        var secondPath = Path.Combine(selected, "b.bin");
+        File.WriteAllBytes(firstPath, [1, 2, 3, 4]);
+        File.WriteAllBytes(secondPath, [5, 6]);
+
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var intake = new LocalSourceIntake(catalog);
+        var original = await intake.ImportFolderAsync(
+            selected, "folder-request", 2, 0, 4, 6);
+
+        File.WriteAllBytes(firstPath, [7]);
+        File.WriteAllBytes(secondPath, [8]);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            intake.ImportFolderAsync(selected, "folder-request", 2, 0, 4, 2));
+
+        Assert.Equal(2, catalog.ListProcessingJobs().Count);
+        using var db = Connect(catalog.DatabasePath);
+        Assert.Equal(2L, Count(db, "ingest_requests"));
+        Assert.Equal(original, await intake.ImportFolderAsync(
+            selected, "folder-request", 2, 0, 4, 6));
+    }
+
+    [Fact]
     public async Task CancellationAndOversizeSingleFileNeverWriteAReceipt()
     {
         var file = Path.Combine(workspace, "file.bin");
