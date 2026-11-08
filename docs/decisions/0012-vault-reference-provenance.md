@@ -29,14 +29,27 @@ dotnet run --project tools/Praxis.VaultCli -- update /vault /backups/first.zip /
 
 Once enabled in the archive, tracking continues on subsequent updates without repeating the flag. The update reconciles paths and stable identities first, then recomputes tracked pairs from the new note text and current attachment paths. An unchanged rescan preserves pairs and histories, edits add pairs to the tracked list and attachment renames keep stable IDs when mapped explicitly.
 
-An unresolved or ambiguous supported embed stops tracked capture, planning and update **before publication**. A previously tracked pair that disappears also stops an update by default. This can be an intentional removal, a stale link after an attachment rename or an unsupported syntax change: no interpretation is guessed. The operator must inspect the plan and explicitly opt into removing disappearing derived pairs:
+An unresolved or ambiguous supported embed stops tracked capture, planning and update **before publication**. A tracked pair that disappears is returned by the non-writing `plan` operation with its exact note/attachment UUIDs, current paths and removal count. `update` always refuses unapproved removals, including incomplete, duplicate or supersets of approval pairs.
 
-```sh
-dotnet run --project tools/Praxis.VaultCli -- plan /vault /backups/first.zip --accept-link-removals
-dotnet run --project tools/Praxis.VaultCli -- update /vault /backups/first.zip /backups/next.zip --accept-link-removals
+The operator reviews the reported identities and writes an explicit JSON approval file **outside the vault**:
+
+```json
+[
+  {
+    "noteId": "11111111-1111-1111-1111-111111111111",
+    "attachmentId": "22222222-2222-2222-2222-222222222222"
+  }
+]
 ```
 
-That approval accepts **all tracked reference removals in that one update**. Plans report added/removed counts but are not atomic snapshots or locks; the source folder can change between plan and update. The original baseline remains unmodified and new archives use staged, non-overwriting publication. A mapped rename does not rewrite Markdown: if the source still references the obsolete path, tracking refuses the update until the user fixes or intentionally changes it.
+The displayed IDs above are illustrative; use the actual UUID pairs from that `plan` result. Pass the file when publishing:
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- plan /vault /backups/first.zip
+dotnet run --project tools/Praxis.VaultCli -- update /vault /backups/first.zip /backups/next.zip --approve-unlinks /backups/reviewed-unlinks.json
+```
+
+The approval must exactly match **every** disappearing pair, with no extras or duplicates. A source edit between preview and update that removes an additional pair invalidates the approval. The approved list is bounded to 4 MiB / 50,000 pairs. The previous archive remains unmodified and new archives use staged, non-overwriting publication. A mapped rename does not rewrite Markdown: if the source still references the obsolete path, tracking refuses the update until the user fixes or intentionally changes it.
 
 ## Limits and release gates
 
