@@ -13,10 +13,12 @@ async function fixture(t) {
     const vault = path.join(root, 'vault');
     const archives = path.join(root, 'archives');
     const cli = path.join(root, 'published', 'Praxis.VaultCli.dll');
+    const dotnet = path.join(root, 'published', 'dotnet');
     await fs.mkdir(path.join(vault, '.obsidian'), { recursive: true });
     await fs.mkdir(archives);
     await fs.mkdir(path.dirname(cli));
     await fs.writeFile(cli, 'stub assembly');
+    await fs.writeFile(dotnet, 'stub host');
     await fs.writeFile(path.join(vault, 'private.md'), '# Personal note');
     const calls = [];
     async function run(_assembly, args) {
@@ -35,8 +37,9 @@ async function fixture(t) {
         return 'ok';
     }
     return {
-        root, vault, archives, cli, calls, run,
-        options: { vaultPath: vault, archiveDirectory: archives, cliAssemblyPath: cli }
+        root, vault, archives, cli, dotnet, calls, run,
+        options: { vaultPath: vault, archiveDirectory: archives,
+            cliAssemblyPath: cli, dotnetExecutablePath: dotnet }
     };
 }
 
@@ -50,6 +53,7 @@ test('preflight succeeds before installing a two-file plugin with external archi
     const settings = JSON.parse(await fs.readFile(path.join(result.pluginDirectory, 'data.json'), 'utf8'));
     assert.equal(settings.backupDirectory, await fs.realpath(f.archives));
     assert.equal(settings.cliAssemblyPath, await fs.realpath(f.cli));
+    assert.equal(settings.dotnetExecutablePath, await fs.realpath(f.dotnet));
     assert.equal(await fs.readFile(path.join(f.vault, 'private.md'), 'utf8'), '# Personal note');
     assert.deepEqual(await fs.readdir(f.archives), []);
     assert.match(await fs.readFile(path.join(result.pluginDirectory, 'main.js'), 'utf8'),
@@ -109,8 +113,9 @@ test('symlinked configuration is refused rather than escaping vault', async t =>
 });
 
 test('installation arguments reject duplicates and unknown parameters', () => {
-    assert.deepEqual(parseArguments(['--vault', '/v', '--archives', '/a', '--cli', '/c']),
-        { vaultPath: '/v', archiveDirectory: '/a', cliAssemblyPath: '/c' });
+    assert.deepEqual(parseArguments(['--vault', '/v', '--archives', '/a', '--cli', '/c',
+        '--dotnet', '/d']),
+        { vaultPath: '/v', archiveDirectory: '/a', cliAssemblyPath: '/c', dotnetExecutablePath: '/d' });
     assert.throws(() => parseArguments(['--vault', '/v', '--vault', '/q']), /Usage:/);
     assert.throws(() => parseArguments(['--unknown', 'x']), /Usage:/);
     assert.throws(() => parseArguments(['--vault']), /Usage:/);
