@@ -84,13 +84,13 @@ python3 scripts/research/local_catalog_probe.py
 
 ### Recorded Linux CI sample
 
-[CI run #114](https://github.com/berniemackie97/Praxis/actions/runs/42513677524) executed the same generated workload on SQLite **3.45.1**: 4,000 source/item entries, 100 updated revisions and a 64 MiB streamed original.
+[CI run #120](https://github.com/berniemackie97/Praxis/actions/runs/42513992076) executed the same generated workload on SQLite **3.45.1**: 4,000 source/item entries, 100 updated revisions, a physically written 64 MiB original and 2 GiB of streamed sparse input.
 
 | Observation | SQLite schema fixture | JSONL append baseline |
 | --- | ---: | ---: |
-| Initial records | 0.0540 s | 0.0109 s |
-| 100 individually synced revisions | 0.0909 s | 0.0261 s |
-| Reopen/count vs event replay | 0.0007 s | 0.0075 s |
+| Initial records | 0.0685 s | 0.0168 s |
+| 100 individually synced revisions | 0.0426 s | 0.0350 s |
+| Reopen/count vs event replay | 0.0007 s | 0.0120 s |
 | Metadata bytes on disk | 1,982,464 | 832,300 |
 
 These samples show SQLite **does not outperform the simpler flat log in initial append throughput or file footprint** on this synthetic workload. The selection rests instead on transactional multi-entity consistency, uniqueness/foreign keys, schema migration and indexed queries without building a separate log compactor and referential integrity layer.
