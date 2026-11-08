@@ -1,6 +1,6 @@
 # ADR 0017: Embedded owner-local catalog and original objects
 
-**Status:** Local catalog design accepted after merged #99 / PR #121. The first runtime schema bootstrap is under #122 / PR #123, pending review. Object publication, ingestion, catalog recovery and full owner access controls remain unimplemented.
+**Status:** Local catalog design accepted after merged #99 / PR #121. Runtime schema bootstrap #122 / PR #123 is merged; explicit original publication S1b is under review in #124 / PR #125. Idempotent ingestion, metadata+media recovery and complete owner access controls remain open.
 
 ## Problem and existing evidence
 
@@ -109,8 +109,20 @@ These choices are conservative, not guarantees against an attacker who controls 
 
 #100 retains streaming publication, idempotent ingest receipts, physical multi-GiB import and coordinated backup/restore; a catalog schema initializer alone does not satisfy those requirements.
 
+## S1b explicit original publication (PR #125)
+
+`LocalCatalog.CaptureFileAsync(absoluteSourceLocator, suppliedReadableStream, maxBytes)` is a **caller-triggered storage primitive**, not a folder crawler, file picker, background agent or trusted claim that the supplied bytes originated from the named path. The caller retains ownership of the source stream. It must choose and validate the source and permissions before calling this API; the method does not open, move, rename or delete a source file.
+
+The store reads with a maximum **64 KiB buffer** and a caller-specified byte bound, allowing zero-byte and non-seekable streams. It writes to a private `staging/<random>.part` file beneath the selected local root, incrementally hashes content, flushes the staging file, reopens and rehashes staged bytes, then publishes by an ordinary **non-overwriting same-volume move** to `objects/<first2>/<next2>/<lowercase-sha256>`. Existing content is reverified before sharing its digest path; corrupt content is refused rather than replaced. A final digest verification of the published path completes before a SQLite transaction writes an `original_objects` record and **distinct** source, item and first revision identities.
+
+The physical object and SQLite transaction are **not one atomic operation**. If a SQLite constraint, cancellation or process failure occurs after publication, a verified but **unreferenced** object can remain; the catalog transaction rolls back without dangling source/version references. Do not automatically delete unreferenced objects: S1c must establish bounded reconciliation, retention, concurrent publishing and backup coordination. A repeated source locator currently fails a uniqueness constraint rather than claiming idempotent update or retry semantics. New versions of one source are also S1c work.
+
+Tests exercise empty, multiple-chunk and non-seekable streams; distinct source identities with one shared digest; cancellation, oversize and source-read failures; duplicate path rollback; corrupt or missing originals; and rejection of symbolic links in reserved storage. Verification checks the latest committed item reference by digest and byte length across catalog restarts. These tests do **not** prove untrusted callers cannot lie about a source pathname, that the logged-in owner cannot tamper with files, that a hostile local process cannot race directory substitution, or that Windows filesystem ACLs meet an approved multi-user security policy.
+
+`Flush(flushToDisk: true)`, an atomic rename on the same filesystem, and SQLite WAL/FULL minimize ordinary interruption windows but **do not prove parent-directory metadata durability or behavior after hard power loss and unplugging an external drive**. A successful return is not a complete backup: the catalog and every referenced object must be captured and restored together. #100 S1c/S1d, #40 and real-device acceptance remain open. External processing, sync and MCP/browser access are not enabled.
+
 ## Consequences and next slice
 
-The next bounded task is [#100](https://github.com/berniemackie97/Praxis/issues/100): select/lock a supported .NET SQLite provider, implement a single-owner catalog and verified streamed object publication (not a background watcher), then prove restart/idempotency, same-bytes/different-source, invalid path/digest, backup/restore and out-of-space behavior on real filesystems. **Do not** introduce a generic repository framework, ORM plus parallel SQL implementation, vector store or multi-user auth abstraction just to satisfy the spike.
+With S1a merged and S1b under review, the next bounded task under [#100](https://github.com/berniemackie97/Praxis/issues/100) is S1c: deliberate request receipts, idempotent source re-import/versioning, interruption/orphan recovery and safe reference-aware retention. S1d then requires coordinated catalog+object backup/restore, real multi-GiB data and external-volume failure rehearsals. **Do not** introduce a generic repository framework, ORM plus parallel SQL implementation, vector store or multi-user auth abstraction just to satisfy the spike.
 
 The existing archive transfer tests remain unchanged. The broader pipeline (#102), safe extractors (#103), search (#106), first-party UI (#108), hosting/security decisions (#50) and operational recovery (#40) remain open.
