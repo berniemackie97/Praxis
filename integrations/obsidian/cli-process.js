@@ -5,9 +5,9 @@ const { spawn } = require('node:child_process');
 const MaxOutputBytes = 64 * 1024;
 const TimeoutMilliseconds = 180_000;
 
-function runVaultCli(assembly, arguments_, { cwd, signal }) {
+function runVaultCli(assembly, arguments_, { cwd, signal, dotnetExecutablePath = 'dotnet' }) {
     return new Promise((resolve, reject) => {
-        const child = spawn('dotnet', [assembly, ...arguments_], {
+        const child = spawn(dotnetExecutablePath, [assembly, ...arguments_], {
             cwd, signal, shell: false, windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe']
         });
