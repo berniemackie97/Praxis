@@ -149,9 +149,16 @@ public sealed partial class LocalCatalog
             manifest.CatalogVersion != CurrentSchemaVersion ||
             manifest.Objects is null ||
             manifest.Objects.Count > MaximumSnapshotObjects ||
-            !IsDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)
+            !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)
         {
             throw new InvalidDataException("The snapshot manifest is incompatible.");
+        }
+
+        var (length, hash) = await HashFileAsync(
+            Path.Combine(directory, "catalog.sqlite"), cancellationToken);
+        if (length != manifest.CatalogLength || hash != manifest.CatalogSha256)
+        {
+            throw new InvalidDataException("The snapshot catalog failed integrity verification.");
         }
 
         var objects = ReadSnapshotObjects(Path.Combine(directory, "catalog.sqlite"));
@@ -161,12 +168,6 @@ public sealed partial class LocalCatalog
         }
 
         var total = EnforceBudget(manifest.CatalogLength, objects, maxBytes);
-        var (length, hash) = await HashFileAsync(
-            Path.Combine(directory, "catalog.sqlite"), cancellationToken);
-        if (length != manifest.CatalogLength || hash != manifest.CatalogSha256)
-        {
-            throw new InvalidDataException("The snapshot catalog failed integrity verification.");
-        }
 
         var store = new OriginalFileStore(directory);
         var published = store.EnumeratePublishedDigests().ToHashSet(StringComparer.Ordinal);
@@ -204,7 +205,7 @@ public sealed partial class LocalCatalog
         VerifySchema(snapshot, CurrentSchemaVersion);
         using (var receipts = Command(snapshot, """
             SELECT COUNT(*) FROM ingest_requests r
-            JOIN items i ON i.source_id = r.source_id
+            LEFT JOIN items i ON i.source_id = r.source_id
             LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
             WHERE r.state = 'committed' AND v.item_id IS NULL
             """))
@@ -228,7 +229,7 @@ public sealed partial class LocalCatalog
 
             var digest = reader.GetString(0);
             var length = reader.GetInt64(1);
-            if (!IsDigest(digest) || length < 0)
+            if (!OriginalFileStore.IsValidDigest(digest) || length < 0)
             {
                 throw new InvalidDataException("The snapshot contains invalid original metadata.");
             }
@@ -447,8 +448,4 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(maxBytes));
         }
     }
-
-    private static bool IsDigest(string? digest) =>
-        digest is { Length: 64 } && digest.All(c =>
-            c is >= '0' and <= '9' or >= 'a' and <= 'f');
 }
