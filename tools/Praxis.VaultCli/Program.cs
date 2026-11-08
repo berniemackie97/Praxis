@@ -1,6 +1,6 @@
-using Praxis.Knowledge;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Praxis.Knowledge;
 
 if (args.Length == 2 && args[0] == "verify")
 {
