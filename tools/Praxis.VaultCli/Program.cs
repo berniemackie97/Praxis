@@ -133,12 +133,8 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     IReadOnlyList<VaultRename> mappings = [];
     if (renamePath is not null)
     {
-        if (new FileInfo(renamePath).Length > 256 * 1024)
-        {
-            throw new InvalidDataException("The rename mapping exceeds its size limit.");
-        }
-
-        var renames = JsonSerializer.Deserialize<VaultRename[]>(File.ReadAllBytes(renamePath), options)
+        var renames = JsonSerializer.Deserialize<VaultRename[]>(
+            ReadBoundedJson(renamePath, 256 * 1024), options)
             ?? throw new InvalidDataException("The rename mapping is empty.");
         if (renames.Length > 20_000)
         {
@@ -151,12 +147,8 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     IReadOnlyList<AttachmentReference>? approved = null;
     if (unlinkPath is not null)
     {
-        if (new FileInfo(unlinkPath).Length > 4 * 1024 * 1024)
-        {
-            throw new InvalidDataException("The link removal approval exceeds its size limit.");
-        }
-
-        var pairs = JsonSerializer.Deserialize<AttachmentReference[]>(File.ReadAllBytes(unlinkPath), options)
+        var pairs = JsonSerializer.Deserialize<AttachmentReference[]>(
+            ReadBoundedJson(unlinkPath, 4 * 1024 * 1024), options)
             ?? throw new InvalidDataException("The link removal approval is empty.");
         if (pairs.Length > 50_000 || pairs.Any(pair => pair is null ||
                 pair.NoteId == Guid.Empty || pair.AttachmentId == Guid.Empty))
@@ -168,6 +160,24 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     }
 
     return (mappings, trackLinks, approved);
+}
+
+static byte[] ReadBoundedJson(string path, int maximum)
+{
+    using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+    if (file.Length > maximum)
+    {
+        throw new InvalidDataException("The supplied JSON file exceeds its size limit.");
+    }
+
+    var bytes = new byte[(int)file.Length];
+    file.ReadExactly(bytes);
+    if (file.ReadByte() != -1)
+    {
+        throw new InvalidDataException("The supplied JSON file changed during reading.");
+    }
+
+    return bytes;
 }
 
 static void PrintChanges(VaultUpdate update)
