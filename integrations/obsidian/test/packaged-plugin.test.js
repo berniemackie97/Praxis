@@ -134,7 +134,8 @@ test('onload registers commands but defers vault events until layout is ready', 
     const session = {
         changes: 0,
         changed() { this.changes++; },
-        recordRename: async () => {}
+        recordRename: async () => {},
+        close() {}
     };
     host.plugin.session = session;
     host.plugin.sessionPromise = Promise.resolve(session);
