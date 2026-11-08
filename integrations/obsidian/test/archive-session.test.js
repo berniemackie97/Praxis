@@ -160,6 +160,40 @@ test('folder renames persist across restart as ordered explicit moves', async t 
     assert.deepEqual((await state(f.backup)).renames, []);
 });
 
+test('folder event subsumes a burst of matching descendant events', async t => {
+    const f = await fixture(t);
+    const session = await f.open();
+    await session.snapshot();
+    const folder = session.recordRename('Old', 'New', true);
+    const descendants = Array.from({ length: 150 }, (_, i) =>
+        session.recordRename('Old/notes/file' + i + '.md', 'New/notes/file' + i + '.md'));
+    await Promise.all([folder, ...descendants]);
+
+    assert.deepEqual((await state(f.backup)).renames,
+        [{ fromPath: 'Old', toPath: 'New', isFolder: true }]);
+
+    await session.recordRename('New/notes/file0.md', 'New/notes/renamed.md');
+    assert.deepEqual((await state(f.backup)).renames, [
+        { fromPath: 'Old', toPath: 'New', isFolder: true },
+        { fromPath: 'New/notes/file0.md', toPath: 'New/notes/renamed.md' }
+    ]);
+});
+
+test('redundant descendant events after a restart do not multiply rename rules', async t => {
+    const f = await fixture(t);
+    const session = await f.open();
+    await session.snapshot();
+    await session.recordRename('Old', 'New', true);
+    session.close();
+
+    const resumed = await f.open();
+    await resumed.recordRename('Old/one.md', 'New/one.md');
+    await resumed.recordRename('Old/Sub', 'New/Sub', true);
+    assert.deepEqual((await state(f.backup)).renames, [
+        { fromPath: 'Old', toPath: 'New', isFolder: true }
+    ]);
+});
+
 test('file moves before folder moves remain ordered by event identity', async t => {
     const f = await fixture(t);
     const session = await f.open();
