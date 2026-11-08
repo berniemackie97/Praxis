@@ -90,14 +90,15 @@ def generate(root=ROOT, cache=None):
                 seen_linked.add(lower)
                 continue
 
-            if kind not in ("Direct", "Transitive"):
+            if kind not in ("Direct", "Transitive", "CentralTransitive"):
                 raise ValueError(f"Invalid dependency kind in {name}: {package}")
             if (lower in direct) != (kind == "Direct"):
                 raise ValueError(f"Direct dependency mismatch in {name}: {package}")
-            if kind == "Direct":
-                if item.get("resolved") != central[lower]:
+            if kind in ("Direct", "CentralTransitive"):
+                if lower not in central or item.get("resolved") != central[lower]:
                     raise ValueError(f"Central version and lockfile disagree in {name}: {package}")
-                seen_direct.add(lower)
+                if kind == "Direct":
+                    seen_direct.add(lower)
 
             version = item.get("resolved")
             digest = item.get("contentHash")

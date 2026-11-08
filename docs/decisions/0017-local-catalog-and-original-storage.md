@@ -1,6 +1,6 @@
 # ADR 0017: Embedded owner-local catalog and original objects
 
-**Status:** Proposed in #99 / PR #121; becomes the reviewed **local-only** implementation direction on merge. No runtime database has been added.
+**Status:** Local catalog design accepted after merged #99 / PR #121. The first runtime schema bootstrap is under #122 / PR #123, pending review. Object publication, ingestion, catalog recovery and full owner access controls remain unimplemented.
 
 ## Problem and existing evidence
 
@@ -96,6 +96,18 @@ python3 scripts/research/local_catalog_probe.py
 These samples show SQLite **does not outperform the simpler flat log in initial append throughput or file footprint** on this synthetic workload. The selection rests instead on transactional multi-entity consistency, uniqueness/foreign keys, schema migration and indexed queries without building a separate log compactor and referential integrity layer.
 
 Durations from GitHub-hosted runner disks are descriptive, **not** platform performance targets or a comparable .NET provider benchmark: JSONL records are denormalized, unlike the multi-table SQLite schema. They illustrate the operational cost of replay versus transactional indexing. The 64 MiB written fixture and 2 GiB sparse read demonstrate fixed-buffer processing and large-length arithmetic. A sparse file is not a fully written 2 GiB media transfer: neither benchmark proves that a 3 GiB video, unplugged external SSD or large-library restore passes on macOS, Linux and Windows. Full multi-GiB import, busy-writer, cancellation, retention and power-loss tests remain hard acceptance criteria for #100/#40.
+
+## S1a schema bootstrap (PR #123)
+
+The owner-local SQLite metadata database is now introduced as a **separate assembly** (`Praxis.Storage`) rather than polluting the portable archive domain model. Its first migration reuses the single [embedded schema](../../src/Praxis.Storage/LocalCatalog.sql) also used by the research tests; the duplicate research fixture was removed.
+
+`LocalCatalog.Open(absoluteDataRoot)` is deliberately **not an import operation**: the root must already exist, it rejects unexpected names and reparse points, and it enforces private owner-only root permissions on Unix. A per-process file lock prevents two cooperating catalog instances using the same root at once. It checks integrity, schema version and foreign keys, rejects unrecognized or corrupt catalogs, and verifies WAL and FULL synchronous settings before reporting a usable catalog.
+
+An existing `catalog.sqlite` with unknown tables and version zero is **not adopted** or migrated implicitly; a version greater than one is refused. Tests cover transactional rollback/reopen, two sources referring to the same digest, corrupt data, foreign-key failure, symlinked entries and unknown user files. Central NuGet package locking includes the .NET 10 SQLite provider and native binaries.
+
+These choices are conservative, not guarantees against an attacker who controls the owner process or parent directory. On Windows, filesystem ACLs are inherited from the selected root and **not yet independently audited**. On Unix, restrictive mode checks can reject a volume with incomplete POSIX permission support. No trusted policy has been established for exFAT, SMB/NFS, external SSD unplug or concurrent raw SQLite connections opened by unrelated software; **do not point the new catalog at a valuable shared directory**. The runtime has no automatic path discovery, content import, database encryption or network listener.
+
+#100 retains streaming publication, idempotent ingest receipts, physical multi-GiB import and coordinated backup/restore; a catalog schema initializer alone does not satisfy those requirements.
 
 ## Consequences and next slice
 
