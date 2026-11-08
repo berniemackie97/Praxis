@@ -199,6 +199,48 @@ test('rename mappings are limited to valid relative paths', async t => {
     assert.deepEqual((await state(f.backup)).renames, []);
 });
 
+test('unloading while a CLI verification is pending never adopts the generated archive', async t => {
+    let releaseVerification;
+    let verificationStarted;
+    const enteredVerification = new Promise(resolve => { verificationStarted = resolve; });
+    let hold = false;
+    const f = await fixture(t, async (_assembly, args) => {
+        if (args[0] === 'capture' || args[0] === 'update') {
+            await fs.writeFile(args[0] === 'capture' ? args[2] : args[3], 'archive', { flag: 'wx' });
+        }
+        if (hold && args[0] === 'verify') {
+            verificationStarted();
+            await new Promise(resolve => { releaseVerification = resolve; });
+        }
+        return 'ok';
+    });
+    const session = await f.open();
+    const baseline = await session.snapshot();
+    hold = true;
+    const update = session.snapshot();
+    await enteredVerification;
+    session.close();
+    releaseVerification();
+
+    await assert.rejects(update, /vault changed during verification|unloaded/);
+    assert.equal((await state(f.backup)).current, path.basename(baseline.archive));
+    assert.equal(await fs.readFile(baseline.archive, 'utf8'), 'archive');
+});
+
+test('unloading during the first capture cannot create a baseline pointer', async t => {
+    let session;
+    const f = await fixture(t, async (_assembly, args) => {
+        if (args[0] === 'capture') {
+            await fs.writeFile(args[2], 'archive', { flag: 'wx' });
+            session.close();
+        }
+        return 'ok';
+    });
+    session = await f.open();
+    await assert.rejects(session.snapshot(), /vault changed during capture|unloaded/);
+    assert.deepEqual((await fs.readdir(f.backup)).filter(name => name.endsWith('.json')), []);
+});
+
 test('closing the session refuses subsequent operations', async t => {
     const f = await fixture(t);
     const session = await f.open();
