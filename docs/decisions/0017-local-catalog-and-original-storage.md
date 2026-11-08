@@ -131,6 +131,10 @@ The persisted catalog schema advances from **v1 to v2** with a nullable positive
 
 This is not the complete durable background ingestion workflow (#102). Pending/failed job receipt persistence, automatic restart/retry state transitions, source revocation/forget actions, reference-aware retention and coordinated catalog+object export/restore still need separate acceptance under #100/#40. Inventory reads can race concurrent publication, so inspection counts must never be used as a destructive action plan without an exclusive, checkpointed recovery procedure. Physical multi-GiB writes, power failure and external-drive unplug remain unverified.
 
+## Coherent recovery implementation proposal
+
+[ADR 0018](0018-coherent-local-backup.md) and [PR #134](https://github.com/berniemackie97/Praxis/pull/134) implement and test the owner-local SQLite-plus-original snapshot boundary proposed by #128. They do **not** establish real removable-drive interruption, encrypted/off-device recovery, automatic retention or first-party owner UX. Until PR review/CI and physical acceptance are recorded, this is an implementation proposal, not completion of #100/#128.
+
 ## Consequences and next slice
 
 S1c #126 establishes committed-request replay, source versioning and non-destructive recovery inspection. The next bounded work under [#100](https://github.com/berniemackie97/Praxis/issues/100) must specify reference-aware retention, validated restart handling and a coordinated catalog-plus-original export/restore. These operations need failure injection and safe staged/orphan lifecycle rules before any automatic deletion; physical multi-GiB data and external-volume unplug are separate acceptance gates. **Do not** introduce a generic repository framework, ORM plus parallel SQL implementation, vector store or multi-user auth abstraction just to satisfy the spike.
