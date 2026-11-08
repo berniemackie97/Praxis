@@ -41,6 +41,9 @@ def main():
         verified = run(executable, "verify", archive)
         if "1 notes and 2 attachments" not in verified.stdout:
             raise AssertionError(f"Unexpected verification: {verified.stdout}")
+        links = run(executable, "links", archive)
+        if "Resolved 1 note-to-attachment links; 0 unresolved" not in links.stdout:
+            raise AssertionError(f"Unexpected attachment links: {links.stdout}")
         run(executable, "restore", archive, destination)
         for name, bytes_ in contents.items():
             actual = (destination / name).read_bytes()
@@ -73,6 +76,10 @@ def main():
         if "1 notes and 2 attachments" not in verified.stdout:
             raise AssertionError(f"Updated archive invalid: {verified.stdout}")
 
+        updated_links = run(executable, "links", next_archive)
+        if "Resolved 1 note-to-attachment links; 0 unresolved" not in updated_links.stdout:
+            raise AssertionError(f"Updated link audit failed: {updated_links.stdout}")
+
         updated_vault = root / "updated-restored"
         run(executable, "restore", next_archive, updated_vault)
         if (updated_vault / "Notes/first.md").read_bytes() != (
@@ -91,6 +98,15 @@ def main():
         if removed_archive.exists():
             raise AssertionError("A removed file was silently discarded.")
 
+        unresolved_source = root / "unresolved-source"
+        unresolved_source.mkdir()
+        (unresolved_source / "note.md").write_text("![[missing.png]]", encoding="utf-8")
+        unresolved_archive = root / "unresolved.zip"
+        run(executable, "capture", unresolved_source, unresolved_archive)
+        unresolved = run(executable, "links", unresolved_archive, expected=1)
+        if "No attachment matches" not in unresolved.stderr:
+            raise AssertionError(f"Missing link was not diagnosed: {unresolved.stderr}")
+
         invalid = root / "invalid.zip"
         invalid.write_bytes(b"invalid archive")
         run(executable, "verify", invalid, expected=1)
@@ -98,7 +114,7 @@ def main():
         if (root / "invalid-restore").exists():
             raise AssertionError("An invalid archive created a restore destination.")
 
-    print("Vault CLI smoke passed: capture, verify, incremental plan/update, explicit rename, restore, no overwrite, missing-file and corruption checks.")
+    print("Vault CLI smoke passed: capture, verify, links, incremental plan/update, explicit rename, restore, no overwrite, missing-file and corruption checks.")
 
 
 if __name__ == "__main__":
