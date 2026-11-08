@@ -89,6 +89,7 @@ class CatalogContractTests(unittest.TestCase):
             self.connection.rollback()
         self.connection.close()
         self.connection = connect(self.path)
+        self.addCleanup(self.connection.close)
         self.assertEqual([("committed",)], self.connection.execute(
             "SELECT source_id FROM sources").fetchall())
 
