@@ -105,13 +105,13 @@ public sealed class LocalCatalogTests : IDisposable
         var path = Path.Combine(root, "catalog.sqlite");
         using (var connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 3");
+            Execute(connection, "PRAGMA user_version = 4");
         }
 
         Assert.Throws<NotSupportedException>(() => LocalCatalog.Open(root));
         using (var connection = Connect(path))
         {
-            Assert.Equal(3L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(4L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
