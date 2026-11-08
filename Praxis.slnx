@@ -10,5 +10,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
     <Project Path="tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj" />
+    <Project Path="tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj" />
   </Folder>
 </Solution>
