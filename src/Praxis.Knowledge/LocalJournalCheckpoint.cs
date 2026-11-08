@@ -115,10 +115,13 @@ internal static class LocalJournalCheckpoint
         }
 
         var acceptedSequences = new HashSet<long>();
+        var acceptedOperations = new HashSet<Guid>();
         foreach (var accepted in state.AwaitingPull)
         {
-            if (accepted is null || accepted.Sequence <= state.Cursor ||
-                !acceptedSequences.Add(accepted.Sequence))
+            if (accepted is null || accepted.OperationId == Guid.Empty ||
+                accepted.Sequence <= state.Cursor ||
+                !acceptedSequences.Add(accepted.Sequence) ||
+                !acceptedOperations.Add(accepted.OperationId))
             {
                 throw new InvalidDataException("The accepted-event receipt is invalid.");
             }

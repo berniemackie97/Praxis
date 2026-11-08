@@ -73,7 +73,7 @@ public sealed class LocalNoteJournal : IDisposable
         get { lock (gate) { EnsureOpen(); return Array.AsReadOnly(state.Conflicts.ToArray()); } }
     }
 
-    public IReadOnlyList<AppliedNoteChange> AcknowledgedChanges
+    public IReadOnlyList<AcceptedNoteReceipt> AcknowledgedChanges
     {
         get { lock (gate) { EnsureOpen(); return Array.AsReadOnly(state.AwaitingPull.ToArray()); } }
     }
@@ -116,6 +116,18 @@ public sealed class LocalNoteJournal : IDisposable
         {
             EnsureOpen();
             LocalJournalCheckpoint.ValidateRecord(accepted);
+            var previous = state.AwaitingPull.FirstOrDefault(
+                receipt => receipt.OperationId == operationId);
+            if (previous is not null)
+            {
+                if (previous.Sequence != acceptedSequence || previous.Record != accepted)
+                {
+                    throw new InvalidDataException("The replayed acknowledgement differs from its receipt.");
+                }
+
+                return;
+            }
+
             if (acceptedSequence <= state.Cursor ||
                 state.AwaitingPull.Any(change => change.Sequence == acceptedSequence))
             {
@@ -144,7 +156,7 @@ public sealed class LocalNoteJournal : IDisposable
             candidate.Records.RemoveAll(record => record.Id == accepted.Id);
             candidate.Records.Add(accepted);
             candidate.Pending.Remove(edit);
-            candidate.AwaitingPull.Add(new AppliedNoteChange(acceptedSequence, accepted));
+            candidate.AwaitingPull.Add(new AcceptedNoteReceipt(operationId, acceptedSequence, accepted));
             Commit(candidate);
         }
     }

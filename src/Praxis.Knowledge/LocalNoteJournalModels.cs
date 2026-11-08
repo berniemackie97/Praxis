@@ -24,6 +24,8 @@ public sealed record RejectedNoteEdit(
 
 public sealed record AppliedNoteChange(long Sequence, LocalNoteState Record);
 
+public sealed record AcceptedNoteReceipt(Guid OperationId, long Sequence, LocalNoteState Record);
+
 public sealed record LocalNoteSnapshot(Guid CollectionEpoch, long Cursor, IReadOnlyList<LocalNoteState> Records);
 
 internal sealed class LocalJournalState
@@ -35,7 +37,7 @@ internal sealed class LocalJournalState
     public List<PendingNoteEdit> Pending { get; set; } = [];
     public List<RejectedNoteEdit> Conflicts { get; set; } = [];
     public List<RejectedNoteEdit> Resolved { get; set; } = [];
-    public List<AppliedNoteChange> AwaitingPull { get; set; } = [];
+    public List<AcceptedNoteReceipt> AwaitingPull { get; set; } = [];
 
     public LocalJournalState Copy() => new()
     {

@@ -109,6 +109,30 @@ public sealed class LocalNoteJournalTests : IDisposable
     }
 
     [Fact]
+    public void DuplicateAcknowledgementIsIdempotentWhileReceiptIsPending()
+    {
+        using (var journal = Open())
+        {
+            var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "accepted");
+            var result = Record(Note, 1, "note.md", "accepted");
+            journal.Accept(edit.OperationId, 1, result);
+            journal.Accept(edit.OperationId, 1, result);
+
+            Assert.Single(journal.AcknowledgedChanges);
+            Assert.Empty(journal.Pending);
+            Assert.Throws<InvalidDataException>(() =>
+                journal.Accept(edit.OperationId, 2, result));
+            Assert.Throws<InvalidDataException>(() =>
+                journal.Accept(edit.OperationId, 1, result with { Markdown = "altered" }));
+            Assert.Equal(0, journal.Cursor);
+        }
+
+        using var restored = Open();
+        Assert.Single(restored.AcknowledgedChanges);
+        Assert.Equal("accepted", Assert.Single(restored.Records).Markdown);
+    }
+
+    [Fact]
     public void AcknowledgedReceiptSurvivesRestartUntilMatchingPull()
     {
         using (var journal = Open())
