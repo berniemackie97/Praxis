@@ -98,6 +98,12 @@ The owner-selected data root is checked before capture. Staged originals are pla
 
 Local filesystem and owner permissions are not a security boundary against another process with the same OS-user authority; the current implementation does not guarantee resistance to adversarial path substitution, hard power loss, Windows ACL misconfiguration or disconnected external media. A hash confirms bytes, not authenticity or access rights. The catalog, originals and derived content are **plaintext** until separately authorized encryption decisions. These limits remain in #50/#40/#107. The write primitive must not be exposed to browser pages or MCP agents without separate caller authentication and scopes.
 
+## Explicit request receipts and interruption inspection (S1c)
+
+S1c introduces caller-provided request keys and stable source/item revision history. A committed key returns the stored historical result **without re-reading the caller's stream**. This makes intentional retries repeatable, but does not authenticate source locators, prove a new stream matches the old stream or authorize a new actor to replay someone else's key. Future localhost, browser and MCP interfaces must bind request keys to an authenticated principal, source scope and expiration/revocation policy before exposing this API.
+
+`InspectRecoveryAsync` reads catalog and object metadata and rehashes referenced original files. It can identify incomplete staging, orphaned publication, corrupt and missing references; it makes **no changes**. The scan is not a consistent snapshot across concurrent imports, and an orphan may still be in use. Retention policies, directory replacement risks, interrupted power/drive removal and complete media+metadata backups remain required under #100/#40. Do not expose source paths, file hashes, private content or inventory output to agents without #107/#117 access decisions.
+
 ## Verification gates
 
 **Before exposing a private-data sync endpoint:**
