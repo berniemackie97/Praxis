@@ -1,6 +1,6 @@
 # ADR 0004: Portable note identities and revision archives
 
-**Status:** Accepted for local Markdown note exchange; synchronization and attachment formats are separate decisions
+**Status:** Accepted for local Markdown note exchange; attachment-bearing collection archives are defined separately in [ADR 0005](0005-attachment-collection-archive.md).
 
 ## Context
 

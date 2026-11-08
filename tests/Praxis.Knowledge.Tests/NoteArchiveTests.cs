@@ -66,7 +66,7 @@ public sealed class NoteArchiveTests
     {
         var note = NoteRecord.Create("note.md", "original");
         using var archive = Export(note);
-        ReplaceEntry(archive, $"notes/{note.Id:N}/00000001.md", _ => Encoding.UTF8.GetBytes("altered!"));
+        ArchiveFixture.ReplaceEntry(archive, $"notes/{note.Id:N}/00000001.md", _ => Encoding.UTF8.GetBytes("altered!"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
     }
@@ -75,7 +75,7 @@ public sealed class NoteArchiveTests
     public void UnknownFormatVersionIsRejected()
     {
         using var archive = Export(NoteRecord.Create("note.md", "content"));
-        ReplaceEntry(archive, "manifest.json", bytes =>
+        ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
             Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace(
                 "\"formatVersion\": 1", "\"formatVersion\": 2", StringComparison.Ordinal)));
 
@@ -86,7 +86,7 @@ public sealed class NoteArchiveTests
     public void InvalidManifestPathIsRejected()
     {
         using var archive = Export(NoteRecord.Create("safe.md", "content"));
-        ReplaceEntry(archive, "manifest.json", bytes =>
+        ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
             Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace(
                 "\"path\": \"safe.md\"", "\"path\": \"../escape.md\"", StringComparison.Ordinal)));
 
@@ -125,7 +125,7 @@ public sealed class NoteArchiveTests
     public void CorruptedManifestIsRejected()
     {
         using var archive = Export(NoteRecord.Create("note.md", "content"));
-        ReplaceEntry(archive, "manifest.json", _ => Encoding.UTF8.GetBytes("{"));
+        ArchiveFixture.ReplaceEntry(archive, "manifest.json", _ => Encoding.UTF8.GetBytes("{"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
     }
@@ -215,25 +215,4 @@ public sealed class NoteArchiveTests
         return stream;
     }
 
-    private static void ReplaceEntry(MemoryStream stream, string name, Func<byte[], byte[]> replace)
-    {
-        stream.Position = 0;
-        using (var zip = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
-        {
-            var entry = zip.GetEntry(name) ?? throw new InvalidOperationException("Missing test entry.");
-            byte[] original;
-            using (var payload = entry.Open())
-            using (var buffer = new MemoryStream())
-            {
-                payload.CopyTo(buffer);
-                original = buffer.ToArray();
-            }
-
-            entry.Delete();
-            using var updated = zip.CreateEntry(name).Open();
-            updated.Write(replace(original));
-        }
-
-        stream.Position = 0;
-    }
 }

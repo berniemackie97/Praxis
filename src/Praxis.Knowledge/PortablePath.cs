@@ -2,9 +2,9 @@ using System.Text;
 
 namespace Praxis.Knowledge;
 
-internal static class NotePath
+internal static class PortablePath
 {
-    public static void Validate(string path)
+    public static void Validate(string path, bool markdown = false)
     {
         ArgumentNullException.ThrowIfNull(path);
 
@@ -12,9 +12,9 @@ internal static class NotePath
             !path.IsNormalized(NormalizationForm.FormC) ||
             path.StartsWith('/') ||
             path.Contains('\\') ||
-            !path.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            (markdown && !path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)))
         {
-            throw new ArgumentException("A note path must be a normalized, relative Markdown path.", nameof(path));
+            throw new ArgumentException("The path must be normalized and relative.", nameof(path));
         }
 
         foreach (var segment in path.Split('/'))
@@ -27,7 +27,7 @@ internal static class NotePath
                     character == '\u007f' ||
                     "<>:\"|?*".Contains(character)))
             {
-                throw new ArgumentException("The note path contains an invalid segment.", nameof(path));
+                throw new ArgumentException("The path contains an invalid segment.", nameof(path));
             }
 
             var stem = segment.Split('.')[0];
@@ -38,7 +38,7 @@ internal static class NotePath
                 (stem.Length == 4 && stem.AsSpan(0, 3).Equals("COM", StringComparison.OrdinalIgnoreCase) && stem[3] is >= '1' and <= '9') ||
                 (stem.Length == 4 && stem.AsSpan(0, 3).Equals("LPT", StringComparison.OrdinalIgnoreCase) && stem[3] is >= '1' and <= '9'))
             {
-                throw new ArgumentException("The note path contains a reserved filename.", nameof(path));
+                throw new ArgumentException("The path contains a reserved filename.", nameof(path));
             }
         }
     }

@@ -19,7 +19,7 @@ public sealed class NoteRecord
                 throw new ArgumentException("Note revisions must be contiguous and start at one.");
             }
 
-            NotePath.Validate(revision.Path);
+            PortablePath.Validate(revision.Path, markdown: true);
             ArgumentNullException.ThrowIfNull(revision.Markdown);
         }
 
@@ -36,14 +36,14 @@ public sealed class NoteRecord
 
     public static NoteRecord Create(string path, string markdown)
     {
-        NotePath.Validate(path);
+        PortablePath.Validate(path, markdown: true);
         ArgumentNullException.ThrowIfNull(markdown);
         return new NoteRecord(Guid.NewGuid(), [new NoteRevision(1, path, markdown)]);
     }
 
     public NoteRecord Revise(string path, string markdown)
     {
-        NotePath.Validate(path);
+        PortablePath.Validate(path, markdown: true);
         ArgumentNullException.ThrowIfNull(markdown);
 
         var next = new NoteRevision(checked(Current.Number + 1), path, markdown);
