@@ -27,7 +27,7 @@ The current service does **not** yet implement remote private-data storage, auth
 
 The validated [standalone delivery plan](delivery/standalone-mvp.md) and [product experience](product/second-brain-experience.md) define the current priority and user-visible acceptance:
 
-1. **Local Praxis, no Obsidian:** resolve source/storage contract #99, implement catalog #100, ingestion lifecycle #102, file/folder Inbox #101, bounded extraction #103, lexical search #106, loopback boundary #107 and first-party UI #108. Exit is a real restarted/imported/searched/recovered local application without remote processing.
+1. **Local Praxis, no Obsidian:** completed storage decision #99, catalog bootstrap #122 and original publication #124 lead to retry-safe source identity #126, coherent recovery #128 and parent catalog gate #100. Then implement ingestion lifecycle #102, file/folder Inbox #101, bounded extraction #103, lexical search #106, local caller-policy spike #129, loopback boundary #107 and first-party UI #108. Close the local vertical slice only after cross-feature acceptance #130 demonstrates an actual restarted/imported/searched/recovered application without remote processing.
 2. **Fast capture:** quick thoughts #113, intentional microphone recording #109 and transcription #110, URL capture #104 and an explicitly paired browser extension #112/#111. These use the same provenance/ingestion model rather than independent stores.
 3. **Knowledge depth and evaluation:** explicit folder watcher #105, safe rich-media metadata #114, reviewed suggestions #115, relationships #116 and retrieval measurements #29. An unsupported binary is preserved, never falsely described as understood.
 4. **Agent/MCP compatibility:** contract and per-agent scope spike #117, local read-only #118, then separately authorized auditable writes #119. Untrusted content cannot authorize actions.
@@ -36,7 +36,7 @@ Remote synchronization (M2), Obsidian desktop/mobile parity (M3), advanced infer
 
 ### First useful milestone (local)
 
-An owner can open Praxis directly, explicitly add files/folders with mixed supported and unsupported formats, see provenance and processing errors, search supported extracted content, inspect source originals, retry after a restart, rebuild the index and verify restoration. Obsidian, cloud storage, an external AI model and a second device are **not requirements** for this local milestone.
+After #130 verification, an owner can open Praxis directly, explicitly add files/folders with mixed supported and unsupported formats, see provenance and processing errors, search supported extracted content, inspect source originals, retry after a restart, rebuild the index and verify restoration. Obsidian, cloud storage, an external AI model and a second device are **not requirements** for this local milestone.
 
 ### Later synchronization and release work
 
