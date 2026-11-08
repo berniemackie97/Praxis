@@ -168,6 +168,11 @@ public static class LocalVaultReconciler
     private static IReadOnlyList<VaultRename> ExpandMoves(
         IReadOnlyDictionary<string, PriorFile> previous, IReadOnlyList<VaultRename> rules)
     {
+        if (rules.Count > 2_000)
+        {
+            throw new InvalidDataException("The ordered rename list exceeds its supported limit.");
+        }
+
         var positions = previous.Values.ToDictionary(file => file, file => file.Path);
         foreach (var rule in rules)
         {
