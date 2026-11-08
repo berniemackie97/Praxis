@@ -15,7 +15,8 @@ Project priority is independent from milestone number. Owner-local processing mu
 | Slice | Work | Deliverable and acceptance evidence |
 | --- | --- | --- |
 | S0 — local data contract | #99 | Review measured local catalog/storage alternatives, durable identity, crash/power/data-loss and privacy boundaries; proposed decision and fixtures |
-| S1 — originals and catalog | #100 | Explicit local import of an original retains stable item/source IDs and digest across restart; unsafe paths/large files/disk failures rejected |
+| S1a — catalog bootstrap | #122 under #100 | Pin/lock SQLite provider, validate schema migration, owner-local directory, WAL/FK settings, rollback/reopen and incompatible-catalog refusal; **not yet a working import** |
+| S1b–S1d — original storage and recovery | #100 | Stream verified originals, preserve source/item IDs across restart/retry, handle failures and prove consistent metadata+content backup/restore; unsafe paths/large files/disk failures rejected |
 | S2 — reliable ingestion | #102, #101 | File/folder Inbox import, visible states and retry/cancel; no original writes or duplicate logical entries |
 | S3 — first extraction | #103 | Bounded text/Markdown and selected PDF extraction; other media metadata-only or unsupported, never discarded silently |
 | S4 — rebuildable search | #106 | Lexical text search with source links; index rebuild, delete and version change tests |
