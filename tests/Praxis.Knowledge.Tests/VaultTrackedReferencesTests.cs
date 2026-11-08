@@ -112,14 +112,13 @@ public sealed class VaultTrackedReferencesTests : IDisposable
         Assert.False(File.Exists(nextPath));
         Assert.Equal(before, File.ReadAllBytes(firstPath));
 
-        var plan = LocalVaultExchange.PlanUpdate(source, firstPath,
-            acceptLinkRemovals: true);
+        var plan = LocalVaultExchange.PlanUpdate(source, firstPath);
         Assert.Equal(1, plan.RemovedLinks);
         Assert.Empty(plan.Collection.VaultReferences!);
         Assert.False(File.Exists(nextPath));
 
         LocalVaultExchange.UpdateArchive(source, firstPath, nextPath,
-            acceptLinkRemovals: true);
+            approvedLinkRemovals: plan.RemovedLinkPairs);
         var updated = Read(nextPath);
         Assert.NotNull(updated.VaultReferences);
         Assert.Empty(updated.VaultReferences);
@@ -139,11 +138,68 @@ public sealed class VaultTrackedReferencesTests : IDisposable
         Put(source, "note.md", "no embed");
 
         var result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source),
-            acceptLinkRemovals: true);
+            previewLinkRemovals: true);
 
         Assert.Empty(result.Collection.VaultReferences!);
         Assert.Equal(reference, Assert.Single(result.Collection.References));
         Assert.Equal(1, result.RemovedLinks);
+    }
+
+    [Fact]
+    public void ApprovalMustExactlyMatchRemovedPairIdentifiers()
+    {
+        var source = Vault();
+        Put(source, "note.md", "![[first.png]]\n![[second.png]]");
+        Put(source, "first.png", "one");
+        Put(source, "second.png", "two");
+        var first = Path.Combine(root, "baseline.zip");
+        LocalVaultExchange.CaptureArchive(source, first, trackLinks: true);
+        Put(source, "note.md", "no embeds");
+        var plan = LocalVaultExchange.PlanUpdate(source, first);
+        Assert.Equal(2, plan.RemovedLinks);
+
+        var output = Path.Combine(root, "incorrect.zip");
+        Assert.Throws<InvalidOperationException>(() =>
+            LocalVaultExchange.UpdateArchive(source, first, output,
+                approvedLinkRemovals: [plan.RemovedLinkPairs![0]]));
+        Assert.False(File.Exists(output));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LocalVaultExchange.UpdateArchive(source, first, output,
+                approvedLinkRemovals: [plan.RemovedLinkPairs![0], plan.RemovedLinkPairs[0]]));
+        Assert.False(File.Exists(output));
+
+        var alien = new AttachmentReference(Guid.NewGuid(), Guid.NewGuid());
+        Assert.Throws<InvalidOperationException>(() =>
+            LocalVaultExchange.UpdateArchive(source, first, output,
+                approvedLinkRemovals: [plan.RemovedLinkPairs![0], alien]));
+        Assert.False(File.Exists(output));
+
+        LocalVaultExchange.UpdateArchive(source, first, output,
+            approvedLinkRemovals: plan.RemovedLinkPairs!.Reverse().ToArray());
+        Assert.Empty(Read(output).VaultReferences!);
+    }
+
+    [Fact]
+    public void StaleApprovalCannotRemoveNewlyDisappearedReferences()
+    {
+        var source = Vault();
+        Put(source, "note.md", "![[first.png]]\n![[second.png]]");
+        Put(source, "first.png", "one");
+        Put(source, "second.png", "two");
+        var first = Path.Combine(root, "baseline.zip");
+        LocalVaultExchange.CaptureArchive(source, first, trackLinks: true);
+
+        Put(source, "note.md", "![[second.png]]");
+        var plan = LocalVaultExchange.PlanUpdate(source, first);
+        Assert.Single(plan.RemovedLinkPairs!);
+        Put(source, "note.md", "no embeds");
+        var output = Path.Combine(root, "changed-after-plan.zip");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            LocalVaultExchange.UpdateArchive(source, first, output,
+                approvedLinkRemovals: plan.RemovedLinkPairs));
+        Assert.False(File.Exists(output));
     }
 
     [Fact]
