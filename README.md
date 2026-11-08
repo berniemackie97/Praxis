@@ -71,6 +71,14 @@ dotnet run --project tools/Praxis.VaultCli -- update /path/to/vault /backups/pre
 
 Unchanged records keep their IDs, changed Markdown appends history, updated binary attachments preserve attachment IDs, and existing explicit references remain attached to those IDs. **Missing prior files stop the update** rather than being silently discarded. Renames require an explicit JSON file passed as `--renames /path/to/mapping.json`; both input and output archives must live outside the vault. See [ADR 0010](docs/decisions/0010-incremental-vault-reconciliation.md) for the mapping format, rules and unresolved semantic-link/deletion limitations.
 
+Before wiring Markdown embeds into stored identity references, inspect a captured or updated collection archive:
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- links /backups/next.zip
+```
+
+The read-only link audit resolves the supported local Markdown image and Obsidian embedded wikilink forms to attachment IDs. It reports missing, escaping and ambiguous targets with a nonzero exit code, without modifying the archive or source vault. This is **not** a complete Markdown/Obsidian parser: reference-definition links, advanced nested Markdown syntax, aliases, editor metadata and automatic link repair are not supported. The discovered links are diagnostic and are not yet committed as canonical collection references. See [ADR 0011](docs/decisions/0011-vault-attachment-link-audit.md).
+
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
 ## Release verification
