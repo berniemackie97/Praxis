@@ -82,6 +82,19 @@ python3 -m unittest discover -s scripts/research -p 'test_*.py' -v
 python3 scripts/research/local_catalog_probe.py
 ```
 
+### Recorded Linux CI sample
+
+[CI run #114](https://github.com/berniemackie97/Praxis/actions/runs/42513677524) executed the same generated workload on SQLite **3.45.1**: 4,000 source/item entries, 100 updated revisions and a 64 MiB streamed original.
+
+| Observation | SQLite schema fixture | JSONL append baseline |
+| --- | ---: | ---: |
+| Initial records | 0.0540 s | 0.0109 s |
+| 100 individually synced revisions | 0.0909 s | 0.0261 s |
+| Reopen/count vs event replay | 0.0007 s | 0.0075 s |
+| Metadata bytes on disk | 1,982,464 | 832,300 |
+
+These samples show SQLite **does not outperform the simpler flat log in initial append throughput or file footprint** on this synthetic workload. The selection rests instead on transactional multi-entity consistency, uniqueness/foreign keys, schema migration and indexed queries without building a separate log compactor and referential integrity layer.
+
 Durations from GitHub-hosted runner disks are descriptive, **not** platform performance targets or a comparable .NET provider benchmark: JSONL records are denormalized, unlike the multi-table SQLite schema. They illustrate the operational cost of replay versus transactional indexing. The 64 MiB fixture demonstrates fixed-buffer streaming, not that a 3 GiB video, unplugged external SSD or large-library restore has passed on macOS, Linux and Windows. Full multi-GiB import, busy-writer, cancellation, retention and power-loss tests remain hard acceptance criteria for #100/#40.
 
 ## Consequences and next slice
