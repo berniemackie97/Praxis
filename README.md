@@ -1,12 +1,18 @@
 # Praxis
 
-Praxis is a local-first knowledge and automation platform. Obsidian is the first editor, not a dependency of the data model, synchronization protocol, or services.
+Praxis is a local-first, independent Second Brain for capturing, preserving, finding, organizing and eventually using knowledge through explicitly authorized agents. **Obsidian is optional**: it is an editor adapter, not the primary application or required storage. The active delivery priority is a standalone local Inbox/Library/Search experience, followed by voice dictation, browser save, reviewable enrichment and scoped MCP agent access.
 
 ## Current state
 
 The repository contains a .NET 10 HTTP service with process liveness checks and a separate `Praxis.Knowledge` library for portable Markdown note identities, immutable revision histories and validated local archive import/export.
 
 Authentication, durable canonical collection storage, synchronization, search and agent execution are **not implemented**. Local archives and optional staged attachment files do not send data to any service.
+
+## Product direction and delivery status
+
+The [product experience](docs/product/second-brain-experience.md) defines the intended sources, original-versus-derived model, user-facing flows, microphone/browser capture and agent access. The [standalone local MVP plan](docs/delivery/standalone-mvp.md) defines a dependency-aware sequence of first useful slices and their acceptance criteria.
+
+**Implemented today:** portable note/attachment identities and local ZIP capture/verify/restore, including a tested macOS Obsidian adapter. **Not implemented yet:** an independent source catalog, generic durable Inbox, first-party Praxis UI, full-text search, dictation, browser extension, source enrichment, MCP server, remotely authorized sync or production hosting. No cloud AI provider is required by the intended local MVP.
 
 ## Development
 
@@ -38,9 +44,9 @@ The [note archive contract](docs/decisions/0004-portable-note-archive.md) and [a
 
 1. Preserve portable canonical records and recoverable original attachments.
 2. Provide authorized, versioned sync with offline edits and explicit conflict handling.
-3. Integrate Obsidian desktop and mobile as the initial clients.
-4. Add capture, source-grounded retrieval, and constrained automation.
-5. Offer independent first-party interfaces without migrating away from the underlying knowledge.
+3. Deliver an independent, local-only file/folder Inbox and first-party Praxis Library/Search interface—no Obsidian required.
+4. Add intentional voice dictation, browser capture, source-grounded enrichment and scoped MCP access.
+5. Validate remote sync, Obsidian desktop/mobile compatibility, broader clients and operational recovery separately, behind their security and device-test gates.
 
 See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [engineering workflow](docs/engineering.md), and [tracking conventions](docs/tracking.md). GitHub [roadmap issue #1](https://github.com/berniemackie97/Praxis/issues/1) is the work-item index.
 

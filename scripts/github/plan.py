@@ -99,10 +99,35 @@ def validate(plan):
             raise ValueError(f"Unknown epic #{epic_number}.")
         add(task["issue"], None, epic_number, epics[epic_number]["stage"], epics[epic_number]["area"])
 
+    for number, area in plan.get("area_overrides", {}).items():
+        if int(number) not in items or area not in AREAS:
+            raise ValueError(f"Invalid area override on #{number}.")
+        items[int(number)]["area"] = area
+    if not set(plan.get("decision_queue", [])).issubset(items):
+        raise ValueError("Decision queue contains an unknown issue.")
+
     dependencies = {int(issue): set(blockers) for issue, blockers in plan["dependencies"].items()}
     for number, blockers in dependencies.items():
         if number not in items or number in blockers or not blockers.issubset(items):
             raise ValueError(f"Invalid dependency edge on #{number}.")
+
+    removed = {int(number): set(blockers)
+               for number, blockers in plan.get("dependency_removals", {}).items()}
+    for number, blockers in removed.items():
+        if (number not in items or not blockers or not blockers.issubset(items) or
+                number in blockers or blockers.intersection(dependencies.get(number, set()))):
+            raise ValueError(f"Invalid retired dependency on #{number}.")
+
+    lane_ids = set()
+    lane_items = set()
+    for lane in plan.get("delivery_lanes", []):
+        if lane["id"] in lane_ids or not lane["issues"] or not lane["exit"]:
+            raise ValueError("Delivery lanes need distinct identities and exit evidence.")
+        lane_ids.add(lane["id"])
+        for number in lane["issues"]:
+            if number not in items or number in lane_items:
+                raise ValueError(f"Invalid or duplicate lane issue #{number}.")
+            lane_items.add(number)
 
     visited = set()
     active = set()
@@ -134,6 +159,13 @@ def validate(plan):
         item["priority"] = plan["priority_overrides"].get(
             str(number), plan["priorities"].get(stage)
         )
+    for number, migration in plan.get("priority_migrations", {}).items():
+        if (int(number) not in items or
+                set(migration) != {"from", "to"} or
+                migration["from"] not in {"P0", "P1", "P2", "P3"} or
+                migration["from"] == migration["to"] or
+                migration["to"] != items[int(number)]["priority"]):
+            raise ValueError(f"Invalid priority migration on #{number}.")
     return items, dependencies
 
 
@@ -234,7 +266,7 @@ def reconcile_issues(plan, items, dependencies):
             raise RuntimeError(f"Unexpected issue classification on #{number}: {issue['title']}")
 
         desired = {f"kind:{kind}", f"area:{metadata['area']}"}
-        if number == 50:
+        if number in plan.get("decision_queue", [50]):
             desired.add("needs:decision")
         present = {label["name"] for label in issue.get("labels") or []}
         missing_labels = desired - present
@@ -257,6 +289,9 @@ def reconcile_issues(plan, items, dependencies):
             gh("issue", "edit", number, "-R", repo, "--parent", parent)
 
         blocked_by = blocked_by_numbers(issue)
+        retired = set(plan.get("dependency_removals", {}).get(str(number), []))
+        for dependency in sorted(retired & blocked_by):
+            gh("issue", "edit", number, "-R", repo, "--remove-blocked-by", dependency)
         for dependency in sorted(dependencies.get(number, set()) - blocked_by):
             gh("issue", "edit", number, "-R", repo, "--add-blocked-by", dependency)
 
@@ -432,6 +467,11 @@ def reconcile_project(plan, project, items, issues):
             current = entry.get(field_name.lower())
             if current == value:
                 continue
+            migration = plan.get("priority_migrations", {}).get(str(issue_number))
+            if (field_name == "Priority" and migration and
+                    current == migration["from"] and value == migration["to"]):
+                changes.append((item_id, by_name[field_name]["id"], options[field_name][value]))
+                continue
             if current:
                 print(f"Preserved existing {field_name}={current} on #{issue_number}")
                 continue
@@ -486,7 +526,8 @@ def main():
     if not args.apply:
         return
 
-    check_graphql_capacity(20)
+    # Reserve quota for issue hierarchy/dependency reconciliation before any writes.
+    check_graphql_capacity(max(200, 10 * len(items)))
     project = verify_target(plan)
     print(f"Authorized target: {plan['repository']} / "
           f"{plan['project']['owner']} project #{plan['project']['number']}")

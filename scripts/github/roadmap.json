@@ -28,7 +28,7 @@
     {
       "stage": "M4",
       "title": "M4 — Capture and retrieval",
-      "description": "Provenance-preserving ingestion, source-scoped search and evidence-based retrieval. Exit: reproducible relevance and reindex validation."
+      "description": "Independent local capture, durable provenance, type-aware extraction and rebuildable retrieval; user-facing capture with no Obsidian dependency."
     },
     {
       "stage": "M5",
@@ -38,7 +38,7 @@
     {
       "stage": "M6",
       "title": "M6 — First-party clients",
-      "description": "Independent cross-platform Praxis clients with interoperable offline storage. Exit: operating without Obsidian demonstrated on supported platforms."
+      "description": "First-party Praxis interfaces that access the same local and future multi-device contracts, independent of Obsidian; earliest usable local UI may deliver before M2/M3/M6 exit."
     },
     {
       "stage": "M7",
@@ -153,7 +153,15 @@
       "children": [
         26,
         27,
-        30
+        30,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        114
       ]
     },
     {
@@ -162,7 +170,8 @@
       "area": "retrieval",
       "children": [
         28,
-        29
+        29,
+        106
       ]
     },
     {
@@ -199,7 +208,9 @@
       "area": "clients",
       "children": [
         37,
-        39
+        39,
+        107,
+        108
       ]
     },
     {
@@ -218,6 +229,37 @@
       "children": [
         46,
         47
+      ]
+    },
+    {
+      "issue": 96,
+      "epic": 6,
+      "area": "capture",
+      "children": [
+        109,
+        110,
+        111,
+        112,
+        113
+      ]
+    },
+    {
+      "issue": 97,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        115,
+        116
+      ]
+    },
+    {
+      "issue": 98,
+      "epic": 7,
+      "area": "automation",
+      "children": [
+        117,
+        118,
+        119
       ]
     }
   ],
@@ -299,14 +341,18 @@
       22
     ],
     "26": [
-      22
+      101,
+      109,
+      111
     ],
     "27": [
       14,
-      15
+      16,
+      102
     ],
     "28": [
-      27
+      27,
+      106
     ],
     "29": [
       28
@@ -360,30 +406,249 @@
     "67": [
       71,
       73
+    ],
+    "99": [
+      14,
+      16
+    ],
+    "100": [
+      99
+    ],
+    "101": [
+      102
+    ],
+    "102": [
+      100
+    ],
+    "103": [
+      102
+    ],
+    "104": [
+      30,
+      102,
+      103
+    ],
+    "105": [
+      101,
+      102
+    ],
+    "106": [
+      103
+    ],
+    "107": [
+      99,
+      100
+    ],
+    "108": [
+      101,
+      106,
+      107
+    ],
+    "109": [
+      100,
+      108
+    ],
+    "110": [
+      103,
+      109
+    ],
+    "111": [
+      104,
+      112
+    ],
+    "112": [
+      102,
+      107
+    ],
+    "113": [
+      108
+    ],
+    "114": [
+      103
+    ],
+    "115": [
+      103,
+      106
+    ],
+    "116": [
+      108,
+      115
+    ],
+    "117": [
+      106,
+      107
+    ],
+    "118": [
+      106,
+      107,
+      117
+    ],
+    "119": [
+      32,
+      102,
+      118
     ]
   },
   "priorities": {
     "M0": "P1",
     "M1": "P1",
-    "M2": "P1",
+    "M2": "P2",
     "M3": "P2",
-    "M4": "P2",
+    "M4": "P1",
     "M5": "P2",
-    "M6": "P3",
+    "M6": "P2",
     "M7": "P2"
   },
   "priority_overrides": {
+    "6": "P1",
+    "8": "P1",
     "13": "P0",
     "15": "P0",
     "16": "P0",
     "17": "P0",
+    "26": "P1",
+    "27": "P1",
+    "37": "P1",
     "40": "P0",
     "41": "P0",
     "50": "P0",
     "53": "P0",
     "55": "P0",
+    "59": "P1",
+    "60": "P1",
+    "64": "P1",
     "65": "P1",
     "92": "P1",
-    "94": "P1"
-  }
+    "94": "P1",
+    "96": "P1",
+    "99": "P1",
+    "100": "P1",
+    "101": "P1",
+    "102": "P1",
+    "103": "P1",
+    "104": "P2",
+    "105": "P2",
+    "106": "P1",
+    "107": "P1",
+    "108": "P1",
+    "109": "P1",
+    "110": "P1",
+    "111": "P2",
+    "112": "P2",
+    "113": "P1",
+    "114": "P2",
+    "115": "P2",
+    "116": "P2",
+    "117": "P2",
+    "118": "P2",
+    "119": "P2"
+  },
+  "area_overrides": {
+    "99": "knowledge",
+    "100": "knowledge",
+    "112": "security",
+    "117": "security"
+  },
+  "decision_queue": [
+    13,
+    30,
+    36,
+    50,
+    99,
+    117
+  ],
+  "dependency_removals": {
+    "26": [
+      22
+    ],
+    "27": [
+      15
+    ]
+  },
+  "priority_migrations": {
+    "6": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "8": {
+      "from": "P3",
+      "to": "P1"
+    },
+    "26": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "27": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "37": {
+      "from": "P3",
+      "to": "P1"
+    },
+    "59": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "60": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "64": {
+      "from": "P3",
+      "to": "P1"
+    }
+  },
+  "delivery_lanes": [
+    {
+      "id": "L0",
+      "name": "Standalone local knowledge MVP",
+      "issues": [
+        99,
+        100,
+        102,
+        101,
+        103,
+        106,
+        107,
+        108
+      ],
+      "exit": "Import a representative file/folder sample, recover originals and source attribution after restart, search extracted content, and inspect it in Praxis without Obsidian or network."
+    },
+    {
+      "id": "L1",
+      "name": "Fast capture surfaces",
+      "issues": [
+        113,
+        109,
+        110,
+        104,
+        112,
+        111
+      ],
+      "exit": "Quick entry, deliberate voice recording/transcription and explicit browser capture all use the same recoverable local intake contract with consent and no duplicate writes."
+    },
+    {
+      "id": "L2",
+      "name": "Source depth and usable organization",
+      "issues": [
+        105,
+        114,
+        115,
+        116,
+        29
+      ],
+      "exit": "Configured folder monitoring, bounded rich-media metadata, reviewed suggestions and cross-source collections survive rebuild/reprocessing without inventing source facts."
+    },
+    {
+      "id": "L3",
+      "name": "Agent interoperability",
+      "issues": [
+        117,
+        118,
+        119
+      ],
+      "exit": "A local agent can retrieve scoped grounded knowledge; write operations require independent permissions and approval, with revocation and prompt-injection tests."
+    }
+  ]
 }

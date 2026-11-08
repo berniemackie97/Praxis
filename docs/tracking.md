@@ -2,6 +2,12 @@
 
 GitHub [Praxis Roadmap Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board; [#1](https://github.com/berniemackie97/Praxis/issues/1) is the program index. The [declarative roadmap](../scripts/github/roadmap.json) maps existing issues to stages, parent features and critical dependencies.
 
+## Execution focus: standalone local Praxis
+
+The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The first active chain is #99 → #100 → #102/#101 → #103 → #106 → #107 → #108; voice #109/#110, browser #104/#111/#112 and MCP #117–#119 follow as separately testable outcomes. Obsidian #5 is optional and does not block initial direct capture.
+
+Limit work-in-progress to one cohesive implementation slice awaiting merge per active workstream, except independent decision spikes. Each issue is audited against current code before taking it, and every PR reports exact test evidence, unresolved integration gaps and its linked parent issue. Do not close a parent feature because a single child test passes. No remote processing or agent permission is inferred from user-local ingestion.
+
 ## Work item hierarchy
 
 | Level | Purpose | Completion condition |
@@ -25,7 +31,7 @@ Closed duplicate issues #42–#45 are retained in GitHub's history but excluded 
 
 Use the existing Project **Status** field. Assign Todo/Backlog only to unstarted, unblocked work; In Progress when actively worked; In Review when a PR is awaiting merge (only if that option exists); and Done after the issue is closed with verified acceptance. Blocked work should have a native dependency link and appear in the Decision Queue or a blocker view; do not create a second source of truth by adding ad-hoc blocked labels.
 
-The Project **Stage** field mirrors the milestone stage for board filtering. The reconciliation tool fills missing Stage and Priority values but preserves existing curated open-item values.
+The Project **Stage** field mirrors the milestone stage for board filtering. The reconciliation tool fills missing Stage and Priority values but preserves existing curated open-item values. Reviewed `priority_migrations` in the source plan may promote a specifically enumerated issue **only** when its existing Priority matches the declared prior value. Other custom values remain untouched. A declared dependency-removal list similarly removes only explicitly identified stale blockers.
 
 - **P0:** Release-blocking security, recovery, integrity or immediate critical-path decision.
 - **P1:** Required for the next demonstrable delivery milestone.
