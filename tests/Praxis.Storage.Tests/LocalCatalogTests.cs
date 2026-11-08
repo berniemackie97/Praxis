@@ -136,6 +136,29 @@ public sealed class LocalCatalogTests : IDisposable
     }
 
     [Fact]
+    public void FalselyVersionedCatalogWithIncompatibleColumnsIsRejected()
+    {
+        var path = Path.Combine(root, "catalog.sqlite");
+        using (var connection = Connect(path))
+        {
+            Execute(connection, """
+                CREATE TABLE original_objects (placeholder INTEGER) STRICT;
+                CREATE TABLE sources (placeholder INTEGER) STRICT;
+                CREATE TABLE items (placeholder INTEGER) STRICT;
+                CREATE TABLE item_versions (placeholder INTEGER) STRICT;
+                CREATE TABLE ingest_requests (placeholder INTEGER) STRICT;
+                PRAGMA user_version = 1;
+                """);
+        }
+
+        Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
+        using var reopened = Connect(path);
+        Assert.Equal(1L, Scalar(reopened, "PRAGMA user_version"));
+        Assert.Equal(1L, Scalar(reopened,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sources'"));
+    }
+
+    [Fact]
     public void MissingRelativeAndSharedDirectoriesAreRejectedWithoutCreatingCatalog()
     {
         Assert.Throws<DirectoryNotFoundException>(() =>
