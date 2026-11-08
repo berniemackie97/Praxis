@@ -5,8 +5,14 @@ namespace Praxis.Storage;
 public sealed class LocalCatalog : IDisposable
 {
     private const int CurrentSchemaVersion = 1;
-    private static readonly string[] Tables =
-        ["original_objects", "sources", "items", "item_versions", "ingest_requests"];
+    private static readonly (string Name, string Columns)[] Tables =
+    [
+        ("original_objects", "digest, byte_length, recorded_utc"),
+        ("sources", "source_id, source_kind, locator, created_utc, status"),
+        ("items", "item_id, source_id"),
+        ("item_versions", "item_id, revision, digest, observed_utc"),
+        ("ingest_requests", "request_key, source_id, state, attempt, failure_code")
+    ];
 
     private readonly FileStream lockFile;
     private readonly SqliteConnection connection;
@@ -173,14 +179,25 @@ public sealed class LocalCatalog : IDisposable
 
     private static void VerifySchema(SqliteConnection database)
     {
-        foreach (var table in Tables)
+        foreach (var (name, columns) in Tables)
         {
             using var command = Command(database,
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=$name");
-            command.Parameters.AddWithValue("$name", table);
-            if ((long)command.ExecuteScalar()! != 1)
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
+            command.Parameters.AddWithValue("$name", name);
+            if (command.ExecuteScalar() is not string definition ||
+                !definition.TrimEnd().EndsWith("STRICT", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidDataException("The catalog schema is incomplete.");
+                throw new InvalidDataException("The catalog schema is incompatible.");
+            }
+
+            using var projection = Command(database, $"SELECT {columns} FROM {name} LIMIT 0");
+            try
+            {
+                using var reader = projection.ExecuteReader();
+            }
+            catch (SqliteException exception)
+            {
+                throw new InvalidDataException("The catalog schema is incomplete.", exception);
             }
         }
     }
