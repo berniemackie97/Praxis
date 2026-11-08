@@ -73,7 +73,7 @@ Do not start a non-loopback listener or allow browser pages to connect with impl
 
 ## Empirical probe and what it does **not** prove
 
-The [probe](../../scripts/research/local_catalog_probe.py) evaluates embedded SQLite against an append-only JSONL event baseline with a repeatable generated corpus, version updates, cold reopen/replay, and per-candidate stored bytes. It also streams a **64 MiB** synthetic original using **64 KiB** buffers and checks its SHA-256 after reopening. The [constraint tests](../../scripts/research/test_local_catalog_probe.py) exercise schema version, multiple sources sharing one digest, uniqueness, failed references, rollback, reopen, metadata backup and corrupt-catalog rejection.
+The [probe](../../scripts/research/local_catalog_probe.py) evaluates embedded SQLite against an append-only JSONL event baseline with a repeatable generated corpus, version updates, cold reopen/replay, and per-candidate stored bytes. It streams a **physically written 64 MiB** synthetic original using **64 KiB** buffers and verifies its SHA-256 after reopening; a separate **2 GiB sparse input** is read in the same fixed-size chunks to exercise large-file length handling without consuming 2 GiB of actual disk blocks. The [constraint tests](../../scripts/research/test_local_catalog_probe.py) exercise schema version, multiple sources sharing one digest, uniqueness, failed references, rollback, reopen, metadata backup and corrupt-catalog rejection.
 
 Run from the repository root:
 
@@ -95,7 +95,7 @@ python3 scripts/research/local_catalog_probe.py
 
 These samples show SQLite **does not outperform the simpler flat log in initial append throughput or file footprint** on this synthetic workload. The selection rests instead on transactional multi-entity consistency, uniqueness/foreign keys, schema migration and indexed queries without building a separate log compactor and referential integrity layer.
 
-Durations from GitHub-hosted runner disks are descriptive, **not** platform performance targets or a comparable .NET provider benchmark: JSONL records are denormalized, unlike the multi-table SQLite schema. They illustrate the operational cost of replay versus transactional indexing. The 64 MiB fixture demonstrates fixed-buffer streaming, not that a 3 GiB video, unplugged external SSD or large-library restore has passed on macOS, Linux and Windows. Full multi-GiB import, busy-writer, cancellation, retention and power-loss tests remain hard acceptance criteria for #100/#40.
+Durations from GitHub-hosted runner disks are descriptive, **not** platform performance targets or a comparable .NET provider benchmark: JSONL records are denormalized, unlike the multi-table SQLite schema. They illustrate the operational cost of replay versus transactional indexing. The 64 MiB written fixture and 2 GiB sparse read demonstrate fixed-buffer processing and large-length arithmetic. A sparse file is not a fully written 2 GiB media transfer: neither benchmark proves that a 3 GiB video, unplugged external SSD or large-library restore passes on macOS, Linux and Windows. Full multi-GiB import, busy-writer, cancellation, retention and power-loss tests remain hard acceptance criteria for #100/#40.
 
 ## Consequences and next slice
 
