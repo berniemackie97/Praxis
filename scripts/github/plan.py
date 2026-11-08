@@ -114,8 +114,8 @@ def validate(plan):
     removed = {int(number): set(blockers)
                for number, blockers in plan.get("dependency_removals", {}).items()}
     for number, blockers in removed.items():
-        if number not in items or not blockers or not blockers.issubset(items) or
-                number in blockers or blockers.intersection(dependencies.get(number, set())):
+        if (number not in items or not blockers or not blockers.issubset(items) or
+                number in blockers or blockers.intersection(dependencies.get(number, set()))):
             raise ValueError(f"Invalid retired dependency on #{number}.")
 
     lane_ids = set()
