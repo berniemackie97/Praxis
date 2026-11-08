@@ -1,6 +1,6 @@
 # Standalone Praxis delivery plan
 
-**Status:** Scoped roadmap for user review. No implementation, provider, privacy mode or target date is approved solely by this document.
+**Status:** Reviewed product direction and delivery plan. The standalone app remains unshipped; implementation and privacy decisions require their own verified acceptance.
 
 ## Correction to execution strategy
 
@@ -17,16 +17,18 @@ Project priority is independent from milestone number. Owner-local processing mu
 | S0 — local data contract | #99 | Review measured local catalog/storage alternatives, durable identity, crash/power/data-loss and privacy boundaries; proposed decision and fixtures |
 | S1a — catalog bootstrap | #122 under #100 | Pin/lock SQLite provider, validate schema migration, owner-local directory, WAL/FK settings, rollback/reopen and incompatible-catalog refusal; **not yet a working import** |
 | S1b — streamed original publication | #124 under #100 | Bound and verify input streams; non-overwriting same-volume publication before a transaction records original/source/item/first version; distinguish source identities despite byte deduplication |
-| S1c–S1d — recovery and lifecycle | #100 | Add request idempotency, repeated-source versioning and orphan recovery, then prove consistent catalog+content backup/restore and disk/full-volume failure behavior |
+| S1c — retry and interruption safety | #126 under #100 | Preserve source identity across retries and revisions, durable receipts and read-only orphan/corruption inventory; no destructive object collection |
+| S1d — coherent local recovery | #128 under #100 | Backup and restore catalog+originals together with identity/integrity evidence, failure injection and explicit real external-drive checks |
 | S2 — reliable ingestion | #102, #101 | File/folder Inbox import, visible states and retry/cancel; no original writes or duplicate logical entries |
 | S3 — first extraction | #103 | Bounded text/Markdown and selected PDF extraction; other media metadata-only or unsupported, never discarded silently |
 | S4 — rebuildable search | #106 | Lexical text search with source links; index rebuild, delete and version change tests |
-| S5 — secure local access | #107 | Loopback-only independently callable service, authorization model for browser/MCP integration and negative origin/cross-process tests |
+| S5 — secure local access | #129, #107 | Reviewed owner-local caller/access decision followed by a loopback service with tested cross-origin, unauthorized process and extension/agent boundaries |
 | S6 — usable Praxis app | #108 | First-party Inbox/Library/Search works end-to-end **without Obsidian**, no cloud account and no required model provider |
+| S7 — integrated acceptance | #130 | Real macOS first-run and cross-platform regression prove mixed-source import, provenance, recovery, indexed search, denial tests and user-visible errors |
 
 These are separate issue-sized implementation reviews, not an instruction to introduce a framework per row. A slice must re-audit actual code, dependencies and CI before implementation; one PR may cover multiple closely coupled acceptance points only when it remains reviewable. Cross-platform API/unit tests and a real macOS first-run acceptance are required before claiming the local MVP complete.
 
-**Local MVP exit test:** Import a mixed folder (Markdown, text, selected PDF, image, video, code and unknown binary); preserve every accepted original byte and provenance; show unsupported processing; crash/restart/retry without duplicates; search supported text, inspect exact source, rebuild and delete the index; export/restore current originals; deny unauthorized or remote access. No Obsidian dependency, no silent external inference.
+**Local MVP exit test (#130):** Import a mixed folder (Markdown, text, selected PDF, image, video, code and unknown binary); preserve every accepted original byte and provenance; show unsupported processing; crash/restart/retry without duplicates; search supported text, inspect exact source, rebuild and delete the index; export/restore current originals; deny unauthorized or remote access. No Obsidian dependency, no silent external inference.
 
 ## Next capture experiences
 
