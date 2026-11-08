@@ -38,7 +38,7 @@ Only one adapter action is run at a time in a plugin instance. An exclusive `.pr
 
 Running or previewing a snapshot during Obsidian file change events invalidates the current operation; changes made through other processes without vault events cannot be detected reliably by this bridge. The CLI retains its own bounded path, size, version and integrity checks. Every spawned CLI process uses an argument array without a shell, has bounded output and a timeout, and is cancelled when the plugin unloads. Unload invalidates pending capture adoption and suppresses late success messages. Reconfiguring the archive directory or CLI path invalidates pending session initialization; the old session cannot silently become active after settings change.
 
-Disable or uninstalling this adapter leaves all original vault files readable and editable in Obsidian. Its external archives and external session metadata are not deleted. **No mobile compatibility, automatic remote sync, encrypted storage, **real-app validation of folder event ordering**, or complete Markdown link parsing is claimed.**
+Disable or uninstalling this adapter leaves all original vault files readable and editable in Obsidian. Its external archives and external session metadata are not deleted. **No mobile compatibility, automatic remote sync, encrypted storage, verified real-app folder event ordering, or complete Markdown link parsing is claimed.**
 
 ## Automated verification
 
