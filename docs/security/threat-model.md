@@ -90,6 +90,14 @@ These are requirements for future work, **not** evidence of implemented security
 
 A local first-party demonstration may run without remote trust decisions, but enabling external access, third-party inference or unattended agent side effects still requires #13/#15/#50 and corresponding authorization evidence.
 
+## Verified original-file publication boundary (S1b)
+
+S1b issue #124 adds an explicitly invoked .NET stream-to-storage primitive. Only the caller supplies source bytes and absolute locator; no automatic source opening, watcher, browser permission, microphone access or remote transfer is added. The locator is **unverified provenance text** until the planned input-selection layer (#101/#102) validates that the stream came from a user-approved source.
+
+The owner-selected data root is checked before capture. Staged originals are placed under private subdirectories, size-limited, hashed and flushed; a non-overwriting same-volume rename publishes them by lowercase SHA-256. Existing objects are rehashed before sharing. The catalog transaction comes after successful published-byte verification. A failed SQL transaction can leave an orphan verified object, and no automatic garbage collector is authorized yet. Retries and source version updates are not yet idempotent (#100 S1c).
+
+Local filesystem and owner permissions are not a security boundary against another process with the same OS-user authority; the current implementation does not guarantee resistance to adversarial path substitution, hard power loss, Windows ACL misconfiguration or disconnected external media. A hash confirms bytes, not authenticity or access rights. The catalog, originals and derived content are **plaintext** until separately authorized encryption decisions. These limits remain in #50/#40/#107. The write primitive must not be exposed to browser pages or MCP agents without separate caller authentication and scopes.
+
 ## Verification gates
 
 **Before exposing a private-data sync endpoint:**
