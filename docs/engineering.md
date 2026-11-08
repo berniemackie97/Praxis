@@ -21,3 +21,10 @@
 ## PR gate
 
 A PR is ready for owner review only when its actual relevant tests and CI are green, its diff has been audited, linked issues have clear disposition, and remaining risks are called out. Never treat unrun tests as passed or merge without the owner's direction.
+
+## Dependency and workflow security
+
+- CI pins third-party GitHub Actions to reviewed commit hashes. Dependabot proposes updates; review the new commit and its permissions before merging.
+- Restore audits direct and transitive NuGet dependencies, including low-severity advisories, with warnings treated as errors. Investigate the originating package and fix or replace it; advisory suppression requires a specific, documented risk decision.
+- Dependabot checks NuGet and workflow actions weekly. Updates are reviewable PRs, not automatic merges.
+- The SDK can roll forward within the configured feature-band policy; package lock files and reproducible restore are not yet established. Before claiming reproducible releases, commit generated lock files, enforce locked restores in CI, and verify the resulting SDK/package graph. Database migrations and rollback rehearsals remain #46 follow-up work once persistent schema exists.
