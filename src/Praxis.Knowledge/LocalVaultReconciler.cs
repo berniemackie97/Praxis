@@ -1,6 +1,6 @@
 namespace Praxis.Knowledge;
 
-public sealed record VaultRename(string FromPath, string ToPath);
+public sealed record VaultRename(string FromPath, string ToPath, bool IsFolder = false);
 
 public sealed record VaultChange(
     Guid RecordId, string? PreviousPath, string CurrentPath,
@@ -46,7 +46,10 @@ public static class LocalVaultReconciler
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var remapped = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
         var remappedSources = new HashSet<PriorFile>();
-        foreach (var rule in renames ?? [])
+        var rules = renames ?? [];
+        var mappings = rules.Any(rule => rule?.IsFolder == true)
+            ? ExpandMoves(priorByPath, rules) : rules;
+        foreach (var rule in mappings)
         {
             if (rule is null)
             {
@@ -160,6 +163,47 @@ public static class LocalVaultReconciler
 
             return prior;
         }
+    }
+
+    private static IReadOnlyList<VaultRename> ExpandMoves(
+        IReadOnlyDictionary<string, PriorFile> previous, IReadOnlyList<VaultRename> rules)
+    {
+        var positions = previous.Values.ToDictionary(file => file, file => file.Path);
+        foreach (var rule in rules)
+        {
+            if (rule is null)
+            {
+                throw new ArgumentException("The rename list contains an empty mapping.", nameof(rules));
+            }
+
+            PortablePath.Validate(rule.FromPath);
+            PortablePath.Validate(rule.ToPath);
+            if (string.Equals(rule.FromPath, rule.ToPath, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("The rename mapping is redundant.");
+            }
+
+            var affected = positions.Where(pair => rule.IsFolder
+                    ? pair.Value.StartsWith(rule.FromPath + "/", StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(pair.Value, rule.FromPath, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (affected.Length == 0 || !rule.IsFolder && affected.Length != 1)
+            {
+                throw new InvalidDataException("The rename mapping is missing or ambiguous.");
+            }
+
+            foreach (var (file, current) in affected)
+            {
+                var destination = rule.IsFolder
+                    ? rule.ToPath + current[rule.FromPath.Length..] : rule.ToPath;
+                PortablePath.Validate(destination);
+                positions[file] = destination;
+            }
+        }
+
+        return positions.Where(pair => !string.Equals(pair.Key.Path, pair.Value, StringComparison.Ordinal))
+            .Select(pair => new VaultRename(pair.Key.Path, pair.Value))
+            .ToArray();
     }
 
     private sealed record PriorFile(Guid Id, string Path, bool IsAttachment);
