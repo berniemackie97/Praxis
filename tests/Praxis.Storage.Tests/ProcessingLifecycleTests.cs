@@ -152,7 +152,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(3, reopened.SchemaVersion);
         var job = Assert.Single(reopened.ListProcessingJobs());
         Assert.Equal("canceled", job.State);
-        Assert.False(reopened.ListProcessingJobs().Any(j => j.State == "running"));
+        Assert.DoesNotContain(reopened.ListProcessingJobs(), j => j.State == "running");
         Assert.Null(reopened.TryClaimProcessing(TimeSpan.FromSeconds(1)));
         Assert.True(reopened.RetryProcessing(job.ItemId, job.Revision, job.ProcessorKey));
         Assert.NotNull(reopened.TryClaimProcessing(TimeSpan.FromSeconds(1)));
