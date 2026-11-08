@@ -122,6 +122,21 @@ public sealed class LocalVaultAttachmentLinksTests
     }
 
     [Fact]
+    public void IgnoresNoteEmbedsWhileAuditingBinaryEmbeds()
+    {
+        var note = NoteRecord.Create("index.md",
+            "![[other]]\n![[other.md#section]]\n![[image.png]]");
+        var linkedNote = NoteRecord.Create("other.md", "body");
+        var image = AttachmentRecord.Create("image.png", [1]);
+        var report = LocalVaultAttachmentLinks.Inspect(
+            new KnowledgeCollection([note, linkedNote], [image], []));
+
+        Assert.Empty(report.Problems);
+        Assert.Equal(new AttachmentReference(note.Id, image.Id),
+            Assert.Single(report.References));
+    }
+
+    [Fact]
     public void DoesNotModifySourceMarkdownOrCollection()
     {
         const string body = "![[media/old.png]]\r\n";
