@@ -9,10 +9,15 @@ This is the first **local, user-triggered desktop adapter** for Praxis. It uses 
    dotnet publish tools/Praxis.VaultCli/Praxis.VaultCli.csproj -c Release -o /path/outside/vault/praxis-cli
    ```
 2. Create an **existing private archive directory outside the vault**. Keep it on storage you control; archives contain full note and attachment contents, including hidden configuration, **without encryption**.
-3. Copy `main.js`, `archive-session.js`, `cli-process.js` and `manifest.json` into the vault's configured Obsidian plugins directory under a folder named `praxis-vault`. The configuration directory is not necessarily `.obsidian`.
-4. Enable the plugin under Obsidian desktop's Community plugins. In Praxis Vault settings, specify the **absolute** archive directory and **absolute** published `Praxis.VaultCli.dll` path.
+3. Build the self-contained plugin package outside the source directory (Node.js is needed only to package the plugin):
+   ```sh
+   node integrations/obsidian/scripts/package.js /path/outside/vault/praxis-vault
+   ```
+   The output contains only `main.js` and `manifest.json`. The packager refuses an existing destination and does not overwrite previous builds. It uses only built-in Node.js modules and embeds the repository's three local runtime modules into `main.js`; there are no downloaded npm dependencies.
+4. Copy the **two generated files** into a folder named `praxis-vault` under Obsidian's configured plugins directory (its configuration directory may differ from `.obsidian`). Do not install the three unbundled source modules as the plugin.
+5. Enable the plugin under Obsidian desktop's Community plugins. In Praxis Vault settings, specify the **absolute** archive directory and **absolute** published `Praxis.VaultCli.dll` path.
 
-This first adapter is not yet distributed as an installer or published to the Obsidian plugin directory. It requires a supported desktop Obsidian app, the local .NET runtime and files copied manually. **Real desktop-app smoke testing is still outstanding** under issue #22.
+The package can be installed manually, but is not published to the Obsidian community directory. Obsidian desktop and the local .NET runtime are required; the package is **not** a standalone replacement for the CLI. The generated entry is syntax-checked and loaded against a simulated Obsidian host in CI; **real desktop-app smoke testing is still outstanding** under issue #22.
 
 ## Commands and state
 
@@ -29,7 +34,7 @@ The plugin does not approve disappearing tracked references. Use the CLI `plan` 
 
 Only one adapter action is run at a time in a plugin instance. An exclusive `.praxis-vault-session.lock` file prevents concurrent processes from changing the same external session state during an operation. An unexpected shutdown may leave this lock file. **Check that no archive process is active and preserve the state and archives before removing it manually.** The adapter does not silently delete stale locks or reset corrupted state.
 
-Running or previewing a snapshot during Obsidian file change events invalidates the current operation; changes made through other processes without vault events cannot be detected reliably by this bridge. The CLI retains its own bounded path, size, version and integrity checks. Every spawned CLI process uses an argument array without a shell, has bounded output and a timeout, and is cancelled when the plugin unloads.
+Running or previewing a snapshot during Obsidian file change events invalidates the current operation; changes made through other processes without vault events cannot be detected reliably by this bridge. The CLI retains its own bounded path, size, version and integrity checks. Every spawned CLI process uses an argument array without a shell, has bounded output and a timeout, and is cancelled when the plugin unloads. Unload invalidates pending capture adoption and suppresses late success messages. Reconfiguring the archive directory or CLI path invalidates pending session initialization; the old session cannot silently become active after settings change.
 
 Disable or uninstalling this adapter leaves all original vault files readable and editable in Obsidian. Its external archives and external session metadata are not deleted. **No mobile compatibility, automatic remote sync, encrypted storage, folder-event parity or complete Markdown link parsing is claimed.**
 
@@ -40,6 +45,9 @@ node --test integrations/obsidian/test/archive-session.test.js
 node --check integrations/obsidian/main.js
 node --check integrations/obsidian/archive-session.js
 node --check integrations/obsidian/cli-process.js
+node integrations/obsidian/scripts/package.js /path/outside/vault/praxis-vault
+node --check /path/outside/vault/praxis-vault/main.js
+node --test integrations/obsidian/test/packaged-plugin.test.js
 ```
 
-The standard-library tests exercise session behavior against a simulated CLI on all three CI platforms. Linux additionally runs `node --test integrations/obsidian/test/archive-session-cli.test.js` against the real compiled `.NET` CLI, covering initial capture, tracked-link preservation, rename/update, round-trip restore and refusal to publish an unapproved unlink. The independent CLI smoke in `scripts/release/smoke_vault_cli.py` also remains. These automated tests do **not** replace real Obsidian desktop validation.
+The standard-library tests exercise session behavior against a simulated CLI on all three CI platforms. Packaging tests build the two-file installable layout, verify reproducibility and safety, and load the generated plugin against a simulated Obsidian host to exercise event registration and commands. Linux additionally runs `node --test integrations/obsidian/test/archive-session-cli.test.js` against the real compiled `.NET` CLI, covering initial capture, tracked-link preservation, rename/update, round-trip restore and refusal to publish an unapproved unlink. The independent CLI smoke in `scripts/release/smoke_vault_cli.py` also remains. These automated tests do **not** replace real Obsidian desktop validation.
