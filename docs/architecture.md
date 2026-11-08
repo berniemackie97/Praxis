@@ -47,7 +47,7 @@ The HTTP application exposes only a process liveness endpoint with its integrati
 
 ## Planned standalone ingestion and retrieval boundary
 
-The current portable archive library and local Obsidian capture remain implemented foundations. **A durable standalone source catalog, processing pipeline, search service, first-party UI, microphone input, browser extension and MCP server are not yet implemented.** The [product experience](product/second-brain-experience.md) and [delivery lanes](delivery/standalone-mvp.md) define their user-level responsibilities and acceptance criteria.
+Portable archive/vault tools and the owner-local SQLite catalog with first-version original-file storage are implemented foundations. **The catalog is not yet a replay-safe, fully recoverable intake system:** source updates and interruption inventory remain #126; coordinated catalog-and-original restore remains #128. The durable ingestion pipeline, search service, first-party UI, microphone input, browser extension and MCP server are **not implemented**. The [product experience](product/second-brain-experience.md) and [delivery lanes](delivery/standalone-mvp.md) define their user-level responsibilities and acceptance criteria.
 
 - Explicit owner-selected file/folder intake and later voice/browser/agent input all pass through one source/provenance contract (#59/#96).
 - Immutable or versioned originals are separate from file paths, capture sources, extraction outputs, human annotations and searchable indexes; deduplication cannot erase source ownership.
@@ -57,7 +57,7 @@ The current portable archive library and local Obsidian capture remain implement
 - Browser extension pairing and MCP are **different untrusted callers**, each with explicit grants. MCP read-only comes before independently approved write actions (#98).
 - Folder input is a convenience surface, not the canonical data store. Obsidian is another optional adapter (#57).
 
-The embedded local catalog design in [ADR 0017](decisions/0017-local-catalog-and-original-storage.md) has been accepted under #99. Task #122 / PR #123 established the owner-local SQLite catalog schema. S1b issue #124 / PR #125 adds bounded, explicitly supplied original-stream publication into separate content-addressed files before committing first source/item/version references. This is a low-level storage operation, **not a user-facing file/folder importer**. Durable request replay, coordinated object recovery, extraction, UI and complete ingest remain in #100/#102/#103/#108. API authorization, UI packaging, transcription, remote trust and model/provider decisions remain separate (#107/#50/#117).
+The embedded local catalog design in [ADR 0017](decisions/0017-local-catalog-and-original-storage.md) has been accepted under #99. Task #122 / merged PR #123 established the owner-local SQLite catalog schema. S1b issue #124 / merged PR #125 added bounded, explicitly supplied original-stream publication into separate content-addressed files before committing first source/item/version references. This is a low-level storage operation, **not a user-facing file/folder importer**. Durable request replay and changed-source identity are #126, coherent catalog/object recovery is #128, and parent acceptance remains #100. Extraction, UI and complete ingest remain #102/#103/#108; the local caller-policy decision is #129, with cross-feature MVP acceptance #130. API authorization, UI packaging, transcription, remote trust and model/provider decisions remain separate (#107/#50/#117).
 
 ## Pending decisions
 
