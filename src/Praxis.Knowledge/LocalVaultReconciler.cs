@@ -6,13 +6,15 @@ public sealed record VaultChange(
     Guid RecordId, string? PreviousPath, string CurrentPath,
     bool IsAttachment, bool ContentChanged, bool PathChanged);
 
-public sealed record VaultUpdate(KnowledgeCollection Collection, IReadOnlyList<VaultChange> Changes);
+public sealed record VaultUpdate(KnowledgeCollection Collection, IReadOnlyList<VaultChange> Changes,
+    int AddedLinks = 0, int RemovedLinks = 0);
 
 public static class LocalVaultReconciler
 {
     public static VaultUpdate Reconcile(
         KnowledgeCollection previous, KnowledgeCollection captured,
-        IReadOnlyList<VaultRename>? renames = null)
+        IReadOnlyList<VaultRename>? renames = null,
+        bool trackLinks = false, bool acceptLinkRemovals = false)
     {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(captured);
@@ -122,7 +124,25 @@ public static class LocalVaultReconciler
         }
 
         var collection = new KnowledgeCollection(notes, attachments, previous.References);
-        return new VaultUpdate(collection, Array.AsReadOnly(changes.ToArray()));
+        var addedLinks = 0;
+        var removedLinks = 0;
+        if (trackLinks || previous.VaultReferences is not null)
+        {
+            collection = LocalVaultAttachmentLinks.Track(collection);
+            var oldLinks = previous.VaultReferences?.ToHashSet() ?? [];
+            var newLinks = collection.VaultReferences!.ToHashSet();
+            addedLinks = newLinks.Except(oldLinks).Count();
+            removedLinks = oldLinks.Except(newLinks).Count();
+            if (removedLinks != 0 && !acceptLinkRemovals)
+            {
+                throw new InvalidOperationException(
+                    $"{removedLinks} tracked attachment reference(s) disappeared. " +
+                    "Review the changes and explicitly accept link removals before updating.");
+            }
+        }
+
+        return new VaultUpdate(collection, Array.AsReadOnly(changes.ToArray()),
+            addedLinks, removedLinks);
 
         PriorFile? Find(string path, bool isAttachment)
         {
