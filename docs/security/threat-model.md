@@ -77,6 +77,19 @@ Priority indicates what must be blocked before private remote data is accepted; 
 | T13 | High | Human error, malicious update or lost device creates unrecoverable destruction | Audit, immutable/versioned restore points, tested revoke and restore operations. [#40](https://github.com/berniemackie97/Praxis/issues/40), [#46](https://github.com/berniemackie97/Praxis/issues/46) |
 | T14 | Medium | Encrypted collections still expose timing, sizes, endpoints or device associations | Minimize metadata and log retention; document residual leakage. [#13](https://github.com/berniemackie97/Praxis/issues/13), [#50](https://github.com/berniemackie97/Praxis/issues/50) |
 
+## Additional local capture, browser, voice and agent boundaries (planned)
+
+These are requirements for future work, **not** evidence of implemented security controls:
+
+- **Owner-local library:** accepting a directory or file means permission for the chosen source only, not for a whole home directory. The local service cannot assume that loopback implies authorization; browser origin bypass, DNS rebinding, alternate local users and token disclosure require explicit negative tests (#99/#100/#107).
+- **Hostile input:** malformed PDFs/media/archives, code, game binaries, and fetched pages are untrusted. Never execute imported code or extraction instructions; bound file size, parser runtime, recursion and derived output, and do not silently upload content (#102/#103/#114).
+- **Dictation:** microphone permission and active recording state are explicit; cancellation and retention must be tested. A transcript is a derived output with separate processing consent; no remote speech model receives audio by default (#109/#110).
+- **Extension:** page scripts are untrusted, even on a tab the user chose. Paired browser capture needs narrow grants, cross-origin checks, content sanitization, an explicit queue and revocation, with no passive browsing-history surveillance (#111/#112).
+- **MCP:** agent identities have separately scoped read and write capabilities. Retrieved notes/web pages cannot instruct the service to escalate permissions; tools require bounded arguments/responses and auditable approvals; no agent receives arbitrary disk access (#117/#118/#119/#32).
+- **Deletion and index cleanup:** source revocation/deletion must retract unauthorized derived snippets, suggestions, cached responses and agent-visible results, even when identical bytes remain for another authorized source (#102/#106/#115/#118).
+
+A local first-party demonstration may run without remote trust decisions, but enabling external access, third-party inference or unattended agent side effects still requires #13/#15/#50 and corresponding authorization evidence.
+
 ## Verification gates
 
 **Before exposing a private-data sync endpoint:**
