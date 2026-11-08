@@ -27,21 +27,28 @@ internal static class LocalJournalCheckpoint
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
         }
 
-        var container = JsonSerializer.Deserialize<CheckpointEnvelope>(
-            File.ReadAllBytes(path), Options) ?? throw new InvalidDataException("The local checkpoint is empty.");
-        if (container.Version != 1 || container.Payload is null ||
-            container.Payload.Length > MaxPayloadBytes || container.Sha256 is null ||
-            !string.Equals(
-                Convert.ToHexStringLower(SHA256.HashData(container.Payload)),
-                container.Sha256, StringComparison.Ordinal))
+        try
         {
-            throw new InvalidDataException("The local checkpoint failed integrity verification.");
-        }
+            var container = JsonSerializer.Deserialize<CheckpointEnvelope>(
+                File.ReadAllBytes(path), Options) ?? throw new InvalidDataException("The local checkpoint is empty.");
+            if (container.Version != 1 || container.Payload is null ||
+                container.Payload.Length > MaxPayloadBytes || container.Sha256 is null ||
+                !string.Equals(
+                    Convert.ToHexStringLower(SHA256.HashData(container.Payload)),
+                    container.Sha256, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("The local checkpoint failed integrity verification.");
+            }
 
-        var result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options)
-            ?? throw new InvalidDataException("The local checkpoint payload is empty.");
-        Validate(result);
-        return result;
+            var result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options)
+                ?? throw new InvalidDataException("The local checkpoint payload is empty.");
+            Validate(result);
+            return result;
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The local checkpoint is malformed.", exception);
+        }
     }
 
     public static void Write(string path, LocalJournalState state)

@@ -1,4 +1,4 @@
-using System.Text;
+using System.Text.Json.Nodes;
 using Praxis.Knowledge;
 using Xunit;
 
@@ -339,17 +339,17 @@ public sealed class LocalNoteJournalTests : IDisposable
         }
 
         var checkpoint = Path.Combine(directory, "journal.json");
-        var bytes = File.ReadAllBytes(checkpoint);
-        var offset = Array.IndexOf(bytes, (byte)'a');
-        Assert.True(offset >= 0);
-        bytes[offset] ^= 1;
-        File.WriteAllBytes(checkpoint, bytes);
+        var envelope = JsonNode.Parse(File.ReadAllText(checkpoint))!.AsObject();
+        var payload = envelope["payload"]!.GetValue<string>();
+        envelope["payload"] = (payload[0] == 'A' ? 'B' : 'A') + payload[1..];
+        var corrupted = envelope.ToJsonString();
+        File.WriteAllText(checkpoint, corrupted);
 
-        Assert.ThrowsAny<Exception>(() =>
+        Assert.Throws<InvalidDataException>(() =>
         {
             using var _ = Open();
         });
-        Assert.Equal(bytes, File.ReadAllBytes(checkpoint));
+        Assert.Equal(corrupted, File.ReadAllText(checkpoint));
     }
 
     [Fact]
@@ -363,6 +363,44 @@ public sealed class LocalNoteJournalTests : IDisposable
         File.WriteAllText(Path.Combine(directory, "journal.json.123456.pending"), "partial");
         using var reopened = Open();
         Assert.Equal("durable", Assert.Single(reopened.Pending).Markdown);
+    }
+
+    [Fact]
+    public void AJournalCannotBeSilentlyReopenedUnderAnotherIdentity()
+    {
+        using (var first = Open())
+        {
+            first.Queue(Note, LocalNoteAction.Upsert, "note.md", "private");
+        }
+
+        Assert.Throws<InvalidDataException>(() =>
+        {
+            using var _ = LocalNoteJournal.Open(directory, Guid.NewGuid(), DeviceA);
+        });
+        Assert.Throws<InvalidDataException>(() =>
+        {
+            using var _ = LocalNoteJournal.Open(directory, Epoch, DeviceB);
+        });
+
+        using var restored = Open();
+        Assert.Equal("private", Assert.Single(restored.Pending).Markdown);
+    }
+
+    [Fact]
+    public void MalformedCheckpointFailsWithoutReinitializingLocalEdits()
+    {
+        using (var first = Open())
+        {
+            first.Queue(Note, LocalNoteAction.Upsert, "note.md", "private");
+        }
+
+        var checkpoint = Path.Combine(directory, "journal.json");
+        File.WriteAllText(checkpoint, "{unparseable");
+        Assert.Throws<InvalidDataException>(() =>
+        {
+            using var _ = Open();
+        });
+        Assert.Equal("{unparseable", File.ReadAllText(checkpoint));
     }
 
     [Fact]
