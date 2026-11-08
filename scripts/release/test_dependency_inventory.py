@@ -120,6 +120,38 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Conflicting hashes"):
             generate(self.root, self.cache)
 
+    def test_centrally_pinned_transitive_dependency_from_project_reference(self):
+        dependent = self.root / "tests/Storage.Tests"
+        dependent.mkdir(parents=True)
+        (dependent / "Storage.Tests.csproj").write_text(
+            '<Project><ItemGroup><ProjectReference Include="../../src/Example/Example.csproj" />'
+            '</ItemGroup></Project>', encoding="utf-8"
+        )
+        (dependent / "packages.lock.json").write_text(json.dumps({
+            "version": 2, "dependencies": {"net10.0": {
+                "example": {"type": "Project"},
+                "Example": {
+                    "type": "CentralTransitive", "requested": "[1.2.3, )",
+                    "resolved": "1.2.3", "contentHash": DIGEST
+                }
+            }}
+        }), encoding="utf-8")
+        (self.root / "Praxis.slnx").write_text(
+            '<Solution><Project Path="src/Example/Example.csproj"/>'
+            '<Project Path="tests/Storage.Tests/Storage.Tests.csproj"/></Solution>',
+            encoding="utf-8"
+        )
+        report = generate(self.root, self.cache)
+        self.assertEqual(["src/Example", "tests/Storage.Tests"],
+                         report["packages"][0]["projects"])
+
+        lock = dependent / "packages.lock.json"
+        data = json.loads(lock.read_text())
+        data["dependencies"]["net10.0"]["Example"]["resolved"] = "9.9.9"
+        lock.write_text(json.dumps(data), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Central version"):
+            generate(self.root, self.cache)
+
     def test_unpinned_sdk_is_rejected(self):
         (self.root / "global.json").write_text(
             '{"sdk":{"version":"10.0.403","rollForward":"latestFeature"}}',
