@@ -18,7 +18,7 @@ Project priority is independent from milestone number. Owner-local processing mu
 | S1a — catalog bootstrap | #122 under #100 | Pin/lock SQLite provider, validate schema migration, owner-local directory, WAL/FK settings, rollback/reopen and incompatible-catalog refusal; **not yet a working import** |
 | S1b — streamed original publication | #124 under #100 | Bound and verify input streams; non-overwriting same-volume publication before a transaction records original/source/item/first version; distinguish source identities despite byte deduplication |
 | S1c — retry and interruption safety | #126 under #100 | Preserve source identity across retries and revisions, durable receipts and read-only orphan/corruption inventory; no destructive object collection |
-| S1d — coherent local recovery | #128 under #100 | Backup and restore catalog+originals together with identity/integrity evidence, failure injection and explicit real external-drive checks |
+| S1d — coherent local recovery | #128 under #100 | [PR #134](https://github.com/berniemackie97/Praxis/pull/134) proposes a verified local catalog+original snapshot API with restore and failure tests; CI, review, real large-file and physical external-drive acceptance remain open |
 | S2 — reliable ingestion | #102, #101 | File/folder Inbox import, visible states and retry/cancel; no original writes or duplicate logical entries |
 | S3 — first extraction | #103 | Bounded text/Markdown and selected PDF extraction; other media metadata-only or unsupported, never discarded silently |
 | S4 — rebuildable search | #106 | Lexical text search with source links; index rebuild, delete and version change tests |
@@ -66,7 +66,7 @@ Do not treat agent access as ordinary browser/UI access or grant tools by prompt
 
 ## Planning and owner decisions
 
-- #99 evaluates embedded SQLite metadata and verified original files against an append-only JSONL alternative in [ADR 0017](../decisions/0017-local-catalog-and-original-storage.md); the recommendation remains subject to review, provider validation and end-to-end crash/backup tests under #100.
+- #99 evaluates embedded SQLite metadata and verified original files against an append-only JSONL alternative in [ADR 0017](../decisions/0017-local-catalog-and-original-storage.md); provider validation and basic storage behavior are now implemented in merged S1a–S1c; [ADR 0018](../decisions/0018-coherent-local-backup.md) specifies the S1d snapshot proposal and the still-unverified physical recovery gates.
 - #50 retains remote hosting, budget, multi-user access, data trust/key custody and external-processing decisions. Local no-cloud/no-agent prototype needs no implied consent for any of these.
 - #30 defines later external source consent and availability; a manually supplied file does not require a third-party connector.
 - #117 resolves the MCP SDK, transports and authorization boundary before writing MCP integration.
