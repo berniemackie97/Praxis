@@ -26,8 +26,14 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         cancellationToken.ThrowIfCancellationRequested();
         await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return await catalog.CaptureFileAsync(path, input, maxBytes, requestKey,
+        var accepted = await catalog.CaptureFileAsync(path, input, maxBytes, requestKey,
             cancellationToken);
+        if (accepted.Length > maxBytes)
+        {
+            throw new InvalidDataException("The committed original exceeds the import byte limit.");
+        }
+
+        return accepted;
     }
 
     public async Task<IReadOnlyList<LocalImportedFile>> ImportFolderAsync(
