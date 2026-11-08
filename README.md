@@ -6,13 +6,13 @@ Praxis is a local-first, independent Second Brain for capturing, preserving, fin
 
 The repository contains a .NET 10 HTTP service with process liveness checks and a separate `Praxis.Knowledge` library for portable Markdown note identities, immutable revision histories and validated local archive import/export.
 
-Authentication, durable canonical collection storage, synchronization, search and agent execution are **not implemented**. Local archives and optional staged attachment files do not send data to any service.
+Authenticated synchronization, end-to-end resilient source ingestion, search, a first-party Praxis application and agent execution are **not implemented**. The merged owner-local SQLite catalog and verified original-file publication are low-level storage foundations, not a usable source Inbox or network-accessible knowledge service. Local archives and staged originals do not send data to any service.
 
 ## Product direction and delivery status
 
 The [product experience](docs/product/second-brain-experience.md) defines the intended sources, original-versus-derived model, user-facing flows, microphone/browser capture and agent access. The [standalone local MVP plan](docs/delivery/standalone-mvp.md) defines a dependency-aware sequence of first useful slices and their acceptance criteria.
 
-**Implemented today:** portable note/attachment identities and local ZIP capture/verify/restore, including a tested macOS Obsidian adapter. **Not implemented yet:** an independent source catalog, generic durable Inbox, first-party Praxis UI, full-text search, dictation, browser extension, source enrichment, MCP server, remotely authorized sync or production hosting. No cloud AI provider is required by the intended local MVP.
+**Implemented today:** portable note/attachment identities, local ZIP capture/verify/restore and optional Obsidian desktop integration; an owner-local SQLite catalog schema ([PR #123](https://github.com/berniemackie97/Praxis/pull/123)); and bounded streamed original-file publication with first-version source/item records ([PR #125](https://github.com/berniemackie97/Praxis/pull/125)). **Still missing:** replay-safe reimports and version transitions (#126), coherent whole-catalog/object recovery (#128), the durable Inbox and extraction pipeline, first-party Praxis UI, full-text search, dictation, browser extension, source enrichment, MCP, remote sync and production hosting. These distinctions are release gates, not progress inferred from planned code. No cloud AI provider is required by the intended local MVP.
 
 ## Development
 

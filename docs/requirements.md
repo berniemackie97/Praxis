@@ -7,7 +7,7 @@ This document separates product commitments from unverified assumptions. The ini
 | ID | Requirement | Verification |
 | --- | --- | --- |
 | R01 | Support macOS, Windows, Linux, Android, iOS, and browser clients over the product lifetime. | Each advertised platform must pass the release matrix in [platform verification](platform-verification.md). |
-| R02 | Obsidian is the initial editor, not a dependency of canonical records or synchronization. | An independently implemented client can import, modify, synchronize, and export the same collection. |
+| R02 | Obsidian is an optional editor and archive adapter, not a prerequisite for canonical records, direct capture, retrieval or the first useful Praxis interface. | The owner can import, inspect, search and recover local content through a first-party interface without installing Obsidian; later interoperability and synchronization have separate verification gates. |
 | R03 | Users retain locally accessible, independently exportable notes and original attachments. | A full export/import round-trip verifies identifiers, content, metadata, references, and attachments. |
 | R04 | Editing and capture must function without network access. | Edits survive termination while offline and reconcile safely after reconnection. |
 | R05 | Concurrent device activity must not silently discard user-authored changes. | Deterministic tests cover simultaneous edits, stale writes, rename/edit and delete/edit conflicts. |
@@ -52,7 +52,7 @@ These requirements describe the destination. They do not imply that each platfor
 - **Target platforms:** macOS, Windows, Linux, Android, iOS/iPadOS, and the web.
 - **First usable interaction:** a standalone Praxis local interface. Obsidian is an optional editor/capture adapter, including its mobile application where compatible.
 - **Initial deployment model:** undetermined. A modular monolith is a design default, not a commitment to one host.
-- **Initial database and storage:** must be selected after record consistency, trust, and recovery semantics; avoid making a database export the only portable format.
+- **Owner-local catalog/storage:** SQLite schema and content-addressed original publication were implemented in #122/#124. Stable repeat-import receipts and revision transitions remain #126; coherent catalog-plus-original restore remains #128. Portable export must remain available independent of SQLite internals; do not treat the current schema as proof of recovery.
 - **Client execution model:** clients may run intermittently, be force-terminated, miss notifications, or be disconnected for extended periods.
 - **Inference:** external providers must not be assumed authorized to receive private content.
 
@@ -65,7 +65,7 @@ These requirements describe the destination. They do not imply that each platfor
 | Private-data policy: device-only, trusted server, or separately encrypted collections | Key custody, threat model and search architecture | Open in #50 |
 | Data loss/recovery objectives and acceptable manual intervention | Revision retention, backups and account recovery | Open in #50 |
 | Physical devices available for platform testing versus long-term platform targets | Real-device acceptance | Open in #50 |
-| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | The owner confirmed universal local inbox, dictation, browser capture and future MCP. Exact file formats, sources, consent and evaluation remain open in #30/#50/#99 |
+| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | The owner confirmed a standalone local Inbox, dictation, browser capture and future MCP. The initial catalog decision #99 is closed; precise additional capture formats, connector scopes and consent remain #30, and remote processing/hosting remain #50 |
 | Single-user/household/multi-user needs and sharing boundaries | Account model and authorization | Open in #50 |
 
 Do not record defaults as approved owner decisions. An ADR is accepted only when its tradeoffs and required evidence have been reviewed.

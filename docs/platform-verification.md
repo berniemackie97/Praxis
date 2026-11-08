@@ -2,24 +2,28 @@
 
 Praxis targets macOS, Windows, Linux, Android, iOS/iPadOS and browsers. Support must be demonstrated; a shared codebase alone is not evidence of platform parity.
 
-## Platform matrix
+## First-party platform acceptance matrix
 
-| Environment | Initial client | Required evidence |
+The first useful product is a **local owner-only Praxis Inbox/Library/Search experience**, delivered independently of Obsidian. Subsequent platforms are targets, not promised support inferred from shared code or a CI build.
+
+| Environment | Intended Praxis outcome | Evidence required before claiming support |
 | --- | --- | --- |
-| macOS | Obsidian desktop | Filesystem event behavior, offline edits, file locking, rename/delete recovery and restart |
-| Windows | Obsidian desktop | Case-insensitive paths, reserved names, cross-process locking, rename collisions |
-| Linux | Obsidian desktop | Path case, permissions, watching limits, symlinks and atomic replacement |
-| Android | Obsidian mobile | Offline/reconnect, app suspend/resume, restricted network, vault lifecycle |
-| iOS/iPadOS | Obsidian mobile | Sandbox constraints, suspend/resume, interrupted transfer, foreground recovery |
-| Browser | Future client | Offline persistence, secure browser storage, reload/upgrade, accessible conflict resolution |
+| macOS | First standalone local Praxis release (#108/#130) | Actual GUI first-run with chosen data directory, mixed file/folder intake, restart/retry, source-grounded search, original recovery, permission denial and keyboard/accessibility smoke |
+| Windows | First-party local client after verified platform packaging | Real package/launch, case-insensitive and reserved-path behavior, permissions, file locking, crash/restart and source recovery |
+| Linux | First-party local client after verified platform packaging | Actual launch, filesystem permissions, symlink/path behavior, file watcher limits if enabled, restart and recovery |
+| Browser | Local first-party interface, followed by secure independently accessed client | Explicit caller/origin policy (#129/#107), denied cross-origin/rebinding attempts, accessible Inbox/Search, reload and offline-state behavior |
+| Android | Later first-party client (#39) | Real-device sandbox/share flow, permission and lifecycle tests, offline capture, suspend/resume and recovery |
+| iOS/iPadOS | Later first-party client (#39) | Real-device sandbox/share flow, foreground recovery, offline persistence, termination and secure credential handling |
 
-Actual supported OS versions, CPU architectures and device inventory are to be recorded in test evidence as each platform reaches a release gate.
+Optional Obsidian desktop/mobile interoperability remains an **independent M3 adapter gate** (#22/#23/#25), not a prerequisite for selecting or verifying first-party Praxis. Real Obsidian event, vault and lifecycle tests must be recorded separately and must not substitute for #130.
+
+Actual supported OS versions, CPU architectures and device inventory must be recorded alongside each first-party or adapter acceptance.
 
 ## Automated build verification
 
 The CI pipeline checks .NET 10.0.403, locked NuGet restore, Release compilation, .NET tests, and API publication on Ubuntu 24.04, macOS 15 (GitHub-hosted Apple Silicon), and Windows Server 2025. Linux also verifies a published API's loopback health endpoint, the lockfile/license inventory, formatting and roadmap validation.
 
-This matrix validates **build and test portability for the current backend**, not real-device Obsidian editor parity or supported client platforms. The Mac runner's Apple Silicon architecture and actual CI outcomes must be confirmed by the associated successful GitHub Actions run; passing Linux checks alone does not establish cross-platform evidence. macOS/Windows hosted CI jobs on a private repository consume GitHub Actions usage, so the matrix should be revisited if usage budgets require it.
+This CI matrix validates **build and test portability for the current backend**, not the first-party local GUI acceptance (#130), real-device Obsidian editor parity or supported client platforms. The Mac runner's Apple Silicon architecture and actual CI outcomes must be confirmed by the associated successful GitHub Actions run; passing Linux checks alone does not establish cross-platform evidence. macOS/Windows hosted CI jobs on a private repository consume GitHub Actions usage, so the matrix should be revisited if usage budgets require it.
 
 ## Obsidian adapter constraints
 

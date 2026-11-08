@@ -47,7 +47,7 @@ The HTTP application exposes only a process liveness endpoint with its integrati
 
 ## Planned standalone ingestion and retrieval boundary
 
-The current portable archive library and local Obsidian capture remain implemented foundations. **A durable standalone source catalog, processing pipeline, search service, first-party UI, microphone input, browser extension and MCP server are not yet implemented.** The [product experience](product/second-brain-experience.md) and [delivery lanes](delivery/standalone-mvp.md) define their user-level responsibilities and acceptance criteria.
+Portable archive/vault tools and the owner-local SQLite catalog with first-version original-file storage are implemented foundations. **The catalog is not yet a replay-safe, fully recoverable intake system:** source updates and interruption inventory remain #126; coordinated catalog-and-original restore remains #128. The durable ingestion pipeline, search service, first-party UI, microphone input, browser extension and MCP server are **not implemented**. The [product experience](product/second-brain-experience.md) and [delivery lanes](delivery/standalone-mvp.md) define their user-level responsibilities and acceptance criteria.
 
 - Explicit owner-selected file/folder intake and later voice/browser/agent input all pass through one source/provenance contract (#59/#96).
 - Immutable or versioned originals are separate from file paths, capture sources, extraction outputs, human annotations and searchable indexes; deduplication cannot erase source ownership.
