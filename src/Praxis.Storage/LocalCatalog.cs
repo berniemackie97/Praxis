@@ -45,11 +45,11 @@ public sealed class LocalCatalog : IDisposable
                 Pooling = false
             }.ToString());
             database.Open();
-            Command(database, "PRAGMA foreign_keys = ON").ExecuteNonQuery();
-            Command(database, "PRAGMA busy_timeout = 5000").ExecuteNonQuery();
+            Execute(database, "PRAGMA foreign_keys = ON");
+            Execute(database, "PRAGMA busy_timeout = 5000");
             VerifyIntegrity(database);
 
-            var version = Convert.ToInt32(Command(database, "PRAGMA user_version").ExecuteScalar());
+            var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
             if (version != 0 && version != CurrentSchemaVersion)
             {
                 throw new NotSupportedException("The catalog schema version is not supported.");
@@ -57,10 +57,10 @@ public sealed class LocalCatalog : IDisposable
 
             if (version == 0)
             {
-                if (Command(database, """
+                if (Convert.ToInt64(Scalar(database, """
                     SELECT COUNT(*) FROM sqlite_master
                     WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                    """).ExecuteScalar() is not long 0)
+                    """)) != 0)
                 {
                     throw new InvalidDataException("An unversioned database already contains user tables.");
                 }
@@ -73,14 +73,14 @@ public sealed class LocalCatalog : IDisposable
             }
 
             VerifySchema(database);
-            if (Command(database, "PRAGMA journal_mode = WAL").ExecuteScalar() is not string "wal")
+            if (Scalar(database, "PRAGMA journal_mode = WAL") is not string "wal")
             {
                 throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
             }
 
-            Command(database, "PRAGMA synchronous = FULL").ExecuteNonQuery();
-            if (Convert.ToInt32(Command(database, "PRAGMA synchronous").ExecuteScalar()) != 2 ||
-                Convert.ToInt32(Command(database, "PRAGMA foreign_keys").ExecuteScalar()) != 1)
+            Execute(database, "PRAGMA synchronous = FULL");
+            if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 ||
+                Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
             {
                 throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
             }
@@ -153,7 +153,7 @@ public sealed class LocalCatalog : IDisposable
 
     private static void VerifyIntegrity(SqliteConnection database)
     {
-        if (Command(database, "PRAGMA integrity_check").ExecuteScalar() is not string "ok")
+        if (Scalar(database, "PRAGMA integrity_check") is not string "ok")
         {
             throw new InvalidDataException("The catalog failed SQLite integrity verification.");
         }
@@ -186,6 +186,18 @@ public sealed class LocalCatalog : IDisposable
             ?? throw new InvalidOperationException("The catalog migration resource is missing.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static object? Scalar(SqliteConnection connection, string sql)
+    {
+        using var command = Command(connection, sql);
+        return command.ExecuteScalar();
+    }
+
+    private static void Execute(SqliteConnection connection, string sql)
+    {
+        using var command = Command(connection, sql);
+        command.ExecuteNonQuery();
     }
 
     private static SqliteCommand Command(SqliteConnection connection, string sql)
