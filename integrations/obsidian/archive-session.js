@@ -71,7 +71,11 @@ class ArchiveSession {
     }
 
     close() {
+        if (this.closed) {
+            return;
+        }
         this.closed = true;
+        this.changed();
         this.active?.abort();
     }
 
@@ -177,7 +181,11 @@ class ArchiveSession {
             }
 
             try {
-                return await action(await this._readState());
+                const state = await this._readState();
+                if (this.closed) {
+                    throw new Error('The adapter has been unloaded.');
+                }
+                return await action(state);
             } finally {
                 await lock.close();
                 await fs.unlink(this.lockPath);
@@ -235,6 +243,10 @@ class ArchiveSession {
     }
 
     async _writeState(state) {
+        if (this.closed) {
+            throw new Error('The adapter has been unloaded.');
+        }
+
         const data = Buffer.from(JSON.stringify(state) + '\n');
         if (data.length > MaxStateBytes) {
             throw new Error('The archive session state exceeds its size limit.');
@@ -248,6 +260,9 @@ class ArchiveSession {
                 await handle.sync();
             } finally {
                 await handle.close();
+            }
+            if (this.closed) {
+                throw new Error('The adapter has been unloaded.');
             }
             await fs.rename(pending, this.statePath);
         } finally {
