@@ -23,14 +23,15 @@ public static partial class NoteArchive
         long totalBytes = 0;
         var manifest = new ArchiveManifest
         {
-            FormatVersion = collection is null ? 1 : 2,
+            FormatVersion = collection is null ? 1 : collection.VaultReferences is null ? 2 : 3,
             Notes = DescribeNotes(notes, ref totalBytes)
         };
 
         var payloads = new SortedDictionary<string, AttachmentRecord>(StringComparer.Ordinal);
         if (collection is not null)
         {
-            if (collection.Attachments.Count > MaxAttachments || collection.References.Count > MaxReferences)
+            if (collection.Attachments.Count > MaxAttachments ||
+                collection.References.Count + (collection.VaultReferences?.Count ?? 0) > MaxReferences)
             {
                 throw new InvalidDataException("The collection contains too many attachments or references.");
             }
@@ -60,10 +61,11 @@ public static partial class NoteArchive
                 });
             }
 
-            manifest.References = collection.References
-                .OrderBy(reference => reference.NoteId)
-                .ThenBy(reference => reference.AttachmentId)
-                .ToList();
+            manifest.References = OrderReferences(collection.References);
+            if (collection.VaultReferences is not null)
+            {
+                manifest.VaultReferences = OrderReferences(collection.VaultReferences);
+            }
         }
 
         var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
@@ -84,6 +86,10 @@ public static partial class NoteArchive
         manifestStream.Write(manifestBytes);
     }
 
+    private static List<AttachmentReference> OrderReferences(IReadOnlyList<AttachmentReference> values)
+        => values.OrderBy(reference => reference.NoteId)
+            .ThenBy(reference => reference.AttachmentId).ToList();
+
     private static KnowledgeCollection ReadCore(Stream source, bool acceptAttachments)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -101,7 +107,8 @@ public static partial class NoteArchive
         var manifest = ReadManifest(archive, acceptAttachments, out var entries, out var totalBytes);
 
         if (manifest.FormatVersion == 1 &&
-            (manifest.Attachments is not null || manifest.References is not null))
+            (manifest.Attachments is not null || manifest.References is not null ||
+             manifest.VaultReferences is not null))
         {
             throw new InvalidDataException("The version one manifest has unexpected attachment metadata.");
         }
@@ -110,17 +117,22 @@ public static partial class NoteArchive
         var notes = ReadNotes(manifest, entries, consumed, ref totalBytes);
         var attachments = new List<AttachmentRecord>();
         var references = new List<AttachmentReference>();
-        if (manifest.FormatVersion == 2)
+        List<AttachmentReference>? vaultReferences = null;
+        if (manifest.FormatVersion is 2 or 3)
         {
             if (manifest.Attachments is null || manifest.References is null ||
                 manifest.Attachments.Count > MaxAttachments ||
-                manifest.References.Count > MaxReferences)
+                manifest.References.Count > MaxReferences ||
+                (manifest.FormatVersion == 2 && manifest.VaultReferences is not null) ||
+                (manifest.FormatVersion == 3 && manifest.VaultReferences is null) ||
+                manifest.References.Count + (manifest.VaultReferences?.Count ?? 0) > MaxReferences)
             {
                 throw new InvalidDataException("The attachment metadata is invalid.");
             }
 
             attachments = ReadAttachments(manifest.Attachments, entries, consumed, ref totalBytes);
             references = manifest.References;
+            vaultReferences = manifest.VaultReferences;
         }
 
         if (consumed.Count != entries.Count)
@@ -130,7 +142,7 @@ public static partial class NoteArchive
 
         try
         {
-            return new KnowledgeCollection(notes, attachments, references);
+            return new KnowledgeCollection(notes, attachments, references, vaultReferences);
         }
         catch (ArgumentException exception)
         {

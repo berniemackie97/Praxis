@@ -12,9 +12,9 @@ Wiki paths can be vault-root paths, explicit relative paths or unqualified uniqu
 
 ## Boundaries
 
-This is **not** a complete CommonMark or Obsidian parser. It does not handle reference-definition images, nested destination syntax, image size/link metadata beyond the simple patterns above, Obsidian aliases/frontmatter, arbitrary escaped markup, HTML embeds or semantic note-to-note links. Results must not be used as proof that all links in a vault have been inspected. It deliberately does not insert discovered references into the archive: doing so without provenance and a removal/update policy could leave stale references when an embed is edited or removed. Previously authored explicit references remain unchanged.
+This is **not** a complete CommonMark or Obsidian parser. It does not handle reference-definition images, nested destination syntax, image size/link metadata beyond the simple patterns above, Obsidian aliases/frontmatter, arbitrary escaped markup, HTML embeds or semantic note-to-note links. Results must not be used as proof that all links in a vault have been inspected. The `links` command remains read-only. [ADR 0012](0012-vault-reference-provenance.md) defines separately tracked vault-derived references with an explicit removal gate for archive capture and incremental updates; caller-authored references remain unchanged.
 
-A subsequent slice must define a source-aware stored reference model and validate it against real Obsidian vault behavior, including stale links after rename, repeated import, deletion/tombstones and editor-specific syntax. None of these operations introduce a remote endpoint or alter plaintext-at-rest limitations.
+The provenance contract is now defined for this partial scanner, but validation against real Obsidian vault behavior, including complex links, deletion/tombstones, stale links after rename and editor-specific syntax, remains outstanding. None of these operations introduce a remote endpoint or alter plaintext-at-rest limitations.
 
 ## Verification
 

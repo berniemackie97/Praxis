@@ -119,7 +119,7 @@ public static partial class NoteArchive
             throw new InvalidDataException("The archive manifest is invalid.", exception);
         }
 
-        if (manifest.FormatVersion != 1 && !(allowAttachments && manifest.FormatVersion == 2))
+        if (manifest.FormatVersion != 1 && !(allowAttachments && manifest.FormatVersion is 2 or 3))
         {
             throw new NotSupportedException("The archive format version is not supported.");
         }
@@ -258,6 +258,8 @@ public static partial class NoteArchive
         public List<ArchiveAttachment>? Attachments { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<AttachmentReference>? References { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<AttachmentReference>? VaultReferences { get; set; }
     }
 
     private sealed class ArchiveNote

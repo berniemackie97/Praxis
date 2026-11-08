@@ -5,7 +5,8 @@ public sealed class KnowledgeCollection
     public KnowledgeCollection(
         IEnumerable<NoteRecord> notes,
         IEnumerable<AttachmentRecord> attachments,
-        IEnumerable<AttachmentReference> references)
+        IEnumerable<AttachmentReference> references,
+        IEnumerable<AttachmentReference>? vaultReferences = null)
     {
         ArgumentNullException.ThrowIfNull(notes);
         ArgumentNullException.ThrowIfNull(attachments);
@@ -14,6 +15,7 @@ public sealed class KnowledgeCollection
         var noteArray = notes.ToArray();
         var attachmentArray = attachments.ToArray();
         var referenceArray = references.ToArray();
+        var vaultReferenceArray = vaultReferences?.ToArray();
 
         var noteIds = new HashSet<Guid>();
         var attachmentIds = new HashSet<Guid>();
@@ -34,21 +36,31 @@ public sealed class KnowledgeCollection
             }
         }
 
-        var links = new HashSet<AttachmentReference>();
-        foreach (var reference in referenceArray)
+        ValidateReferences(referenceArray, nameof(references));
+        if (vaultReferenceArray is not null)
         {
-            if (reference is null ||
-                !noteIds.Contains(reference.NoteId) ||
-                !attachmentIds.Contains(reference.AttachmentId) ||
-                !links.Add(reference))
+            ValidateReferences(vaultReferenceArray, nameof(vaultReferences));
+        }
+
+        void ValidateReferences(AttachmentReference[] values, string parameter)
+        {
+            var links = new HashSet<AttachmentReference>();
+            foreach (var reference in values)
             {
-                throw new ArgumentException("An attachment reference must resolve exactly once.", nameof(references));
+                if (reference is null ||
+                    !noteIds.Contains(reference.NoteId) ||
+                    !attachmentIds.Contains(reference.AttachmentId) ||
+                    !links.Add(reference))
+                {
+                    throw new ArgumentException("An attachment reference must resolve exactly once.", parameter);
+                }
             }
         }
 
         Notes = Array.AsReadOnly(noteArray);
         Attachments = Array.AsReadOnly(attachmentArray);
         References = Array.AsReadOnly(referenceArray);
+        VaultReferences = vaultReferenceArray is null ? null : Array.AsReadOnly(vaultReferenceArray);
     }
 
     public IReadOnlyList<NoteRecord> Notes { get; }
@@ -56,4 +68,6 @@ public sealed class KnowledgeCollection
     public IReadOnlyList<AttachmentRecord> Attachments { get; }
 
     public IReadOnlyList<AttachmentReference> References { get; }
+
+    public IReadOnlyList<AttachmentReference>? VaultReferences { get; }
 }

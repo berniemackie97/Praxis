@@ -6,13 +6,18 @@ public sealed record VaultChange(
     Guid RecordId, string? PreviousPath, string CurrentPath,
     bool IsAttachment, bool ContentChanged, bool PathChanged);
 
-public sealed record VaultUpdate(KnowledgeCollection Collection, IReadOnlyList<VaultChange> Changes);
+public sealed record VaultUpdate(KnowledgeCollection Collection, IReadOnlyList<VaultChange> Changes,
+    int AddedLinks = 0, IReadOnlyList<AttachmentReference>? RemovedLinkPairs = null)
+{
+    public int RemovedLinks => RemovedLinkPairs?.Count ?? 0;
+}
 
 public static class LocalVaultReconciler
 {
     public static VaultUpdate Reconcile(
         KnowledgeCollection previous, KnowledgeCollection captured,
-        IReadOnlyList<VaultRename>? renames = null)
+        IReadOnlyList<VaultRename>? renames = null,
+        bool trackLinks = false, bool previewLinkRemovals = false)
     {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(captured);
@@ -122,7 +127,27 @@ public static class LocalVaultReconciler
         }
 
         var collection = new KnowledgeCollection(notes, attachments, previous.References);
-        return new VaultUpdate(collection, Array.AsReadOnly(changes.ToArray()));
+        var addedLinks = 0;
+        IReadOnlyList<AttachmentReference> removedLinkPairs = [];
+        if (trackLinks || previous.VaultReferences is not null)
+        {
+            collection = LocalVaultAttachmentLinks.Track(collection);
+            var oldLinks = previous.VaultReferences?.ToHashSet() ?? [];
+            var newLinks = collection.VaultReferences!.ToHashSet();
+            addedLinks = newLinks.Except(oldLinks).Count();
+            removedLinkPairs = Array.AsReadOnly(oldLinks.Except(newLinks)
+                .OrderBy(link => link.NoteId)
+                .ThenBy(link => link.AttachmentId).ToArray());
+            if (removedLinkPairs.Count != 0 && !previewLinkRemovals)
+            {
+                throw new InvalidOperationException(
+                    $"{removedLinkPairs.Count} tracked attachment reference(s) disappeared. " +
+                    "Review their exact IDs through PlanUpdate before approving removals.");
+            }
+        }
+
+        return new VaultUpdate(collection, Array.AsReadOnly(changes.ToArray()),
+            addedLinks, removedLinkPairs);
 
         PriorFile? Find(string path, bool isAttachment)
         {

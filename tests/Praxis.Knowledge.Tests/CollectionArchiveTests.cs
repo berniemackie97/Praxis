@@ -283,9 +283,66 @@ public sealed class CollectionArchiveTests
     public void UnknownCollectionVersionIsRejected()
     {
         using var archive = Export(new KnowledgeCollection([], [], []));
-        EditManifest(archive, json => json["formatVersion"] = 3);
+        EditManifest(archive, json => json["formatVersion"] = 4);
 
         Assert.Throws<NotSupportedException>(() => NoteArchive.ReadCollection(archive));
+    }
+
+    [Fact]
+    public void VersionThreeRequiresVaultReferenceMetadataEvenWhenEmpty()
+    {
+        var note = NoteRecord.Create("note.md", "plain");
+        using var archive = Export(new KnowledgeCollection([note], [], [], []));
+        EditManifest(archive, json => json.Remove("vaultReferences"));
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
+    }
+
+    [Fact]
+    public void VersionTwoCannotClaimTrackedVaultLinksWithoutVersionChange()
+    {
+        using var archive = Export(new KnowledgeCollection([], [], []));
+        EditManifest(archive, json => json["vaultReferences"] = new JsonArray());
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
+    }
+
+    [Fact]
+    public void TamperedVaultDerivedReferenceIsRejected()
+    {
+        var note = NoteRecord.Create("note.md", "![[image.png]]");
+        var image = AttachmentRecord.Create("image.png", [2]);
+        using var archive = Export(new KnowledgeCollection([note], [image], [],
+            [new AttachmentReference(note.Id, image.Id)]));
+        EditManifest(archive, json =>
+            json["vaultReferences"]!.AsArray()[0]!["attachmentId"] = Guid.NewGuid());
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
+    }
+
+    [Fact]
+    public void DuplicateVaultDerivedReferencesInManifestAreRejected()
+    {
+        var note = NoteRecord.Create("note.md", "![[image.png]]");
+        var image = AttachmentRecord.Create("image.png", [2]);
+        using var archive = Export(new KnowledgeCollection([note], [image], [],
+            [new AttachmentReference(note.Id, image.Id)]));
+        EditManifest(archive, json =>
+        {
+            var references = json["vaultReferences"]!.AsArray();
+            references.Add(references[0]!.DeepClone());
+        });
+
+        Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
+    }
+
+    [Fact]
+    public void NoteOnlyReaderRejectsVersionThreeCollection()
+    {
+        using var archive = Export(new KnowledgeCollection(
+            [NoteRecord.Create("note.md", "body")], [], [], []));
+
+        Assert.Throws<NotSupportedException>(() => NoteArchive.Read(archive));
     }
 
     [Fact]
