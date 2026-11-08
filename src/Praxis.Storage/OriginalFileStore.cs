@@ -78,7 +78,7 @@ internal sealed class OriginalFileStore(string dataDirectory)
                     }
                     finally
                     {
-                        ArrayPool<byte>.Shared.Return(buffer);
+                        ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
                     }
                 }
 
@@ -91,11 +91,7 @@ internal sealed class OriginalFileStore(string dataDirectory)
             var published = Path.Combine(directory, digest);
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (File.Exists(published))
-            {
-                await VerifyAsync(published, digest, length, cancellationToken);
-            }
-            else
+            if (!File.Exists(published))
             {
                 try
                 {
@@ -103,10 +99,11 @@ internal sealed class OriginalFileStore(string dataDirectory)
                 }
                 catch (IOException) when (File.Exists(published))
                 {
-                    await VerifyAsync(published, digest, length, cancellationToken);
+                    // A concurrent publication must still pass the same content check.
                 }
             }
 
+            await VerifyAsync(published, digest, length, cancellationToken);
             return new OriginalObject(digest, length);
         }
         finally
@@ -123,9 +120,9 @@ internal sealed class OriginalFileStore(string dataDirectory)
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        var objects = EnsureDirectory(Path.Combine(dataDirectory, "objects"));
-        var directory = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
-        directory = EnsureDirectory(Path.Combine(directory, original.Digest[2..4]));
+        var objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
+        var directory = CheckDirectory(Path.Combine(objects, original.Digest[..2]));
+        directory = CheckDirectory(Path.Combine(directory, original.Digest[2..4]));
         await VerifyAsync(Path.Combine(directory, original.Digest),
             original.Digest, original.Length, cancellationToken);
     }
@@ -161,9 +158,19 @@ internal sealed class OriginalFileStore(string dataDirectory)
             Directory.CreateDirectory(path, PrivateDirectoryMode);
         }
 
+        return CheckDirectory(path);
+    }
+
+    private static string CheckDirectory(string path)
+    {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("The original storage path contains a symbolic link.");
+        }
+
+        if (!Directory.Exists(path))
+        {
+            throw new DirectoryNotFoundException(path);
         }
 
         if (!OperatingSystem.IsWindows() &&
