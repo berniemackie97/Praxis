@@ -18,14 +18,27 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(63, len(items))
+        self.assertEqual(87, len(items))
+        self.assertEqual(59, items[100]["parent"])
+        self.assertEqual("knowledge", items[100]["area"])
+        self.assertEqual(96, items[109]["parent"])
+        self.assertEqual(97, items[115]["parent"])
+        self.assertEqual(98, items[117]["parent"])
+        self.assertEqual("security", items[117]["area"])
+        self.assertEqual(64, items[108]["parent"])
+        self.assertEqual("P1", items[108]["priority"])
+        self.assertEqual({101, 109, 111}, dependencies[26])
+        self.assertNotIn(22, dependencies[26])
+        self.assertEqual({14, 16, 102}, dependencies[27])
+        self.assertEqual([99, 100, 102, 101, 103, 106, 107, 108],
+                         self.plan["delivery_lanes"][0]["issues"])
         self.assertEqual(57, items[94]["parent"])
         self.assertEqual("P1", items[94]["priority"])
         self.assertEqual(57, items[92]["parent"])
         self.assertEqual("P1", items[92]["priority"])
         self.assertIn(92, dependencies[22])
         self.assertEqual(8, len(self.plan["milestones"]))
-        self.assertEqual(14, len(self.plan["features"]))
+        self.assertEqual(17, len(self.plan["features"]))
         self.assertEqual(1, items[2]["parent"])
         self.assertEqual(3, items[54]["parent"])
         self.assertEqual(54, items[14]["parent"])
@@ -51,6 +64,36 @@ class RoadmapValidationTests(unittest.TestCase):
         data["dependencies"]["13"].append(15)
 
         with self.assertRaisesRegex(ValueError, "Cyclic issue dependencies"):
+            validate(data)
+
+    def test_invalid_retired_edge_is_rejected(self):
+        data = copy.deepcopy(self.plan)
+        data["dependency_removals"]["26"] = [101]
+        with self.assertRaisesRegex(ValueError, "Invalid retired dependency"):
+            validate(data)
+
+    def test_unknown_delivery_lane_item_is_rejected(self):
+        data = copy.deepcopy(self.plan)
+        data["delivery_lanes"][0]["issues"].append(9999)
+        with self.assertRaisesRegex(ValueError, "Invalid or duplicate lane issue"):
+            validate(data)
+
+    def test_duplicate_delivery_lane_item_is_rejected(self):
+        data = copy.deepcopy(self.plan)
+        data["delivery_lanes"][1]["issues"].append(99)
+        with self.assertRaisesRegex(ValueError, "Invalid or duplicate lane issue"):
+            validate(data)
+
+    def test_priority_migration_requires_expected_new_priority(self):
+        data = copy.deepcopy(self.plan)
+        data["priority_migrations"]["59"]["to"] = "P0"
+        with self.assertRaisesRegex(ValueError, "Invalid priority migration"):
+            validate(data)
+
+    def test_area_override_rejects_invalid_label(self):
+        data = copy.deepcopy(self.plan)
+        data["area_overrides"]["100"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "Invalid area override"):
             validate(data)
 
     def test_missing_milestone_is_rejected(self):
@@ -115,6 +158,26 @@ class ReconciliationTests(unittest.TestCase):
 
     @patch("plan.gh")
     @patch("plan.gh_json")
+    def test_declared_retired_dependency_is_removed_without_touching_others(self, fetch, execute):
+        fetch.return_value = [{
+            "number": 26, "title": "[Story] Capture",
+            "labels": [{"name": "kind:story"}, {"name": "area:capture"}],
+            "milestone": {"title": "M4"}, "parent": {"number": 59},
+            "blockedBy": {"nodes": [{"number": 22}, {"number": 101}, {"number": 999}],
+                          "totalCount": 3},
+        }]
+        plan = {"repository": "berniemackie97/Praxis",
+                "milestones": [{"stage": "M4", "title": "M4"}],
+                "dependency_removals": {"26": [22]}}
+        items = {26: {"kind": None, "stage": "M4", "area": "capture", "parent": 59}}
+        reconcile_issues(plan, items, {26: {101}})
+        execute.assert_called_once_with(
+            "issue", "edit", 26, "-R", "berniemackie97/Praxis",
+            "--remove-blocked-by", 22
+        )
+
+    @patch("plan.gh")
+    @patch("plan.gh_json")
     def test_partial_blockers_never_trigger_a_write(self, fetch, execute):
         fetch.return_value = [{
             "number": 19, "title": "[Task] Authenticated sync",
@@ -166,8 +229,7 @@ class ReconciliationTests(unittest.TestCase):
 
         execute.assert_not_called()
 
-    @staticmethod
-    def _existing_issue_rows(items, titles, dependencies=None):
+    def _existing_issue_rows(self, items, titles, dependencies=None):
         dependencies = dependencies or {}
         return [
             {
@@ -176,7 +238,8 @@ class ReconciliationTests(unittest.TestCase):
                 "labels": [
                     {"name": f"kind:{metadata['kind'] or 'task'}"},
                     {"name": f"area:{metadata['area']}"},
-                    *([{"name": "needs:decision"}] if number == 50 else []),
+                    *([{"name": "needs:decision"}]
+                      if number in self.plan.get("decision_queue", [50]) else []),
                 ],
                 "milestone": (
                     {"title": titles[metadata['stage']]}
@@ -237,6 +300,32 @@ class ProjectReconciliationTests(unittest.TestCase):
             mutations.assert_not_called()
             shell.assert_not_called()
             views.assert_called_once_with("PVT_project")
+
+    def test_scoped_priority_migration_updates_only_expected_old_value(self):
+        url = "https://github.com/berniemackie97/Praxis/issues/59"
+        def fetch(*args):
+            if args[1] == "field-list":
+                return self.fields()
+            return {"totalCount": 1, "items": [{
+                "id": "PVTI_existing", "content": {"url": url},
+                "stage": "M4", "priority": "P2", "status": "Todo"
+            }]}
+        plan = {**self.plan(),
+                "priority_migrations": {"59": {"from": "P2", "to": "P1"}}}
+        with (patch("plan.gh_json", side_effect=fetch),
+              patch("plan.graphql_mutations", return_value={
+                  "set0": {"projectV2Item": {"id": "PVTI_existing"}}
+              }) as mutations,
+              patch("plan.check_graphql_capacity"),
+              patch("plan.ensure_views"),
+              patch("plan.gh") as shell):
+            reconcile_project(plan, {"id": "PVT_project",
+                "shortDescription": "Curated"}, {59: {"stage": "M4", "priority": "P1"}},
+                {59: {"state": "OPEN"}})
+            updates = mutations.call_args.args[0]
+            self.assertEqual(1, len(updates))
+            self.assertIn('singleSelectOptionId: "priority1"', updates[0][1])
+            shell.assert_not_called()
 
     def test_missing_item_is_added_once_then_field_values_are_batched(self):
         url = "https://github.com/berniemackie97/Praxis/issues/73"
