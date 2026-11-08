@@ -48,8 +48,6 @@ jobs:
         if: matrix.os == 'ubuntu-24.04'
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
         if: matrix.os == 'ubuntu-24.04'
-      - run: python3 scripts/release/dependency_inventory.py --emit-base64
-        if: matrix.os == 'ubuntu-24.04'
       - run: python3 scripts/release/dependency_inventory.py --check
         if: matrix.os == 'ubuntu-24.04'
       - run: dotnet format Praxis.slnx --verify-no-changes --no-restore
