@@ -77,7 +77,17 @@ Before wiring Markdown embeds into stored identity references, inspect a capture
 dotnet run --project tools/Praxis.VaultCli -- links /backups/next.zip
 ```
 
-The read-only link audit resolves the supported local Markdown image and Obsidian embedded wikilink forms to attachment IDs. It reports missing, escaping and ambiguous targets with a nonzero exit code, without modifying the archive or source vault. This is **not** a complete Markdown/Obsidian parser: reference-definition links, advanced nested Markdown syntax, aliases, editor metadata and automatic link repair are not supported. The discovered links are diagnostic and are not yet committed as canonical collection references. See [ADR 0011](docs/decisions/0011-vault-attachment-link-audit.md).
+The read-only link audit resolves the supported local Markdown image and Obsidian embedded wikilink forms to attachment IDs. It reports missing, escaping and ambiguous targets with a nonzero exit code, without modifying the archive or source vault. This is **not** a complete Markdown/Obsidian parser: reference-definition links, advanced nested Markdown syntax, aliases, editor metadata and automatic link repair are not supported. The standalone `links` command stays read-only. Tracked capture and update optionally persist these **vault-derived** pairs separately from manually asserted references, using the backward-compatible [version-three collection archive](docs/decisions/0012-vault-reference-provenance.md). The scanner is intentionally incomplete: a successful audit is not proof that all Obsidian references resolve. See [ADR 0011](docs/decisions/0011-vault-attachment-link-audit.md).
+
+To begin tracking supported embeds, capture with `--track-links`, or opt into tracking while updating an existing version-two archive. Once enabled, every subsequent update re-evaluates tracked references without repeating the option:
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- capture /path/to/vault /backups/first.zip --track-links
+dotnet run --project tools/Praxis.VaultCli -- plan /path/to/vault /backups/first.zip
+dotnet run --project tools/Praxis.VaultCli -- update /path/to/vault /backups/first.zip /backups/next.zip
+```
+
+Unresolved or ambiguous supported embeds block publication. Disappearing tracked links also block an update by default, while explicitly stored references remain untouched. Use `plan ... --accept-link-removals` to review the count, then `update ... --accept-link-removals` only after approving **all** removed tracked pairs for that update. Paths and Markdown text are never rewritten. These snapshot operations cannot detect concurrent editor changes between preview and update.
 
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
