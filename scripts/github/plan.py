@@ -526,7 +526,8 @@ def main():
     if not args.apply:
         return
 
-    check_graphql_capacity(20)
+    # Reserve quota for issue hierarchy/dependency reconciliation before any writes.
+    check_graphql_capacity(max(200, 10 * len(items)))
     project = verify_target(plan)
     print(f"Authorized target: {plan['repository']} / "
           f"{plan['project']['owner']} project #{plan['project']['number']}")
