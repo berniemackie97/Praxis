@@ -74,7 +74,7 @@ test('file rename survives restart and reaches the CLI as an explicit mapping', 
 
     const current = await restarted.snapshot();
     const updateCall = f.calls.find(args => args[0] === 'update');
-    assert.deepEqual(updateCall.slice(0, 4), ['update', f.vault, first.archive, current.archive]);
+    assert.deepEqual(updateCall.slice(0, 4), ['update', await fs.realpath(f.vault), first.archive, current.archive]);
     assert.ok(updateCall.includes('--renames'));
     assert.equal((await state(f.backup)).current, path.basename(current.archive));
     assert.deepEqual((await state(f.backup)).renames, []);
