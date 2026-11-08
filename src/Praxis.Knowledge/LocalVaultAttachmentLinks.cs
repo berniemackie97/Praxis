@@ -26,16 +26,35 @@ public static class LocalVaultAttachmentLinks
 
         foreach (var note in collection.Notes)
         {
+            char fence = '\0';
             foreach (var line in note.Current.Markdown.Split('\n'))
             {
-                // Fenced blocks are excluded by the caller's scope; they are not link syntax.
-                foreach (Match match in WikiEmbed.Matches(line))
+                var trimmed = line.TrimStart();
+                if (fence == '\0' && (trimmed.StartsWith("~~~") || trimmed.StartsWith("\u0060\u0060\u0060")))
+                {
+                    fence = trimmed[0];
+                    continue;
+                }
+
+                if (fence != '\0')
+                {
+                    if (trimmed.Length >= 3 && trimmed[0] == fence &&
+                        trimmed[1] == fence && trimmed[2] == fence)
+                    {
+                        fence = '\0';
+                    }
+
+                    continue;
+                }
+
+                var visible = HideInlineCode(line);
+                foreach (Match match in WikiEmbed.Matches(visible))
                 {
                     var target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
                     Resolve(note, target, wiki: true);
                 }
 
-                foreach (Match match in MarkdownEmbed.Matches(line))
+                foreach (Match match in MarkdownEmbed.Matches(visible))
                 {
                     var value = match.Groups[1].Value.Trim();
                     if (Uri.TryCreate(value, UriKind.Absolute, out _) ||
@@ -154,5 +173,58 @@ public static class LocalVaultAttachmentLinks
                 problems.Add(new VaultLinkProblem(path, target, "No attachment matches."));
             }
         }
+    }
+
+    private static string HideInlineCode(string line)
+    {
+        var characters = line.ToCharArray();
+        for (var i = 0; i < characters.Length;)
+        {
+            if (characters[i] != '\u0060')
+            {
+                i++;
+                continue;
+            }
+
+            var start = i;
+            while (i < characters.Length && characters[i] == '\u0060')
+            {
+                i++;
+            }
+
+            var delimiterLength = i - start;
+            var end = -1;
+            for (var j = i; j < characters.Length; j++)
+            {
+                if (characters[j] != '\u0060')
+                {
+                    continue;
+                }
+
+                var runStart = j;
+                while (j < characters.Length && characters[j] == '\u0060')
+                {
+                    j++;
+                }
+
+                if (j - runStart == delimiterLength)
+                {
+                    end = j;
+                    break;
+                }
+
+                j--;
+            }
+
+            if (end == -1)
+            {
+                continue;
+            }
+
+            Array.Fill(characters, ' ', start, end - start);
+            i = end;
+        }
+
+        return new string(characters);
     }
 }
