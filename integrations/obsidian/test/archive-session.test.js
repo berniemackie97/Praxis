@@ -354,8 +354,11 @@ test('unloading during the first capture cannot create a baseline pointer', asyn
 test('closing the session refuses subsequent operations', async t => {
     const f = await fixture(t);
     const session = await f.open();
+    await session.snapshot();
+    await session.recordRename('Old', 'New', true);
     session.close();
     await assert.rejects(session.snapshot(), /unloaded/);
+    await assert.rejects(session.recordRename('Old/a.md', 'New/a.md'), /unloaded/);
 });
 
 test('manifest declares desktop-only support and valid plugin entry point', async () => {
