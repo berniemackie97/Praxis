@@ -23,14 +23,14 @@ public sealed class LocalCatalogTests : IDisposable
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using var catalog = LocalCatalog.Open(root);
-        Assert.Equal(2, catalog.SchemaVersion);
+        Assert.Equal(3, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
         using var reader = Connect(catalog.DatabasePath);
-        Assert.Equal(2L, Scalar(reader, "PRAGMA user_version"));
+        Assert.Equal(3L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
-        Assert.Equal(5L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"));
+        Assert.Equal(6L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"));
         Assert.Equal("ok", Scalar(reader, "PRAGMA integrity_check"));
         Assert.Equal(0L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
     }
@@ -148,9 +148,9 @@ public sealed class LocalCatalogTests : IDisposable
 
         using (var upgraded = LocalCatalog.Open(root))
         {
-            Assert.Equal(2, upgraded.SchemaVersion);
+            Assert.Equal(3, upgraded.SchemaVersion);
             using var connection = Connect(upgraded.DatabasePath);
-            Assert.Equal(2L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(3L, Scalar(connection, "PRAGMA user_version"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
             Assert.Equal(1L, Scalar(connection,
@@ -159,8 +159,9 @@ public sealed class LocalCatalogTests : IDisposable
 
         using var reopened = LocalCatalog.Open(root);
         using var verified = Connect(reopened.DatabasePath);
-        Assert.Equal(2L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(3L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
+        Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
     }
 
     [Fact]
