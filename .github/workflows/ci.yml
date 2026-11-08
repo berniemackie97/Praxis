@@ -10,8 +10,13 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    name: Verify ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
@@ -19,10 +24,18 @@ jobs:
           global-json-file: global.json
       - run: dotnet --version
       - run: dotnet restore Praxis.slnx --locked-mode
-      - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
-      - run: python3 scripts/release/dependency_inventory.py --emit-base64
       - run: dotnet build Praxis.slnx -c Release --no-restore
       - run: dotnet test Praxis.slnx -c Release --no-build --no-restore
+      - run: dotnet publish src/Praxis.Api/Praxis.Api.csproj -c Release --no-build --no-restore -o artifacts/publish
+      - run: python3 scripts/release/smoke_api.py
+        if: matrix.os == 'ubuntu-24.04'
+      - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+        if: matrix.os == 'ubuntu-24.04'
+      - run: python3 scripts/release/dependency_inventory.py --check
+        if: matrix.os == 'ubuntu-24.04'
       - run: dotnet format Praxis.slnx --verify-no-changes --no-restore
+        if: matrix.os == 'ubuntu-24.04'
       - run: python3 scripts/github/plan.py
+        if: matrix.os == 'ubuntu-24.04'
       - run: python3 -m unittest discover -s scripts/github -p test_plan.py -v
+        if: matrix.os == 'ubuntu-24.04'

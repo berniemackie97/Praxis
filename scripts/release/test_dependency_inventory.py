@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
 
 from dependency_inventory import generate, serialized
 
@@ -91,6 +90,35 @@ class InventoryTests(unittest.TestCase):
         report = generate(self.root, self.cache)
         self.assertEqual({"kind": "unknown", "value": ""},
                          report["packages"][0]["declaredLicense"])
+
+    def test_legacy_license_url_is_not_promoted_to_expression(self):
+        nuspec = self.cache / "example/1.2.3/example.nuspec"
+        nuspec.write_text(
+            '<package><metadata><licenseUrl>https://example.test/license</licenseUrl>'
+            '</metadata></package>', encoding="utf-8"
+        )
+        self.assertEqual({"kind": "url", "value": "https://example.test/license"},
+                         generate(self.root, self.cache)["packages"][0]["declaredLicense"])
+
+    def test_conflicting_hashes_across_projects_are_rejected(self):
+        second = self.root / "src/Other"
+        second.mkdir(parents=True)
+        (second / "Other.csproj").write_text(
+            '<Project><ItemGroup><PackageReference Include="Example"/></ItemGroup></Project>',
+            encoding="utf-8"
+        )
+        conflicting = {"Example": dict(self.dependencies["Example"], contentHash=
+            base64.b64encode(bytes(reversed(range(64)))).decode("ascii"))}
+        (second / "packages.lock.json").write_text(
+            json.dumps({"version": 2, "dependencies": {"net10.0": conflicting}}),
+            encoding="utf-8"
+        )
+        (self.root / "Praxis.slnx").write_text(
+            '<Solution><Project Path="src/Example/Example.csproj"/>'
+            '<Project Path="src/Other/Other.csproj"/></Solution>', encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "Conflicting hashes"):
+            generate(self.root, self.cache)
 
     def test_unpinned_sdk_is_rejected(self):
         (self.root / "global.json").write_text(
