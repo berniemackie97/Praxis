@@ -82,7 +82,7 @@ test('folder move through real CLI retains nested files and tracked embedded lin
     const backup = path.join(root, 'backups');
     await fs.mkdir(path.join(vault, 'Old', 'media'), { recursive: true });
     await fs.mkdir(backup);
-    const note = Buffer.from('# Memo\n![[media/photo.png]]\n');
+    const note = Buffer.from('# Memo\n![](media/photo.png)\n');
     const photo = Buffer.from([0, 255, 13, 3]);
     await fs.writeFile(path.join(vault, 'Old', 'memo.md'), note);
     await fs.writeFile(path.join(vault, 'Old', 'media', 'photo.png'), photo);
