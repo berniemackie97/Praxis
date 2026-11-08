@@ -14,31 +14,43 @@ This document separates product commitments from unverified assumptions. The ini
 | R06 | Derived indexes and model outputs cannot be the sole copy of source content. | Rebuild succeeds from canonical sources without embedding-provider dependence. |
 | R07 | Agent tools and connectors require explicit authorization, scoped credentials and recoverable audit history. | Unauthorized tool calls and sensitive data access are rejected in integration tests. |
 | R08 | Complexity and ongoing cost require demonstrated benefit. | Add each infrastructure dependency only with a measurable benefit, failure model and maintenance cost. |
-| R09 | Private content cannot leave the device without explicit trust/processing authorization. | Negative tests demonstrate no unauthorized upload, indexing, inference, connector transfer, or tool action. |
+| R09 | Private content cannot leave the device without explicit trust/processing authorization. | Negative tests demonstrate no unauthorized upload, remote inference, connector transfer, or tool action. |
+| R10 | The initial useful Praxis app must not depend on Obsidian or continuous network access. | From a clean device session, import, find and restore local items with no Obsidian installation or remote service. |
+| R11 | Source originals and derived knowledge are distinct, auditable and independently recoverable. | Exact original byte hashes, provenance, extract/processor versions, proposed tags and full reindex survive restart and source updates. |
+| R12 | Dictation and browser capture are intentional, permissioned and loss-aware. | Mic activation/stop, browser origins, pairing, offline queue and transcript/source attribution pass negative and restart tests. |
+| R13 | Agents use explicit scoped MCP capabilities rather than implicit filesystem access. | Read/fetch and separately approved mutations enforce per-agent grants, source scope and revocation independent of prompt content. |
 
 These requirements describe the destination. They do not imply that each platform and capability is implemented in the first release.
 
 ## Delivery profiles
 
-### First usable milestone
+### First useful milestone — standalone local Praxis
 
-- One owner can capture and edit Markdown locally on at least two authorized devices.
-- A backend can exchange incremental changes without silent loss or requiring continuous connectivity.
-- Conflict states are visible and recoverable; original attachments remain intact.
-- A complete export and restore is demonstrable without the service being available.
-- This milestone does not require remote model APIs, embeddings, agents, or a custom UI.
+- One owner opens a first-party Praxis interface on a supported desktop without Obsidian, an account, network access or any model provider.
+- The owner explicitly imports a mixed local file/folder corpus. Original bytes, distinct source identities, provenance, processing status and supported extracted text survive restart, cancellation and retry without duplicates.
+- The owner searches supported text, opens source-grounded results and inspects originals; unprocessed/unsupported media is visible and not invented as searchable content.
+- A derived search index can be fully rebuilt; source deletion/revocation and content updates are reflected without stale unauthorized results.
+- Current originals and metadata can be exported/restored with verified bytes and explicit documented metadata limits. An unrelated process or hostile page cannot read local private content.
+- Capture, extraction and search require no upload or remote inference. A separately user-triggered URL fetch is an explicit network action, not a background permission.
 
-### Later milestones
+### Follow-on capture and intelligence
 
-- Real-device Obsidian integration on both mobile operating systems; user-visible sync status and repair.
-- Capture from selected authorized sources, searchable provenance, and measurable retrieval evaluation.
-- Explicitly approved automated actions with audit trails and safe recovery from failed jobs.
-- A first-party client using the same canonical content and synchronization contracts.
+- Quick-note and microphone dictation workflows preserve recordings and editable transcript revisions with explicit consent.
+- Browser-extension URL/page/selection capture requires deliberate user action, narrow permissions, local pairing and offline-safe retries.
+- Reviewable tags, summaries, topics and cross-source project relationships preserve source provenance and user corrections.
+- MCP agents obtain scoped read-only search/fetch first; capture or modifications require separate authorization, durable receipts and approvals.
+- Source-specific semantic analysis and grounded assistance are evaluated against actual data quality, not presumed to work for every media/game file.
+
+### Independent future release milestones
+
+- Authorized multi-device sync, conflicts, account/device recovery and remote access are independently verified under M2/#50; the local-first milestone never implies those features work.
+- Real-device Obsidian integration on desktop/mobile remains optional M3 acceptance.
+- Richer connectors, cross-platform first-party clients, approved model providers and operational recovery have separate feature gates.
 
 ## Platform and data boundaries
 
 - **Target platforms:** macOS, Windows, Linux, Android, iOS/iPadOS, and the web.
-- **Confirmed initial editor:** Obsidian, including its mobile application where compatible.
+- **First usable interaction:** a standalone Praxis local interface. Obsidian is an optional editor/capture adapter, including its mobile application where compatible.
 - **Initial deployment model:** undetermined. A modular monolith is a design default, not a commitment to one host.
 - **Initial database and storage:** must be selected after record consistency, trust, and recovery semantics; avoid making a database export the only portable format.
 - **Client execution model:** clients may run intermittently, be force-terminated, miss notifications, or be disconnected for extended periods.
@@ -53,7 +65,7 @@ These requirements describe the destination. They do not imply that each platfor
 | Private-data policy: device-only, trusted server, or separately encrypted collections | Key custody, threat model and search architecture | Open in #50 |
 | Data loss/recovery objectives and acceptable manual intervention | Revision retention, backups and account recovery | Open in #50 |
 | Physical devices available for platform testing versus long-term platform targets | Real-device acceptance | Open in #50 |
-| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | Open in #50 |
+| Initial capture sources and highest-value workflows | Ingestion and connector prioritization | The owner confirmed universal local inbox, dictation, browser capture and future MCP. Exact file formats, sources, consent and evaluation remain open in #30/#50/#99 |
 | Single-user/household/multi-user needs and sharing boundaries | Account model and authorization | Open in #50 |
 
 Do not record defaults as approved owner decisions. An ADR is accepted only when its tradeoffs and required evidence have been reviewed.
