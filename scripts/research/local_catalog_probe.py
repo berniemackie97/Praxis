@@ -10,7 +10,7 @@ import sqlite3
 import tempfile
 from time import perf_counter
 
-SCHEMA = Path(__file__).with_name("local-catalog.schema.sql")
+SCHEMA = Path(__file__).resolve().parents[2] / "src" / "Praxis.Storage" / "LocalCatalog.sql"
 
 
 def connect(path):
