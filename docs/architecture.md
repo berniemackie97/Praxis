@@ -1,6 +1,6 @@
 # Architecture baseline
 
-Praxis is a client-independent knowledge and automation platform. Obsidian is the first supported editor; first-party clients will use the same versioned contracts.
+Praxis is a client-independent knowledge and automation platform. Obsidian is an optional supported editor adapter, **not** a requirement for first-party capture, retrieval, storage or use. The first useful release is an owner-local Praxis Inbox/Library/Search application; full multi-device and hosted trust profiles are later gated capabilities.
 
 ## Invariants
 
@@ -44,6 +44,20 @@ A [local vault exchange](decisions/0009-local-vault-capture-restore.md) captures
 A [manual Obsidian desktop adapter](decisions/0013-obsidian-desktop-local-adapter.md) invokes the local CLI through explicitly triggered commands, persists archive and rename state outside the vault and refuses interrupted or unapproved updates. Its runtime is separate from the .NET knowledge library; integration tests use a simulated CLI. The [offline two-file plugin package](decisions/0014-obsidian-package-and-lifecycle.md) now builds the desktop source into a self-contained entry with simulated host tests and unload/session generation safeguards. Real Obsidian desktop event verification and mobile support remain open in #22 and #23, respectively.
 
 The HTTP application exposes only a process liveness endpoint with its integration test. This endpoint is not a readiness signal and authenticates no user. No persistent data or sync service exists yet.
+
+## Planned standalone ingestion and retrieval boundary
+
+The current portable archive library and local Obsidian capture remain implemented foundations. **A durable standalone source catalog, processing pipeline, search service, first-party UI, microphone input, browser extension and MCP server are not yet implemented.** The [product experience](product/second-brain-experience.md) and [delivery lanes](delivery/standalone-mvp.md) define their user-level responsibilities and acceptance criteria.
+
+- Explicit owner-selected file/folder intake and later voice/browser/agent input all pass through one source/provenance contract (#59/#96).
+- Immutable or versioned originals are separate from file paths, capture sources, extraction outputs, human annotations and searchable indexes; deduplication cannot erase source ownership.
+- Processing jobs need bounded resources, durable status, cancellation/retry and verified cleanup on source deletion. Unsupported media is preserved as an original with honest processing status.
+- Rebuildable lexical retrieval comes before unmeasured embedding or graph infrastructure (#60). Suggestion and relationship outputs require source-grounding and review (#97).
+- The first-party local API/UI (#64) must be safe on loopback with explicit caller identity as appropriate; no network/listener/connector/remote model access is implied by running locally.
+- Browser extension pairing and MCP are **different untrusted callers**, each with explicit grants. MCP read-only comes before independently approved write actions (#98).
+- Folder input is a convenience surface, not the canonical data store. Obsidian is another optional adapter (#57).
+
+Local catalog, content store, API packaging, transcription and inference engines remain explicit design decisions (#99/#50/#117), not predetermined services.
 
 ## Pending decisions
 
