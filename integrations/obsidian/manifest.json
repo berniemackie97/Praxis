@@ -1,0 +1,9 @@
+{
+  "id": "praxis-vault",
+  "name": "Praxis Vault",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Capture and verify local Praxis vault archives from Obsidian desktop.",
+  "author": "Praxis",
+  "isDesktopOnly": true
+}
