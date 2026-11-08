@@ -146,21 +146,43 @@ def streaming_probe(root, mib):
     return {"original_bytes": payload.stat().st_size, "chunk_bytes": len(chunk)}
 
 
+def sparse_size_probe(root, mib):
+    size = mib * 1024 * 1024
+    source = root / "sparse-original"
+    with source.open("xb") as handle:
+        handle.truncate(size)
+    digest = hashlib.sha256()
+    consumed = 0
+    with source.open("rb") as handle:
+        while data := handle.read(64 * 1024):
+            if len(data) > 64 * 1024:
+                raise AssertionError("The input read exceeded the bounded buffer.")
+            digest.update(data)
+            consumed += len(data)
+    if consumed != size:
+        raise AssertionError("The sparse input length changed during streaming.")
+    return {"sparse_input_bytes_streamed": consumed, "sparse_sha256": digest.hexdigest()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--items", type=int, default=4000)
     parser.add_argument("--revisions", type=int, default=100)
     parser.add_argument("--original-mib", type=int, default=64)
+    parser.add_argument("--sparse-mib", type=int, default=2048)
     arguments = parser.parse_args()
     if not 1 <= arguments.items <= 100_000 or not 0 <= arguments.revisions <= arguments.items:
         parser.error("Require 1–100,000 items and 0–items revisions.")
     if not 0 <= arguments.original_mib <= 256:
         parser.error("Original fixture must be between 0 and 256 MiB.")
+    if not 0 <= arguments.sparse_mib <= 4096:
+        parser.error("Sparse input must be between 0 and 4096 MiB.")
 
     with tempfile.TemporaryDirectory(prefix="praxis-catalog-probe-") as directory:
         root = Path(directory)
         result = catalog_probe(root, arguments.items, arguments.revisions)
         result.update(streaming_probe(root, arguments.original_mib))
+        result.update(sparse_size_probe(root, arguments.sparse_mib))
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
