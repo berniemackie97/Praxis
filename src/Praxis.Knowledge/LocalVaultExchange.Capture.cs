@@ -45,7 +45,13 @@ public static partial class LocalVaultExchange
             }
 
             var entries = Directory.EnumerateFileSystemEntries(directory)
-                .OrderBy(path => path, StringComparer.Ordinal).ToArray();
+                .Take(MaxNotes + MaxAttachments + MaxDirectories + 1).ToArray();
+            if (entries.Length > MaxNotes + MaxAttachments + MaxDirectories)
+            {
+                throw new InvalidDataException("The vault directory contains too many entries.");
+            }
+
+            Array.Sort(entries, StringComparer.Ordinal);
             if (depth > 0 && entries.Length == 0)
             {
                 throw new InvalidDataException("Empty vault directories cannot be represented by the archive.");
