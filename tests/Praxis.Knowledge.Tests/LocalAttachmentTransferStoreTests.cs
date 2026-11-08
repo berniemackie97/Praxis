@@ -143,6 +143,25 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     }
 
     [Fact]
+    public void ExistingPublishedBlobDoesNotMaskCorruptedNewStagingBytes()
+    {
+        var content = new byte[] { 1, 2, 3 };
+        var digest = Hash(content);
+        var first = TransferId(17);
+        store.Begin(first, digest, content.Length);
+        store.Append(first, 0, content);
+        store.Commit(first);
+
+        var second = TransferId(18);
+        store.Begin(second, digest, content.Length);
+        store.Append(second, 0, [1, 2, 99]);
+
+        Assert.Throws<InvalidDataException>(() => store.Commit(second));
+        Assert.Equal(content, store.ReadVerified(digest));
+        Assert.Equal(content.Length, store.Status(second).Uploaded);
+    }
+
+    [Fact]
     public void TwoAttachmentIdentitiesCanShareOneCommittedPayload()
     {
         var bytes = new byte[] { 5, 6, 7 };

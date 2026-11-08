@@ -109,6 +109,13 @@ public sealed class LocalAttachmentTransferStore
             }
 
             digest = status.Sha256;
+            staging.Position = HeaderLength;
+            if (!CryptographicOperations.FixedTimeEquals(
+                SHA256.HashData(staging), Convert.FromHexString(digest)))
+            {
+                throw new InvalidDataException("The staged attachment failed integrity verification.");
+            }
+
             if (!IsCommitted(status.Sha256, status.Length))
             {
                 var temporary = Path.Combine(contentDirectory, $"{Guid.NewGuid():N}.pending");
