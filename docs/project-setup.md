@@ -40,7 +40,7 @@ gh issue view 19 -R berniemackie97/Praxis --json blockedBy
 gh project view 3 --owner berniemackie97 --web
 \`\`\`
 
-Expected after this planning PR merges: eight distinct M0–M7 capability milestones, **17 feature issues and 89 unique tracked issues**, with native parent/blocked-by links, 4 execution lanes and classified board items. The new source, voice, browser, organization and MCP issues are #96–#119. Existing completed work remains closed. The validated source plan is authoritative for desired relationships, not proof that private Project #3 has already been reconciled.
+Expected after this planning PR merges: eight distinct M0–M7 capability milestones, **17 feature issues and 93 unique tracked issues**, with native parent/blocked-by links, 4 execution lanes and classified board items. The new source, voice, browser, organization and MCP issues are #96–#119. Existing completed work remains closed. Added local execution gates #126 (S1c), #128 (S1d), #129 (local caller-policy decision) and #130 (integrated local MVP acceptance); overlapping duplicate #127 is excluded. The validated source plan is authoritative for desired relationships, not proof that private Project #3 has already been reconciled.
 
 GitHub Projects currently reserves the field name \`Type\`; kind labels plus issue title prefixes cover personal repository classification. Native organization issue types are not required.
 
