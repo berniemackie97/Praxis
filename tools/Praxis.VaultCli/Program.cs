@@ -12,6 +12,25 @@ if (args.Length == 2 && args[0] == "verify")
     });
 }
 
+if (args.Length == 2 && args[0] == "links")
+{
+    return Run(() =>
+    {
+        using var stream = File.OpenRead(args[1]);
+        var report = LocalVaultAttachmentLinks.Inspect(NoteArchive.ReadCollection(stream));
+        Console.WriteLine($"Resolved {report.References.Count} note-to-attachment links; {report.Problems.Count} unresolved or ambiguous.");
+        foreach (var problem in report.Problems)
+        {
+            Console.Error.WriteLine($"{problem.NotePath}: {problem.Target}: {problem.Reason}");
+        }
+
+        if (report.Problems.Count != 0)
+        {
+            throw new InvalidDataException("The attachment link audit has unresolved findings.");
+        }
+    });
+}
+
 if (args.Length == 3 && args[0] == "capture")
 {
     return Run(() =>
@@ -53,6 +72,7 @@ if (args.Length >= 4 && args[0] == "update")
 Console.Error.WriteLine("Usage: vault capture <source-directory> <new-archive.zip>");
 Console.Error.WriteLine("       vault verify  <archive.zip>");
 Console.Error.WriteLine("       vault restore <archive.zip> <new-directory>");
+Console.Error.WriteLine("       vault links <archive.zip>");
 Console.Error.WriteLine("       vault plan <source-directory> <previous-archive.zip> [--renames <json-file>]");
 Console.Error.WriteLine("       vault update <source-directory> <previous-archive.zip> <new-archive.zip> [--renames <json-file>]");
 return 2;
