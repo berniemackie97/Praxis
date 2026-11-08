@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage;
 
-public sealed class LocalCatalog : IDisposable
+public sealed partial class LocalCatalog : IDisposable
 {
     private const int CurrentSchemaVersion = 1;
     private static readonly (string Name, string Columns)[] Tables =
