@@ -2,6 +2,8 @@
 
 This is the first **local, user-triggered desktop adapter** for Praxis. It uses the existing .NET vault CLI to capture, preview, update and verify a vault archive. It does **not** synchronize to a service, watch files in the background, rewrite notes, delete vault files or create backups automatically.
 
+For a first-use Mac walkthrough with an actual CLI preflight and a new disposable test vault, follow [LOCAL-TRIAL.md](LOCAL-TRIAL.md). The installer accepts an absolute `.NET` executable path to avoid GUI `PATH` differences. For the manual installation steps below, set **both** the .NET executable and CLI assembly in the plugin settings.
+
 ## Install for local testing
 
 1. Publish the local CLI using the repository's pinned .NET 10 SDK, outside the Obsidian vault:
@@ -15,7 +17,7 @@ This is the first **local, user-triggered desktop adapter** for Praxis. It uses 
    ```
    The output contains only `main.js` and `manifest.json`. The packager refuses an existing destination and does not overwrite previous builds. It uses only built-in Node.js modules and embeds the repository's three local runtime modules into `main.js`; there are no downloaded npm dependencies.
 4. Copy the **two generated files** into a folder named `praxis-vault` under Obsidian's configured plugins directory (its configuration directory may differ from `.obsidian`). Do not install the three unbundled source modules as the plugin.
-5. Enable the plugin under Obsidian desktop's Community plugins. In Praxis Vault settings, specify the **absolute** archive directory and **absolute** published `Praxis.VaultCli.dll` path.
+5. Enable the plugin under Obsidian desktop's Community plugins. In Praxis Vault settings, specify the **absolute** archive directory, **absolute** published `Praxis.VaultCli.dll` path, and **absolute** `dotnet` executable path (for example from `command -v dotnet`).
 
 The package can be installed manually, but is not published to the Obsidian community directory. Obsidian desktop and the local .NET runtime are required; the package is **not** a standalone replacement for the CLI. The generated entry is syntax-checked and loaded against a simulated Obsidian host in CI; **real desktop-app smoke testing is still outstanding** under issue #22.
 

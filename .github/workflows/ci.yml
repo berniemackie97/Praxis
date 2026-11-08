@@ -35,12 +35,16 @@ jobs:
       - run: node integrations/obsidian/scripts/package.js artifacts/obsidian/praxis-vault
       - run: node --check artifacts/obsidian/praxis-vault/main.js
       - run: node --test integrations/obsidian/test/packaged-plugin.test.js
+      - run: node --check integrations/obsidian/scripts/install-local.js
+      - run: node --test integrations/obsidian/test/install-local.test.js
       - run: dotnet publish src/Praxis.Api/Praxis.Api.csproj -c Release --no-build --no-restore -o artifacts/publish
       - run: python3 scripts/release/smoke_api.py
         if: matrix.os == 'ubuntu-24.04'
       - run: python3 scripts/release/smoke_vault_cli.py
         if: matrix.os == 'ubuntu-24.04'
       - run: node --test integrations/obsidian/test/archive-session-cli.test.js
+        if: matrix.os == 'ubuntu-24.04'
+      - run: node --test integrations/obsidian/test/install-local-cli.test.js
         if: matrix.os == 'ubuntu-24.04'
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
         if: matrix.os == 'ubuntu-24.04'

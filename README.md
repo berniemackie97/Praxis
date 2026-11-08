@@ -97,6 +97,8 @@ The first Obsidian desktop integration is under [`integrations/obsidian`](integr
 
 The adapter has automated Node tests, but **real Obsidian desktop event and device validation has not been completed**. Encrypted backups, folder renames, background synchronization and mobile support remain outstanding.
 
+For a practical local trial using the current desktop adapter, see the [Mac first-run and restore checklist](integrations/obsidian/LOCAL-TRIAL.md). It uses a disposable Obsidian vault and actual .NET CLI preflight before installing a plugin, without enabling server synchronization or automatic knowledge classification.
+
 ## Release verification
 
 The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions verifies the backend build and tests on Linux, macOS and Windows; the Linux job additionally smokes the published API on loopback and checks a [declared-license/dependency inventory](docs/dependencies/README.md). See [release verification](docs/release-verification.md) for update commands, evidence and limitations. These checks do not imply that mobile clients or production synchronization are implemented.

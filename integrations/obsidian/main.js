@@ -41,6 +41,13 @@ class PraxisSettings extends PluginSettingTab {
                 .setValue(this.plugin.settings.backupDirectory)
                 .onChange(value => this.plugin.saveSettings('backupDirectory', value)));
         new Setting(this.containerEl)
+            .setName('.NET executable')
+            .setDesc('Absolute path to dotnet. This avoids depending on the GUI application PATH.')
+            .addText(field => field
+                .setPlaceholder('/absolute/path/to/dotnet')
+                .setValue(this.plugin.settings.dotnetExecutablePath)
+                .onChange(value => this.plugin.saveSettings('dotnetExecutablePath', value)));
+        new Setting(this.containerEl)
             .setName('Vault CLI assembly')
             .setDesc('Absolute path to the published Praxis.VaultCli.dll; requires the matching .NET runtime.')
             .addText(field => field
@@ -55,7 +62,8 @@ module.exports = class PraxisPlugin extends Plugin {
         const saved = await this.loadData();
         this.settings = {
             backupDirectory: typeof saved?.backupDirectory === 'string' ? saved.backupDirectory : '',
-            cliAssemblyPath: typeof saved?.cliAssemblyPath === 'string' ? saved.cliAssemblyPath : ''
+            cliAssemblyPath: typeof saved?.cliAssemblyPath === 'string' ? saved.cliAssemblyPath : '',
+            dotnetExecutablePath: typeof saved?.dotnetExecutablePath === 'string' ? saved.dotnetExecutablePath : ''
         };
         this.sessionPromise = null;
         this.session = null;
@@ -122,7 +130,8 @@ module.exports = class PraxisPlugin extends Plugin {
             const pending = ArchiveSession.open({
                 vaultPath: this.app.vault.adapter.getBasePath(),
                 backupDirectory: this.settings.backupDirectory,
-                cliAssemblyPath: this.settings.cliAssemblyPath
+                cliAssemblyPath: this.settings.cliAssemblyPath,
+                dotnetExecutablePath: this.settings.dotnetExecutablePath || undefined
             }).then(session => {
                 if (this.disposed || this.sessionEpoch !== epoch) {
                     session.close();
