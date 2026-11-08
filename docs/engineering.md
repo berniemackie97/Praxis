@@ -24,7 +24,7 @@ A PR is ready for owner review only when its actual relevant tests and CI are gr
 
 ## Dependency and workflow security
 
-- CI pins third-party GitHub Actions to reviewed commit hashes. Dependabot proposes updates; review the new commit and its permissions before merging.
+- CI pins referenced GitHub Actions to reviewed commit hashes. Dependabot proposes updates; review the new commit and its permissions before merging.
 - Restore audits direct and transitive NuGet dependencies, including low-severity advisories, with warnings treated as errors. Investigate the originating package and fix or replace it; advisory suppression requires a specific, documented risk decision.
-- Dependabot checks NuGet and workflow actions weekly. Updates are reviewable PRs, not automatic merges.
+- CI uses the Ubuntu 24.04 runner family rather than the moving `ubuntu-latest` alias. Dependabot checks NuGet and workflow actions weekly; updates are reviewable PRs, not automatic merges.
 - The SDK can roll forward within the configured feature-band policy; package lock files and reproducible restore are not yet established. Before claiming reproducible releases, commit generated lock files, enforce locked restores in CI, and verify the resulting SDK/package graph. Database migrations and rollback rehearsals remain #46 follow-up work once persistent schema exists.
