@@ -4,7 +4,7 @@ GitHub [Praxis Roadmap Project #3](https://github.com/users/berniemackie97/proje
 
 ## Execution focus: standalone local Praxis
 
-The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The first active chain is #99 → #100 → #102/#101 → #103 → #106 → #107 → #108; voice #109/#110, browser #104/#111/#112 and MCP #117–#119 follow as separately testable outcomes. Obsidian #5 is optional and does not block initial direct capture.
+The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The active local-first path now distinguishes completed foundation #99/#122/#124 from open S1c #126, S1d #128 and parent #100; then #102/#101 → #103 → #106, with local caller-policy spike #129 before #107, followed by #108 and end-to-end release proof #130. Voice #109/#110, browser #104/#111/#112 and MCP #117–#119 remain distinct follow-on outcomes. Obsidian #5 is optional and does not block initial direct capture.
 
 Limit work-in-progress to one cohesive implementation slice awaiting merge per active workstream, except independent decision spikes. Each issue is audited against current code before taking it, and every PR reports exact test evidence, unresolved integration gaps and its linked parent issue. Do not close a parent feature because a single child test passes. No remote processing or agent permission is inferred from user-local ingestion.
 
