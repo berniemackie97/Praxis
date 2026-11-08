@@ -61,6 +61,7 @@ module.exports = class PraxisPlugin extends Plugin {
         this.session = null;
         this.running = false;
         this.disposed = false;
+        this.sessionEpoch = 0;
         this.addSettingTab(new PraxisSettings(this.app, this));
 
         this.addCommand({
@@ -99,6 +100,7 @@ module.exports = class PraxisPlugin extends Plugin {
             new Notice('Praxis: finish the active archive operation before changing settings.');
             return;
         }
+        this.sessionEpoch++;
         this.session?.close();
         this.session = null;
         this.sessionPromise = null;
@@ -107,27 +109,44 @@ module.exports = class PraxisPlugin extends Plugin {
     }
 
     async getSession() {
+        if (this.disposed) {
+            throw new Error('The plugin was unloaded.');
+        }
+
+        const epoch = this.sessionEpoch;
         if (!this.sessionPromise) {
             if (!(this.app.vault.adapter instanceof FileSystemAdapter)) {
                 throw new Error('The local vault adapter requires Obsidian desktop.');
             }
-            this.sessionPromise = ArchiveSession.open({
+
+            const pending = ArchiveSession.open({
                 vaultPath: this.app.vault.adapter.getBasePath(),
                 backupDirectory: this.settings.backupDirectory,
                 cliAssemblyPath: this.settings.cliAssemblyPath
             }).then(session => {
-                if (this.disposed) {
+                if (this.disposed || this.sessionEpoch !== epoch) {
                     session.close();
-                    throw new Error('The plugin was unloaded.');
+                    throw new Error('The plugin session configuration changed.');
                 }
+
                 this.session = session;
                 return session;
-            }).catch(error => {
-                this.sessionPromise = null;
+            });
+            const guarded = pending.catch(error => {
+                if (this.sessionPromise === guarded) {
+                    this.sessionPromise = null;
+                }
                 throw error;
             });
+            this.sessionPromise = guarded;
         }
-        return this.sessionPromise;
+
+        const session = await this.sessionPromise;
+        if (this.disposed || this.sessionEpoch !== epoch) {
+            throw new Error('The plugin session configuration changed.');
+        }
+
+        return session;
     }
 
     async recordRename(previous, current) {
@@ -145,18 +164,29 @@ module.exports = class PraxisPlugin extends Plugin {
             return;
         }
 
+        if (this.disposed) {
+            return;
+        }
+
         this.running = true;
         try {
             const session = await this.getSession();
             if (kind === 'plan') {
-                new PlanModal(this.app, await session.plan()).open();
+                const result = await session.plan();
+                if (!this.disposed) {
+                    new PlanModal(this.app, result).open();
+                }
             } else {
                 const result = await session.snapshot();
-                new Notice('Praxis: verified archive saved as ' +
-                    path.basename(result.archive), 10_000);
+                if (!this.disposed) {
+                    new Notice('Praxis: verified archive saved as ' +
+                        path.basename(result.archive), 10_000);
+                }
             }
         } catch (error) {
-            new Notice('Praxis: ' + error.message, 12_000);
+            if (!this.disposed) {
+                new Notice('Praxis: ' + error.message, 12_000);
+            }
         } finally {
             this.running = false;
         }
@@ -164,6 +194,7 @@ module.exports = class PraxisPlugin extends Plugin {
 
     onunload() {
         this.disposed = true;
+        this.sessionEpoch++;
         this.session?.close();
     }
 };
