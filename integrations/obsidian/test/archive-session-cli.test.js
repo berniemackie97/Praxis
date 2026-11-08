@@ -73,3 +73,49 @@ test('desktop archive session executes the actual CLI and preserves original vau
     assert.ok((await fs.readdir(backup)).filter(file => file.endsWith('.zip')).length >= 2);
     session.close();
 });
+
+test('folder move through real CLI retains nested files and tracked embedded links', async t => {
+    await fs.access(Assembly);
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-folder-move-'));
+    t.after(() => fs.rm(root, { recursive: true, force: true }));
+    const vault = path.join(root, 'vault');
+    const backup = path.join(root, 'backups');
+    await fs.mkdir(path.join(vault, 'Old', 'media'), { recursive: true });
+    await fs.mkdir(backup);
+    const note = Buffer.from('# Memo\n![](media/photo.png)\n');
+    const photo = Buffer.from([0, 255, 13, 3]);
+    await fs.writeFile(path.join(vault, 'Old', 'memo.md'), note);
+    await fs.writeFile(path.join(vault, 'Old', 'media', 'photo.png'), photo);
+
+    const session = await ArchiveSession.open({
+        vaultPath: vault, backupDirectory: backup, cliAssemblyPath: Assembly
+    });
+    const original = await session.snapshot();
+    await fs.rename(path.join(vault, 'Old'), path.join(vault, 'Intermediate'));
+    await session.recordRename('Old', 'Intermediate', true);
+    await session.recordRename('Old/memo.md', 'Intermediate/memo.md');
+    await session.recordRename('Old/media/photo.png', 'Intermediate/media/photo.png');
+    await fs.rename(path.join(vault, 'Intermediate'), path.join(vault, 'Final'));
+    await session.recordRename('Intermediate', 'Final', true);
+    await session.recordRename('Intermediate/memo.md', 'Final/memo.md');
+
+    const plan = await session.plan();
+    assert.match(plan, /0 added, 0 updated, 2 renamed/);
+    assert.match(plan, /0 removed/);
+    const updated = await session.snapshot();
+    const verify = await runVaultCli(Assembly, ['verify', updated.archive], {
+        cwd: backup, signal: new AbortController().signal
+    });
+    assert.match(verify, /Tracked 1 vault attachment references/);
+    const destination = path.join(root, 'restored');
+    await runVaultCli(Assembly, ['restore', updated.archive, destination], {
+        cwd: backup, signal: new AbortController().signal
+    });
+    assert.deepEqual(await fs.readFile(path.join(destination, 'Final', 'memo.md')), note);
+    assert.deepEqual(await fs.readFile(path.join(destination, 'Final', 'media', 'photo.png')), photo);
+    assert.deepEqual(await fs.readFile(path.join(vault, 'Final', 'memo.md')), note);
+    assert.equal((await fs.readdir(vault)).length, 1);
+    assert.equal((await fs.readdir(backup)).filter(file => file.endsWith('.zip')).length, 2);
+    assert.equal((await fs.readFile(original.archive)).length > 0, true);
+    session.close();
+});

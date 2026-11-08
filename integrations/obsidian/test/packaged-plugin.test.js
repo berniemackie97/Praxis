@@ -76,7 +76,7 @@ async function loadPackage(t) {
     new vm.Script(source, { filename: 'praxis-vault/main.js' }).runInNewContext({
         module: entry,
         require: name => name === 'obsidian'
-            ? { FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile }
+            ? { FileSystemAdapter, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder }
             : require(name),
         Buffer,
         AbortController,
@@ -152,25 +152,33 @@ test('onload registers commands but defers vault events until layout is ready', 
     assert.equal(session.changes, 1);
 });
 
-test('file rename events are recorded; folder rename invalidates capture without guessing', async t => {
+test('file and folder rename events are recorded without guessing content identities', async t => {
     const host = await loadPackage(t);
     const renames = [];
     const session = {
         changes: 0,
         changed() { this.changes++; },
-        async recordRename(previous, current) { renames.push({ previous, current }); },
+        async recordRename(previous, current, isFolder) {
+            renames.push({ previous, current, isFolder });
+        },
         close() {}
     };
     host.plugin.session = session;
     host.plugin.sessionPromise = Promise.resolve(session);
     host.app.workspace.readyCallback();
     host.emit('rename', new host.TFile('Notes/new.md'), 'Notes/old.md');
-    await host.flush();
-    assert.deepEqual(renames, [{ previous: 'Notes/old.md', current: 'Notes/new.md' }]);
     host.emit('rename', new host.TFolder('Moved'), 'Old');
+    await host.flush();
+
+    assert.deepEqual(renames, [
+        { previous: 'Notes/old.md', current: 'Notes/new.md', isFolder: false },
+        { previous: 'Old', current: 'Moved', isFolder: true }
+    ]);
+    assert.equal(session.changes, 0);
+    assert.equal(host.notices.length, 0);
+    host.emit('rename', { path: 'other' }, 'unknown');
     assert.equal(session.changes, 1);
-    assert.match(host.notices.at(-1), /folder renames need explicit CLI mapping/);
-    assert.equal(renames.length, 1);
+    assert.match(host.notices.at(-1), /unsupported rename event needs manual review/);
     host.unload();
 });
 

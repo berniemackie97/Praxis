@@ -18,7 +18,10 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(61, len(items))
+        self.assertEqual(62, len(items))
+        self.assertEqual(57, items[92]["parent"])
+        self.assertEqual("P1", items[92]["priority"])
+        self.assertIn(92, dependencies[22])
         self.assertEqual(8, len(self.plan["milestones"]))
         self.assertEqual(14, len(self.plan["features"]))
         self.assertEqual(1, items[2]["parent"])

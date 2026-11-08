@@ -47,7 +47,8 @@ The absolute `dotnet` path is saved to avoid relying on Finder-launched Obsidian
 3. Run the command-palette action **Praxis Vault: Capture or update local archive**. Confirm a ZIP archive appears in the separate archive directory.
 4. Edit the note and run **Praxis Vault: Preview local archive update**. Review the reported file changes.
 5. Run **Praxis Vault: Capture or update local archive** again. Verify the newer archive was created without replacing the earlier one.
-6. Test restore to a **new** directory, never your active vault:
+6. In the **disposable test vault**, move a folder containing a Markdown note and image using Obsidian's file explorer while the plugin is enabled. Preview then update again; the existing files should appear as renamed, not added. If the move is rejected, preserve the original archive and note exactly what Obsidian events were observed. This is a **manual acceptance test**, not a compatibility claim.
+7. Test restore to a **new** directory, never your active vault:
 
    ```sh
    dotnet "$HOME/PraxisLocalCli/Praxis.VaultCli.dll" verify \
@@ -60,10 +61,10 @@ The absolute `dotnet` path is saved to avoid relying on Finder-launched Obsidian
 
    Replace `<verified-archive>` with the actual generated filename. The restore target must not already exist. Compare the recovered Markdown and original attachments with the test vault. After the rehearsal, remove the disposable recovered copy only if you're satisfied with the result.
 
-7. Disable the plugin and verify Obsidian can still open/edit the source notes. Re-enable it, run preview, and inspect the external archive session state. Do **not** remove an external session lock unless you confirm no operation is running.
+8. Disable the plugin and verify Obsidian can still open/edit the source notes. Re-enable it, run preview, and inspect the external archive session state. Do **not** remove an external session lock unless you confirm no operation is running.
 
 ## Current limits
 
-The adapter is **explicit capture only**, not a watcher or live synchronization engine. It tracks individual file rename events while loaded, but folder renames or missed events can require manual CLI mappings. A removed tracked embed can require explicit note/attachment-ID approval in the CLI; the plugin will not silently approve it. An unresolved or ambiguous supported link blocks tracked capture. It cannot guarantee a consistent snapshot when external processes write directly to the vault while capture is running.
+The adapter is **explicit capture only**, not a watcher or live synchronization engine. It records file and folder rename events while loaded, and the archive CLI can reconcile ordered folder moves across existing records. Missed events, mixed or conflicting renames, and moves made with the plugin disabled can still require explicit manual mappings and otherwise fail closed. A removed tracked embed can require explicit note/attachment-ID approval in the CLI; the plugin will not silently approve it. An unresolved or ambiguous supported link blocks tracked capture. It cannot guarantee a consistent snapshot when external processes write directly to the vault while capture is running.
 
 Plugin installation and command behavior have automated tests, but this procedure has **not yet been run against a real Obsidian desktop session in CI**. Record the Obsidian version, OS, paths, observed behavior and restore comparison when doing the manual acceptance test. Do not mark [#22](https://github.com/berniemackie97/Praxis/issues/22) or [#25](https://github.com/berniemackie97/Praxis/issues/25) complete until those results are reviewed. No mobile or remote processing is provided; [#50](https://github.com/berniemackie97/Praxis/issues/50) remains the trust/hosting decision gate.
