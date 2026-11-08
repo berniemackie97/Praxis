@@ -15,6 +15,12 @@ Praxis targets macOS, Windows, Linux, Android, iOS/iPadOS and browsers. Support 
 
 Actual supported OS versions, CPU architectures and device inventory are to be recorded in test evidence as each platform reaches a release gate.
 
+## Automated build verification
+
+The CI pipeline checks .NET 10.0.403, locked NuGet restore, Release compilation, .NET tests, and API publication on Ubuntu 24.04, macOS 15 (GitHub-hosted Apple Silicon), and Windows Server 2025. Linux also verifies a published API's loopback health endpoint, the lockfile/license inventory, formatting and roadmap validation.
+
+This matrix validates **build and test portability for the current backend**, not real-device Obsidian editor parity or supported client platforms. The Mac runner's Apple Silicon architecture and actual CI outcomes must be confirmed by the associated successful GitHub Actions run; passing Linux checks alone does not establish cross-platform evidence. macOS/Windows hosted CI jobs on a private repository consume GitHub Actions usage, so the matrix should be revisited if usage budgets require it.
+
 ## Obsidian adapter constraints
 
 - Use the public Obsidian vault and platform APIs as applicable; don't assume Node.js or Electron APIs on mobile.
