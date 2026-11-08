@@ -36,6 +36,8 @@ jobs:
         if: matrix.os == 'ubuntu-24.04'
       - run: python3 scripts/release/smoke_vault_cli.py
         if: matrix.os == 'ubuntu-24.04'
+      - run: node --test integrations/obsidian/test/archive-session-cli.test.js
+        if: matrix.os == 'ubuntu-24.04'
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
         if: matrix.os == 'ubuntu-24.04'
       - run: python3 scripts/release/dependency_inventory.py --check
