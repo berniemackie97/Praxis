@@ -48,6 +48,22 @@ See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [engineeri
 
 `LocalNoteJournal` is a bounded, local-only checkpoint for multiple pending Markdown edits, conflict resolution, accepted-change receipts and a durable applied cursor. It survives ordinary process restarts and verifies echoed events without losing queued content. It is not encrypted storage, a complete vault backup or an authenticated synchronization service. See [ADR 0008](docs/decisions/0008-durable-offline-note-journal.md) for the owner-controlled directory, limits, and unimplemented integration gates.
 
+## Local vault capture and restore
+
+`LocalVaultExchange.CaptureArchive(sourceDirectory, archivePath)` captures a local Markdown folder, binary originals and hidden files into a validated collection ZIP. `LocalVaultExchange.RestoreArchive(archivePath, newDirectory)` restores the latest Markdown files and original attachments into a **new** directory, never overwriting a vault. Links are preserved as written; their meaning and target identity are not inferred. Empty nested directories, invalid UTF-8, and symbolic links fail explicitly.
+
+Use the local command-line tool (requires the repository's exact .NET SDK):
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- capture /path/to/vault /path/to/new-backup.zip
+dotnet run --project tools/Praxis.VaultCli -- verify /path/to/new-backup.zip
+dotnet run --project tools/Praxis.VaultCli -- restore /path/to/new-backup.zip /path/to/new-restored-vault
+```
+
+Paths must point to an existing source/parent directory; archive and restore destinations must not already exist. The ZIP includes original content and potentially private hidden configuration files, all **unencrypted**. This CLI does not modify an existing vault.
+
+See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
+
 ## Release verification
 
 The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions verifies the backend build and tests on Linux, macOS and Windows; the Linux job additionally smokes the published API on loopback and checks a [declared-license/dependency inventory](docs/dependencies/README.md). See [release verification](docs/release-verification.md) for update commands, evidence and limitations. These checks do not imply that mobile clients or production synchronization are implemented.
