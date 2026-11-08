@@ -21,6 +21,9 @@ public static class LocalVaultAttachmentLinks
         ArgumentNullException.ThrowIfNull(collection);
         var byPath = collection.Attachments.ToDictionary(
             item => item.Path, StringComparer.OrdinalIgnoreCase);
+        var byName = collection.Attachments.ToLookup(
+            item => item.Path[(item.Path.LastIndexOf('/') + 1)..],
+            StringComparer.OrdinalIgnoreCase);
         var references = new HashSet<AttachmentReference>();
         var problems = new List<VaultLinkProblem>();
 
@@ -149,14 +152,9 @@ public static class LocalVaultAttachmentLinks
 
             if (wiki && !target.Contains('/'))
             {
-                foreach (var attachment in collection.Attachments)
+                foreach (var attachment in byName[target])
                 {
-                    if (string.Equals(
-                        attachment.Path[(attachment.Path.LastIndexOf('/') + 1)..],
-                        target, StringComparison.OrdinalIgnoreCase))
-                    {
-                        candidates.Add(attachment.Id);
-                    }
+                    candidates.Add(attachment.Id);
                 }
             }
 
