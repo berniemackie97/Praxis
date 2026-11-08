@@ -42,4 +42,4 @@ node --check integrations/obsidian/archive-session.js
 node --check integrations/obsidian/cli-process.js
 ```
 
-These tests use the Node.js standard library and a simulated CLI. The real .NET CLI integration smoke remains in `scripts/release/smoke_vault_cli.py`. The tests do **not** replace manual verification in an actual Obsidian desktop installation.
+The standard-library tests exercise session behavior against a simulated CLI on all three CI platforms. Linux additionally runs `node --test integrations/obsidian/test/archive-session-cli.test.js` against the real compiled `.NET` CLI, covering initial capture, tracked-link preservation, rename/update, round-trip restore and refusal to publish an unapproved unlink. The independent CLI smoke in `scripts/release/smoke_vault_cli.py` also remains. These automated tests do **not** replace real Obsidian desktop validation.
