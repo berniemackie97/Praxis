@@ -28,6 +28,6 @@ The first local interface should display this lifecycle rather than require raw 
 
 ## Design decisions to settle in #99
 
-Compare a small embedded catalog/store design, including SQLite or other local engines, against durability, migration and recovery constraints; do not treat the choice as approved by this document. Specify exact source/item/original schemas, background work lifecycle, file system/publication semantics, authorized local calling process, retention/forget behavior, portable export and steady-state disk/memory bounds.
+Review the measured local catalog recommendation in [ADR 0017](0017-local-catalog-and-original-storage.md): SQLite metadata plus independently verified content-addressed original files. It is a proposed local-only design until the linked spike is reviewed and merged; the SQL fixture is not yet a production migration. Specify exact source/item/original schemas, background work lifecycle, file system/publication semantics, authorized local calling process, retention/forget behavior, portable export and steady-state disk/memory bounds.
 
 Follow [standalone implementation lanes](../delivery/standalone-mvp.md). Do not select remote hosting, encryption mode, speech/LLM provider, vector store or graph engine by implication; those choices remain separately gated in #50/#117 and feature-level evidence.

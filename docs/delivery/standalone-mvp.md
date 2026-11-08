@@ -62,7 +62,7 @@ Do not treat agent access as ordinary browser/UI access or grant tools by prompt
 
 ## Planning and owner decisions
 
-- #99 selects local catalog/database and original storage based on constraints and measured tests; SQLite is a candidate, not a settled choice.
+- #99 evaluates embedded SQLite metadata and verified original files against an append-only JSONL alternative in [ADR 0017](../decisions/0017-local-catalog-and-original-storage.md); the recommendation remains subject to review, provider validation and end-to-end crash/backup tests under #100.
 - #50 retains remote hosting, budget, multi-user access, data trust/key custody and external-processing decisions. Local no-cloud/no-agent prototype needs no implied consent for any of these.
 - #30 defines later external source consent and availability; a manually supplied file does not require a third-party connector.
 - #117 resolves the MCP SDK, transports and authorization boundary before writing MCP integration.

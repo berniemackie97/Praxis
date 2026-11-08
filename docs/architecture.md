@@ -57,7 +57,7 @@ The current portable archive library and local Obsidian capture remain implement
 - Browser extension pairing and MCP are **different untrusted callers**, each with explicit grants. MCP read-only comes before independently approved write actions (#98).
 - Folder input is a convenience surface, not the canonical data store. Obsidian is another optional adapter (#57).
 
-Local catalog, content store, API packaging, transcription and inference engines remain explicit design decisions (#99/#50/#117), not predetermined services.
+The local catalog proposal in [ADR 0017](decisions/0017-local-catalog-and-original-storage.md) recommends embedded SQLite metadata and streamed content-addressed original files, pending acceptance and real implementation under #99/#100. API authorization, UI packaging, transcription, remote trust and model/provider decisions remain separate (#107/#50/#117).
 
 ## Pending decisions
 
