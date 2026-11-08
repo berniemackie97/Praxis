@@ -68,6 +68,33 @@ public sealed class OriginalCaptureTests : IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentIdenticalCapturesPublishOneVerifiedObject()
+    {
+        var bytes = Enumerable.Range(0, 100_000).Select(i => (byte)(i * 17)).ToArray();
+        using var catalog = LocalCatalog.Open(root);
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(async i =>
+        {
+            using var stream = new MemoryStream(bytes);
+            return await catalog.CaptureFileAsync(SourcePath($"concurrent-{i}.bin"),
+                stream, bytes.Length);
+        }));
+
+        Assert.Equal(8, results.Select(x => x.SourceId).Distinct().Count());
+        Assert.Equal(8, results.Select(x => x.ItemId).Distinct().Count());
+        Assert.Single(results.Select(x => x.Sha256).Distinct());
+        foreach (var result in results)
+        {
+            await catalog.VerifyOriginalAsync(result.ItemId);
+        }
+
+        using var db = Connect(catalog.DatabasePath);
+        Assert.Equal(8L, Scalar(db, "SELECT COUNT(*) FROM sources"));
+        Assert.Equal(8L, Scalar(db, "SELECT COUNT(*) FROM item_versions"));
+        Assert.Equal(1L, Scalar(db, "SELECT COUNT(*) FROM original_objects"));
+        Assert.Empty(Directory.GetFiles(Path.Combine(root, "staging")));
+    }
+
+    [Fact]
     public async Task EmptyOriginalIsPreserved()
     {
         using var catalog = LocalCatalog.Open(root);
