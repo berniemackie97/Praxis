@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the published local vault CLI against real files, without a network service."""
 
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -51,6 +52,44 @@ def main():
         if (destination / "Notes/first.md").read_bytes() != contents["Notes/first.md"]:
             raise AssertionError("A refused restore altered existing data.")
 
+        (source / "Notes/first.md").write_bytes(b"# Updated\n![[../media/new.bin]]\n")
+        (source / "media/a.bin").rename(source / "media/new.bin")
+        next_archive = root / "updated.zip"
+        run(executable, "plan", source, archive, expected=1)
+        run(executable, "update", source, archive, next_archive, expected=1)
+        if next_archive.exists():
+            raise AssertionError("Ambiguous rename published a replacement archive.")
+
+        mapping = root / "renames.json"
+        mapping.write_text(json.dumps([{
+            "fromPath": "media/a.bin",
+            "toPath": "media/new.bin"
+        }]), encoding="utf-8")
+        preview = run(executable, "plan", source, archive, "--renames", mapping)
+        if "1 updated, 1 renamed" not in preview.stdout:
+            raise AssertionError(f"Unexpected incremental plan: {preview.stdout}")
+        run(executable, "update", source, archive, next_archive, "--renames", mapping)
+        verified = run(executable, "verify", next_archive)
+        if "1 notes and 2 attachments" not in verified.stdout:
+            raise AssertionError(f"Updated archive invalid: {verified.stdout}")
+
+        updated_vault = root / "updated-restored"
+        run(executable, "restore", next_archive, updated_vault)
+        if (updated_vault / "Notes/first.md").read_bytes() != (
+            source / "Notes/first.md").read_bytes():
+            raise AssertionError("Updated Markdown did not restore exactly.")
+        if (updated_vault / "media/new.bin").read_bytes() != contents["media/a.bin"]:
+            raise AssertionError("Mapped attachment did not restore exactly.")
+        if (updated_vault / ".obsidian/app.json").read_bytes() != contents[".obsidian/app.json"]:
+            raise AssertionError("Hidden configuration was lost.")
+
+        (source / ".obsidian/app.json").unlink()
+        removed_archive = root / "removed.zip"
+        run(executable, "plan", source, next_archive, expected=1)
+        run(executable, "update", source, next_archive, removed_archive, expected=1)
+        if removed_archive.exists():
+            raise AssertionError("A removed file was silently discarded.")
+
         invalid = root / "invalid.zip"
         invalid.write_bytes(b"invalid archive")
         run(executable, "verify", invalid, expected=1)
@@ -58,7 +97,7 @@ def main():
         if (root / "invalid-restore").exists():
             raise AssertionError("An invalid archive created a restore destination.")
 
-    print("Vault CLI smoke passed: capture, verify, restore, byte fidelity, no overwrite and corruption.")
+    print("Vault CLI smoke passed: capture, verify, incremental plan/update, explicit rename, restore, no overwrite, missing-file and corruption checks.")
 
 
 if __name__ == "__main__":

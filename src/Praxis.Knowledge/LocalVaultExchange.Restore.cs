@@ -15,7 +15,46 @@ public static partial class LocalVaultExchange
             throw new ArgumentException("The archive output must be outside the source vault.", nameof(archivePath));
         }
 
-        var collection = Capture(source);
+        WriteArchive(Capture(source), destination);
+    }
+
+    public static VaultUpdate PlanUpdate(
+        string vaultDirectory, string previousArchivePath,
+        IReadOnlyList<VaultRename>? renames = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(previousArchivePath);
+        var source = Path.GetFullPath(vaultDirectory);
+        var previousPath = Path.GetFullPath(previousArchivePath);
+        if (IsWithin(source, previousPath))
+        {
+            throw new ArgumentException("The prior archive must be outside the source vault.", nameof(previousArchivePath));
+        }
+
+        using var input = new FileStream(previousPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var previous = NoteArchive.ReadCollection(input);
+        return LocalVaultReconciler.Reconcile(previous, Capture(source), renames);
+    }
+
+    public static VaultUpdate UpdateArchive(
+        string vaultDirectory, string previousArchivePath, string newArchivePath,
+        IReadOnlyList<VaultRename>? renames = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newArchivePath);
+        var destination = Path.GetFullPath(newArchivePath);
+        if (IsWithin(Path.GetFullPath(vaultDirectory), destination))
+        {
+            throw new ArgumentException("The new archive must be outside the source vault.", nameof(newArchivePath));
+        }
+
+        var update = PlanUpdate(vaultDirectory, previousArchivePath, renames);
+        WriteArchive(update.Collection, destination);
+        return update;
+    }
+
+    private static void WriteArchive(KnowledgeCollection collection, string destination)
+    {
         var parent = Path.GetDirectoryName(destination)!;
         if (!Directory.Exists(parent) || Path.Exists(destination))
         {

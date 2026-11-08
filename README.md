@@ -62,6 +62,15 @@ dotnet run --project tools/Praxis.VaultCli -- restore /path/to/new-backup.zip /p
 
 Paths must point to an existing source/parent directory; archive and restore destinations must not already exist. The ZIP includes original content and potentially private hidden configuration files, all **unencrypted**. This CLI does not modify an existing vault.
 
+After the first archive, use an existing snapshot as the baseline for an identity-preserving incremental update:
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- plan /path/to/vault /backups/previous.zip
+dotnet run --project tools/Praxis.VaultCli -- update /path/to/vault /backups/previous.zip /backups/next.zip
+```
+
+Unchanged records keep their IDs, changed Markdown appends history, updated binary attachments preserve attachment IDs, and existing explicit references remain attached to those IDs. **Missing prior files stop the update** rather than being silently discarded. Renames require an explicit JSON file passed as `--renames /path/to/mapping.json`; both input and output archives must live outside the vault. See [ADR 0010](docs/decisions/0010-incremental-vault-reconciliation.md) for the mapping format, rules and unresolved semantic-link/deletion limitations.
+
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
 ## Release verification
