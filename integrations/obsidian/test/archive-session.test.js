@@ -134,6 +134,56 @@ test('moving a file back clears a pending mapping; case-only changes remain', as
         [{ fromPath: 'a.md', toPath: 'A.md' }]);
 });
 
+test('folder renames persist across restart as ordered explicit moves', async t => {
+    const f = await fixture(t);
+    const firstSession = await f.open();
+    const baseline = await firstSession.snapshot();
+    await firstSession.recordRename('Old', 'Middle', true);
+    await firstSession.recordRename('Middle', 'Final', true);
+    await firstSession.recordRename('Final/notes/a.md', 'Final/notes/b.md');
+    firstSession.close();
+
+    const mapping = (await state(f.backup)).renames;
+    assert.deepEqual(mapping, [
+        { fromPath: 'Old', toPath: 'Middle', isFolder: true },
+        { fromPath: 'Middle', toPath: 'Final', isFolder: true },
+        { fromPath: 'Final/notes/a.md', toPath: 'Final/notes/b.md' }
+    ]);
+
+    const restored = await f.open();
+    const updated = await restored.snapshot();
+    assert.notEqual(updated.archive, baseline.archive);
+    const args = f.calls.find(call => call[0] === 'update');
+    const renamesPath = args[args.indexOf('--renames') + 1];
+    assert.match(renamesPath, /praxis-renames-/);
+    assert.equal((await state(f.backup)).current, path.basename(updated.archive));
+    assert.deepEqual((await state(f.backup)).renames, []);
+});
+
+test('file moves before folder moves remain ordered by event identity', async t => {
+    const f = await fixture(t);
+    const session = await f.open();
+    await session.snapshot();
+    await session.recordRename('Old/note.md', 'Old/renamed.md');
+    await session.recordRename('Old', 'New', true);
+    assert.deepEqual((await state(f.backup)).renames, [
+        { fromPath: 'Old/note.md', toPath: 'Old/renamed.md' },
+        { fromPath: 'Old', toPath: 'New', isFolder: true }
+    ]);
+});
+
+test('invalid folder event markers never reset an existing archive baseline', async t => {
+    const f = await fixture(t);
+    const session = await f.open();
+    await session.snapshot();
+    const snapshot = await state(f.backup);
+    snapshot.renames = [{ fromPath: 'Old', toPath: 'New', isFolder: false }];
+    const statePath = path.join(f.backup, '.praxis-vault-session.json');
+    await fs.writeFile(statePath, JSON.stringify(snapshot));
+    await assert.rejects(f.open(), /invalid rename mapping/);
+    assert.equal((await state(f.backup)).current, snapshot.current);
+});
+
 test('failed update preserves last good baseline and queued renames', async t => {
     let fail = false;
     const f = await fixture(t, async (_assembly, args) => {
