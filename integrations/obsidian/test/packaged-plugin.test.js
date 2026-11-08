@@ -113,7 +113,9 @@ test('package is reproducible and ships only a self-contained entry and manifest
     t.after(() => fs.rm(second, { recursive: true, force: true }));
     await packagePlugin(second);
     assert.equal(await fs.readFile(path.join(second, 'main.js'), 'utf8'), instance.source);
-    assert.doesNotMatch(instance.source, /require\(['"]\.\/(?:archive-session|cli-process)['"]\)/);
+    assert.match(instance.source, /"\.\/cli-process": function/);
+    assert.match(instance.source, /"\.\/archive-session": function/);
+    assert.match(instance.source, /"\.\/main": function/);
 });
 
 test('onload registers commands but defers vault events until layout is ready', async t => {
