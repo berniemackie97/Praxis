@@ -80,7 +80,7 @@ public sealed class LocalVaultReconciliationTests : IDisposable
     {
         var source = Vault();
         Put(source, "Old/note.md", "![[media/photo.png]]");
-        Put(source, "Old/media/photo.png", "\\0\\x03");
+        Put(source, "Old/media/photo.png", "\0\x03");
         Put(source, "Old/nested/other.md", "# Other");
         var previousPath = Path.Combine(root, "folder-original.zip");
         LocalVaultExchange.CaptureArchive(source, previousPath, trackLinks: true);
