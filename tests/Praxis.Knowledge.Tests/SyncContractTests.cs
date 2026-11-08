@@ -236,7 +236,7 @@ public sealed class SyncContractTests
         var attempted = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload",
             version: version);
 
-        Assert.Equal(ApplyStatus.InvalidRequest, fixture.Apply(attempted).Status);
+        Assert.Equal(ApplyStatus.UnsupportedProtocolVersion, fixture.Apply(attempted).Status);
         Assert.Empty(fixture.Snapshot().Records);
         Assert.Equal(0, fixture.HeadSequence);
     }
@@ -246,7 +246,7 @@ public sealed class SyncContractTests
     {
         var fixture = new SyncContractFixture(Collection);
         var mutation = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload");
-        Assert.Equal(ApplyStatus.InvalidRequest,
+        Assert.Equal(ApplyStatus.WrongCollectionEpoch,
             fixture.Apply(mutation with { CollectionEpoch = Guid.NewGuid() }).Status);
 
         Assert.Equal(ApplyStatus.Applied, fixture.Apply(mutation).Status);

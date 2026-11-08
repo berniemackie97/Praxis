@@ -12,6 +12,8 @@ internal enum ApplyStatus
     Applied,
     StaleRevision,
     PathCollision,
+    UnsupportedProtocolVersion,
+    WrongCollectionEpoch,
     InvalidRequest,
     OperationKeyReused
 }
@@ -65,8 +67,12 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
 
     public SyncReply Apply(SyncMutation mutation)
     {
-        if (mutation.CollectionEpoch != CollectionEpoch ||
-            mutation.DeviceId == Guid.Empty || mutation.OperationId == Guid.Empty ||
+        if (mutation.CollectionEpoch != CollectionEpoch)
+        {
+            return Reject(ApplyStatus.WrongCollectionEpoch);
+        }
+
+        if (mutation.DeviceId == Guid.Empty || mutation.OperationId == Guid.Empty ||
             mutation.RecordId == Guid.Empty)
         {
             return Reject(ApplyStatus.InvalidRequest);
@@ -78,6 +84,11 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
             return previous.Request == mutation
                 ? previous.Reply
                 : Reject(ApplyStatus.OperationKeyReused);
+        }
+
+        if (mutation.ProtocolVersion != 1)
+        {
+            return Reject(ApplyStatus.UnsupportedProtocolVersion);
         }
 
         if (!IsValid(mutation))
@@ -167,8 +178,7 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
 
     private static bool IsValid(SyncMutation mutation)
     {
-        if (mutation.ProtocolVersion != 1 || mutation.BaseRevision < 0 ||
-            !Enum.IsDefined(mutation.Action))
+        if (mutation.BaseRevision < 0 || !Enum.IsDefined(mutation.Action))
         {
             return false;
         }
