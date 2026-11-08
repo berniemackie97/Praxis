@@ -28,6 +28,6 @@ File rename events update an external, restart-safe mapping ledger. Chained rena
 
 ## Verification and open gates
 
-Node standard-library tests simulate archive execution, restarts, chained rename events, data corruption, path rejection, concurrent changes, aborted operations and lock conflicts; the .NET CLI remains validated separately through the existing real-process smoke test. CI runs syntax checks and deterministic Node tests on Linux, macOS and Windows in addition to existing .NET verification.
+Node standard-library tests simulate archive execution, restarts, chained rename events, data corruption, path rejection, concurrent changes, aborted operations and lock conflicts. A separate Linux integration test runs the real .NET CLI through the adapter session across capture, rename, verified update, restore and refused unapproved link removal. CI runs syntax checks and deterministic Node tests on Linux, macOS and Windows in addition to existing .NET verification.
 
 The actual Obsidian application has not yet been smoke tested with the plugin. Desktop event parity, rename behavior during folder moves, file creation semantics, plugin packaging, recovery from interrupted editor sessions, and no-loop proof on a real vault remain under #22/#25. Mobile adaptation is independent under #23; it cannot use these desktop Node APIs. Privacy, hosting and key-custody selections still require #50 before any remotely accessible private data is enabled.
