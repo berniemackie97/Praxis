@@ -45,47 +45,7 @@ public sealed class LocalCatalog : IDisposable
                 Pooling = false
             }.ToString());
             database.Open();
-            Execute(database, "PRAGMA foreign_keys = ON");
-            Execute(database, "PRAGMA busy_timeout = 5000");
-            VerifyIntegrity(database);
-
-            var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
-            if (version != 0 && version != CurrentSchemaVersion)
-            {
-                throw new NotSupportedException("The catalog schema version is not supported.");
-            }
-
-            if (version == 0)
-            {
-                if (Convert.ToInt64(Scalar(database, """
-                    SELECT COUNT(*) FROM sqlite_master
-                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                    """)) != 0)
-                {
-                    throw new InvalidDataException("An unversioned database already contains user tables.");
-                }
-
-                using var transaction = database.BeginTransaction();
-                using var migration = Command(database, ReadSchema());
-                migration.Transaction = transaction;
-                migration.ExecuteNonQuery();
-                transaction.Commit();
-            }
-
-            VerifySchema(database);
-            if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
-                "wal", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
-            }
-
-            Execute(database, "PRAGMA synchronous = FULL");
-            if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 ||
-                Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
-            {
-                throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
-            }
-
+            Prepare(database);
             if (!OperatingSystem.IsWindows())
             {
                 File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -99,6 +59,50 @@ public sealed class LocalCatalog : IDisposable
             database?.Dispose();
             fileLock.Dispose();
             throw;
+        }
+    }
+
+    private static void Prepare(SqliteConnection database)
+    {
+        Execute(database, "PRAGMA foreign_keys = ON");
+        Execute(database, "PRAGMA busy_timeout = 5000");
+        VerifyIntegrity(database);
+
+        var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
+        if (version != 0 && version != CurrentSchemaVersion)
+        {
+            throw new NotSupportedException("The catalog schema version is not supported.");
+        }
+
+        if (version == 0)
+        {
+            if (Convert.ToInt64(Scalar(database, """
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                """)) != 0)
+            {
+                throw new InvalidDataException("An unversioned database already contains user tables.");
+            }
+
+            using var transaction = database.BeginTransaction();
+            using var migration = Command(database, ReadSchema());
+            migration.Transaction = transaction;
+            migration.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
+        VerifySchema(database);
+        if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
+            "wal", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
+        }
+
+        Execute(database, "PRAGMA synchronous = FULL");
+        if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 ||
+            Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
+        {
+            throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
         }
     }
 
