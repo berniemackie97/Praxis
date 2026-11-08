@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-Praxis is delivered through verifiable capability gates, not arbitrary dates. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
+Praxis is delivered through verifiable capability gates, not arbitrary dates. **Milestone numbers classify outcomes, not execution order.** A small local Praxis application now takes delivery priority over unfinished remote sync and optional Obsidian integration. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
 
 ## Milestone portfolio
 
@@ -10,8 +10,8 @@ Praxis is delivered through verifiable capability gates, not arbitrary dates. Gi
 | M1 — Private and portable knowledge | [#3](https://github.com/berniemackie97/Praxis/issues/3) | [#53](https://github.com/berniemackie97/Praxis/issues/53) device trust; [#54](https://github.com/berniemackie97/Praxis/issues/54) portable content | Device authorization and recovery contract, note/attachment import-export and integrity evidence |
 | M2 — Secure multi-device synchronization | [#4](https://github.com/berniemackie97/Praxis/issues/4) | [#55](https://github.com/berniemackie97/Praxis/issues/55) conflict protocol; [#56](https://github.com/berniemackie97/Praxis/issues/56) incremental exchange | Adversarial multi-client sync, safe retries, explicit conflicts, and authorization |
 | M3 — Obsidian device integration | [#5](https://github.com/berniemackie97/Praxis/issues/5) | [#57](https://github.com/berniemackie97/Praxis/issues/57) vault interoperability; [#58](https://github.com/berniemackie97/Praxis/issues/58) mobile recovery | Real desktop/mobile device tests, offline resume, portable vault restore and conflict UX |
-| M4 — Capture and retrieval | [#6](https://github.com/berniemackie97/Praxis/issues/6) | [#59](https://github.com/berniemackie97/Praxis/issues/59) source ingestion; [#60](https://github.com/berniemackie97/Praxis/issues/60) search quality | Idempotent ingestion, scoped provenance, full reindex and measured relevance |
-| M5 — Authorized intelligence | [#7](https://github.com/berniemackie97/Praxis/issues/7) | [#61](https://github.com/berniemackie97/Praxis/issues/61) grounded assistance; [#62](https://github.com/berniemackie97/Praxis/issues/62) action execution | Explicit provider consent, citations, permission/approval tests, durable audited workflows |
+| M4 — Capture and retrieval | [#6](https://github.com/berniemackie97/Praxis/issues/6) | [#59](https://github.com/berniemackie97/Praxis/issues/59) source ingestion; [#60](https://github.com/berniemackie97/Praxis/issues/60) search quality; [#96](https://github.com/berniemackie97/Praxis/issues/96) voice/browser capture | Idempotent ingestion, scoped provenance, full reindex and measured relevance |
+| M5 — Authorized intelligence | [#7](https://github.com/berniemackie97/Praxis/issues/7) | [#61](https://github.com/berniemackie97/Praxis/issues/61) grounded assistance; [#62](https://github.com/berniemackie97/Praxis/issues/62) action execution; [#97](https://github.com/berniemackie97/Praxis/issues/97) reviewable organization; [#98](https://github.com/berniemackie97/Praxis/issues/98) agent/MCP access | Explicit provider consent, citations, permission/approval tests, durable audited workflows |
 | M6 — First-party clients | [#8](https://github.com/berniemackie97/Praxis/issues/8) | [#63](https://github.com/berniemackie97/Praxis/issues/63) client contracts; [#64](https://github.com/berniemackie97/Praxis/issues/64) independent UI | Edits, sync and recovery work without Obsidian on the advertised platforms |
 | M7 — Operational readiness | [#9](https://github.com/berniemackie97/Praxis/issues/9) | [#65](https://github.com/berniemackie97/Praxis/issues/65) recoverability; [#66](https://github.com/berniemackie97/Praxis/issues/66) release resilience | Restore rehearsal, guarded deployment, migrations, supply-chain review and measured faults |
 
@@ -23,16 +23,25 @@ Operations and security are not postponed until M7. Before private synchronizati
 
 The current service does **not** yet implement remote private-data storage, authentication, attachments, synchronization or inference. [ADR 0003](decisions/0003-processing-trust-boundaries.md) prevents treating planned security as deployed security.
 
-## Delivery order
+## Execution lanes (across capability milestones)
 
-1. Complete the hosting, trust, key and recovery decisions in #50 and the threat model resolution in #13.
-2. Extend the completed Markdown note archive #14 with binary attachment integrity #16.
-3. Define the replay/conflict contract #17 and validate it with adversarial fixtures #21.
-4. Implement identity, recovery, bounded incremental transport and multi-client synchronization.
-5. Validate Obsidian adapters on real desktop/mobile devices before declaring M3 complete.
-6. Layer ingestion, retrieval, permissioned actions and independent clients only after the appropriate data and authorization contracts are proven.
+The validated [standalone delivery plan](delivery/standalone-mvp.md) and [product experience](product/second-brain-experience.md) define the current priority and user-visible acceptance:
 
-The [platform test matrix](platform-verification.md) and [requirements](requirements.md) distinguish target platforms from tested release support.
+1. **Local Praxis, no Obsidian:** resolve source/storage contract #99, implement catalog #100, ingestion lifecycle #102, file/folder Inbox #101, bounded extraction #103, lexical search #106, loopback boundary #107 and first-party UI #108. Exit is a real restarted/imported/searched/recovered local application without remote processing.
+2. **Fast capture:** quick thoughts #113, intentional microphone recording #109 and transcription #110, URL capture #104 and an explicitly paired browser extension #112/#111. These use the same provenance/ingestion model rather than independent stores.
+3. **Knowledge depth and evaluation:** explicit folder watcher #105, safe rich-media metadata #114, reviewed suggestions #115, relationships #116 and retrieval measurements #29. An unsupported binary is preserved, never falsely described as understood.
+4. **Agent/MCP compatibility:** contract and per-agent scope spike #117, local read-only #118, then separately authorized auditable writes #119. Untrusted content cannot authorize actions.
+
+Remote synchronization (M2), Obsidian desktop/mobile parity (M3), advanced inference (M5) and broad platform/deployment readiness (M6/M7) remain separate release gates. The work item [#50](https://github.com/berniemackie97/Praxis/issues/50) continues to block **remote** trust/hosting choices, not explicitly owner-local, network-disabled source capture.
+
+### First useful milestone (local)
+
+An owner can open Praxis directly, explicitly add files/folders with mixed supported and unsupported formats, see provenance and processing errors, search supported extracted content, inspect source originals, retry after a restart, rebuild the index and verify restoration. Obsidian, cloud storage, an external AI model and a second device are **not requirements** for this local milestone.
+
+### Later synchronization and release work
+
+Finish the threat/host/key/recovery decisions (#13/#15/#50) and versioned conflict protocol (#17) before remotely reachable private sync (#18/#19). Do not advertise device or encryption support until matching test evidence exists. The M3 desktop archive/restore work remains available as an optional adapter, with unverified editor/mobile acceptance tracked in #22/#23/#25.
+
 
 ## Quality gates
 
