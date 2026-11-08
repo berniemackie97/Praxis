@@ -13,7 +13,7 @@ The repository integration can create/update issues and PRs but does not adminis
 Run on your Mac:
 
 \`\`\`sh
-cd ~/Praxis
+cd /Volumes/EnderChest/Development/Repos/DotNet/Tools/Praxis/Praxis
 git switch main
 git pull --ff-only
 gh auth refresh -s project
@@ -21,9 +21,9 @@ python3 scripts/github/plan.py
 python3 scripts/github/plan.py --apply
 \`\`\`
 
-\`--apply\` creates missing milestones, labels, issue parent/dependency links, board items and views. It assigns missing Stage/Priority metadata and aligns closed issues to Done when that status exists. It never adds another user or collaborator and never merges a PR.
+\`--apply\` creates missing milestones, labels, issue parent/dependency links, board items and views. It assigns missing Stage/Priority metadata and aligns closed issues to Done when that status exists. It never adds another user or collaborator and never merges a PR. **Do not run against a planning branch:** merge the reviewed PR, then update `main` before applying. First run without `--apply` to validate locally.
 
-The script can be rerun after interruption. It preserves nonempty user-defined priority/stage fields, existing issue milestones and parent links, and already created views. If a conflict is discovered, execution stops rather than overwriting the existing configuration. Dependency reconciliation reads GitHub CLI's `blockedBy.nodes` and checks `totalCount`; if the API returns only a partial relationship list, setup stops without guessing missing blockers. The command's progress output indicates where to resume.
+The script can be rerun after interruption. It preserves nonempty user-defined priority/stage fields, existing issue milestones and parent links, and already created views. The newly reviewed source plan contains `dependency_removals` for **only** the obsolete #26 → #22 and #27 → #15 relationships. The script removes those edges only if currently present, without pruning other user-maintained dependencies. `priority_migrations` permits a bounded P2/P3 → P1 correction for specifically listed early-delivery items only when the old value matches exactly; all other curated Priority values remain unchanged. If a conflict is discovered, execution stops rather than overwriting the existing configuration. Dependency reconciliation reads GitHub CLI's `blockedBy.nodes` and checks `totalCount`; if the API returns only a partial relationship list, setup stops without guessing missing blockers. The command's progress output indicates where to resume.
 
 If an earlier run created the milestones and labels but stopped while reconciling issues, do **not** delete or recreate those resources. Update your local checkout to the reviewed fix and rerun the same `--apply` command.
 
@@ -40,7 +40,7 @@ gh issue view 19 -R berniemackie97/Praxis --json blockedBy
 gh project view 3 --owner berniemackie97 --web
 \`\`\`
 
-Expected: eight distinct M0–M7 milestones, fourteen feature issues, native roadmap/epic/feature/child relationships, a linked critical path and classified board items. The current plan tracks 61 unique nonduplicate issues, including the program index and setup regressions #71 and #73; the number changes only with reviewed roadmap changes.
+Expected after this planning PR merges: eight distinct M0–M7 capability milestones, **17 feature issues and 87 unique tracked issues**, with native parent/blocked-by links, 4 execution lanes and classified board items. The new source, voice, browser, organization and MCP issues are #96–#119. Existing completed work remains closed. The validated source plan is authoritative for desired relationships, not proof that private Project #3 has already been reconciled.
 
 GitHub Projects currently reserves the field name \`Type\`; kind labels plus issue title prefixes cover personal repository classification. Native organization issue types are not required.
 
@@ -62,7 +62,7 @@ GitHub enforces hourly and secondary GraphQL write limits. The setup checks the 
 gh api rate_limit --jq '.resources.graphql | {remaining, reset}'
 ```
 
-For Project changes the script reads item/field/option IDs once and batches up to eight additions or field-value updates into each GraphQL mutation request. It avoids invoking `gh project item-edit` for every individual field, and introduces a pause between mutating batches to respect GitHub's secondary limits. Existing user-set values remain authoritative; completed issues are moved to Done only where that option exists. Each rerun rereads GitHub state and applies only remaining changes. Errors stop the run; there are no automatic retry loops or hidden reauthentication attempts.
+For Project changes the script reads item/field/option IDs once and batches up to eight additions or field-value updates into each GraphQL mutation request. The additional tracked issues increase write volume; check quota and avoid repeatedly invoking `--apply` if the service reports insufficient capacity. It avoids invoking `gh project item-edit` for every individual field, and introduces a pause between mutating batches to respect GitHub's secondary limits. Existing user-set values remain authoritative; completed issues are moved to Done only where that option exists. Each rerun rereads GitHub state and applies only remaining changes. Errors stop the run; there are no automatic retry loops or hidden reauthentication attempts.
 
 The script also reconciles partially created Project views: an existing view without a filter can be finished without creating a duplicate, while an existing custom filter is preserved.
 
