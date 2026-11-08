@@ -52,6 +52,32 @@ test('first capture tracks links without adding any files inside the vault', asy
     assert.deepEqual(f.calls[0].slice(-1), ['--track-links']);
 });
 
+test('explicit dotnet executable path is passed to the CLI runner', async t => {
+    const f = await fixture(t);
+    const dotnet = path.join(f.root, 'dotnet');
+    await fs.writeFile(dotnet, 'test executable');
+    const invocations = [];
+    const session = await ArchiveSession.open({
+        vaultPath: f.vault,
+        backupDirectory: f.backup,
+        cliAssemblyPath: f.assembly,
+        dotnetExecutablePath: dotnet,
+        runner: async (_assembly, args, options) => {
+            invocations.push({ command: args[0], dotnet: options.dotnetExecutablePath });
+            if (args[0] === 'capture') {
+                await fs.writeFile(args[2], 'archive', { flag: 'wx' });
+            }
+            return 'verified';
+        }
+    });
+    await session.snapshot();
+
+    assert.deepEqual(invocations, [
+        { command: 'capture', dotnet: await fs.realpath(dotnet) },
+        { command: 'verify', dotnet: await fs.realpath(dotnet) }
+    ]);
+});
+
 test('plan before first capture refuses without writing state', async t => {
     const f = await fixture(t);
     const session = await f.open();
