@@ -185,7 +185,7 @@ public sealed class CollectionArchiveTests
     {
         var attachment = AttachmentRecord.Create("image.png", [1, 2, 3, 4]);
         using var archive = Export(new KnowledgeCollection([], [attachment], []));
-        ReplaceEntry(archive, $"attachments/{attachment.Sha256}", _ => [1, 2, 3, 5]);
+        ArchiveFixture.ReplaceEntry(archive, $"attachments/{attachment.Sha256}", _ => [1, 2, 3, 5]);
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
     }
@@ -270,7 +270,11 @@ public sealed class CollectionArchiveTests
         var second = AttachmentRecord.Create("b.png", [2]);
         using var archive = Export(new KnowledgeCollection([], [first, second], []));
         EditManifest(archive, json =>
-            json["attachments"]!.AsArray()[1]!["path"] = "A.PNG");
+        {
+            var attachments = json["attachments"]!.AsArray();
+            var firstPath = attachments[0]!["path"]!.GetValue<string>();
+            attachments[1]!["path"] = firstPath.ToUpperInvariant();
+        });
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
     }
@@ -314,7 +318,7 @@ public sealed class CollectionArchiveTests
 
     private static void EditManifest(MemoryStream archive, Action<JsonObject> edit)
     {
-        ReplaceEntry(archive, "manifest.json", bytes =>
+        ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
         {
             var json = JsonNode.Parse(Encoding.UTF8.GetString(bytes))!.AsObject();
             edit(json);
@@ -333,25 +337,4 @@ public sealed class CollectionArchiveTests
         archive.Position = 0;
     }
 
-    private static void ReplaceEntry(MemoryStream archive, string name, Func<byte[], byte[]> edit)
-    {
-        archive.Position = 0;
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
-        {
-            var entry = zip.GetEntry(name)!;
-            byte[] bytes;
-            using (var source = entry.Open())
-            using (var buffer = new MemoryStream())
-            {
-                source.CopyTo(buffer);
-                bytes = buffer.ToArray();
-            }
-
-            entry.Delete();
-            using var destination = zip.CreateEntry(name).Open();
-            destination.Write(edit(bytes));
-        }
-
-        archive.Position = 0;
-    }
 }
