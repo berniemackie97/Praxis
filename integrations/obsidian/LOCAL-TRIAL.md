@@ -57,9 +57,13 @@ The absolute `dotnet` path is saved to avoid relying on Finder-launched Obsidian
    dotnet "$HOME/PraxisLocalCli/Praxis.VaultCli.dll" restore \
      "/absolute/path/to/PraxisLocalArchives/<verified-archive>.zip" \
      "$HOME/PraxisRecoveredTrial"
+
+   dotnet "$HOME/PraxisLocalCli/Praxis.VaultCli.dll" compare \
+     "/absolute/path/to/PraxisLocalArchives/<verified-archive>.zip" \
+     "$HOME/PraxisRecoveredTrial"
    ```
 
-   Replace `<verified-archive>` with the actual generated filename. The restore target must not already exist. Compare the recovered Markdown and original attachments with the test vault. After the rehearsal, remove the disposable recovered copy only if you're satisfied with the result.
+   Replace `<verified-archive>` with the actual generated filename. The restore target must not already exist. A successful comparison reports the number of matching current files with **zero differences** and exits successfully. Missing, extra, or changed files are listed with a nonzero exit code; neither the archive nor the restored directory is modified. This verifies original file bytes and portable paths, not file permissions, timestamps, extended attributes, empty directories, or Obsidian runtime state. Only remove the disposable recovered copy after reviewing the result.
 
 8. Disable the plugin and verify Obsidian can still open/edit the source notes. Re-enable it, run preview, and inspect the external archive session state. Do **not** remove an external session lock unless you confirm no operation is running.
 
