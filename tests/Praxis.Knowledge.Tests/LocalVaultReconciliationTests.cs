@@ -76,6 +76,115 @@ public sealed class LocalVaultReconciliationTests : IDisposable
     }
 
     [Fact]
+    public void ExplicitFolderRenameRetainsNoteHistoryAttachmentIdentityAndTrackedLinks()
+    {
+        var source = Vault();
+        Put(source, "Old/note.md", "![[media/photo.png]]");
+        Put(source, "Old/media/photo.png", "\\0\\x03");
+        Put(source, "Old/nested/other.md", "# Other");
+        var previousPath = Path.Combine(root, "folder-original.zip");
+        LocalVaultExchange.CaptureArchive(source, previousPath, trackLinks: true);
+        using var previousStream = File.OpenRead(previousPath);
+        var previous = NoteArchive.ReadCollection(previousStream);
+
+        Directory.Move(Path.Combine(source, "Old"), Path.Combine(source, "New"));
+        var renames = new[] { new VaultRename("Old", "New", IsFolder: true) };
+
+        var preview = LocalVaultExchange.PlanUpdate(source, previousPath, renames);
+        Assert.Equal(3, preview.Changes.Count);
+        Assert.All(preview.Changes, change => Assert.True(change.PathChanged));
+        Assert.Equal(0, preview.RemovedLinks);
+
+        var newPath = Path.Combine(root, "folder-updated.zip");
+        var result = LocalVaultExchange.UpdateArchive(source, previousPath, newPath, renames);
+        Assert.Equal(previous.VaultReferences, result.Collection.VaultReferences);
+        foreach (var original in previous.Notes)
+        {
+            var updated = Assert.Single(result.Collection.Notes,
+                note => note.Id == original.Id);
+            Assert.Equal("New" + original.Current.Path["Old".Length..], updated.Current.Path);
+            Assert.Equal(2, updated.Revisions.Count);
+            Assert.Equal(original.Current.Markdown, updated.Current.Markdown);
+        }
+
+        Assert.Equal(previous.Attachments[0].Id, Assert.Single(result.Collection.Attachments).Id);
+        Assert.Equal("New/media/photo.png", result.Collection.Attachments[0].Path);
+
+        var restored = Path.Combine(root, "folder-restored");
+        LocalVaultExchange.RestoreArchive(newPath, restored);
+        Assert.Equal("![[media/photo.png]]",
+            File.ReadAllText(Path.Combine(restored, "New/note.md")));
+        Assert.Equal([0, 3], File.ReadAllBytes(Path.Combine(restored, "New/media/photo.png")));
+        Assert.True(File.Exists(previousPath));
+    }
+
+    [Fact]
+    public void OrderedFolderAndFileMovesResolveFromOriginalIdentity()
+    {
+        var previous = new KnowledgeCollection(
+            [NoteRecord.Create("Old/notes/note.md", "note")],
+            [AttachmentRecord.Create("Old/media/image.bin", [1, 2, 3])], []);
+        var captured = new KnowledgeCollection(
+            [NoteRecord.Create("Final/notes/renamed.md", "note")],
+            [AttachmentRecord.Create("Final/media/image.bin", [1, 2, 3])], []);
+        var rules = new[]
+        {
+            new VaultRename("Old", "Middle", IsFolder: true),
+            new VaultRename("Middle", "Final", IsFolder: true),
+            new VaultRename("Final/notes/note.md", "Final/notes/renamed.md")
+        };
+
+        var updated = LocalVaultReconciler.Reconcile(previous, captured, rules);
+        Assert.Equal(previous.Notes[0].Id, updated.Collection.Notes[0].Id);
+        Assert.Equal(previous.Attachments[0].Id, updated.Collection.Attachments[0].Id);
+        Assert.Equal("Final/notes/renamed.md", updated.Collection.Notes[0].Current.Path);
+        Assert.Equal("Final/media/image.bin", updated.Collection.Attachments[0].Path);
+    }
+
+    [Fact]
+    public void InvalidFolderMappingsCannotInferOrSilentlyOverwriteIdentities()
+    {
+        var previous = new KnowledgeCollection([
+            NoteRecord.Create("Old/a.md", "A"), NoteRecord.Create("Elsewhere/b.md", "B")
+        ], [], []);
+        var observed = new KnowledgeCollection([
+            NoteRecord.Create("New/a.md", "A"), NoteRecord.Create("Elsewhere/b.md", "B")
+        ], [], []);
+
+        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+            previous, observed, [new VaultRename("Missing", "New", IsFolder: true)]));
+        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+            previous, observed, [new VaultRename("Old", "Nowhere", IsFolder: true)]));
+        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+            previous, observed, [
+                new VaultRename("Old", "New", IsFolder: true),
+                new VaultRename("Old/a.md", "New/a.md")
+            ]));
+        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+            previous, observed, [new VaultRename("Old", "../escape", IsFolder: true)]));
+    }
+
+    [Fact]
+    public void FolderRenameOnlyMatchesWholePathSegments()
+    {
+        var previous = new KnowledgeCollection([
+            NoteRecord.Create("Old/a.md", "a"),
+            NoteRecord.Create("Older/b.md", "b")
+        ], [], []);
+        var observed = new KnowledgeCollection([
+            NoteRecord.Create("New/a.md", "a"),
+            NoteRecord.Create("Older/b.md", "b")
+        ], [], []);
+
+        var updated = LocalVaultReconciler.Reconcile(previous, observed,
+            [new VaultRename("Old", "New", IsFolder: true)]);
+        Assert.Equal(previous.Notes[0].Id,
+            Assert.Single(updated.Collection.Notes, note => note.Current.Path == "New/a.md").Id);
+        Assert.Equal(previous.Notes[1].Id,
+            Assert.Single(updated.Collection.Notes, note => note.Current.Path == "Older/b.md").Id);
+    }
+
+    [Fact]
     public void ExplicitNoteRenameAndEditPreserveIdentityAndRevisionHistory()
     {
         var source = Vault();
