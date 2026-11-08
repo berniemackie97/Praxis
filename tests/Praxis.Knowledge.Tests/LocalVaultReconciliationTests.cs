@@ -79,7 +79,7 @@ public sealed class LocalVaultReconciliationTests : IDisposable
     public void ExplicitFolderRenameRetainsNoteHistoryAttachmentIdentityAndTrackedLinks()
     {
         var source = Vault();
-        Put(source, "Old/note.md", "![[media/photo.png]]");
+        Put(source, "Old/note.md", "![](media/photo.png)");
         Put(source, "Old/media/photo.png", "\0\x03");
         Put(source, "Old/nested/other.md", "# Other");
         var previousPath = Path.Combine(root, "folder-original.zip");
@@ -112,7 +112,7 @@ public sealed class LocalVaultReconciliationTests : IDisposable
 
         var restored = Path.Combine(root, "folder-restored");
         LocalVaultExchange.RestoreArchive(newPath, restored);
-        Assert.Equal("![[media/photo.png]]",
+        Assert.Equal("![](media/photo.png)",
             File.ReadAllText(Path.Combine(restored, "New/note.md")));
         Assert.Equal([0, 3], File.ReadAllBytes(Path.Combine(restored, "New/media/photo.png")));
         Assert.True(File.Exists(previousPath));
@@ -160,7 +160,7 @@ public sealed class LocalVaultReconciliationTests : IDisposable
                 new VaultRename("Old", "New", IsFolder: true),
                 new VaultRename("Old/a.md", "New/a.md")
             ]));
-        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+        Assert.Throws<ArgumentException>(() => LocalVaultReconciler.Reconcile(
             previous, observed, [new VaultRename("Old", "../escape", IsFolder: true)]));
     }
 
