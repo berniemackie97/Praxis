@@ -88,27 +88,37 @@ class ArchiveSession {
         this.active?.abort();
     }
 
-    async recordRename(from, to) {
+    async recordRename(from, to, isFolder = false) {
         this.changed();
         filePath(from);
         filePath(to);
+        if (typeof isFolder !== 'boolean') {
+            throw new Error('The rename event type is invalid.');
+        }
+
         return this._enqueue(async state => {
             if (state.current === null || from === to) {
                 return;
             }
 
-            const existing = state.renames.find(rule => rule.toPath === from);
-            if (existing) {
-                existing.toPath = to;
-                if (existing.fromPath === existing.toPath) {
-                    state.renames.splice(state.renames.indexOf(existing), 1);
-                }
-            } else {
-                if (state.renames.length >= MaxRenames) {
-                    throw new Error('Too many pending rename mappings. Review them using the vault CLI.');
-                }
+            if (state.renames.length >= MaxRenames) {
+                throw new Error('Too many pending rename mappings. Review them using the vault CLI.');
+            }
 
-                state.renames.push({ fromPath: from, toPath: to });
+            if (isFolder || state.renames.some(rule => rule.isFolder)) {
+                state.renames.push(isFolder
+                    ? { fromPath: from, toPath: to, isFolder: true }
+                    : { fromPath: from, toPath: to });
+            } else {
+                const existing = state.renames.find(rule => rule.toPath === from);
+                if (existing) {
+                    existing.toPath = to;
+                    if (existing.fromPath === existing.toPath) {
+                        state.renames.splice(state.renames.indexOf(existing), 1);
+                    }
+                } else {
+                    state.renames.push({ fromPath: from, toPath: to });
+                }
             }
 
             await this._writeState(state);
@@ -234,7 +244,9 @@ class ArchiveSession {
         }
 
         for (const item of state.renames) {
-            if (!item || Object.keys(item).sort().join(',') !== 'fromPath,toPath') {
+            if (!item || !["fromPath,toPath", "fromPath,isFolder,toPath"]
+                .includes(Object.keys(item).sort().join(',')) ||
+                (Object.hasOwn(item, 'isFolder') && item.isFolder !== true)) {
                 throw new Error('The archive session contains an invalid rename mapping.');
             }
             filePath(item.fromPath);
