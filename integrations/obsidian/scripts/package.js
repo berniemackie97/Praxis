@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
 const modules = [
@@ -63,10 +64,31 @@ async function packagePlugin(outputDirectory) {
         ''
     ].join('\n');
 
-    await fs.mkdir(outputDirectory, { recursive: true });
     const directory = path.resolve(outputDirectory);
-    await fs.writeFile(path.join(directory, 'main.js'), bundle, { flag: 'w' });
-    await fs.copyFile(path.join(root, 'manifest.json'), path.join(directory, 'manifest.json'));
+    if (directory === root || directory.startsWith(root + path.sep)) {
+        throw new Error('The package destination must not overlap the plugin source directory.');
+    }
+
+    const parent = path.dirname(directory);
+    await fs.mkdir(parent, { recursive: true });
+    const pending = path.join(parent, '.' + path.basename(directory) +
+        '-' + randomUUID() + '.pending');
+    await fs.mkdir(pending);
+    try {
+        await fs.writeFile(path.join(pending, 'main.js'), bundle, { flag: 'wx' });
+        await fs.copyFile(path.join(root, 'manifest.json'), path.join(pending, 'manifest.json'));
+        try {
+            await fs.lstat(directory);
+            throw new Error('The package destination already exists.');
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                throw error;
+            }
+        }
+        await fs.rename(pending, directory);
+    } finally {
+        await fs.rm(pending, { recursive: true, force: true });
+    }
     return directory;
 }
 
