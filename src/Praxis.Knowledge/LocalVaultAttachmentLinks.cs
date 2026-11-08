@@ -191,6 +191,21 @@ public static class LocalVaultAttachmentLinks
         }
     }
 
+    public static KnowledgeCollection Track(KnowledgeCollection collection)
+    {
+        var report = Inspect(collection);
+        if (report.Problems.Count != 0)
+        {
+            var problem = report.Problems[0];
+            throw new InvalidDataException(
+                $"Attachment link audit found {report.Problems.Count} problem(s); " +
+                $"{problem.NotePath}: {problem.Target}: {problem.Reason}");
+        }
+
+        return new KnowledgeCollection(
+            collection.Notes, collection.Attachments, collection.References, report.References);
+    }
+
     private static string HideInlineCode(string line)
     {
         var characters = line.ToCharArray();
