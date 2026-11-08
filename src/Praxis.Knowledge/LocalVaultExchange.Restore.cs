@@ -23,7 +23,7 @@ public static partial class LocalVaultExchange
     public static VaultUpdate PlanUpdate(
         string vaultDirectory, string previousArchivePath,
         IReadOnlyList<VaultRename>? renames = null,
-        bool trackLinks = false, bool acceptLinkRemovals = false)
+        bool trackLinks = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(previousArchivePath);
@@ -37,13 +37,14 @@ public static partial class LocalVaultExchange
         using var input = new FileStream(previousPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var previous = NoteArchive.ReadCollection(input);
         return LocalVaultReconciler.Reconcile(previous, Capture(source), renames,
-            trackLinks, acceptLinkRemovals);
+            trackLinks, previewLinkRemovals: true);
     }
 
     public static VaultUpdate UpdateArchive(
         string vaultDirectory, string previousArchivePath, string newArchivePath,
         IReadOnlyList<VaultRename>? renames = null,
-        bool trackLinks = false, bool acceptLinkRemovals = false)
+        bool trackLinks = false,
+        IReadOnlyList<AttachmentReference>? approvedLinkRemovals = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(newArchivePath);
@@ -53,8 +54,17 @@ public static partial class LocalVaultExchange
             throw new ArgumentException("The new archive must be outside the source vault.", nameof(newArchivePath));
         }
 
-        var update = PlanUpdate(vaultDirectory, previousArchivePath, renames,
-            trackLinks, acceptLinkRemovals);
+        var update = PlanUpdate(vaultDirectory, previousArchivePath, renames, trackLinks);
+        var approved = approvedLinkRemovals ?? [];
+        var distinct = approved.ToHashSet();
+        if (distinct.Count != approved.Count ||
+            distinct.Count != update.RemovedLinks ||
+            !distinct.SetEquals(update.RemovedLinkPairs ?? []))
+        {
+            throw new InvalidOperationException(
+                "Approval must list exactly the disappearing vault attachment reference pairs.");
+        }
+
         WriteArchive(update.Collection, destination);
         return update;
     }
