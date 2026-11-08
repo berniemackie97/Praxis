@@ -121,11 +121,62 @@ internal sealed class OriginalFileStore(string dataDirectory)
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        var objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
-        var directory = CheckDirectory(Path.Combine(objects, original.Digest[..2]));
-        directory = CheckDirectory(Path.Combine(directory, original.Digest[2..4]));
-        await VerifyAsync(Path.Combine(directory, original.Digest),
+        await VerifyAsync(ExistingObjectPath(original.Digest),
             original.Digest, original.Length, cancellationToken);
+    }
+
+    public async Task CopyVerifiedAsync(
+        OriginalObject original, OriginalFileStore destination,
+        CancellationToken cancellationToken)
+    {
+        ValidateDigest(original.Digest);
+        if (original.Length < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(original));
+        }
+
+        var sourcePath = ExistingObjectPath(original.Digest);
+        if ((File.GetAttributes(sourcePath) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidDataException("An original object path is a symbolic link.");
+        }
+
+        var objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
+        var first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
+        var second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
+        var targetPath = Path.Combine(second, original.Digest);
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            BufferSize = BufferLength,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan
+        };
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = PrivateFileMode;
+        }
+
+        await using (var input = new FileStream(sourcePath, FileMode.Open,
+            FileAccess.Read, FileShare.Read, BufferLength,
+            FileOptions.Asynchronous | FileOptions.SequentialScan))
+        await using (var output = new FileStream(targetPath, options))
+        {
+            await input.CopyToAsync(output, BufferLength, cancellationToken);
+            await output.FlushAsync(cancellationToken);
+            output.Flush(flushToDisk: true);
+        }
+
+        await destination.VerifyAsync(original, cancellationToken);
+    }
+
+    private string ExistingObjectPath(string digest)
+    {
+        var objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
+        var first = CheckDirectory(Path.Combine(objects, digest[..2]));
+        var second = CheckDirectory(Path.Combine(first, digest[2..4]));
+        return Path.Combine(second, digest);
     }
 
     public IEnumerable<string> EnumeratePublishedDigests()
