@@ -1,6 +1,6 @@
 # ADR 0006: Versioned synchronization and conflict semantics
 
-**Status:** Proposed for issue #17 review. This is a protocol contract with executable fixtures, not an implemented network or durable synchronization service.
+**Status:** Accepted in PR #76 for the local protocol contract. This is not an implemented network or durable synchronization service.
 
 ## Context
 
@@ -84,6 +84,6 @@ The selected plaintext-versus-ciphertext processing model determines which valid
 
 ## Executable acceptance
 
-The test-only fixture in tests/Praxis.Knowledge.Tests models accepted revisions, operation receipts, tombstones, conflicting edits, rename collisions, clock skew, pagination, cursor expiry and epoch/version rejection. It is **not** a synchronization engine, an authentication system, a persistence guarantee or an end-to-end recovery test. The multi-device fault-injection harness remains #21.
+The test-only fixture in tests/Praxis.Knowledge.Tests models accepted revisions, operation receipts, tombstones, conflicting edits, rename collisions, clock skew, pagination, cursor expiry and epoch/version rejection. It is **not** a synchronization engine, an authentication system, a persistence guarantee or an end-to-end recovery test. Deterministic multi-device failure schedules are documented in [the adversarial test guide](../testing/sync-adversarial.md) (#21); this still does not validate real persistent or network transport.
 
 References: RFC 9110 section 13.1.1 (strong conditional writes and lost-update prevention), RFC 9562 (UUID format and security considerations).
