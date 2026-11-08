@@ -87,7 +87,7 @@ dotnet run --project tools/Praxis.VaultCli -- plan /path/to/vault /backups/first
 dotnet run --project tools/Praxis.VaultCli -- update /path/to/vault /backups/first.zip /backups/next.zip
 ```
 
-Unresolved or ambiguous supported embeds block publication. Disappearing tracked links also block an update by default, while explicitly stored references remain untouched. Use `plan ... --accept-link-removals` to review the count, then `update ... --accept-link-removals` only after approving **all** removed tracked pairs for that update. Paths and Markdown text are never rewritten. These snapshot operations cannot detect concurrent editor changes between preview and update.
+Unresolved or ambiguous supported embeds block publication. Disappearing tracked links are listed by exact note/attachment IDs in a read-only `plan`, while explicit stored references remain untouched. To approve a removal, create a UTF-8 JSON file outside the vault containing an array of `{"noteId":"<uuid>","attachmentId":"<uuid>"}` pairs copied from the plan, then run `update ... --approve-unlinks /path/to/approved.json`. The approval must match the complete set of removed pairs; extra, duplicate or stale approvals fail without publishing. Paths and Markdown text are never rewritten. The scanner recognizes only the subset documented in [ADR 0011](docs/decisions/0011-vault-attachment-link-audit.md).
 
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
