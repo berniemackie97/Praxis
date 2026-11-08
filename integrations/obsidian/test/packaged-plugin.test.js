@@ -9,8 +9,9 @@ const vm = require('node:vm');
 const { packagePlugin } = require('../scripts/package');
 
 async function loadPackage(t) {
-    const output = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-plugin-package-'));
-    t.after(() => fs.rm(output, { recursive: true, force: true }));
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-plugin-package-'));
+    t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+    const output = path.join(temporary, 'praxis-vault');
     await packagePlugin(output);
     const source = await fs.readFile(path.join(output, 'main.js'), 'utf8');
     const manifest = JSON.parse(await fs.readFile(path.join(output, 'manifest.json'), 'utf8'));
@@ -111,8 +112,9 @@ test('package is reproducible and ships only a self-contained entry and manifest
     assert.equal(instance.manifest.isDesktopOnly, true);
     const second = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-plugin-repeat-'));
     t.after(() => fs.rm(second, { recursive: true, force: true }));
-    await packagePlugin(second);
-    assert.equal(await fs.readFile(path.join(second, 'main.js'), 'utf8'), instance.source);
+    const secondOutput = path.join(second, 'praxis-vault');
+    await packagePlugin(secondOutput);
+    assert.equal(await fs.readFile(path.join(secondOutput, 'main.js'), 'utf8'), instance.source);
     assert.match(instance.source, /"\.\/cli-process": function/);
     assert.match(instance.source, /"\.\/archive-session": function/);
     assert.match(instance.source, /"\.\/main": function/);
