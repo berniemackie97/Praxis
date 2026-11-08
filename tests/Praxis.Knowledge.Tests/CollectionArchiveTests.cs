@@ -50,7 +50,7 @@ public sealed class CollectionArchiveTests
         using var archive = Export(collection);
         using (var zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true))
         {
-            Assert.Single(zip.Entries.Where(item => item.FullName.StartsWith("attachments/", StringComparison.Ordinal)));
+            Assert.Single(zip.Entries, item => item.FullName.StartsWith("attachments/", StringComparison.Ordinal));
         }
 
         archive.Position = 0;
