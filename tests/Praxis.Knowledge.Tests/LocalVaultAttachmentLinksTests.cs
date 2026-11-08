@@ -85,7 +85,7 @@ public sealed class LocalVaultAttachmentLinksTests
     public void IgnoresExternalImagesAndNonEmbeddedLinks()
     {
         var note = NoteRecord.Create("note.md",
-            "![external](https://example.test/image.png)\n[[missing.png]]\n[link](missing.png)");
+            "![external](https://example.test/image.png)\n![cdn](//example.test/image.png)\n[[missing.png]]\n[link](missing.png)");
         var report = LocalVaultAttachmentLinks.Inspect(
             new KnowledgeCollection([note], [], []));
 
