@@ -14,7 +14,7 @@ public sealed class LocalCatalogTests : IDisposable
         Directory.CreateDirectory(root);
         if (!OperatingSystem.IsWindows())
         {
-            Directory.SetUnixFileMode(root,
+            File.SetUnixFileMode(root,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
     }
@@ -144,7 +144,7 @@ public sealed class LocalCatalogTests : IDisposable
 
         if (!OperatingSystem.IsWindows())
         {
-            Directory.SetUnixFileMode(root,
+            File.SetUnixFileMode(root,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
                 UnixFileMode.OtherExecute);
             Assert.Throws<UnauthorizedAccessException>(() => LocalCatalog.Open(root));
