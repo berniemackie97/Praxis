@@ -20,7 +20,7 @@ function configName(value) {
     return value;
 }
 
-async function preflight(assembly, run, temporary) {
+async function preflight(assembly, dotnet, run, temporary) {
     const source = path.join(temporary, 'vault');
     const archive = path.join(temporary, 'check.zip');
     const restored = path.join(temporary, 'restored');
@@ -30,7 +30,8 @@ async function preflight(assembly, run, temporary) {
     await fs.writeFile(path.join(source, 'note.md'), note);
     await fs.writeFile(path.join(source, 'picture.png'), picture);
     const invoke = args => run(assembly, args, {
-        cwd: temporary, signal: new AbortController().signal
+        cwd: temporary, signal: new AbortController().signal,
+        dotnetExecutablePath: dotnet
     });
     await invoke(['capture', source, archive, '--track-links']);
     const verification = await invoke(['verify', archive]);
@@ -49,16 +50,17 @@ async function preflight(assembly, run, temporary) {
 }
 
 async function installLocal({ vaultPath, archiveDirectory, cliAssemblyPath,
-    configDirectory = '.obsidian' }, run = runVaultCli) {
-    if (![vaultPath, archiveDirectory, cliAssemblyPath].every(value =>
+    dotnetExecutablePath, configDirectory = '.obsidian' }, run = runVaultCli) {
+    if (![vaultPath, archiveDirectory, cliAssemblyPath, dotnetExecutablePath].every(value =>
         typeof value === 'string' && path.isAbsolute(value))) {
         throw new Error('Vault, archive directory and CLI assembly paths must be absolute.');
     }
     configName(configDirectory);
-    const [vault, archives, assembly] = await Promise.all([
+    const [vault, archives, assembly, dotnet] = await Promise.all([
         fs.realpath(vaultPath),
         fs.realpath(archiveDirectory),
-        fs.realpath(cliAssemblyPath)
+        fs.realpath(cliAssemblyPath),
+        fs.realpath(dotnetExecutablePath)
     ]);
     if (contains(vault, archives) || contains(archives, vault)) {
         throw new Error('The archive directory must be separate from the vault.');
@@ -66,7 +68,8 @@ async function installLocal({ vaultPath, archiveDirectory, cliAssemblyPath,
     if (path.basename(assembly) !== 'Praxis.VaultCli.dll' ||
         !(await fs.stat(vault)).isDirectory() ||
         !(await fs.stat(archives)).isDirectory() ||
-        !(await fs.stat(assembly)).isFile()) {
+        !(await fs.stat(assembly)).isFile() ||
+        !(await fs.stat(dotnet)).isFile()) {
         throw new Error('The selected paths do not identify a vault, archive directory and published CLI.');
     }
 
@@ -98,7 +101,7 @@ async function installLocal({ vaultPath, archiveDirectory, cliAssemblyPath,
 
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-trial-'));
     try {
-        await preflight(assembly, run, temporary);
+        await preflight(assembly, dotnet, run, temporary);
         const packageDirectory = path.join(temporary, 'package');
         await packagePlugin(packageDirectory);
 
@@ -115,7 +118,8 @@ async function installLocal({ vaultPath, archiveDirectory, cliAssemblyPath,
             await fs.copyFile(path.join(packageDirectory, 'manifest.json'),
                 path.join(destination, 'manifest.json'));
             await fs.writeFile(path.join(destination, 'data.json'), JSON.stringify({
-                backupDirectory: archives, cliAssemblyPath: assembly
+                backupDirectory: archives, cliAssemblyPath: assembly,
+                dotnetExecutablePath: dotnet
             }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
         } catch (error) {
             await fs.rm(destination, { force: true, recursive: true });
@@ -132,13 +136,14 @@ function parseArguments(argv) {
         ['--vault', 'vaultPath'],
         ['--archives', 'archiveDirectory'],
         ['--cli', 'cliAssemblyPath'],
+        ['--dotnet', 'dotnetExecutablePath'],
         ['--config-dir', 'configDirectory']
     ]);
     const result = {};
     for (let index = 0; index < argv.length; index += 2) {
         const key = keys.get(argv[index]);
         if (!key || index + 1 >= argv.length || Object.hasOwn(result, key)) {
-            throw new Error('Usage: install-local.js --vault <absolute-path> --archives <absolute-path> --cli <absolute-Praxis.VaultCli.dll> [--config-dir <name>]');
+            throw new Error('Usage: install-local.js --vault <absolute-path> --archives <absolute-path> --cli <absolute-Praxis.VaultCli.dll> --dotnet <absolute-dotnet> [--config-dir <name>]');
         }
         result[key] = argv[index + 1];
     }
