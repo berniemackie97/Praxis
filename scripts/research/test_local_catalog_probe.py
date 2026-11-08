@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from local_catalog_probe import SCHEMA, catalog_probe, connect, create_catalog, streaming_probe
+from local_catalog_probe import SCHEMA, catalog_probe, connect, create_catalog, sparse_size_probe, streaming_probe
 
 NOW = "2026-11-08T00:00:00Z"
 DIGEST = "a" * 64
@@ -128,6 +128,9 @@ class CatalogContractTests(unittest.TestCase):
         streamed = streaming_probe(self.root, 2)
         self.assertEqual(2 * 1024 * 1024, streamed["original_bytes"])
         self.assertEqual(64 * 1024, streamed["chunk_bytes"])
+        sparse = sparse_size_probe(self.root, 3)
+        self.assertEqual(3 * 1024 * 1024, sparse["sparse_input_bytes_streamed"])
+        self.assertEqual(64, len(sparse["sparse_sha256"]))
 
 
 if __name__ == "__main__":
