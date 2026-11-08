@@ -5,8 +5,12 @@ namespace Praxis.Storage;
 
 internal readonly record struct OriginalObject(string Digest, long Length);
 
-internal sealed class OriginalFileStore(string dataDirectory)
+internal sealed class OriginalFileStore
 {
+    private readonly string dataDirectory;
+
+    public OriginalFileStore(string dataDirectory) => this.dataDirectory = dataDirectory;
+
     private const int BufferLength = 64 * 1024;
     private static readonly UnixFileMode PrivateDirectoryMode =
         UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
