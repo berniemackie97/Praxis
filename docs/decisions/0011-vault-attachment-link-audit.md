@@ -8,7 +8,7 @@ The version-two collection archive stores immutable note histories, original att
 
 `LocalVaultAttachmentLinks.Inspect` is a read-only, deterministic audit over one validated `KnowledgeCollection`. It extracts simple local `![[file.ext]]` / `![[path/file.ext|display]]` embeds and inline Markdown image destinations `![label](path/file.ext)`; it does not mutate the collection, original notes or stored references. `vault links <archive.zip>` reads a validated archive, reports the distinct resolved ID pairs, and exits nonzero with source-path diagnostics when a target cannot be resolved uniquely.
 
-Wiki paths can be vault-root paths, explicit relative paths or unqualified unique attachment basenames. Markdown paths accept vault-root and note-relative candidates and must resolve to exactly one attachment. URL-encoded Markdown filenames are decoded before lookup. The resolver treats attachment paths case-insensitively under the same portable archive rules. Relative paths that escape the vault, missing targets and ambiguous bare filenames are reported rather than guessed. External URL embeds and ordinary non-embedded links are not attachment references. Code fences and matched inline backtick code spans are ignored.
+Wiki paths can be vault-root paths, explicit relative paths or unqualified unique attachment basenames. Markdown paths accept vault-root and note-relative candidates and must resolve to exactly one attachment. URL-encoded Markdown filenames are decoded before lookup. The resolver treats attachment paths case-insensitively under the same portable archive rules. Relative paths that escape the vault, missing targets and ambiguous bare filenames are reported rather than guessed. External URL embeds, note wikilink embeds (extensionless or `.md` destinations) and ordinary non-embedded links are not attachment references. Code fences and matched inline backtick code spans are ignored. Inspection refuses more than 100,000 embed tokens per archive.
 
 ## Boundaries
 
@@ -18,4 +18,4 @@ A subsequent slice must define a source-aware stored reference model and validat
 
 ## Verification
 
-Unit tests cover relative and root paths, unique basenames, URL-encoded image paths, ambiguous and missing targets, vault escapes, code regions, external links and read-only behavior. The separate-process CLI smoke audits both the baseline and updated archive and asserts that unresolved links fail with diagnostics. Issues #22, #25 and #57 remain open for complete integration and device verification.
+Unit tests cover note embed exclusion, relative and root paths, unique basenames, URL-encoded image paths, ambiguous and missing targets, vault escapes, code regions, external links and read-only behavior. The separate-process CLI smoke audits both the baseline and updated archive and asserts that unresolved links fail with diagnostics. Issues #22, #25 and #57 remain open for complete integration and device verification.
