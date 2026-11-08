@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using Praxis.Knowledge;
 using Xunit;
 
@@ -152,6 +153,39 @@ public sealed class LocalVaultReconciliationTests : IDisposable
         Assert.Equal(2, result.Collection.Notes[0].Current.Number);
         Assert.True(Assert.Single(result.Changes).PathChanged);
         Assert.False(Assert.Single(result.Changes).ContentChanged);
+    }
+
+    [Fact]
+    public void NoteAndAttachmentWithEqualUuidsRemainDistinctDuringRenames()
+    {
+        var note = NoteRecord.Create("old.md", "body");
+        var attachment = AttachmentRecord.Create("old.bin", [1, 2]);
+        using var archive = new MemoryStream();
+        NoteArchive.WriteCollection(archive,
+            new KnowledgeCollection([note], [attachment], []));
+        archive.Position = 0;
+        ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
+        {
+            var manifest = JsonNode.Parse(Encoding.UTF8.GetString(bytes))!.AsObject();
+            manifest["attachments"]!.AsArray()[0]!["id"] = note.Id;
+            return Encoding.UTF8.GetBytes(manifest.ToJsonString());
+        });
+        archive.Position = 0;
+        var previous = NoteArchive.ReadCollection(archive);
+        Assert.Equal(previous.Notes[0].Id, previous.Attachments[0].Id);
+
+        var observed = new KnowledgeCollection(
+            [NoteRecord.Create("new.md", "body")],
+            [AttachmentRecord.Create("new.bin", [1, 2])], []);
+        var updated = LocalVaultReconciler.Reconcile(previous, observed, [
+            new VaultRename("old.md", "new.md"),
+            new VaultRename("old.bin", "new.bin")
+        ]);
+
+        Assert.Equal(note.Id, Assert.Single(updated.Collection.Notes).Id);
+        Assert.Equal(note.Id, Assert.Single(updated.Collection.Attachments).Id);
+        Assert.Equal(2, updated.Changes.Count);
+        Assert.All(updated.Changes, change => Assert.True(change.PathChanged));
     }
 
     [Fact]

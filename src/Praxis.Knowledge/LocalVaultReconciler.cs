@@ -40,7 +40,7 @@ public static class LocalVaultReconciler
             .Concat(captured.Attachments.Select(attachment => attachment.Path))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var remapped = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
-        var remappedSources = new HashSet<Guid>();
+        var remappedSources = new HashSet<PriorFile>();
         foreach (var rule in renames ?? [])
         {
             if (rule is null)
@@ -53,14 +53,14 @@ public static class LocalVaultReconciler
             if (string.Equals(rule.FromPath, rule.ToPath, StringComparison.Ordinal) ||
                 !priorByPath.TryGetValue(rule.FromPath, out var origin) ||
                 !capturedPaths.Contains(rule.ToPath) ||
-                !remappedSources.Add(origin.Id) ||
+                !remappedSources.Add(origin) ||
                 !remapped.TryAdd(rule.ToPath, origin))
             {
                 throw new InvalidDataException("The rename mapping is redundant, missing or ambiguous.");
             }
         }
 
-        var visited = new HashSet<Guid>();
+        var visited = new HashSet<PriorFile>();
         var notes = new List<NoteRecord>(captured.Notes.Count);
         var attachments = new List<AttachmentRecord>(captured.Attachments.Count);
         var changes = new List<VaultChange>();
@@ -115,7 +115,7 @@ public static class LocalVaultReconciler
         if (visited.Count != priorByPath.Count)
         {
             var missing = priorByPath.Values
-                .Where(item => !visited.Contains(item.Id))
+                .Where(item => !visited.Contains(item))
                 .OrderBy(item => item.Path, StringComparer.Ordinal).First();
             throw new InvalidOperationException(
                 $"A prior vault file is missing: {missing.Path}. Restore it or supply an explicit rename mapping.");
@@ -128,7 +128,7 @@ public static class LocalVaultReconciler
         {
             var prior = remapped.TryGetValue(path, out var mapped)
                 ? mapped : priorByPath.GetValueOrDefault(path);
-            if (prior is not null && (prior.IsAttachment != isAttachment || !visited.Add(prior.Id)))
+            if (prior is not null && (prior.IsAttachment != isAttachment || !visited.Add(prior)))
             {
                 throw new InvalidDataException("A vault file changed type or has ambiguous identity.");
             }
