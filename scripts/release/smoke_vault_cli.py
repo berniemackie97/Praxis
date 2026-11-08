@@ -64,9 +64,11 @@ def main():
         (destination / "Notes/first.md").write_bytes(contents["Notes/first.md"])
 
         (destination / ".obsidian/app.json").unlink()
+        (destination / ".obsidian").rmdir()
         missing = run(executable, "compare", archive, destination, expected=1)
         if "missing: .obsidian/app.json" not in missing.stderr:
             raise AssertionError(f"Missing config was not reported: {missing.stderr}")
+        (destination / ".obsidian").mkdir()
         (destination / ".obsidian/app.json").write_bytes(contents[".obsidian/app.json"])
 
         (destination / "extra.txt").write_bytes(b"unexpected")
