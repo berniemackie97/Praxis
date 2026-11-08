@@ -40,7 +40,7 @@ static int Run(Action action)
         action();
         return 0;
     }
-    catch (Exception error) when (error is ArgumentException or IOException or
+    catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or
         UnauthorizedAccessException or NotSupportedException)
     {
         Console.Error.WriteLine($"Vault operation failed: {error.Message}");
