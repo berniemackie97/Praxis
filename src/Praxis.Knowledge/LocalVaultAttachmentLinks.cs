@@ -70,6 +70,7 @@ public static class LocalVaultAttachmentLinks
                     CheckLimit();
                     var value = match.Groups[1].Value.Trim();
                     if (Uri.TryCreate(value, UriKind.Absolute, out _) ||
+                        value.StartsWith("//", StringComparison.Ordinal) ||
                         value.StartsWith('#'))
                     {
                         continue;
