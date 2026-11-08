@@ -162,6 +162,9 @@ public sealed class LocalVaultReconciliationTests : IDisposable
             ]));
         Assert.Throws<ArgumentException>(() => LocalVaultReconciler.Reconcile(
             previous, observed, [new VaultRename("Old", "../escape", IsFolder: true)]));
+        Assert.Throws<InvalidDataException>(() => LocalVaultReconciler.Reconcile(
+            previous, observed, Enumerable.Repeat(
+                new VaultRename("Old", "New", IsFolder: true), 2_001).ToArray()));
     }
 
     [Fact]
