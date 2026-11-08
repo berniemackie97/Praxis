@@ -137,7 +137,7 @@ This is not the complete durable background ingestion workflow (#102). Pending/f
 
 ## Durable processing follow-up
 
-[ADR 0019](0019-durable-processing-lifecycle.md) and [PR #135](https://github.com/berniemackie97/Praxis/pull/135) propose the additive catalog v3 job lifecycle. Processing jobs are distinct from immutable `ingest_requests` receipts: old captured revisions remain recoverable, and source revocation can fence unfinished derivative work without deleting original bytes. The S2a contract does not provide a file chooser, automatic worker, extractor, index, first-party Inbox or network authorization.
+[ADR 0019](0019-durable-processing-lifecycle.md) and [PR #135](https://github.com/berniemackie97/Praxis/pull/135) propose the additive catalog v3 job lifecycle. Processing jobs are distinct from immutable `ingest_requests` receipts: old captured revisions remain recoverable, and source revocation can fence unfinished derivative work without deleting original bytes. The S2a contract includes an explicit bounded local file/folder intake helper, but does not provide a file chooser, automatic worker, extractor, index, first-party Inbox or network authorization.
 
 ## Consequences and next slice
 
