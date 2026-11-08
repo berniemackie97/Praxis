@@ -151,7 +151,15 @@ public sealed partial class LocalCatalog
         var parent = Path.GetDirectoryName(destination)!;
         var name = Path.GetFileName(destination);
         var staging = Path.Combine(parent, $".{name}.incomplete-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(staging, PrivateDirectory);
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(staging);
+        }
+        else
+        {
+            Directory.CreateDirectory(staging, PrivateDirectory);
+        }
+
         CheckPrivateDirectory(staging);
         return staging;
     }
