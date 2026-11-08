@@ -84,6 +84,7 @@ def main():
             raise AssertionError("Hidden configuration was lost.")
 
         (source / ".obsidian/app.json").unlink()
+        (source / ".obsidian").rmdir()
         removed_archive = root / "removed.zip"
         run(executable, "plan", source, next_archive, expected=1)
         run(executable, "update", source, next_archive, removed_archive, expected=1)
