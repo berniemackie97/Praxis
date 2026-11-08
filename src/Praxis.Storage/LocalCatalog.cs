@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -75,29 +75,41 @@ public sealed partial class LocalCatalog : IDisposable
         VerifyIntegrity(database);
 
         var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
-        if (version != 0 && version != CurrentSchemaVersion)
+        if (version is < 0 or > CurrentSchemaVersion)
         {
             throw new NotSupportedException("The catalog schema version is not supported.");
         }
 
-        if (version == 0)
+        if (version == 0 && Convert.ToInt64(Scalar(database, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            """)) != 0)
         {
-            if (Convert.ToInt64(Scalar(database, """
-                SELECT COUNT(*) FROM sqlite_master
-                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                """)) != 0)
+            throw new InvalidDataException("An unversioned database already contains user tables.");
+        }
+
+        if (version == 1)
+        {
+            VerifySchema(database, version);
+        }
+
+        if (version < CurrentSchemaVersion)
+        {
+            using var transaction = database.BeginTransaction();
+            if (version == 0)
             {
-                throw new InvalidDataException("An unversioned database already contains user tables.");
+                using var initial = Command(database, ReadSchema("LocalCatalog.sql"));
+                initial.Transaction = transaction;
+                initial.ExecuteNonQuery();
             }
 
-            using var transaction = database.BeginTransaction();
-            using var migration = Command(database, ReadSchema());
-            migration.Transaction = transaction;
-            migration.ExecuteNonQuery();
+            using var upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
+            upgrade.Transaction = transaction;
+            upgrade.ExecuteNonQuery();
             transaction.Commit();
         }
 
-        VerifySchema(database);
+        VerifySchema(database, CurrentSchemaVersion);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
             "wal", StringComparison.OrdinalIgnoreCase))
         {
@@ -177,7 +189,7 @@ public sealed partial class LocalCatalog : IDisposable
         }
     }
 
-    private static void VerifySchema(SqliteConnection database)
+    private static void VerifySchema(SqliteConnection database, int version)
     {
         foreach (var (name, columns) in Tables)
         {
@@ -190,7 +202,10 @@ public sealed partial class LocalCatalog : IDisposable
                 throw new InvalidDataException("The catalog schema is incompatible.");
             }
 
-            using var projection = Command(database, $"SELECT {columns} FROM {name} LIMIT 0");
+            var requiredColumns = version >= 2 && name == "ingest_requests"
+                ? $"{columns}, revision"
+                : columns;
+            using var projection = Command(database, $"SELECT {requiredColumns} FROM {name} LIMIT 0");
             try
             {
                 using var reader = projection.ExecuteReader();
@@ -202,10 +217,10 @@ public sealed partial class LocalCatalog : IDisposable
         }
     }
 
-    private static string ReadSchema()
+    private static string ReadSchema(string fileName)
     {
         using var stream = typeof(LocalCatalog).Assembly
-            .GetManifestResourceStream("Praxis.Storage.LocalCatalog.sql")
+            .GetManifestResourceStream($"Praxis.Storage.{fileName}")
             ?? throw new InvalidOperationException("The catalog migration resource is missing.");
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();

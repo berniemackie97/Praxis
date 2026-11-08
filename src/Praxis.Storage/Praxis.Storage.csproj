@@ -2,5 +2,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <EmbeddedResource Include="LocalCatalog.sql" />
+    <EmbeddedResource Include="LocalCatalog.V2.sql" />
   </ItemGroup>
 </Project>

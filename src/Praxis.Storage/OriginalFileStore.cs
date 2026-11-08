@@ -128,6 +128,68 @@ internal sealed class OriginalFileStore(string dataDirectory)
             original.Digest, original.Length, cancellationToken);
     }
 
+    public IEnumerable<string> EnumeratePublishedDigests()
+    {
+        var root = Path.Combine(dataDirectory, "objects");
+        if (!Directory.Exists(root) && !File.Exists(root))
+        {
+            yield break;
+        }
+
+        CheckDirectory(root);
+        foreach (var first in Directory.EnumerateFileSystemEntries(root))
+        {
+            CheckDirectory(first);
+            foreach (var second in Directory.EnumerateFileSystemEntries(first))
+            {
+                CheckDirectory(second);
+                foreach (var file in Directory.EnumerateFileSystemEntries(second))
+                {
+                    if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0 ||
+                        !File.Exists(file))
+                    {
+                        throw new InvalidDataException("The object inventory contains an unexpected file.");
+                    }
+
+                    var digest = Path.GetFileName(file);
+                    ValidateDigest(digest);
+                    if (digest[..2] != Path.GetFileName(first) ||
+                        digest[2..4] != Path.GetFileName(second))
+                    {
+                        throw new InvalidDataException("An object is outside its expected digest directory.");
+                    }
+
+                    yield return digest;
+                }
+            }
+        }
+    }
+
+    public int CountStagedFiles()
+    {
+        var staging = Path.Combine(dataDirectory, "staging");
+        if (!Directory.Exists(staging) && !File.Exists(staging))
+        {
+            return 0;
+        }
+
+        CheckDirectory(staging);
+        var count = 0;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(staging))
+        {
+            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
+                !File.Exists(entry) ||
+                Path.GetExtension(entry) != ".part")
+            {
+                throw new InvalidDataException("The staging inventory contains an unexpected entry.");
+            }
+
+            count = checked(count + 1);
+        }
+
+        return count;
+    }
+
     private static async Task VerifyAsync(
         string path, string digest, long length, CancellationToken cancellationToken)
     {

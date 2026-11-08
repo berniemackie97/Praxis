@@ -23,10 +23,10 @@ public sealed class LocalCatalogTests : IDisposable
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using var catalog = LocalCatalog.Open(root);
-        Assert.Equal(1, catalog.SchemaVersion);
+        Assert.Equal(2, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
         using var reader = Connect(catalog.DatabasePath);
-        Assert.Equal(1L, Scalar(reader, "PRAGMA user_version"));
+        Assert.Equal(2L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
@@ -94,7 +94,7 @@ public sealed class LocalCatalogTests : IDisposable
         Assert.Throws<SqliteException>(() => Execute(connection,
             "INSERT INTO items VALUES ('item-c', 'missing-source')"));
         Assert.Throws<SqliteException>(() => Execute(connection,
-            "INSERT INTO ingest_requests VALUES ('key', 'missing-source', 'queued', 0, NULL)"));
+            "INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code) VALUES ('key', 'missing-source', 'queued', 0, NULL)"));
         Assert.Equal(0L, Scalar(connection, "SELECT COUNT(*) FROM ingest_requests"));
     }
 
@@ -105,19 +105,62 @@ public sealed class LocalCatalogTests : IDisposable
         var path = Path.Combine(root, "catalog.sqlite");
         using (var connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 2");
+            Execute(connection, "PRAGMA user_version = 3");
         }
 
         Assert.Throws<NotSupportedException>(() => LocalCatalog.Open(root));
         using (var connection = Connect(path))
         {
-            Assert.Equal(2L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(3L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
         File.WriteAllBytes(path, [5, 7, 9]);
         Assert.Throws<SqliteException>(() => LocalCatalog.Open(root));
         Assert.Equal([5, 7, 9], File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
+    {
+        var path = Path.Combine(root, "catalog.sqlite");
+        using (var connection = Connect(path))
+        {
+            using var resource = typeof(LocalCatalog).Assembly
+                .GetManifestResourceStream("Praxis.Storage.LocalCatalog.sql")!;
+            using var reader = new StreamReader(resource);
+            Execute(connection, reader.ReadToEnd());
+            InsertSource(connection, "old-source", "source.md");
+            Execute(connection, """
+                INSERT INTO original_objects VALUES
+                  ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                   5, '2026-11-08T00:00:00Z');
+                INSERT INTO items VALUES ('old-item', 'old-source');
+                INSERT INTO item_versions VALUES
+                  ('old-item', 1,
+                   'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                   '2026-11-08T00:00:00Z');
+                INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code)
+                    VALUES ('old-queued', 'old-source', 'queued', 0, NULL);
+                """);
+            Assert.Equal(1L, Scalar(connection, "PRAGMA user_version"));
+        }
+
+        using (var upgraded = LocalCatalog.Open(root))
+        {
+            Assert.Equal(2, upgraded.SchemaVersion);
+            using var connection = Connect(upgraded.DatabasePath);
+            Assert.Equal(2L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
+            Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
+            Assert.Equal(1L, Scalar(connection,
+                "SELECT COUNT(*) FROM ingest_requests WHERE revision IS NULL AND state='queued'"));
+        }
+
+        using var reopened = LocalCatalog.Open(root);
+        using var verified = Connect(reopened.DatabasePath);
+        Assert.Equal(2L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
     }
 
     [Fact]
