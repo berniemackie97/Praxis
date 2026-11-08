@@ -96,13 +96,16 @@ class ArchiveSession {
     }
 
     async recordRename(from, to, isFolder = false) {
+        if (this.closed) {
+            throw new Error('The adapter has been unloaded.');
+        }
         this.changed();
         filePath(from);
         filePath(to);
         if (typeof isFolder !== 'boolean') {
             throw new Error('The rename event type is invalid.');
         }
-        if (coveredByFolderMove(this.folderMoves, from, to)) {
+        if (from === to || coveredByFolderMove(this.folderMoves, from, to)) {
             return;
         }
         if (isFolder) {
