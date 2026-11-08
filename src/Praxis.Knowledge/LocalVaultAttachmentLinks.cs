@@ -26,6 +26,7 @@ public static class LocalVaultAttachmentLinks
             StringComparer.OrdinalIgnoreCase);
         var references = new HashSet<AttachmentReference>();
         var problems = new List<VaultLinkProblem>();
+        var scannedEmbeds = 0;
 
         foreach (var note in collection.Notes)
         {
@@ -54,11 +55,19 @@ public static class LocalVaultAttachmentLinks
                 foreach (Match match in WikiEmbed.Matches(visible))
                 {
                     var target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
+                    CheckLimit();
+                    if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
+                        !Path.HasExtension(target))
+                    {
+                        continue;
+                    }
+
                     Resolve(note, target, wiki: true);
                 }
 
                 foreach (Match match in MarkdownEmbed.Matches(visible))
                 {
+                    CheckLimit();
                     var value = match.Groups[1].Value.Trim();
                     if (Uri.TryCreate(value, UriKind.Absolute, out _) ||
                         value.StartsWith('#'))
@@ -84,6 +93,14 @@ public static class LocalVaultAttachmentLinks
                 .ThenBy(item => item.AttachmentId).ToArray()),
             Array.AsReadOnly(problems.OrderBy(item => item.NotePath, StringComparer.Ordinal)
                 .ThenBy(item => item.Target, StringComparer.Ordinal).ToArray()));
+
+        void CheckLimit()
+        {
+            if (++scannedEmbeds > 100_000)
+            {
+                throw new InvalidDataException("The vault contains too many embedded links to audit.");
+            }
+        }
 
         void Resolve(NoteRecord note, string target, bool wiki)
         {
