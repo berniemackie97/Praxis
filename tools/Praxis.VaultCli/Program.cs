@@ -39,7 +39,7 @@ if (args.Length >= 3 && args[0] == "capture")
 {
     return Run(() =>
     {
-        var options = ReadOptions(args, 3, allowRenames: false, allowRemovals: false);
+        var options = ReadOptions(args, 3, allowRenames: false, allowUnlinks: false);
         LocalVaultExchange.CaptureArchive(args[1], args[2], options.TrackLinks);
         Console.WriteLine("Vault archive created.");
     });
@@ -58,9 +58,9 @@ if (args.Length >= 3 && args[0] == "plan")
 {
     return Run(() =>
     {
-        var options = ReadOptions(args, 3);
+        var options = ReadOptions(args, 3, allowUnlinks: false);
         var update = LocalVaultExchange.PlanUpdate(args[1], args[2], options.Renames,
-            options.TrackLinks, options.AcceptLinkRemovals);
+            options.TrackLinks);
         PrintChanges(update);
     });
 }
@@ -71,7 +71,7 @@ if (args.Length >= 4 && args[0] == "update")
     {
         var options = ReadOptions(args, 4);
         var update = LocalVaultExchange.UpdateArchive(args[1], args[2], args[3],
-            options.Renames, options.TrackLinks, options.AcceptLinkRemovals);
+            options.Renames, options.TrackLinks, options.ApprovedUnlinks);
         PrintChanges(update);
         Console.WriteLine("Updated archive created.");
     });
@@ -81,8 +81,8 @@ Console.Error.WriteLine("Usage: vault capture <source-directory> <new-archive.zi
 Console.Error.WriteLine("       vault verify  <archive.zip>");
 Console.Error.WriteLine("       vault restore <archive.zip> <new-directory>");
 Console.Error.WriteLine("       vault links <archive.zip>");
-Console.Error.WriteLine("       vault plan <source-directory> <previous-archive.zip> [--renames <json-file>] [--track-links] [--accept-link-removals]");
-Console.Error.WriteLine("       vault update <source-directory> <previous-archive.zip> <new-archive.zip> [--renames <json-file>] [--track-links] [--accept-link-removals]");
+Console.Error.WriteLine("       vault plan <source-directory> <previous-archive.zip> [--renames <json-file>] [--track-links]");
+Console.Error.WriteLine("       vault update <source-directory> <previous-archive.zip> <new-archive.zip> [--renames <json-file>] [--track-links] [--approve-unlinks <json-file>]");
 return 2;
 
 static int Run(Action action)
@@ -100,12 +100,13 @@ static int Run(Action action)
     }
 }
 
-static (IReadOnlyList<VaultRename> Renames, bool TrackLinks, bool AcceptLinkRemovals)
-    ReadOptions(string[] arguments, int baseLength, bool allowRenames = true, bool allowRemovals = true)
+static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
+    IReadOnlyList<AttachmentReference>? ApprovedUnlinks)
+    ReadOptions(string[] arguments, int baseLength, bool allowRenames = true, bool allowUnlinks = true)
 {
     string? renamePath = null;
     var trackLinks = false;
-    var acceptLinkRemovals = false;
+    string? unlinkPath = null;
     for (var index = baseLength; index < arguments.Length; index++)
     {
         switch (arguments[index])
@@ -113,8 +114,8 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks, bool AcceptLinkRemo
             case "--track-links" when !trackLinks:
                 trackLinks = true;
                 break;
-            case "--accept-link-removals" when allowRemovals && !acceptLinkRemovals:
-                acceptLinkRemovals = true;
+            case "--approve-unlinks" when allowUnlinks && unlinkPath is null && index + 1 < arguments.Length:
+                unlinkPath = arguments[++index];
                 break;
             case "--renames" when allowRenames && renamePath is null && index + 1 < arguments.Length:
                 renamePath = arguments[++index];
@@ -124,30 +125,49 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks, bool AcceptLinkRemo
         }
     }
 
-    if (renamePath is null)
-    {
-        return ([], trackLinks, acceptLinkRemovals);
-    }
-
-    var info = new FileInfo(renamePath);
-    if (info.Length > 256 * 1024)
-    {
-        throw new InvalidDataException("The rename mapping exceeds its size limit.");
-    }
-
     var options = new JsonSerializerOptions
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
-    var mappings = JsonSerializer.Deserialize<VaultRename[]>(File.ReadAllBytes(renamePath), options)
-        ?? throw new InvalidDataException("The rename mapping is empty.");
-    if (mappings.Length > 20_000)
+    IReadOnlyList<VaultRename> mappings = [];
+    if (renamePath is not null)
     {
-        throw new InvalidDataException("The rename mapping contains too many entries.");
+        if (new FileInfo(renamePath).Length > 256 * 1024)
+        {
+            throw new InvalidDataException("The rename mapping exceeds its size limit.");
+        }
+
+        var renames = JsonSerializer.Deserialize<VaultRename[]>(File.ReadAllBytes(renamePath), options)
+            ?? throw new InvalidDataException("The rename mapping is empty.");
+        if (renames.Length > 20_000)
+        {
+            throw new InvalidDataException("The rename mapping contains too many entries.");
+        }
+
+        mappings = Array.AsReadOnly(renames);
     }
 
-    return (Array.AsReadOnly(mappings), trackLinks, acceptLinkRemovals);
+    IReadOnlyList<AttachmentReference>? approved = null;
+    if (unlinkPath is not null)
+    {
+        if (new FileInfo(unlinkPath).Length > 4 * 1024 * 1024)
+        {
+            throw new InvalidDataException("The link removal approval exceeds its size limit.");
+        }
+
+        var pairs = JsonSerializer.Deserialize<AttachmentReference[]>(File.ReadAllBytes(unlinkPath), options)
+            ?? throw new InvalidDataException("The link removal approval is empty.");
+        if (pairs.Length > 50_000 || pairs.Any(pair => pair is null ||
+                pair.NoteId == Guid.Empty || pair.AttachmentId == Guid.Empty))
+        {
+            throw new InvalidDataException("The link removal approval contains invalid pairs.");
+        }
+
+        approved = Array.AsReadOnly(pairs);
+    }
+
+    return (mappings, trackLinks, approved);
 }
 
 static void PrintChanges(VaultUpdate update)
@@ -161,5 +181,15 @@ static void PrintChanges(VaultUpdate update)
     {
         Console.WriteLine($"Vault links: {update.Collection.VaultReferences.Count} tracked, " +
             $"{update.AddedLinks} added, {update.RemovedLinks} removed.");
+        if (update.RemovedLinks != 0)
+        {
+            var notes = update.Collection.Notes.ToDictionary(note => note.Id);
+            var attachments = update.Collection.Attachments.ToDictionary(attachment => attachment.Id);
+            foreach (var pair in update.RemovedLinkPairs!)
+            {
+                Console.WriteLine($"Removed vault link: noteId={pair.NoteId} ({notes[pair.NoteId].Current.Path}), " +
+                    $"attachmentId={pair.AttachmentId} ({attachments[pair.AttachmentId].Path})");
+            }
+        }
     }
 }
