@@ -47,7 +47,7 @@ test('preflight succeeds before installing a two-file plugin with external archi
     const f = await fixture(t);
     const result = await installLocal(f.options, f.run);
     assert.deepEqual(f.calls.map(args => args[0]), ['capture', 'verify', 'links', 'restore']);
-    assert.equal(result.pluginDirectory, path.join(f.vault, '.obsidian', 'plugins', 'praxis-vault'));
+    assert.equal(result.pluginDirectory, path.join(await fs.realpath(f.vault), '.obsidian', 'plugins', 'praxis-vault'));
     assert.deepEqual((await fs.readdir(result.pluginDirectory)).sort(),
         ['data.json', 'main.js', 'manifest.json']);
     const settings = JSON.parse(await fs.readFile(path.join(result.pluginDirectory, 'data.json'), 'utf8'));
@@ -99,7 +99,7 @@ test('installer supports a non-default existing Obsidian config directory', asyn
     await fs.mkdir(path.join(f.vault, '.custom-config'));
     const result = await installLocal({ ...f.options, configDirectory: '.custom-config' }, f.run);
     assert.equal(result.pluginDirectory,
-        path.join(f.vault, '.custom-config', 'plugins', 'praxis-vault'));
+        path.join(await fs.realpath(f.vault), '.custom-config', 'plugins', 'praxis-vault'));
     assert.equal(await fs.readFile(path.join(f.vault, 'private.md'), 'utf8'), '# Personal note');
 });
 
