@@ -99,7 +99,8 @@ internal sealed class OriginalFileStore(string dataDirectory)
                 }
                 catch (IOException) when (File.Exists(published))
                 {
-                    // A concurrent publication must still pass the same content check.
+                    await VerifyAsync(published, digest, length, cancellationToken);
+                    return new OriginalObject(digest, length);
                 }
             }
 
