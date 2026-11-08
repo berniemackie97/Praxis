@@ -73,7 +73,8 @@ public sealed class LocalCatalog : IDisposable
             }
 
             VerifySchema(database);
-            if (Scalar(database, "PRAGMA journal_mode = WAL") is not string "wal")
+            if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
+                "wal", StringComparison.OrdinalIgnoreCase))
             {
                 throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
             }
@@ -153,7 +154,8 @@ public sealed class LocalCatalog : IDisposable
 
     private static void VerifyIntegrity(SqliteConnection database)
     {
-        if (Scalar(database, "PRAGMA integrity_check") is not string "ok")
+        if (!string.Equals(Scalar(database, "PRAGMA integrity_check") as string,
+                "ok", StringComparison.Ordinal))
         {
             throw new InvalidDataException("The catalog failed SQLite integrity verification.");
         }
