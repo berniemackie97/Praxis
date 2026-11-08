@@ -296,11 +296,13 @@ internal sealed class OriginalFileStore(string dataDirectory)
         return path;
     }
 
+    internal static bool IsValidDigest(string? digest) =>
+        digest is { Length: 64 } && digest.All(c =>
+            c is >= '0' and <= '9' or >= 'a' and <= 'f');
+
     private static void ValidateDigest(string digest)
     {
-        ArgumentNullException.ThrowIfNull(digest);
-        if (digest.Length != 64 || digest.Any(character =>
-            character is not (>= 'a' and <= 'f' or >= '0' and <= '9')))
+        if (!IsValidDigest(digest))
         {
             throw new ArgumentException("An original digest must be lowercase SHA-256.", nameof(digest));
         }
