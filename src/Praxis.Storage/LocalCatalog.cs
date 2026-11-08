@@ -4,14 +4,15 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
         ("sources", "source_id, source_kind, locator, created_utc, status"),
         ("items", "item_id, source_id"),
         ("item_versions", "item_id, revision, digest, observed_utc"),
-        ("ingest_requests", "request_key, source_id, state, attempt, failure_code")
+        ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
+        ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code")
     ];
 
     private readonly FileStream lockFile;
@@ -88,7 +89,7 @@ public sealed partial class LocalCatalog : IDisposable
             throw new InvalidDataException("An unversioned database already contains user tables.");
         }
 
-        if (version == 1)
+        if (version is 1 or 2)
         {
             VerifySchema(database, version);
         }
@@ -103,9 +104,16 @@ public sealed partial class LocalCatalog : IDisposable
                 initial.ExecuteNonQuery();
             }
 
-            using var upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
-            upgrade.Transaction = transaction;
-            upgrade.ExecuteNonQuery();
+            if (version < 2)
+            {
+                using var upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
+                upgrade.Transaction = transaction;
+                upgrade.ExecuteNonQuery();
+            }
+
+            using var next = Command(database, ReadSchema("LocalCatalog.V3.sql"));
+            next.Transaction = transaction;
+            next.ExecuteNonQuery();
             transaction.Commit();
         }
 
@@ -193,6 +201,11 @@ public sealed partial class LocalCatalog : IDisposable
     {
         foreach (var (name, columns) in Tables)
         {
+            if (version < 3 && name == "processing_jobs")
+            {
+                continue;
+            }
+
             using var command = Command(database,
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
             command.Parameters.AddWithValue("$name", name);
