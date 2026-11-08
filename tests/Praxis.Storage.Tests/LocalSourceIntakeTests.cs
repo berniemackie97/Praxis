@@ -112,8 +112,8 @@ public sealed class LocalSourceIntakeTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 0, 10, 100));
         Assert.Empty(catalog.ListProcessingJobs());
-        Assert.Throws<ArgumentException>(() =>
-            intake.ImportFileAsync("relative/file.txt", 10, "request").GetAwaiter().GetResult());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            intake.ImportFileAsync("relative/file.txt", 10, "request"));
     }
 
     [Fact]
