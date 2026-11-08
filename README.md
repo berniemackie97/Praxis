@@ -6,7 +6,7 @@ Praxis is a local-first knowledge and automation platform. Obsidian is the first
 
 The repository contains a .NET 10 HTTP service with process liveness checks and a separate `Praxis.Knowledge` library for portable Markdown note identities, immutable revision histories and validated local archive import/export.
 
-Authentication, durable storage, synchronization, search and agent execution are **not implemented**. The local archive library can preserve original attachments but does not send data to any service.
+Authentication, durable canonical collection storage, synchronization, search and agent execution are **not implemented**. Local archives and optional staged attachment files do not send data to any service.
 
 ## Development
 
@@ -29,6 +29,10 @@ dotnet run --project src/Praxis.Api
 `AttachmentRecord.Create(path, bytes)` creates a stable binary identity; `Rename` preserves its original bytes and ID. A `KnowledgeCollection` combines note histories, binary attachments and explicit note/attachment references. `NoteArchive.WriteCollection` and `ReadCollection` round-trip a version-two archive containing all of them, while the version-one note-only APIs remain compatible.
 
 The [note archive contract](docs/decisions/0004-portable-note-archive.md) and [attachment contract](docs/decisions/0005-attachment-collection-archive.md) document formats, integrity checks and capacity limits. These are local interchange operations, not an Obsidian vault adapter, a live backup service or multi-device synchronization.
+
+### Local attachment transfer
+
+`LocalAttachmentTransferStore` can resume a bounded on-disk upload using its transfer ID, expected SHA-256 and current offset. `Commit` publishes only verified original bytes under their digest; `IsCommitted` verifies a previously published blob after an ambiguous acknowledgment. The storage root is chosen and protected by the caller. This is local **plaintext staging**, not an authenticated network service or an encrypted backup. See [ADR 0007](docs/decisions/0007-local-attachment-staging.md) for failure handling, limits and unimplemented cleanup/retention requirements.
 
 ## Project direction
 
