@@ -28,4 +28,6 @@ These methods write **plaintext**. The caller must protect source, archive and d
 
 Filesystem inspection is not secure against a malicious local actor replacing paths after validation; source and destination parents must be trusted. Flush and same-filesystem publication protect against ordinary interrupted processes but have not been validated against abrupt power loss, all filesystems or storage-provider directory metadata semantics. Concurrent source edits are not snapshotted atomically. File permissions, timestamps, xattrs, symbolic links and empty subdirectories are not retained. Replacing an existing vault requires a separately reviewed workflow.
 
-Issue #25 remains open for real Obsidian adapter integration, stable identity across imports, semantic links/metadata reconciliation and device-level backup/restore verification. See [ADR 0005](0005-attachment-collection-archive.md) for the ZIP format and content integrity rules.
+[ADR 0010](0010-incremental-vault-reconciliation.md) extends capture with prior-archive reconciliation, retained identities, explicit rename maps and fail-closed missing-file handling. The standalone one-shot capture in this ADR still generates new identities.
+
+Issue #25 remains open for real Obsidian adapter integration, semantic links/metadata reconciliation and device-level backup/restore verification. See [ADR 0005](0005-attachment-collection-archive.md) for the ZIP format and content integrity rules.
