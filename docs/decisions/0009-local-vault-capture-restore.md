@@ -12,6 +12,8 @@
 
 Markdown content, frontmatter, wikilinks, relative Markdown links and original line endings are preserved **verbatim**. Links are not parsed, resolved or rewritten. `AttachmentReference` records are not inferred by scanning Markdown; they remain empty on a fresh capture. Existing explicit references and old note revisions stay in collection archives, while a restored folder contains only current files.
 
+The command-line tool `tools/Praxis.VaultCli` exposes `capture`, `verify` and `restore` as standalone, local-only operations. The CI smoke test runs the executable against a real nested directory, checks exact restored file bytes, and exercises no-overwrite and invalid-archive behavior. No separate server or hosted service is involved.
+
 ## Validation and capacity
 
 - Normalize source-relative paths to portable NFC `/`-separated paths; reject traversal, reserved names and unportable filename characters.

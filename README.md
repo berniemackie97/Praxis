@@ -52,6 +52,16 @@ See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [engineeri
 
 `LocalVaultExchange.CaptureArchive(sourceDirectory, archivePath)` captures a local Markdown folder, binary originals and hidden files into a validated collection ZIP. `LocalVaultExchange.RestoreArchive(archivePath, newDirectory)` restores the latest Markdown files and original attachments into a **new** directory, never overwriting a vault. Links are preserved as written; their meaning and target identity are not inferred. Empty nested directories, invalid UTF-8, and symbolic links fail explicitly.
 
+Use the local command-line tool (requires the repository's exact .NET SDK):
+
+```sh
+dotnet run --project tools/Praxis.VaultCli -- capture /path/to/vault /path/to/new-backup.zip
+dotnet run --project tools/Praxis.VaultCli -- verify /path/to/new-backup.zip
+dotnet run --project tools/Praxis.VaultCli -- restore /path/to/new-backup.zip /path/to/new-restored-vault
+```
+
+Paths must point to an existing source/parent directory; archive and restore destinations must not already exist. The ZIP includes original content and potentially private hidden configuration files, all **unencrypted**. This CLI does not modify an existing vault.
+
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
 ## Release verification

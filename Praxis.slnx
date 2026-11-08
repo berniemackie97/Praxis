@@ -3,6 +3,9 @@
     <Project Path="src/Praxis.Api/Praxis.Api.csproj" />
     <Project Path="src/Praxis.Knowledge/Praxis.Knowledge.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Praxis.VaultCli/Praxis.VaultCli.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
     <Project Path="tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj" />
