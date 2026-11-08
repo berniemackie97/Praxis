@@ -93,8 +93,11 @@ test('folder move through real CLI retains nested files and tracked embedded lin
     const original = await session.snapshot();
     await fs.rename(path.join(vault, 'Old'), path.join(vault, 'Intermediate'));
     await session.recordRename('Old', 'Intermediate', true);
+    await session.recordRename('Old/memo.md', 'Intermediate/memo.md');
+    await session.recordRename('Old/media/photo.png', 'Intermediate/media/photo.png');
     await fs.rename(path.join(vault, 'Intermediate'), path.join(vault, 'Final'));
     await session.recordRename('Intermediate', 'Final', true);
+    await session.recordRename('Intermediate/memo.md', 'Final/memo.md');
 
     const plan = await session.plan();
     assert.match(plan, /0 added, 0 updated, 2 renamed/);
