@@ -27,11 +27,12 @@ function filePath(value) {
 }
 
 class ArchiveSession {
-    constructor(vault, backup, assembly, runner) {
+    constructor(vault, backup, assembly, runner, dotnetExecutablePath) {
         this.vault = vault;
         this.backup = backup;
         this.assembly = assembly;
         this.runner = runner;
+        this.dotnetExecutablePath = dotnetExecutablePath;
         this.statePath = path.join(backup, StateName);
         this.lockPath = path.join(backup, LockName);
         this.serial = Promise.resolve();
@@ -40,7 +41,8 @@ class ArchiveSession {
         this.closed = false;
     }
 
-    static async open({ vaultPath, backupDirectory, cliAssemblyPath, runner = runVaultCli }) {
+    static async open({ vaultPath, backupDirectory, cliAssemblyPath,
+        dotnetExecutablePath, runner = runVaultCli }) {
         if (!path.isAbsolute(vaultPath) || !path.isAbsolute(backupDirectory) ||
             !path.isAbsolute(cliAssemblyPath)) {
             throw new Error('Configure absolute vault, archive-directory and CLI assembly paths.');
@@ -61,7 +63,14 @@ class ArchiveSession {
             throw new Error('The vault, archive directory or CLI assembly is not a supported filesystem entry.');
         }
 
-        const session = new ArchiveSession(vault, backup, assembly, runner);
+        if (dotnetExecutablePath !== undefined && !path.isAbsolute(dotnetExecutablePath)) {
+            throw new Error('The .NET host executable path must be absolute.');
+        }
+        const dotnet = dotnetExecutablePath && await fs.realpath(dotnetExecutablePath);
+        if (dotnet && !(await fs.stat(dotnet)).isFile()) {
+            throw new Error('The .NET host path must be a regular file.');
+        }
+        const session = new ArchiveSession(vault, backup, assembly, runner, dotnet);
         await session._readState();
         return session;
     }
@@ -289,7 +298,8 @@ class ArchiveSession {
         this.active = controller;
         try {
             return await this.runner(this.assembly, args, {
-                cwd: this.backup, signal: controller.signal
+                cwd: this.backup, signal: controller.signal,
+                dotnetExecutablePath: this.dotnetExecutablePath
             });
         } finally {
             if (this.active === controller) {
