@@ -45,6 +45,25 @@ if (args.Length >= 3 && args[0] == "capture")
     });
 }
 
+if (args.Length == 3 && args[0] == "compare")
+{
+    return Run(() =>
+    {
+        var report = LocalVaultComparison.CompareArchive(args[1], args[2]);
+        Console.WriteLine($"Matched {report.MatchedFiles} files; {report.Differences.Count} differences.");
+        foreach (var difference in report.Differences.Take(20))
+        {
+            Console.Error.WriteLine($"{difference.Reason}: {difference.Path}");
+        }
+
+        if (!report.IsMatch)
+        {
+            throw new InvalidDataException(
+                "The directory differs from the archive. Neither input was modified.");
+        }
+    });
+}
+
 if (args.Length == 3 && args[0] == "restore")
 {
     return Run(() =>
@@ -80,6 +99,7 @@ if (args.Length >= 4 && args[0] == "update")
 Console.Error.WriteLine("Usage: vault capture <source-directory> <new-archive.zip> [--track-links]");
 Console.Error.WriteLine("       vault verify  <archive.zip>");
 Console.Error.WriteLine("       vault restore <archive.zip> <new-directory>");
+Console.Error.WriteLine("       vault compare <archive.zip> <existing-directory>");
 Console.Error.WriteLine("       vault links <archive.zip>");
 Console.Error.WriteLine("       vault plan <source-directory> <previous-archive.zip> [--renames <json-file>] [--track-links]");
 Console.Error.WriteLine("       vault update <source-directory> <previous-archive.zip> <new-archive.zip> [--renames <json-file>] [--track-links] [--approve-unlinks <json-file>]");

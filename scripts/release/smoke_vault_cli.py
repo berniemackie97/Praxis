@@ -53,6 +53,30 @@ def main():
             if actual != bytes_:
                 raise AssertionError(f"Changed restored content: {name}")
 
+        compared = run(executable, "compare", archive, destination)
+        if "Matched 3 files; 0 differences" not in compared.stdout:
+            raise AssertionError(f"Restored files failed comparison: {compared.stdout}")
+
+        (destination / "Notes/first.md").write_bytes(b"# Modified after restore\\n")
+        altered = run(executable, "compare", archive, destination, expected=1)
+        if "changed: Notes/first.md" not in altered.stderr:
+            raise AssertionError(f"Modified note was not reported: {altered.stderr}")
+        (destination / "Notes/first.md").write_bytes(contents["Notes/first.md"])
+
+        (destination / ".obsidian/app.json").unlink()
+        (destination / ".obsidian").rmdir()
+        missing = run(executable, "compare", archive, destination, expected=1)
+        if "missing: .obsidian/app.json" not in missing.stderr:
+            raise AssertionError(f"Missing config was not reported: {missing.stderr}")
+        (destination / ".obsidian").mkdir()
+        (destination / ".obsidian/app.json").write_bytes(contents[".obsidian/app.json"])
+
+        (destination / "extra.txt").write_bytes(b"unexpected")
+        extra = run(executable, "compare", archive, destination, expected=1)
+        if "unexpected: extra.txt" not in extra.stderr:
+            raise AssertionError(f"Extra file was not reported: {extra.stderr}")
+        (destination / "extra.txt").unlink()
+
         run(executable, "restore", archive, destination, expected=1)
         run(executable, "capture", source, archive, expected=1)
         if (destination / "Notes/first.md").read_bytes() != contents["Notes/first.md"]:
@@ -94,6 +118,9 @@ def main():
             raise AssertionError("Mapped attachment did not restore exactly.")
         if (updated_vault / ".obsidian/app.json").read_bytes() != contents[".obsidian/app.json"]:
             raise AssertionError("Hidden configuration was lost.")
+        compared = run(executable, "compare", next_archive, updated_vault)
+        if "Matched 3 files; 0 differences" not in compared.stdout:
+            raise AssertionError(f"Incremental restore failed comparison: {compared.stdout}")
 
         (source / "Notes/first.md").write_bytes(b"# No image embed\n")
         accepted_archive = root / "accepted-removal.zip"
@@ -144,11 +171,12 @@ def main():
         invalid = root / "invalid.zip"
         invalid.write_bytes(b"invalid archive")
         run(executable, "verify", invalid, expected=1)
+        run(executable, "compare", invalid, destination, expected=1)
         run(executable, "restore", invalid, root / "invalid-restore", expected=1)
         if (root / "invalid-restore").exists():
             raise AssertionError("An invalid archive created a restore destination.")
 
-    print("Vault CLI smoke passed: capture, verify, provenance tracking, approved link removal, links, incremental plan/update, explicit rename, restore, no overwrite, missing-file and corruption checks.")
+    print("Vault CLI smoke passed: capture, verify, compare, provenance tracking, approved link removal, links, incremental plan/update, explicit rename, restore, no overwrite, missing-file and corruption checks.")
 
 
 if __name__ == "__main__":
