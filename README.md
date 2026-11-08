@@ -58,9 +58,10 @@ Use the local command-line tool (requires the repository's exact .NET SDK):
 dotnet run --project tools/Praxis.VaultCli -- capture /path/to/vault /path/to/new-backup.zip
 dotnet run --project tools/Praxis.VaultCli -- verify /path/to/new-backup.zip
 dotnet run --project tools/Praxis.VaultCli -- restore /path/to/new-backup.zip /path/to/new-restored-vault
+dotnet run --project tools/Praxis.VaultCli -- compare /path/to/new-backup.zip /path/to/new-restored-vault
 ```
 
-Paths must point to an existing source/parent directory; archive and restore destinations must not already exist. The ZIP includes original content and potentially private hidden configuration files, all **unencrypted**. This CLI does not modify an existing vault.
+Paths must point to an existing source/parent directory; archive and restore destinations must not already exist. The read-only `compare` command reports current-file byte/path mismatches and fails on any missing, extra or changed file without modifying the archive or folder. It does not verify permissions, timestamps or empty directories. The ZIP includes original content and potentially private hidden configuration files, all **unencrypted**. This CLI does not modify an existing vault.
 
 After the first archive, use an existing snapshot as the baseline for an identity-preserving incremental update:
 
@@ -95,7 +96,7 @@ See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limi
 
 The first Obsidian desktop integration is under [`integrations/obsidian`](integrations/obsidian/README.md). It exposes explicit local archive capture/update and preview commands through Obsidian, tracking file renames into an external session ledger so the existing CLI can reconcile stable IDs. Its plugin manifest is desktop-only; it does not synchronize or rewrite notes. See [ADR 0013](docs/decisions/0013-obsidian-desktop-local-adapter.md).
 
-The adapter has automated Node tests, but **real Obsidian desktop event and device validation has not been completed**. Encrypted backups, folder renames, background synchronization and mobile support remain outstanding.
+The adapter has automated Node tests, but **real Obsidian desktop event and device validation has not been completed**. Encrypted backups, real-Obsidian folder-event acceptance, background synchronization and mobile support remain outstanding.
 
 For a practical local trial using the current desktop adapter, see the [Mac first-run and restore checklist](integrations/obsidian/LOCAL-TRIAL.md). It uses a disposable Obsidian vault and actual .NET CLI preflight before installing a plugin, without enabling server synchronization or automatic knowledge classification.
 
