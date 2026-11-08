@@ -41,11 +41,24 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(batchKey));
         }
 
-        if (maxFiles is < 1 or > 10_000 || maxDepth is < 0 or > 16 ||
-            maxFileBytes < 0 || maxTotalBytes < 0)
+        if (maxFiles is < 1 or > 10_000)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxFiles),
-                "File counts, depths and byte budgets must be bounded.");
+            throw new ArgumentOutOfRangeException(nameof(maxFiles));
+        }
+
+        if (maxDepth is < 0 or > 16)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDepth));
+        }
+
+        if (maxFileBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxFileBytes));
+        }
+
+        if (maxTotalBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
         }
 
         var root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
