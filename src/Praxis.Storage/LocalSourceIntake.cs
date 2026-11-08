@@ -98,16 +98,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new InvalidOperationException("The data store cannot be imported as a source.");
         }
 
-        for (string? current = full; current is not null; current = Path.GetDirectoryName(current))
+        var attributes = File.GetAttributes(full);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
-            var attributes = File.GetAttributes(current);
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidDataException("A selected source path contains a symbolic link.");
-            }
+            throw new InvalidDataException("A selected source path cannot be a symbolic link.");
         }
 
-        var isDirectory = (File.GetAttributes(full) & FileAttributes.Directory) != 0;
+        var isDirectory = (attributes & FileAttributes.Directory) != 0;
         if (isDirectory != expectDirectory)
         {
             throw new InvalidDataException("The selected source has an unexpected file type.");
