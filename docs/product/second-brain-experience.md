@@ -32,6 +32,16 @@ The product must ultimately support many more types and sources—audio, images,
 
 **First release boundary:** one owner, one local machine, representative supported technical, video and financial corpora, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
 
+## Financial intelligence and live account updates
+
+The first supported budget demo may begin with a verified local export, but **the intended product is not a CSV-based budgeting application**. That export is one possible source adapter. Praxis will eventually connect to explicitly authorized financial data providers and receive incremental updates about accounts, transactions, income, bills and other financial activity, where provider access and user consent permit.
+
+Each update should arrive as a typed, versioned, source-attributed event through the common connector envelope (#151/#157), with provider/connection/account identity, stable external IDs, amounts and currency, transaction state, merchant, timestamps, original response evidence, receipt/digest, synchronization status and permission scope. Store immutable observations and a reconciled current projection: a pending card authorization later posting for a different amount must not be charged twice, and refunds, reversals, corrections, transfers, repeated webhooks, missing updates and revocation must have explicit behavior.
+
+Link financial entities and events to accounts, payees, recurring obligations, income sources, budget categories, owner notes, goals and relevant facts from other sources. Preserve the distinction between provider-provided metadata, deterministic rules, owner-reviewed classifications and model hypotheses; propagate corrections without silently rewriting original events. Use incremental processing to avoid needless model inference on already structured data. Privacy is independent of assistant prompts: only scoped approved connections and permitted data can be analyzed, synced or disclosed to a model, and no financial movement is authorized by ingestion.
+
+Provider feasibility, consent scope, rates, costs, refresh/webhooks and data protection are tracked in #162. The typed event contract is #157. The owner-facing financial reasoning and budget workflow is #178, and the complete agent/MVP acceptance remains #170. **A local CSV demo is neither a prerequisite for future financial feeds nor a substitute for their reconciliation design.** Real bank integration is a later connected capability, not an implemented feature.
+
 ## Core experience
 
 The owner can drag files, choose a folder, type or paste a thought, dictate a note, or explicitly save a web page. Approved integrations—including a browser extension, Obsidian and a future MCP server for agents—feed the same ingestion contract. An input folder is a convenient *inbox*, not the authoritative database and not a mandatory physical organization model.

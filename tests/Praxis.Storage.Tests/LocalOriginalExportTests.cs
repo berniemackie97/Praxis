@@ -129,6 +129,21 @@ public sealed class LocalOriginalExportTests : IDisposable
             catalog.ExportOriginalAsync(captured.ItemId, 1,
                 Path.Combine(linked, "redirected.bin")));
         Assert.False(File.Exists(Path.Combine(catalogRoot, "redirected.bin")));
+
+        var chained = Path.Combine(workspace, "chained");
+        Directory.CreateSymbolicLink(chained, linked);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.ExportOriginalAsync(captured.ItemId, 1,
+                Path.Combine(chained, "nested.bin")));
+        Assert.False(File.Exists(Path.Combine(catalogRoot, "nested.bin")));
+
+        var permittedLink = Path.Combine(workspace, "permitted-link");
+        Directory.CreateSymbolicLink(permittedLink, exportRoot);
+        var receipt = await catalog.ExportOriginalAsync(captured.ItemId, 1,
+            Path.Combine(permittedLink, "safe.bin"));
+        Assert.Equal(captured.Sha256, receipt.Sha256);
+        Assert.Equal(new byte[] { 1, 2, 3 },
+            File.ReadAllBytes(Path.Combine(exportRoot, "safe.bin")));
     }
 
     [Fact]
