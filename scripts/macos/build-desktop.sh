@@ -15,7 +15,7 @@ dotnet publish "$root/src/Praxis.Worker/Praxis.Worker.csproj" \
   --no-restore
 
 swiftc -parse-as-library -O \
-  "$root/apps/macos/PraxisApp.swift" \
+  "$root/apps/macos/"*.swift \
   -framework SwiftUI -framework AppKit \
   -o "$destination/Contents/MacOS/Praxis"
 
