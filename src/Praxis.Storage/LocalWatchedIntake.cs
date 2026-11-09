@@ -68,18 +68,28 @@ public sealed partial class LocalWatchedIntake
                 MaximumFolderBytes, cancellationToken);
             var present = snapshot.Select(file => file.SourcePath)
                 .ToHashSet(StringComparer.Ordinal);
-            foreach (var missing in observations.Keys.Where(path => !present.Contains(path)).ToArray())
+            var removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
+            foreach (var missing in removed)
             {
                 observations.Remove(missing);
                 verified.Remove(missing);
                 errors.Remove(missing);
-                report("Source no longer present; preserved captured original: " + missing);
+            }
+
+            if (removed.Length != 0)
+            {
+                report($"No longer observed: {removed.Length} paths; captured originals are preserved.");
             }
 
             var imported = 0;
             foreach (var file in snapshot)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (IsTemporaryName(file.SourcePath))
+                {
+                    continue;
+                }
+
                 var stamp = new FileStamp(file.Length, file.LastWriteUtc);
                 if (!observations.TryGetValue(file.SourcePath, out var observed) ||
                     observed.Stamp != stamp)
@@ -187,6 +197,15 @@ public sealed partial class LocalWatchedIntake
             report("Intake error: " + path + ": " + message);
             errors[path] = message;
         }
+    }
+
+    private static bool IsTemporaryName(string path)
+    {
+        var name = Path.GetFileName(path);
+        return name is ".DS_Store" or ".gitignore" ||
+            name.EndsWith('~') ||
+            new[] { ".tmp", ".part", ".crdownload", ".download", ".swp", ".swx" }
+                .Any(extension => name.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsStable(LocalObservedFile file)
