@@ -41,7 +41,10 @@ public sealed class LocalTextProcessorTests : IDisposable
             var first = Assert.IsType<TextDerivative>(catalog.ReadTextDerivative(text.ItemId, 1));
             var second = Assert.IsType<TextDerivative>(catalog.ReadTextDerivative(markdown.ItemId, 1));
             Assert.Equal("completed", first.Outcome);
+            Assert.Equal(text.SourceId, first.SourceId);
+            Assert.Equal(LocalCatalog.DefaultProcessorKey, first.ProcessorKey);
             Assert.Equal(text.Sha256, first.SourceSha256);
+            Assert.True(first.ProducedUtc > DateTimeOffset.MinValue);
             Assert.Equal("hello\nworld", first.Content);
             Assert.Null(first.ReasonCode);
             Assert.Equal("# Topic\nReady ✅", second.Content);
@@ -101,6 +104,13 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.All(states, job => Assert.Equal("failed", job.State));
         Assert.Null(catalog.ReadTextDerivative(malformed.ItemId, 1));
         Assert.Null(catalog.ReadTextDerivative(corrupt.ItemId, 1));
+        Assert.True(catalog.RetryProcessing(malformed.ItemId, 1,
+            LocalCatalog.DefaultProcessorKey));
+        Assert.True(await processor.ProcessNextAsync());
+        var retry = catalog.ListProcessingJobs().Single(job => job.ItemId == malformed.ItemId);
+        Assert.Equal(2, retry.TotalAttempts);
+        Assert.Equal("invalid_utf8", retry.FailureCode);
+        Assert.Null(catalog.ReadTextDerivative(malformed.ItemId, 1));
     }
 
     [Fact]
