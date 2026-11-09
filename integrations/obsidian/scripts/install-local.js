@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { packagePlugin } = require('./package');
-const { runVaultCli } = require('../cli-process');
+const { runVaultCli } = require('../src/cli-process');
 
 function contains(root, candidate) {
     const relative = path.relative(root, candidate);

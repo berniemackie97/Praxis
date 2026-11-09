@@ -2,24 +2,31 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-destination="$root/.artifacts/Praxis.app"
-if [[ -e "$destination" ]]; then
+artifacts="$root/.artifacts"
+destination="$artifacts/Praxis.app"
+minimum_macos=13.0
+if [[ -e "$destination" || -L "$destination" ]]; then
   echo "Destination already exists: $destination" >&2
   echo "Remove only the previous development app bundle before rebuilding." >&2
   exit 1
 fi
 
-mkdir -p "$destination/Contents/MacOS" "$destination/Contents/Resources/worker"
+mkdir -p "$artifacts"
+staging="$(mktemp -d "$artifacts/.praxis-build.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
+bundle="$staging/Praxis.app"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources/worker"
 dotnet publish "$root/src/Praxis.Worker/Praxis.Worker.csproj" \
-  --configuration Release --output "$destination/Contents/Resources/worker" \
+  --configuration Release --output "$bundle/Contents/Resources/worker" \
   --no-restore
 
-swiftc -parse-as-library -O \
-  "$root/apps/macos/"*.swift \
+swiftc -swift-version 6 -warnings-as-errors -parse-as-library -O \
+  -target "$(uname -m)-apple-macosx${minimum_macos}" \
+  "$root"/apps/macos/{App,Views,Workbench,Worker}/*.swift \
   -framework SwiftUI -framework AppKit \
-  -o "$destination/Contents/MacOS/Praxis"
+  -o "$bundle/Contents/MacOS/Praxis"
 
-cat > "$destination/Contents/Info.plist" <<'PLIST'
+cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,11 +40,18 @@ cat > "$destination/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>${minimum_macos}</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 PLIST
+
+plutil -lint "$bundle/Contents/Info.plist"
+mv -n "$bundle" "$artifacts/"
+if [[ -e "$bundle" ]]; then
+  echo "Destination already exists: $destination" >&2
+  exit 1
+fi
 
 echo "Created unsigned local-development app: $destination"
 echo "Launch with: open \"$destination\""

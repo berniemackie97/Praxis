@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { ArchiveSession } = require('../archive-session');
+const { ArchiveSession } = require('../src/archive-session');
 
 async function fixture(t, runner) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-obsidian-test-'));

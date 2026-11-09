@@ -44,9 +44,9 @@ Disable or uninstalling this adapter leaves all original vault files readable an
 
 ```sh
 node --test integrations/obsidian/test/archive-session.test.js
-node --check integrations/obsidian/main.js
-node --check integrations/obsidian/archive-session.js
-node --check integrations/obsidian/cli-process.js
+node --check integrations/obsidian/src/main.js
+node --check integrations/obsidian/src/archive-session.js
+node --check integrations/obsidian/src/cli-process.js
 node integrations/obsidian/scripts/package.js /path/outside/vault/praxis-vault
 node --check /path/outside/vault/praxis-vault/main.js
 node --test integrations/obsidian/test/packaged-plugin.test.js

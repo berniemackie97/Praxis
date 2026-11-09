@@ -124,20 +124,9 @@ Schema v8 adds only the source-locator move journal. Existing v1–v7 stores and
 
 Owner acceptance should demonstrate a file moved after a successful capture, its original ID and collection remaining stable, a same-content copy producing a different source, reuse of the previous filename without idempotency errors, and a missed/rejected rename remaining independent. Then restart, search, export, verify backup/restore and run a real macOS FileSystemWatcher rename. The deterministic unit tests inject the same bounded event record; **actual OS notification delivery is unverified**.
 
-## Cross-domain read-only development checkpoint
+## Source-linked caption search
 
-An additional first-party Budget view can analyze an active, explicitly selected owner-local `.csv` original for a chosen year/month using the private worker pipe. It displays verified source ID/revision/digest, deterministic posted income, posted spending, separate unpaid bills, pending net amounts, excluded transfers, category aggregates and bounded source-row evidence. No bank credentials, LLM, action execution, hidden network, advice guarantee or automatic budget optimization is involved. Conflicting record IDs, bad date/amount/currency, changed/revoked source or corrupted original fail closed.
-
-The Search view also displays timecoded matches from previously captured `.vtt`/`.srt` sidecars. A cue is exposed as a video-linked candidate **only when the sidecar filename names the full SHA-256 digest of the associated currently active video original**, so a changed video's content cannot inherit old timestamps. Plain same-stem caption files still remain separately searchable text; they are not silently trusted media links. Examples, limits and trial steps are in ADR 0027. This does not implement verified video playback or first-party persistent chat; #177/#33 remain open.
-
-Before accepting this UI checkpoint, compile the Swift app with the provided build script, run locked .NET restore/build/test/format, and exercise both views on a real Mac with offline/denial/restart/revocation tests. Pending tests are not green CI.
-
-
-## Read-only monthly budget scenario preview (development)
-
-The owner may select an active captured financial CSV in Library, choose a month/year, and analyze deterministic income, spending and separate estimated obligations in Budget. The new **Preview budget scenario** control allows explicitly editing supported category spending targets. The private worker re-verifies the current original and calculates reductions with decimal USD arithmetic; the Swift UI displays two distinct values: actual balance after estimated bills versus the *hypothetical* result for a comparable month if the owner had met the specified targets. Posted spending is never rewritten. Pending transactions, incomplete records, and all categories without entered targets remain unchanged.
-
-This is not an autonomous budget optimizer or the #178 acceptance gate. User-authored targets are not inferred recommendations, the scenario does not account for unseen bills, beginning account balances or unprovided accounts, and no artifact is written. Editing targets invalidates the old preview; selecting a different source/revision, revoking the source, or changing the reporting month invalidates results. Unit and desktop-protocol tests cover positive arithmetic, malformed/duplicate/excessive targets, revocation, exact source references and restart. Actual macOS UI, source-race and accessibility acceptance remain outstanding.
+Search displays timecoded matches from captured `.vtt` and `.srt` sidecars. A cue links to a video only when the sidecar filename names the full SHA-256 digest of that active video original. Same-stem captions without a digest remain searchable text. Integrated playback and first-party chat are tracked under #177 and #33. See [ADR 0027](../decisions/0027-cross-domain-evidence.md) for the evidence contract.
 
 ## Media inspection (read-only development capability)
 

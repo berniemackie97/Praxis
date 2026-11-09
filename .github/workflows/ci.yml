@@ -45,10 +45,16 @@ jobs:
       - run: dotnet restore Praxis.slnx --locked-mode
       - run: dotnet build Praxis.slnx -c Release --no-restore
       - run: dotnet test Praxis.slnx -c Release --no-build --no-restore
+      - name: Build the native macOS workbench
+        if: matrix.os == 'macOS'
+        run: bash scripts/macos/build-desktop.sh
+      - name: Verify the macOS worker connection
+        if: matrix.os == 'macOS'
+        run: bash scripts/macos/test-worker-session.sh
       - run: node --version
-      - run: node --check integrations/obsidian/main.js
-      - run: node --check integrations/obsidian/archive-session.js
-      - run: node --check integrations/obsidian/cli-process.js
+      - run: node --check integrations/obsidian/src/main.js
+      - run: node --check integrations/obsidian/src/archive-session.js
+      - run: node --check integrations/obsidian/src/cli-process.js
       - run: node --test integrations/obsidian/test/archive-session.test.js
       - run: node --check integrations/obsidian/scripts/package.js
       - run: node integrations/obsidian/scripts/package.js artifacts/obsidian/praxis-vault
@@ -60,6 +66,8 @@ jobs:
       - run: python3 scripts/release/smoke_api.py
         if: matrix.os == 'Linux'
       - run: python3 scripts/release/smoke_vault_cli.py
+        if: matrix.os == 'Linux'
+      - run: python3 scripts/release/smoke_worker_protocol.py
         if: matrix.os == 'Linux'
       - run: node --test integrations/obsidian/test/archive-session-cli.test.js
         if: matrix.os == 'Linux'
