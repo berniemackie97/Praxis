@@ -60,7 +60,7 @@ public sealed partial class LocalWatchedIntake
                 StringComparison.Ordinal);
     }
 
-    private async Task ReconcileRenamesAsync(
+    private async Task<long> ReconcileRenamesAsync(
         IReadOnlyList<LocalObservedFile> files, CancellationToken cancellationToken)
     {
         bool overflow;
@@ -77,7 +77,7 @@ public sealed partial class LocalWatchedIntake
         if (overflow)
         {
             report("Rename notification backlog exceeded its bound; scanned paths will be captured independently.");
-            return;
+            return 0;
         }
 
         var byPath = files.ToDictionary(f => f.SourcePath, StringComparer.Ordinal);
@@ -151,6 +151,8 @@ public sealed partial class LocalWatchedIntake
                     JsonSerializer.Serialize(exception.Message));
             }
         }
+
+        return HashBudgetPerScan - remaining;
     }
 
     private void DequeueRename()
