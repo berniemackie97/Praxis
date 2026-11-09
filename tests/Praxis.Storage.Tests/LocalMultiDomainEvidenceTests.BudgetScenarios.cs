@@ -99,7 +99,7 @@ public sealed partial class LocalMultiDomainEvidenceTests
             "plan");
         var protocol = new LocalDesktopProtocol(catalog);
         using (var response = System.Text.Json.JsonDocument.Parse(
-            await protocol.HandleAsync($"""
+            await protocol.HandleAsync($$"""
                 {"requestId":"plan","action":"budgetScenario","sourceId":"{{source.SourceId:D}}","year":2026,"month":11,"targets":[{"category":"Food","target":"40.00"}]}
                 """)))
         {
@@ -112,7 +112,7 @@ public sealed partial class LocalMultiDomainEvidenceTests
         }
 
         using (var invalid = System.Text.Json.JsonDocument.Parse(
-            await protocol.HandleAsync($"""
+            await protocol.HandleAsync($$"""
                 {"requestId":"invalid","action":"budgetScenario","sourceId":"{{source.SourceId:D}}","year":2026,"month":11,"targets":[{"category":"Food","target":"-12.00"}]}
                 """)))
         {
@@ -121,7 +121,7 @@ public sealed partial class LocalMultiDomainEvidenceTests
 
         Assert.True(catalog.RevokeSource(source.SourceId));
         using var denied = System.Text.Json.JsonDocument.Parse(
-            await protocol.HandleAsync($"""
+            await protocol.HandleAsync($$"""
                 {"requestId":"revoked","action":"budgetScenario","sourceId":"{{source.SourceId:D}}","year":2026,"month":11,"targets":[]}
                 """));
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
