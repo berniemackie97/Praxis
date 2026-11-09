@@ -25,6 +25,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             return true;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         if (source.SourceKind != "file")
         {
             catalog.CommitTextResult(lease, null, "unsupported_source");
@@ -50,6 +51,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             var store = new OriginalFileStore(Path.GetDirectoryName(catalog.DatabasePath)!);
             var original = await store.ReadVerifiedBytesAsync(
                 source.Original, MaximumTextBytes, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (original.AsSpan().StartsWith("%PDF-"u8))
             {
                 catalog.CommitTextResult(lease, null, "signature_mismatch");
