@@ -229,6 +229,34 @@ struct PraxisWindow: View {
                             }
                         }
                     }
+                    if ["mp4", "mov", "m4v", "webm", "mkv"].contains(
+                        URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased()) {
+                        Divider()
+                        Text("Media original").font(.headline)
+                        Button(model.inspectingMedia ? "Inspecting media…" :
+                               "Inspect verified media header") {
+                            model.inspectSelectedMedia()
+                        }
+                        .disabled(item.sourceStatus != "active" || model.inspectingMedia)
+                        if let inspected = model.mediaInspection,
+                           inspected.sourceId == item.sourceId,
+                           inspected.revision == item.revision,
+                           inspected.sourceSha256 == item.sha256 {
+                            Text("Signature: \(inspected.outcome) · \(inspected.containerFamily ?? "unrecognized")")
+                                .font(.caption).textSelection(.enabled)
+                            if let duration = inspected.durationMilliseconds {
+                                Text("Container timeline: \(Double(duration) / 1000, specifier: "%.3f") seconds")
+                                    .font(.caption).textSelection(.enabled)
+                            } else {
+                                Text("Container duration unavailable from the bounded header.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Text("Source \(inspected.itemId) · \(inspected.originalBytes) verified bytes · \(inspected.producer)")
+                                .font(.caption).textSelection(.enabled)
+                        }
+                        Text("Header recognition is not a decoder, transcript verification or permission to play.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     topicReview
                     Text("Extracted text preview").font(.headline)
                     ScrollView {

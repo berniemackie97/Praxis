@@ -167,8 +167,28 @@ internal sealed class OriginalFileStore
         return bytes;
     }
 
+    internal async Task<byte[]> ReadVerifiedPrefixAsync(
+        OriginalObject original, int prefixBytes, long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        if (prefixBytes < 1 || prefixBytes > 64 * 1024)
+        {
+            throw new ArgumentOutOfRangeException(nameof(prefixBytes));
+        }
+
+        if (original.Length < 0 || original.Length > maxBytes)
+        {
+            throw new InvalidDataException("The original exceeds the media inspection byte budget.");
+        }
+
+        var prefix = new byte[(int)Math.Min(original.Length, prefixBytes)];
+        await CopyVerifiedAsync(original, Stream.Null, cancellationToken, prefix);
+        return prefix;
+    }
+
     internal async Task CopyVerifiedAsync(
-        OriginalObject original, Stream destination, CancellationToken cancellationToken)
+        OriginalObject original, Stream destination, CancellationToken cancellationToken,
+        Memory<byte> prefix = default)
     {
         ValidateDigest(original.Digest);
         ArgumentNullException.ThrowIfNull(destination);
@@ -205,6 +225,12 @@ internal sealed class OriginalFileStore
                 }
 
                 hash.AppendData(buffer, 0, read);
+                if (copied < prefix.Length)
+                {
+                    var length = (int)Math.Min(read, prefix.Length - copied);
+                    buffer.AsMemory(0, length).CopyTo(prefix.Slice((int)copied, length));
+                }
+
                 await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 copied += read;
             }
