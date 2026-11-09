@@ -139,7 +139,9 @@ public sealed class LocalFinancialEvidenceTests : IDisposable
             "corrupt");
         var target = Path.Combine(root, "objects", corrupted.Sha256[..2],
             corrupted.Sha256[2..4], corrupted.Sha256);
-        File.WriteAllBytes(target, Encoding.UTF8.GetBytes("tampered"));
+        var changedBytes = File.ReadAllBytes(target);
+        changedBytes[^1] ^= 0x01;
+        File.WriteAllBytes(target, changedBytes);
         await Assert.ThrowsAsync<InvalidDataException>(
             () => catalog.Finance.AnalyzeAsync(corrupted.SourceId, 2026, 11));
     }
@@ -221,6 +223,28 @@ public sealed class LocalFinancialEvidenceTests : IDisposable
             {"requestId":"revoked","action":"budgetSummary","sourceId":"{{saved.SourceId:D}}","year":2026,"month":11}
             """));
         Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ACancelledReadAndAnOverLimitOriginalCannotProduceFinancialResults()
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var saved = await Capture(catalog, "cancel.csv",
+            "date,record_id,kind,amount,currency,category,description,status\\n",
+            "cancel");
+        using var stopped = new CancellationTokenSource();
+        stopped.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            catalog.Finance.AnalyzeAsync(saved.SourceId, 2026, 11, stopped.Token));
+
+        var large = new byte[LocalFinancialEvidence.MaximumBytes + 1];
+        using var stream = new MemoryStream(large);
+        var oversized = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(root, "incoming", "large.csv"), stream,
+            large.Length + 1, "oversized");
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            catalog.Finance.AnalyzeAsync(oversized.SourceId, 2026, 11));
+        await catalog.Originals.VerifyAsync(oversized.ItemId);
     }
 
     private async Task<CapturedOriginal> Capture(
