@@ -45,10 +45,14 @@ public sealed partial class LocalWatchedIntake
 
         this.quietPeriod = quietPeriod ?? TimeSpan.FromSeconds(3);
         this.rescanInterval = rescanInterval ?? TimeSpan.FromSeconds(10);
-        if (this.quietPeriod < TimeSpan.Zero ||
-            this.rescanInterval < TimeSpan.FromMilliseconds(100))
+        if (this.quietPeriod < TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(quietPeriod));
+        }
+
+        if (this.rescanInterval < TimeSpan.FromMilliseconds(100))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rescanInterval));
         }
 
         this.catalog = catalog;
