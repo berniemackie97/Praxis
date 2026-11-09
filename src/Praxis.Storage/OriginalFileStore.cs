@@ -167,6 +167,61 @@ internal sealed class OriginalFileStore
         return bytes;
     }
 
+    internal async Task CopyVerifiedAsync(
+        OriginalObject original, Stream destination, CancellationToken cancellationToken)
+    {
+        ValidateDigest(original.Digest);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (!destination.CanWrite || original.Length < 0)
+        {
+            throw new ArgumentException("The original requires a writable export stream.");
+        }
+
+        var path = ExistingObjectPath(original.Digest);
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidDataException("An original object path is a symbolic link.");
+        }
+
+        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (input.Length != original.Length)
+        {
+            throw new InvalidDataException("The original object has a conflicting length.");
+        }
+
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var copied = 0L;
+            while (copied < original.Length)
+            {
+                var amount = (int)Math.Min(BufferLength, original.Length - copied);
+                var read = await input.ReadAsync(buffer.AsMemory(0, amount), cancellationToken);
+                if (read == 0)
+                {
+                    throw new InvalidDataException("An original object ended before its recorded length.");
+                }
+
+                hash.AppendData(buffer, 0, read);
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                copied += read;
+            }
+
+            if (input.ReadByte() != -1 ||
+                !CryptographicOperations.FixedTimeEquals(hash.GetHashAndReset(),
+                    Convert.FromHexString(original.Digest)))
+            {
+                throw new InvalidDataException("An original object failed integrity verification.");
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+        }
+    }
+
     public async Task CopyVerifiedAsync(
         OriginalObject original, OriginalFileStore destination,
         CancellationToken cancellationToken)
