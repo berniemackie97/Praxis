@@ -10,6 +10,7 @@ final class Workbench: ObservableObject {
     @Published private(set) var topicOutcome = "pending"
     @Published private(set) var intakeStatus: IntakeStatus?
     @Published private(set) var assignedCollectionIds: [String] = []
+    @Published private(set) var sourceMoves: [SourceMovement] = []
     @Published var selectedCollectionId = ""
     @Published var selectedMembershipId = ""
 
@@ -139,7 +140,10 @@ final class Workbench: ObservableObject {
         send("intakeStatus", [:])
         send("library", fields)
         send("collections", ["limit": 100])
-        if let selected { send("topics", ["sourceId": selected.sourceId]) }
+        if let selected {
+            send("topics", ["sourceId": selected.sourceId])
+            send("sourceMoves", ["sourceId": selected.sourceId])
+        }
     }
 
     func pauseIntake(_ paused: Bool) {
@@ -214,10 +218,12 @@ final class Workbench: ObservableObject {
         preview = "Loading extracted text…"
         previewTarget = "\(item.itemId):\(item.revision)"
         assignedCollectionIds = []
+        sourceMoves = []
         topicProposals = []
         topicOutcome = "pending"
         send("preview", ["itemId": item.itemId, "revision": item.revision])
         send("sourceCollections", ["sourceId": item.sourceId])
+        send("sourceMoves", ["sourceId": item.sourceId])
         send("topics", ["sourceId": item.sourceId])
     }
 
@@ -287,6 +293,9 @@ final class Workbench: ObservableObject {
                 requests[id] = "preview:\(itemId):\(revision)"
             } else if action == "topics", let sourceId = fields["sourceId"] as? String {
                 requests[id] = "topics:\(sourceId)"
+            } else if action == "sourceMoves",
+                      let sourceId = fields["sourceId"] as? String {
+                requests[id] = "sourceMoves:\(sourceId)"
             } else if action == "sourceCollections",
                       let sourceId = fields["sourceId"] as? String {
                 requests[id] = "sourceCollections:\(sourceId)"
@@ -368,6 +377,10 @@ final class Workbench: ObservableObject {
                     send("sourceCollections", ["sourceId": source.sourceId])
                 }
                 refresh()
+            case let context where context.hasPrefix("sourceMoves:"):
+                if let selected, context == "sourceMoves:\(selected.sourceId)" {
+                    sourceMoves = reply.data?.moves ?? []
+                }
             case let context where context.hasPrefix("sourceCollections:"):
                 if let selected, context == "sourceCollections:\(selected.sourceId)" {
                     assignedCollectionIds = reply.data?.collectionIds ?? []

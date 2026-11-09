@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -19,7 +19,8 @@ public sealed partial class LocalCatalog : IDisposable
         ("source_collection_memberships", "collection_id, source_id, created_utc"),
         ("enrichment_runs", "item_id, revision, processor_key, source_digest, outcome, created_utc"),
         ("enrichment_proposals", "proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence, evidence_offset, status, correction, created_utc, reviewed_utc"),
-        ("enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc")
+        ("enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc"),
+        ("source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc")
     ];
 
     private readonly FileStream lockFile;
@@ -153,6 +154,13 @@ public sealed partial class LocalCatalog : IDisposable
                 enrichment.ExecuteNonQuery();
             }
 
+            if (version < 8)
+            {
+                using var movements = Command(database, ReadSchema("LocalCatalog.V8.sql"));
+                movements.Transaction = transaction;
+                movements.ExecuteNonQuery();
+            }
+
             transaction.Commit();
         }
 
@@ -246,7 +254,8 @@ public sealed partial class LocalCatalog : IDisposable
                 (version < 4 && name == "text_derivatives") ||
                 (version < 5 && name == "search_index_keys") ||
                 (version < 6 && name is "source_collections" or "source_collection_memberships") ||
-                (version < 7 && name is "enrichment_runs" or "enrichment_proposals" or "enrichment_reviews"))
+                (version < 7 && name is "enrichment_runs" or "enrichment_proposals" or "enrichment_reviews") ||
+                (version < 8 && name == "source_locator_moves"))
             {
                 continue;
             }

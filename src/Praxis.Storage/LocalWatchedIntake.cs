@@ -70,6 +70,7 @@ public sealed partial class LocalWatchedIntake
         {
             var files = intake.InspectFolder(root, MaximumFiles, MaximumDepth,
                 MaximumFolderBytes, cancellationToken);
+            var renameHashBytes = await ReconcileRenamesAsync(files, cancellationToken);
             var present = files.Select(file => file.SourcePath)
                 .ToHashSet(StringComparer.Ordinal);
             var removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
@@ -86,7 +87,7 @@ public sealed partial class LocalWatchedIntake
             }
 
             var imported = 0;
-            var remainingHashBytes = HashBudgetPerScan;
+            var remainingHashBytes = HashBudgetPerScan - renameHashBytes;
             foreach (var file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();

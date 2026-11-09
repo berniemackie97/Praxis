@@ -76,6 +76,11 @@ public sealed class LocalDesktopProtocol(
                     collectionIds = catalog.ListSourceCollectionIds(
                         ReadGuid(root, "sourceId"))
                 },
+                "sourceMoves" => new
+                {
+                    moves = catalog.ListSourceMovements(
+                        ReadGuid(root, "sourceId"), ReadInteger(root, "limit", 20, 1, 100))
+                },
                 "noteCapture" => new
                 {
                     capture = await (quickCapture ??

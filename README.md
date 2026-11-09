@@ -127,3 +127,8 @@ Under #115, the proposal foundation stores source/revision/digest-bound literal 
 ## Exporting preserved originals (L0 development)
 
 The first-party Library now has a draft owner-selected **Export original…** action for the exact active source version, backed by the content-addressed original store rather than the watched source file. It verifies SHA-256 while streaming to a new, non-overwriting destination. Supported and unsupported formats use the same path, and owner approval is required for each destination. This does not create a remote sharing API, an agent grant or a full catalog backup. See the [workbench smoke guide](docs/delivery/macos-workbench.md) and tracked [#166](https://github.com/berniemackie97/Praxis/issues/166). The new feature is not yet locally compiled/accepted.
+
+
+## Observed file moves (development)
+
+Praxis now has a draft opt-in-folder rename continuity implementation for already captured files. It preserves source identity only when a filesystem move event is independently verified against the current original digest and an unoccupied target; historical paths are recorded in schema v8. Copies and missed moves are not inferred as the same source. See [ADR 0025](docs/decisions/0025-file-source-relocations.md) for evidence limits, security and migration requirements. First-party and physical hardware acceptance remain open.

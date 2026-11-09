@@ -72,6 +72,15 @@ struct IntakeStatus: Decodable {
     let problem: String?
 }
 
+struct SourceMovement: Decodable, Identifiable {
+    let sourceId: String
+    let previousPath: String
+    let currentPath: String
+    let sha256: String
+    let recordedUtc: String
+    var id: String { "\(sourceId):\(recordedUtc):\(previousPath)" }
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
     let status: IntakeStatus?
@@ -80,6 +89,7 @@ struct ResponseData: Decodable {
     let collections: [SourceCollection]?
     let collection: SourceCollection?
     let collectionIds: [String]?
+    let moves: [SourceMovement]?
     let changed: Bool?
     let hits: [SearchHit]?
     let outcome: String?
