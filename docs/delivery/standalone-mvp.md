@@ -30,6 +30,10 @@ These are separate issue-sized implementation reviews, not an instruction to int
 
 **Local MVP exit test (#130):** While Praxis runs, automatically ingest files placed in an approved watched folder (without per-file commands); import a mixed folder (Markdown, text, selected PDF, image, video, code and unknown binary); preserve every accepted original byte and provenance; show unsupported processing; crash/restart/retry without duplicates; search supported text, inspect exact source, rebuild and delete the index; export/restore current originals; deny unauthorized or remote access. No Obsidian dependency, no silent external inference.
 
+## Status checkpoint — November 9, 2026
+
+Merged PRs #144, #145, #147 and #148 now provide a first macOS workbench with supervised automatic intake, named collections and direct note capture. These are implementation milestones, not proof of the end-to-end first-use acceptance: #130 remains open for owner-run macOS GUI and mixed-corpus/restart/recovery/security verification. #146 remains open for unverified collection acceptance even though its implementation is merged. CI status and hardware verification must be read live rather than inferred from merge state.
+
 ## Next capture experiences
 
 | Lane | Issues | Demonstrable outcome |
@@ -97,3 +101,14 @@ The app provides an optional title, a text editor, Command-Return save, explicit
 After source-preserving capture and owner collections are usable, the separately controlled agentic continuation is #115: version- and digest-fenced proposed tags/topics/summaries from eligible verified extracted content, human review and abstention, followed by #143's bounded source-attributed context packs and #117–#119's explicit agent grants. This does not block note capture when no model is installed.
 
 The parent workbench #108 and integrated release #130 remain open until an owner-facing end-to-end scenario passes on actual macOS hardware. This draft is not an executed UI build or green cross-platform CI.
+
+## Subsequent knowledge-intelligence and connected-history lanes
+
+The first local deliverable intentionally stops short of autonomous technical reasoning. The defining longer-term product objective is to turn authorized technical artifacts, ASM/decompilation, research, repositories and notes into a linked, evidence-grounded technical knowledge base, then answer questions that demand synthesis rather than filename lookup.
+
+- **L4 — Technical evidence and investigation:** #149/#152–#154 choose and implement bounded technical extraction, explicit claims and contradictions; #150/#155/#156 evaluate limited investigation loops, citations and abstention. #29/#31/#33/#97 remain the common retrieval/model/chat and review components.
+- **L5 — Connected history and interaction:** #151/#157 introduce typed provider events and replay-safe change history; #158 captures approved GitHub development history, #159 scoped local session transcripts, #162 investigates financial/social APIs and privacy; #160 is a separately approved tool proposal workflow, while #161 adds optional free local conversational voice.
+- **Cost policy:** deterministic extraction/event classification before model inference; measured local Ollama/Qwen path first; Claude/Codex only through supported, explicitly consented invocation with input/cost disclosure; no assumption that user subscriptions include API use.
+- **Security gate:** model output never grants authority. Provider accounts, local session histories and command execution require distinct, narrow, revocable consent. Sensitive financial and social account access remains a research decision, not a scheduled or implemented connector.
+
+Do not create a graph database, broad tool runtime, uncontrolled session monitor, provider marketplace or autonomous background agent before a measured vertical slice justifies it. The owner can use L0 entirely offline with no AI provider; L4/L5 only exit when proven against real authorized cases.
