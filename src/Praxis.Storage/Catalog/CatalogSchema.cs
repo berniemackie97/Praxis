@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 11;
+    internal const int CurrentVersion = 12;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -23,7 +23,9 @@ internal static class CatalogSchema
         (8, "source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc"),
         (10, "processing_jobs", "priority"),
         (10, "text_segments", "item_id, revision, processor_key, ordinal, start_offset, length, heading_path"),
-        (11, "model_profiles", "role, provider, endpoint, model, context_tokens, enabled, updated_utc")
+        (11, "model_profiles", "role, provider, endpoint, model, context_tokens, enabled, updated_utc"),
+        (12, "enrichment_proposals", "entity_type, evidence_length"),
+        (12, "enrichment_runs", "model_provider, model_name, model_digest, input_tokens, output_tokens, duration_ms, segments_examined, segments_total, rejected_count")
     ];
 
     internal static void Prepare(SqliteConnection database)
@@ -53,23 +55,7 @@ internal static class CatalogSchema
 
         if (version < CurrentVersion)
         {
-            using var transaction = database.BeginTransaction();
-            for (var target = version + 1; target <= CurrentVersion; target++)
-            {
-                var resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
-                using var migration = database.CreateCommand(ReadSchema(resource));
-                migration.Transaction = transaction;
-                migration.ExecuteNonQuery();
-            }
-
-            using var versionCheck = database.CreateCommand("PRAGMA user_version");
-            versionCheck.Transaction = transaction;
-            if (Convert.ToInt32(versionCheck.ExecuteScalar()) != CurrentVersion)
-            {
-                throw new InvalidDataException("The catalog migration did not reach the expected version.");
-            }
-
-            transaction.Commit();
+            Migrate(database, version);
         }
 
         VerifySchema(database, CurrentVersion);
@@ -86,6 +72,51 @@ internal static class CatalogSchema
             Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
         {
             throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
+        }
+    }
+
+    /// <summary>
+    /// Applies pending migrations in one transaction using SQLite's documented table-rebuild
+    /// procedure: foreign keys are disabled for the batch (the pragma cannot change inside a
+    /// transaction), every reference is verified with foreign_key_check before commit, and
+    /// enforcement is restored whether or not the upgrade succeeds.
+    /// </summary>
+    private static void Migrate(SqliteConnection database, int version)
+    {
+        Execute(database, "PRAGMA foreign_keys = OFF");
+        try
+        {
+            using var transaction = database.BeginTransaction();
+            for (var target = version + 1; target <= CurrentVersion; target++)
+            {
+                var resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
+                using var migration = database.CreateCommand(ReadSchema(resource));
+                migration.Transaction = transaction;
+                migration.ExecuteNonQuery();
+            }
+
+            using var versionCheck = database.CreateCommand("PRAGMA user_version");
+            versionCheck.Transaction = transaction;
+            if (Convert.ToInt32(versionCheck.ExecuteScalar()) != CurrentVersion)
+            {
+                throw new InvalidDataException("The catalog migration did not reach the expected version.");
+            }
+
+            using var references = database.CreateCommand("PRAGMA foreign_key_check");
+            references.Transaction = transaction;
+            using (var violation = references.ExecuteReader())
+            {
+                if (violation.Read())
+                {
+                    throw new InvalidDataException("The catalog migration left invalid foreign key references.");
+                }
+            }
+
+            transaction.Commit();
+        }
+        finally
+        {
+            Execute(database, "PRAGMA foreign_keys = ON");
         }
     }
 
