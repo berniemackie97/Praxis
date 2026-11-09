@@ -58,6 +58,41 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task TechnicalFilesDroppedIntoInboxAreIndexedAndRemainAvailableAfterRestart()
+    {
+        var codePath = Path.Combine(inbox, "C3Reader.cs");
+        var dumpPath = Path.Combine(inbox, "C3Dump.asm");
+        var opaquePath = Path.Combine(inbox, "packed.bin");
+        File.WriteAllText(codePath, "public sealed class C3ChunkReader {}");
+        File.WriteAllText(dumpPath, "C3ChunkReader PROC\\nRET\\nC3ChunkReader ENDP");
+        File.WriteAllBytes(opaquePath, [0, 255, 1]);
+
+        LocalSearchHit[] indexed;
+        var time = DateTimeOffset.UtcNow;
+        using (var catalog = LocalCatalog.Open(dataRoot))
+        {
+            var watcher = NewMonitor(catalog);
+            Assert.Equal(0, await watcher.ReconcileAsync(time));
+            Assert.Equal(3, await watcher.ReconcileAsync(time.AddSeconds(2)));
+            indexed = catalog.SearchText("C3ChunkReader").ToArray();
+            Assert.Equal(2, indexed.Length);
+            Assert.All(indexed, hit => Assert.Equal(1, hit.Revision));
+            Assert.Equal("unsupported", catalog.ListLibrary().Single(
+                item => item.SourceLocator == opaquePath).ExtractionOutcome);
+            foreach (var hit in indexed)
+            {
+                await catalog.VerifyOriginalAsync(hit.ItemId);
+            }
+        }
+
+        using var reopened = LocalCatalog.Open(dataRoot);
+        var restored = reopened.SearchText("C3ChunkReader");
+        Assert.Equal(indexed.Select(hit => hit.SourceId).OrderBy(id => id),
+            restored.Select(hit => hit.SourceId).OrderBy(id => id));
+        Assert.Equal(3, reopened.ListLibrary().Count);
+    }
+
+    [Fact]
     public async Task ContentUpdatesPreserveSourceIdentityAndInvalidatePreviousSearch()
     {
         var path = Path.Combine(inbox, "changing.txt");
