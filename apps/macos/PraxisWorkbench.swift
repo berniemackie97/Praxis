@@ -157,6 +157,25 @@ final class Workbench: ObservableObject {
         }
     }
 
+    func selectCollection(_ collectionId: String) {
+        guard selectedCollectionId != collectionId else { return }
+        selectedCollectionId = collectionId
+        page = 0
+        refresh()
+    }
+
+    func setBudgetMonth(_ month: Int) {
+        guard budgetMonth != month else { return }
+        budgetMonth = month
+        clearBudgetResults()
+    }
+
+    func setBudgetYear(_ year: Int) {
+        guard budgetYear != year else { return }
+        budgetYear = year
+        clearBudgetResults()
+    }
+
     func pauseIntake(_ paused: Bool) {
         send("intakePause", ["paused": paused])
     }

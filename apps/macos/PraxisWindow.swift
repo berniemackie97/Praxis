@@ -139,15 +139,14 @@ struct PraxisWindow: View {
                     Button("New note") { section = 1 }
                     Button("Refresh") { model.refresh() }
                 }
-                Picker("Collection", selection: $model.selectedCollectionId) {
+                Picker("Collection", selection: Binding(
+                    get: { model.selectedCollectionId },
+                    set: { model.selectCollection($0) }
+                )) {
                     Text("All sources").tag("")
                     ForEach(model.collections) { collection in
                         Text(collection.name).tag(collection.collectionId)
                     }
-                }
-                .onChange(of: model.selectedCollectionId) { _ in
-                    model.page = 0
-                    model.refresh()
                 }
                 if model.items.isEmpty {
                     Text("No captured sources in this view yet.")
@@ -430,12 +429,18 @@ struct PraxisWindow: View {
             }
 
             HStack {
-                Picker("Month", selection: $model.budgetMonth) {
+                Picker("Month", selection: Binding(
+                    get: { model.budgetMonth },
+                    set: { model.setBudgetMonth($0) }
+                )) {
                     ForEach(1...12, id: \.self) { month in
                         Text("\(month)").tag(month)
                     }
                 }.frame(width: 120)
-                Stepper("Year: \(model.budgetYear)", value: $model.budgetYear, in: 2000...2100)
+                Stepper("Year: \(model.budgetYear)", value: Binding(
+                    get: { model.budgetYear },
+                    set: { model.setBudgetYear($0) }
+                ), in: 2000...2100)
                     .frame(width: 180)
                 Button("Analyze selected CSV") { model.analyzeSelectedBudget() }
                     .disabled(model.selected?.sourceStatus != "active" ||
@@ -542,8 +547,6 @@ struct PraxisWindow: View {
             }
             Spacer(minLength: 0)
         }
-        .onChange(of: model.budgetMonth) { _ in model.clearBudgetResults() }
-        .onChange(of: model.budgetYear) { _ in model.clearBudgetResults() }
     }
 
     private var collectionManagement: some View {
@@ -567,16 +570,19 @@ struct PraxisWindow: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Picker("Edit collection", selection: $editingCollectionId) {
+            Picker("Edit collection", selection: Binding(
+                get: { editingCollectionId },
+                set: { id in
+                    editingCollectionId = id
+                    renameCollectionName = model.collections.first(where: {
+                        $0.collectionId == id
+                    })?.name ?? ""
+                }
+            )) {
                 Text("Choose…").tag("")
                 ForEach(model.collections) { collection in
                     Text(collection.name).tag(collection.collectionId)
                 }
-            }
-            .onChange(of: editingCollectionId) { id in
-                renameCollectionName = model.collections.first(where: {
-                    $0.collectionId == id
-                })?.name ?? ""
             }
             HStack {
                 TextField("Collection name", text: $renameCollectionName)
