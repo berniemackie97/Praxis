@@ -207,6 +207,16 @@ public sealed class LocalSourceIntakeTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             intake.ImportFileAsync(insideFile, 10, "linked-file"));
 
+        var relay = Path.Combine(workspace, "relay");
+        Directory.CreateDirectory(relay);
+        Directory.CreateSymbolicLink(Path.Combine(relay, "store"), dataRoot);
+        var nestedAlias = Path.Combine(workspace, "nested-alias");
+        Directory.CreateSymbolicLink(nestedAlias, Path.Combine(relay, "store"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            intake.ImportFileAsync(Path.Combine(nestedAlias, "objects",
+                captured.Sha256[..2], captured.Sha256[2..4], captured.Sha256),
+                10, "nested-linked-file"));
+
         Assert.Single(catalog.ListProcessingJobs());
         await catalog.VerifyOriginalAsync(captured.ItemId);
     }
