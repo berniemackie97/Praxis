@@ -213,6 +213,20 @@ struct PraxisWindow: View {
                             .disabled(!model.assignedCollectionIds
                                 .contains(model.selectedMembershipId))
                     }
+                    if !model.sourceMoves.isEmpty {
+                        DisclosureGroup("Observed file moves (\(model.sourceMoves.count))") {
+                            ForEach(model.sourceMoves) { move in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(move.previousPath).font(.caption).textSelection(.enabled)
+                                    Text("Moved to: \(move.currentPath)")
+                                        .font(.caption).textSelection(.enabled)
+                                    Text("Digest \(move.sha256) · \(move.recordedUtc)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                        }
+                    }
                     topicReview
                     Text("Extracted text preview").font(.headline)
                     ScrollView {
