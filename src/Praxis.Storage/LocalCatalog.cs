@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -14,7 +14,9 @@ public sealed partial class LocalCatalog : IDisposable
         ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
         ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code"),
         ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc"),
-        ("search_index_keys", "rowid, item_id, revision, source_id")
+        ("search_index_keys", "rowid, item_id, revision, source_id"),
+        ("source_collections", "collection_id, name, name_key, created_utc, archived_utc"),
+        ("source_collection_memberships", "collection_id, source_id, created_utc")
     ];
 
     private readonly FileStream lockFile;
@@ -127,9 +129,20 @@ public sealed partial class LocalCatalog : IDisposable
                 extraction.ExecuteNonQuery();
             }
 
-            using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
-            search.Transaction = transaction;
-            search.ExecuteNonQuery();
+            if (version < 5)
+            {
+                using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
+                search.Transaction = transaction;
+                search.ExecuteNonQuery();
+            }
+
+            if (version < 6)
+            {
+                using var collections = Command(database, ReadSchema("LocalCatalog.V6.sql"));
+                collections.Transaction = transaction;
+                collections.ExecuteNonQuery();
+            }
+
             transaction.Commit();
         }
 
@@ -220,7 +233,8 @@ public sealed partial class LocalCatalog : IDisposable
         {
             if ((version < 3 && name == "processing_jobs") ||
                 (version < 4 && name == "text_derivatives") ||
-                (version < 5 && name == "search_index_keys"))
+                (version < 5 && name == "search_index_keys") ||
+                (version < 6 && name is "source_collections" or "source_collection_memberships"))
             {
                 continue;
             }
