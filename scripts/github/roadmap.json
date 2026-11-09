@@ -33,7 +33,7 @@
     {
       "stage": "M5",
       "title": "M5 — Authorized intelligence",
-      "description": "Source-grounded, owner-approved multimodal personal intelligence: technical claims and relationships, timecoded media evidence, typed financial budgeting, hybrid retrieval and citations, constrained task execution, local-first inference and authorized provider routing. Integrated MVP owner-run release gate #170."
+      "description": "General-purpose grounded knowledge intelligence and agentic reasoning across supported technical, multimedia and structured personal sources; evaluated answers and artifacts, authorized tasks and source-aware citations. True cross-domain MVP gate #170."
     },
     {
       "stage": "M6",
@@ -639,13 +639,13 @@
       108
     ],
     "170": [
+      130,
       29,
       31,
       32,
       33,
       115,
       116,
-      130,
       143,
       149,
       150,
@@ -678,19 +678,23 @@
       143
     ],
     "177": [
-      114,
-      181,
       29,
-      33,
-      32,
-      166
-    ],
-    "178": [
-      184,
       31,
       32,
       33,
-      173
+      103,
+      106,
+      114,
+      166,
+      181
+    ],
+    "178": [
+      32,
+      33,
+      103,
+      115,
+      173,
+      184
     ],
     "179": [
       177,
@@ -819,8 +823,6 @@
     "129": "security",
     "136": "knowledge",
     "177": "clients",
-    "178": "intelligence",
-    "179": "intelligence",
     "181": "retrieval",
     "184": "knowledge"
   },
@@ -1058,20 +1060,19 @@
     },
     {
       "id": "L4",
-      "name": "Core MVP: source-grounded cross-domain knowledge and investigations",
+      "name": "Core MVP: cross-domain evidence and bounded investigations",
       "issues": [
         149,
+        150,
         152,
         153,
         154,
-        150,
         155,
         156,
         181,
-        184,
-        176
+        184
       ],
-      "exit": "Given an authorized representative collection spanning technical artifacts, captioned video and structured monthly finance records, Praxis builds versioned evidence and reviewable relationships, retrieves supported textual/temporal/typed facts and produces bounded source-cited multi-step investigations or abstentions. No invented media timestamps, amounts or automatic model permission."
+      "exit": "Given owner-approved technical, captioned video and structured financial sources, build versioned evidence, retrieve explicit source/text/time/record selectors, and perform bounded cited investigations or abstain. Validate changes, revocation, privacy, no fabricated timestamps or amounts and measured resource limits."
     },
     {
       "id": "L5",
@@ -1089,7 +1090,7 @@
     },
     {
       "id": "L6",
-      "name": "Integrated intelligent Second Brain MVP acceptance",
+      "name": "Integrated general-purpose intelligent Second Brain MVP",
       "issues": [
         31,
         32,
@@ -1104,11 +1105,12 @@
         171,
         172,
         173,
+        176,
         177,
         178,
         179
       ],
-      "exit": "Owner-run end-to-end proof spanning three domain workflows: technical cross-file research, a playable timecoded video tutorial excerpt with full-source navigation, and an evidence-backed monthly income/bills/spending budget with reviewable reductions. Demonstrate first-party persistent chat, scoped task execution, source spans and financial rows, Obsidian views, reviewed agent context, measured local-first inference and authorized optional escalation; pass resilience, privacy and cost controls."
+      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured provider escalation, and reliability/privacy/revocation/cost tests."
     }
   ]
 }

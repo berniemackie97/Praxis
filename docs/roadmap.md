@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-Praxis is delivered through verifiable capability gates, not arbitrary dates. **Milestone numbers classify outcomes, not execution order.** A dependable local Praxis application is the immediate foundation; **the actual MVP is an integrated agent-powered, source-grounded Second Brain (#170)**, including Obsidian-accessible derived knowledge, governed tools and cost-aware inference. Remote multi-device sync and general account connectors remain separate; the actual MVP nevertheless includes local supported video evidence playback and personal budgeting from owner-authorized financial exports. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
+Praxis is delivered through verifiable capability gates, not arbitrary dates. **Milestone numbers classify outcomes, not execution order.** A dependable local Praxis application is the immediate foundation; **the actual MVP is an integrated agent-powered, source-grounded Second Brain (#170)**, including Obsidian-accessible derived knowledge, governed tools and cost-aware inference. Remote multi-device sync and unrelated account connectors remain separate. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
 
 ## Milestone portfolio
 
@@ -56,27 +56,17 @@ Finish the threat/host/key/recovery decisions (#13/#15/#50) and versioned confli
 
 The owner's MVP is **not** satisfied by #130's capture, file browsing and keyword search. #130 is an enabling L0 acceptance checkpoint. The actual first release requires:
 
-- **Interpret and relate:** #149/#152–#154 plus #115/#116 extract supported project/source/ASM/format knowledge, version, provenance, contradictions and reviewable claims.
-- **Reason and answer:** #29/#33/#150/#155/#156/#172 prove evaluated hybrid/structural retrieval, bounded agentic investigation, exact claim-level citations, uncertainty, no-answer and revocation cases on a real authorized corpus.
+- **Interpret and relate across modalities:** #149/#152–#154 and #176/#177/#178 plus #115/#116 extract supported code/ASM concepts, time-aligned video moments and structured bills/income/transactions into versioned, provenance-rich, permissioned knowledge, without treating uncertain inferred claims as fact.
+- **Reason and answer:** #29/#33/#150/#155/#156/#172/#179 prove evaluated retrieval/investigation across *three* domain gold sets, with exact text/symbol/time-range/record citations, honest uncertainty, no-answer and revocation behavior.
 - **Efficient agents:** #143 provides task-scoped, hierarchically organized, versioned context packs and owner-reviewed root/nested `AGENTS.md` or tool-specific projections. Generated instructions never bypass consent or read unapproved data.
 - **Local-first inference and escalation:** #31/#172 benchmark Ollama on actual local hardware, choose a measured retrieval+reasoning pipeline, and independently authorize supported Claude/Codex/Gemini/Grok/DeepSeek providers where available; enforce token/context/cost budgets, caching/invalidation, fallback policy and explicit disclosure.
 - **Ask and do:** #33/#32/#34/#160/#173 support first-party persistent chat, planned bounded actions, tool discovery proposals, independent approval, progress, cancellation and auditable verification.
 - **Obsidian companion:** #57/#171 publish owner-approved, linked and provenance-grounded Markdown views into a selected vault without destructive conflicts or a competing canonical store.
-- **Real release gate:** #170 demonstrates these as one product on the owner's Mac with independently verified technical research, source-cited playable video excerpts, grounded monthly budget planning and one approved task; failure, injection, data recovery, revocation and cost/latency evidence are mandatory.
+- **Real release gate:** #170 demonstrates these as one product on the owner's Mac: cited technical answers; directly playable tutorial segments in chat with full-video access; an editable and numerically verified monthly budget from authorized records; and one approved task. Failure, injection, data recovery, revocation and cost/latency evidence are mandatory.
+
+The MVP includes feature [#176](https://github.com/berniemackie97/Praxis/issues/176) (multimodal and structured domain understanding), with [#177](https://github.com/berniemackie97/Praxis/issues/177) video clips, [#178](https://github.com/berniemackie97/Praxis/issues/178) financial budgeting and [#179](https://github.com/berniemackie97/Praxis/issues/179) cross-domain evaluation. Technical research is one representative use case, not the product boundary.
 
 This is an **end-to-end vertical slice at production quality**, not a requirement to support all possible files, models, connected services or devices on day one. Foundational L0 remains the next blocking engineering gate, but the roadmap must not claim MVP completion there.
-
-### Mandatory multi-domain acceptance (owner clarification, November 9, 2026)
-
-The technical corpus is **an example**, not a specialization of Praxis. The actual release gate #170 additionally requires:
-
-| Domain | MVP workflow | Critical path |
-| --- | --- | --- |
-| Technical knowledge | Cross-file research, cited source spans, verified contradictions and an executable owner-approved output | #149/#150/#152–#156 |
-| Media | Search an authorized captioned video, play the exact cited excerpt inside chat and open the verified full original | #114/#176/#181/#177 |
-| Personal finance | Reconcile authorized income, bills and spending; explain meaningful cost cuts and draft a balanced editable monthly budget with row citations | #176/#184/#178 |
-
-A narrow proven supported set is acceptable. Not required for first release: video comprehension without a supported transcript, arbitrary codecs, universal provider connectors, banking credentials/aggregators, cross-device sync, automatic money movement, or unreviewed AI-generated calculations. This **does not** reduce the required actual clip playback, budgeting, grounded reasoning, or independent permission controls.
 
 ## Quality gates
 

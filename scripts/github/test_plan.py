@@ -94,9 +94,9 @@ class RoadmapValidationTests(unittest.TestCase):
         for number in (176, 177, 178, 179, 181, 184, 114):
             self.assertEqual("P1", items[number]["priority"])
         self.assertEqual({103, 106, 114}, dependencies[181])
-        self.assertEqual({181, 114, 29, 33, 32, 166}, dependencies[177])
+        self.assertEqual({181, 114, 103, 106, 29, 31, 33, 32, 166}, dependencies[177])
         self.assertEqual({102, 103, 129}, dependencies[184])
-        self.assertEqual({184, 31, 32, 33, 173}, dependencies[178])
+        self.assertEqual({184, 103, 115, 31, 32, 33, 173}, dependencies[178])
         self.assertEqual({177, 178, 156, 29}, dependencies[179])
         self.assertIn(176, dependencies[170])
         self.assertIn(179, dependencies[170])

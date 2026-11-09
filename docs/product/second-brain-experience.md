@@ -8,9 +8,9 @@ Praxis is a local-first **personal knowledge intelligence and agent platform** t
 
 **Owner decision (November 9, 2026):** The first product release must be an integrated, production-quality, agent-powered system. A functional Inbox, local text index or collection browser alone is a foundational delivery checkpoint (#130), not an MVP release. The cross-stage acceptance gate is **#170**.
 
-One representative **technical** workflow (not the limit of the product):
+A representative set of owner workflows (all required at the supported MVP scope):
 
-1. Open Praxis on a Mac; designate a local root and import a versioned corpus of projects, source code, assembly/disassembly exports, technical notes and format documents. Automatic capture/reconciliation preserves originals and exact lineage.
+1. Open Praxis on a Mac; designate a local root and import a mixed personal knowledge corpus: technical projects and notes, an instructional video, and explicitly provided bills/income/transaction records. Automatic capture/reconciliation preserves originals and exact lineage.
 2. Deterministic parsers and approved local agents extract, classify, normalize and **correlate** supported entities, structures, claims and relationships. No document or model hallucination becomes canonical fact; unrecognized formats remain explicit. Reprocessing corrects derived outputs and preserves reviewed owner decisions.
 3. Build quality-evaluated lexical/semantic/structural retrieval, selective evidence expansion, reranking where measured useful, and tool-assisted bounded investigations. Ask a complex domain question; get a specific supported explanation, traceable source/version/span references and transparent disagreement/abstention, not a file list.
 4. Use a **persistent first-party Praxis assistant** to ask questions or request tasks. Inspect scope, plan, tool arguments, model/location, budget, progress, verification and audit; approve/revoke side effects. The model never grants itself permission.
@@ -18,9 +18,19 @@ One representative **technical** workflow (not the limit of the product):
 6. Browse a **linked, provenance-aware derived Markdown representation in Obsidian**, and optionally export inspected, versioned, task-specific context packs for coding agents. Root/nested `AGENTS.md` and provider-specific context instructions are **reviewed projections**, not authority granted by imported source text; avoid floods of repetitive context.
 7. Pass audited correctness, retrieval, prompt-injection, resource, backup/recovery, permission, privacy and real macOS workflows with concrete benchmark fixtures and reproducible run evidence. Production-grade is a testable engineering bar; no model can guarantee perfect understanding of arbitrary input.
 
-**Delivery ownership:** #170 integrated acceptance; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+### Cross-domain MVP proof — not technical-only
 
-**First release boundary:** one owner, one local machine, a representative technical corpus, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
+**Technical research** is one vertical slice, not the architecture's defining specialization. Two additional concrete, mandatory MVP experiences:
+
+- **Video / tutorial retrieval (#176/#177):** Praxis captures a supported local instructional video, builds time-aligned transcript and source-aware segments (and visual evidence only when implemented), and answers "Is there a tutorial on X?" with a relevant **inline playable segment in first-party chat**. Show accurate segment boundaries, the source's identity, and a jump to the full original video at the precise timestamp. A random frame, transcript-only link or invented timestamp does not pass.
+- **Financial planning (#176/#178):** From explicitly imported income, bills and transaction exports, Praxis reconciles recurring and variable costs, deterministically calculates month-scoped totals, highlights potential savings with assumptions, and generates an **editable, verifiable monthly budget** linked to the underlying records. Handle duplicates, account transfers, refunds, missing data, permissions and private-content disclosure. A live banking API is *not* required; it remains separately permissioned and subject to provider availability.
+- **Shared evaluation (#179):** Test technical citations, video segment retrieval/playback and finance arithmetic as separate gold-standard workflows against the **same core evidence, permissions, versioning, routing, RAG and agent architecture**, with domain-specific extractors and output widgets only where warranted.
+
+The product must ultimately support many more types and sources—audio, images, email, calendars, social media, structured events—but the MVP proves **general-purpose extensibility by actually delivering these different workloads**, not by promising universal comprehension. Sensitive local financial data is never sent to remote inference without separately scoped explicit consent. Financial calculation is deterministic; probabilistic models may propose interpretations or budget scenarios, not fabricate totals.
+
+**Delivery ownership:** #170 cross-domain integrated acceptance; video and financial feature #176/#177/#178 and evaluation #179; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+
+**First release boundary:** one owner, one local machine, representative supported technical, video and financial corpora, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
 
 ## Core experience
 
@@ -134,18 +144,6 @@ Praxis has its own chat/assistant user experience (#33), not merely file browsin
 Prefer deterministic processing and a measured local inference backend (for example an already-installed Qwen model via Ollama) for routine tasks; optional stronger remote reasoning is explicitly user-approved per source and operation, with disclosure of destination and usage. Claude/Codex subscriptions are not presumed to grant unrestricted API access. No remote model is an automatic fallback. Preserve a no-model ingest and local search path.
 
 Beyond note dictation (#109/#110), later first-party push-to-talk interaction (#161) can use free offline STT/TTS with clear microphone control and text fallback; spoken instructions cannot silently approve sensitive actions. The product must remain useful without audio hardware or any paid inference/voice service.
-
-## Mandatory cross-domain MVP workflows
-
-Technical research is only one example of what Praxis must handle. The common contract is **authorized source → verified originals → typed/timecoded/semantic evidence → linked provenance → evaluated retrieval → cited assistant response → approved action**. The processing mechanism varies by source type; the authorization, revision/revocation, budgets, corrections and answer-quality principles do not.
-
-**Video tutorial question (feature #176, story #177 and implementation #181):** Import a supported video and an authorized timestamped transcript/sidecar. A question such as “Is there a tutorial showing how to do this?” can find the relevant spoken/explained moment, cite original video and caption source/version/digest/producer with exact time range, and **play only that excerpt inside the chat**. The response offers seek/play and a way to open/inspect the verified full media and transcript. No made-up timestamp, thumbnail-only search or unrelated filename match counts. Unsupported codecs, untranscribed media, conflicting cues, revoked/edited media, privacy denial and missing clips must be visible. A limited caption-backed MVP may start without automatic transcription of every video; that does not remove the in-chat playback requirement.
-
-**Personal budget question (feature #176, story #178 and implementation #184):** Import owner-approved structured income, bill and transaction exports (initially a local documented CSV profile; live banking credentials and paid aggregators not required). Given “Break down my bills and income, tell me what to cut and produce an optimized budget this month,” deterministic money calculations separate posted actuals, unpaid planned bills, pending items, refunds and transfers. The agent cites individual source rows, discloses missing accounts/uncertain recurrence, proposes editable discretionary cuts based on owner objectives, verifies that the budget balances, and requests approval before saving a file or performing any other side effect. No invisible bank connection, cloud disclosure, financial action or unsupported guarantee.
-
-**Technical investigation (features #149/#150):** Existing C#/C++/ASM research is the third acceptance fixture, requiring structural findings, versioned evidence, contradictory claims and grounded parser or algorithm explanations. It is not the whole MVP.
-
-Each workflow must operate on an owner-approved representative corpus, with adversarial/incomplete cases and quantitative answer/retrieval and resource evidence. The same persistent first-party assistant and independently enforced permissions serve all three. #170 stays open until the **three-domain integrated demonstration** passes in merged code on the owner's Mac.
 
 ## Foundational local demonstration (#130; not the complete MVP)
 
