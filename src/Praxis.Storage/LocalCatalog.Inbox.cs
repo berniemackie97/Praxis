@@ -45,6 +45,11 @@ public sealed partial class LocalCatalog
                 limit is < 1 or > 200 ? nameof(limit) : nameof(offset));
         }
 
+        if (collectionId == Guid.Empty)
+        {
+            throw new ArgumentException("A nonempty collection identifier is required.", nameof(collectionId));
+        }
+
         lock (connection)
         {
             using var command = Command(connection, """
@@ -79,7 +84,7 @@ public sealed partial class LocalCatalog
             command.Parameters.AddWithValue("$limit", limit);
             command.Parameters.AddWithValue("$offset", offset);
             command.Parameters.AddWithValue("$collection",
-                collectionId is null ? DBNull.Value : collectionId.Value.ToString("D"));
+                collectionId.HasValue ? (object)collectionId.Value.ToString("D") : DBNull.Value);
             using var reader = command.ExecuteReader();
             var result = new List<LocalLibraryItem>();
             while (reader.Read())
