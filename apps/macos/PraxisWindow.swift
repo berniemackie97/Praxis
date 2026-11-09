@@ -263,6 +263,12 @@ struct PraxisWindow: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Candidates come from literal Markdown headings, not a model. Reviewing them does not rewrite a source or assign a collection.")
                     .font(.caption).foregroundStyle(.secondary)
+                Text("Processing: \(model.topicOutcome)")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.topicProposals.isEmpty {
+                    Text("No reviewable heading candidates yet. Praxis may be waiting for extraction, abstaining, or handling an unsupported source.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(model.topicProposals) { proposal in

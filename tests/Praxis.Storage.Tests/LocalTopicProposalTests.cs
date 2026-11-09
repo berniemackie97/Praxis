@@ -33,6 +33,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         var proposer = new LocalTopicProposer(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
+        Assert.Equal("generated", catalog.TopicProcessingOutcome(captured.SourceId));
 
         var proposals = catalog.ListTopicProposals(captured.SourceId);
         Assert.Equal(new[] { "Architecture", "Runtime" }, proposals.Select(p => p.Value).ToArray());
@@ -73,6 +74,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.Equal(first.ItemId, revised.ItemId);
         Assert.Equal(2, revised.Revision);
         Assert.Empty(catalog.ListTopicProposals(first.SourceId));
+        Assert.Equal("pending", catalog.TopicProcessingOutcome(first.SourceId));
         Assert.False(catalog.ReviewTopicProposal(old.ProposalId, "rejected"));
         Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
         Assert.True(new LocalTopicProposer(catalog).ProcessNext());
@@ -83,6 +85,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.Equal(1L, Scalar("SELECT COUNT(*) FROM enrichment_reviews"));
 
         Assert.True(catalog.RevokeSource(first.SourceId));
+        Assert.Equal("unavailable", catalog.TopicProcessingOutcome(first.SourceId));
         Assert.Empty(catalog.ListTopicProposals(first.SourceId));
         Assert.False(catalog.ReviewTopicProposal(current.ProposalId, "accepted"));
         Assert.Equal(2L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));
@@ -106,6 +109,8 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.False(proposer.ProcessNext());
         Assert.Empty(catalog.ListTopicProposals(empty.SourceId));
         Assert.Empty(catalog.ListTopicProposals(plain.SourceId));
+        Assert.Equal("abstained", catalog.TopicProcessingOutcome(empty.SourceId));
+        Assert.Equal("pending", catalog.TopicProcessingOutcome(plain.SourceId));
         Assert.Equal("abstained", Scalar(
             "SELECT outcome FROM enrichment_runs WHERE item_id = '" + empty.ItemId + "'"));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));

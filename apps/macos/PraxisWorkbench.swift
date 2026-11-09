@@ -7,6 +7,7 @@ final class Workbench: ObservableObject {
     @Published private(set) var items: [LibraryItem] = []
     @Published private(set) var collections: [SourceCollection] = []
     @Published private(set) var topicProposals: [TopicProposal] = []
+    @Published private(set) var topicOutcome = "pending"
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published var selectedCollectionId = ""
     @Published var selectedMembershipId = ""
@@ -199,6 +200,7 @@ final class Workbench: ObservableObject {
         previewTarget = "\(item.itemId):\(item.revision)"
         assignedCollectionIds = []
         topicProposals = []
+        topicOutcome = "pending"
         send("preview", ["itemId": item.itemId, "revision": item.revision])
         send("sourceCollections", ["sourceId": item.sourceId])
         send("topics", ["sourceId": item.sourceId])
@@ -331,6 +333,7 @@ final class Workbench: ObservableObject {
             case let context where context.hasPrefix("topics:"):
                 if let selected, context == "topics:\(selected.sourceId)" {
                     topicProposals = reply.data?.proposals ?? []
+                    topicOutcome = reply.data?.outcome ?? "unavailable"
                 }
             case "topicReview":
                 message = reply.data?.reviewed == true

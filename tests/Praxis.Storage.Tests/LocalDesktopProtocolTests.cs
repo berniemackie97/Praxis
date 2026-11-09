@@ -208,6 +208,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal("Evidence Topic", proposal.GetProperty("value").GetString());
         Assert.Equal(captured.Sha256, proposal.GetProperty("sourceSha256").GetString());
         Assert.Equal("markdown-heading-v1", proposal.GetProperty("producer").GetString());
+        Assert.Equal("generated", listing.RootElement.GetProperty("data")
+            .GetProperty("outcome").GetString());
 
         using var approved = await Send(protocol,
             $"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");
