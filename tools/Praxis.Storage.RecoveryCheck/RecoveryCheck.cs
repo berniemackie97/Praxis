@@ -196,6 +196,14 @@ internal static class RecoveryCheck
             .Where(d => d.IsReady)
             .OrderByDescending(d => d.RootDirectory.FullName.Length)
             .FirstOrDefault(d => IsWithinDrive(path, d.RootDirectory.FullName));
+        if (OperatingSystem.IsMacOS() &&
+            path.StartsWith("/Volumes/", StringComparison.Ordinal) &&
+            (drive is null ||
+             !drive.RootDirectory.FullName.StartsWith("/Volumes/", StringComparison.Ordinal)))
+        {
+            throw new IOException("The selected external volume is not mounted.");
+        }
+
         var required = checked(LargeBytes * 4 + 1024L * 1024 * 1024);
         if (drive is null || drive.AvailableFreeSpace < required)
         {
