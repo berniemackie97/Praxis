@@ -201,7 +201,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var protocol = new LocalDesktopProtocol(catalog);
 
         using var listing = await Send(protocol,
-            $"""{"requestId":"topics","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
+            $$"""{"requestId":"topics","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
         Assert.True(listing.RootElement.GetProperty("ok").GetBoolean());
         var proposal = listing.RootElement.GetProperty("data").GetProperty("proposals")[0];
         var id = proposal.GetProperty("proposalId").GetString()!;
@@ -212,25 +212,25 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             .GetProperty("outcome").GetString());
 
         using var approved = await Send(protocol,
-            $"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");
+            $$"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");
         Assert.True(approved.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         using var correction = await Send(protocol,
-            $"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
+            $$"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
         Assert.True(correction.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         Assert.Equal("Verified owner topic",
             Assert.Single(catalog.ListTopicProposals(captured.SourceId)).Correction);
 
         using var invalid = await Send(protocol,
-            $"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");
+            $$"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
 
         Assert.True(catalog.RevokeSource(captured.SourceId));
         using var withheld = await Send(protocol,
-            $"""{"requestId":"withheld","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
+            $$"""{"requestId":"withheld","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
         Assert.Equal(0, withheld.RootElement.GetProperty("data")
             .GetProperty("proposals").GetArrayLength());
         using var stale = await Send(protocol,
-            $"""{"requestId":"stale","action":"topicReview","proposalId":"{{id}}","decision":"rejected"}""");
+            $$"""{"requestId":"stale","action":"topicReview","proposalId":"{{id}}","decision":"rejected"}""");
         Assert.False(stale.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         await catalog.VerifyOriginalAsync(captured.ItemId);
     }
@@ -276,12 +276,15 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
 
         Assert.True(catalog.RevokeSource(captured.SourceId));
-        using var revoked = await Send(protocol,
-            JsonSerializer.Serialize(new {
-                requestId = "denied", action = "exportOriginal",
-                itemId = captured.ItemId, revision = 1,
-                destinationPath = Path.Combine(exports, "blocked.bin")
-            }));
+        var revokedRequest = JsonSerializer.Serialize(new
+        {
+            requestId = "denied",
+            action = "exportOriginal",
+            itemId = captured.ItemId,
+            revision = 1,
+            destinationPath = Path.Combine(exports, "blocked.bin")
+        });
+        using var revoked = await Send(protocol, revokedRequest);
         Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
         Assert.False(File.Exists(Path.Combine(exports, "blocked.bin")));
     }
@@ -362,7 +365,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         var protocol = new LocalDesktopProtocol(catalog, monitor: monitor);
         using var listed = await Send(protocol,
-            $"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
+            $$"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.True(listed.RootElement.GetProperty("ok").GetBoolean());
         var move = listed.RootElement.GetProperty("data").GetProperty("moves")[0];
         Assert.Equal(previous, move.GetProperty("previousPath").GetString());
@@ -371,7 +374,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         Assert.True(catalog.RevokeSource(source.SourceId));
         using var revoked = await Send(protocol,
-            $"""{"requestId":"revoked","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
+            $$"""{"requestId":"revoked","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.Equal(0, revoked.RootElement.GetProperty("data")
             .GetProperty("moves").GetArrayLength());
 

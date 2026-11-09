@@ -126,7 +126,9 @@ internal static class RecoveryCheck
     {
         using var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly, Pooling = false
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
         }.ToString());
         db.Open();
         using var query = db.CreateCommand();
@@ -141,7 +143,9 @@ internal static class RecoveryCheck
         var temporary = Path.Combine(workspace, "evidence.pending");
         var options = new FileStreamOptions
         {
-            Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None
         };
         if (!OperatingSystem.IsWindows())
         {

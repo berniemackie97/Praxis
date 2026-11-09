@@ -63,7 +63,10 @@ try
         using var reader = new StreamReader(Console.OpenStandardInput(),
             new UTF8Encoding(false, true));
         using var writer = new StreamWriter(Console.OpenStandardOutput(),
-            new UTF8Encoding(false)) { AutoFlush = true };
+            new UTF8Encoding(false))
+        {
+            AutoFlush = true
+        };
         while (!cancellation.IsCancellationRequested && !protocol.StopRequested)
         {
             var line = await ReadBoundedRequestAsync(reader, cancellation.Token);
