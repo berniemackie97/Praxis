@@ -330,7 +330,7 @@ private struct PraxisWindow: View {
     private var setup: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Set up your private Second Brain").font(.title2)
-            Text("Choose a parent directory for a new private PraxisData folder, then choose a separate existing folder to watch.")
+            Text("Choose a parent for a private PraxisData folder and a separate existing Inbox. Use folders outside cloud-sync services if you do not want OS-level synchronization.")
                 .foregroundStyle(.secondary)
             HStack {
                 Button("Choose catalog location…") {
