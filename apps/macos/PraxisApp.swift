@@ -63,7 +63,7 @@ private final class Workbench: ObservableObject {
     private var buffer = Data()
     private var requests: [String: String] = [:]
 
-    func start(dataRoot: String, inbox: String, initialize: Bool) {
+    func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
         guard !running else { return }
         let data = URL(fileURLWithPath: dataRoot).standardizedFileURL.resolvingSymlinksInPath()
         let source = URL(fileURLWithPath: inbox).standardizedFileURL.resolvingSymlinksInPath()
@@ -94,7 +94,10 @@ private final class Workbench: ObservableObject {
                 return
             }
             let candidates = [
+                dotnetExecutable.isEmpty ? nil : dotnetExecutable,
                 ProcessInfo.processInfo.environment["DOTNET_ROOT"].map { $0 + "/dotnet" },
+                FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent(".dotnet/dotnet").path,
                 "/usr/local/share/dotnet/dotnet",
                 "/opt/homebrew/bin/dotnet",
                 "/usr/local/bin/dotnet"
@@ -278,6 +281,7 @@ private struct PraxisWindow: View {
     @AppStorage("dataRoot") private var dataRoot = ""
     @AppStorage("inbox") private var inbox = ""
     @AppStorage("configured") private var configured = false
+    @AppStorage("dotnetExecutable") private var dotnetExecutable = ""
     @State private var section = 0
     @State private var confirmRevoke = false
     private let refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
@@ -312,7 +316,8 @@ private struct PraxisWindow: View {
         .padding(20)
         .onAppear {
             if configured && !dataRoot.isEmpty && !inbox.isEmpty {
-                model.start(dataRoot: dataRoot, inbox: inbox, initialize: false)
+                model.start(dataRoot: dataRoot, inbox: inbox, initialize: false,
+                            dotnetExecutable: dotnetExecutable)
             }
         }
         .onDisappear { model.stop() }
@@ -352,8 +357,22 @@ private struct PraxisWindow: View {
                 Text(inbox.isEmpty ? "Not selected" : inbox)
                     .textSelection(.enabled).lineLimit(2)
             }
+            HStack {
+                Button("Locate .NET executable (optional)…") {
+                    let picker = NSOpenPanel()
+                    picker.canChooseFiles = true
+                    picker.canChooseDirectories = false
+                    picker.allowsMultipleSelection = false
+                    if picker.runModal() == .OK, let selected = picker.url {
+                        dotnetExecutable = selected.path
+                    }
+                }
+                Text(dotnetExecutable.isEmpty ? "Using standard .NET locations" : dotnetExecutable)
+                    .font(.caption).textSelection(.enabled).lineLimit(2)
+            }
             Button("Start Praxis") {
-                model.start(dataRoot: dataRoot, inbox: inbox, initialize: !configured)
+                model.start(dataRoot: dataRoot, inbox: inbox, initialize: !configured,
+                            dotnetExecutable: dotnetExecutable)
                 if model.running { configured = true }
             }
             .buttonStyle(.borderedProminent)
