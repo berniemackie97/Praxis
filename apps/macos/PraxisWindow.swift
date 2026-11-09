@@ -465,7 +465,7 @@ struct PraxisWindow: View {
                                     .font(.caption)
                                 TextField("Target USD", text: Binding(
                                     get: { model.budgetTargetText[category.category] ?? "" },
-                                    set: { model.budgetTargetText[category.category] = $0 }
+                                    set: { model.updateBudgetTarget(category: category.category, text: $0) }
                                 ))
                                 .frame(width: 110)
                                 .textFieldStyle(.roundedBorder)
