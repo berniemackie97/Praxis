@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Praxis.Storage;
@@ -34,13 +33,10 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
         }
 
         await VerifyPublishedAsync(destination, bytes, cancellationToken);
-        var original = await intake.ImportFileAsync(
-            destination, bytes.Length, "quick-" + captureId.ToString("N"), cancellationToken);
-        if (original.Sha256 != Convert.ToHexStringLower(SHA256.HashData(bytes)))
-        {
-            throw new InvalidDataException("The note changed during original capture.");
-        }
-
+        using var content = new MemoryStream(bytes, writable: false);
+        var original = await catalog.CaptureFileAsync(
+            destination, content, bytes.Length, "quick-" + captureId.ToString("N"),
+            cancellationToken);
         return new LocalQuickCaptureReceipt(destination, original);
     }
 
