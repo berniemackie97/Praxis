@@ -258,6 +258,147 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.Equal(0L, (long)query.ExecuteScalar()!);
     }
 
+
+    [Theory]
+    [InlineData("parser.cs", "public sealed class C3Reader { public void ParseTriangleMesh() {} }")]
+    [InlineData("engine.cpp", "void ParseTriangleMesh() { /* source only */ }")]
+    [InlineData("symbols.asm", "ParseTriangleMesh PROC\n MOV EAX, 1\n RET\nParseTriangleMesh ENDP")]
+    [InlineData("model.lst", "SYMBOL ParseTriangleMesh at section text")]
+    public async Task TechnicalTextIsIndexedWithVerifiedOriginalProvenance(
+        string name, string content)
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var source = await Capture(catalog, name, Encoding.UTF8.GetBytes(content), "technical");
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+
+        var derivative = Assert.IsType<TextDerivative>(
+            catalog.ReadTextDerivative(source.ItemId, source.Revision));
+        Assert.Equal("completed", derivative.Outcome);
+        Assert.Equal(content, derivative.Content);
+        Assert.Equal(source.Sha256, derivative.SourceSha256);
+        var hit = Assert.Single(catalog.SearchText("ParseTriangleMesh").Where(
+            hit => hit.SourceId == source.SourceId));
+        Assert.Equal(source.ItemId, hit.ItemId);
+        Assert.Equal(source.Sha256, hit.OriginalSha256);
+        await catalog.VerifyOriginalAsync(source.ItemId);
+    }
+
+    [Fact]
+    public async Task PreviouslyUnsupportedCodeIsReprocessedWithoutNewRevisionOrDuplicateIndex()
+    {
+        CapturedOriginal source;
+        using (var catalog = LocalCatalog.Open(root))
+        {
+            source = await Capture(catalog, "legacy.cs",
+                Encoding.UTF8.GetBytes("public class RecoveredTechnicalSource {}"), "legacy");
+            SimulateOldUnsupportedText(catalog.DatabasePath, source);
+            Assert.Equal("unsupported",
+                catalog.ReadTextDerivative(source.ItemId, 1)?.Outcome);
+        }
+
+        using (var reopened = LocalCatalog.Open(root))
+        {
+            var processor = new LocalTextProcessor(reopened);
+            Assert.True(await processor.ProcessNextAsync());
+            Assert.False(await processor.ProcessNextAsync());
+            Assert.Equal("completed",
+                reopened.ReadTextDerivative(source.ItemId, 1)?.Outcome);
+            Assert.Equal(1, Assert.Single(reopened.SearchText("RecoveredTechnicalSource")).Revision);
+            Assert.Single(reopened.SearchText("RecoveredTechnicalSource"));
+            Assert.Equal(1, reopened.ListProcessingJobs().Single().TotalAttempts);
+            await reopened.VerifyOriginalAsync(source.ItemId);
+        }
+
+        using var final = LocalCatalog.Open(root);
+        Assert.Single(final.SearchText("RecoveredTechnicalSource"));
+        Assert.False(await new LocalTextProcessor(final).ProcessNextAsync());
+    }
+
+    [Fact]
+    public async Task ReprocessingDoesNotReviveRevokedOrSupersededText()
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var revoked = await Capture(catalog, "revoked.cs",
+            Encoding.UTF8.GetBytes("RevokedTechnicalSource"), "revoked");
+        var first = await Capture(catalog, "updated.cs",
+            Encoding.UTF8.GetBytes("SupersededTechnicalSource"), "old");
+        SimulateOldUnsupportedText(catalog.DatabasePath, revoked);
+        SimulateOldUnsupportedText(catalog.DatabasePath, first);
+        Assert.True(catalog.RevokeSource(revoked.SourceId));
+        var revised = await Capture(catalog, "updated.cs",
+            Encoding.UTF8.GetBytes("CurrentTechnicalSource"), "new");
+        Assert.Equal(2, revised.Revision);
+
+        var processor = new LocalTextProcessor(catalog);
+        Assert.True(await processor.ProcessNextAsync());
+        Assert.False(await processor.ProcessNextAsync());
+        Assert.Empty(catalog.SearchText("RevokedTechnicalSource"));
+        Assert.Empty(catalog.SearchText("SupersededTechnicalSource"));
+        Assert.Single(catalog.SearchText("CurrentTechnicalSource"));
+        Assert.Equal("unsupported",
+            catalog.ReadTextDerivative(first.ItemId, 1)?.Outcome);
+    }
+
+    [Theory]
+    [InlineData("forged.cs", new byte[] { 0x50, 0x4b, 0x03, 0x04, 0x41 })]
+    [InlineData("forged.asm", new byte[] { 0x7f, 0x45, 0x4c, 0x46, 0x41 })]
+    [InlineData("broken.cpp", new byte[] { 0xff, 0xfe, 0x41 })]
+    public async Task CodeFileExtensionsDoNotOverrideBinaryOrMalformedContent(
+        string name, byte[] bytes)
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var source = await Capture(catalog, name, bytes, "hostile");
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        var derivative = catalog.ReadTextDerivative(source.ItemId, 1);
+        if (name == "broken.cpp")
+        {
+            Assert.Null(derivative);
+            Assert.Equal("invalid_utf8", Assert.Single(catalog.ListProcessingJobs()).FailureCode);
+        }
+        else
+        {
+            Assert.Equal("signature_mismatch", derivative?.ReasonCode);
+        }
+
+        Assert.Empty(catalog.SearchText("hostile"));
+        await catalog.VerifyOriginalAsync(source.ItemId);
+    }
+
+    private static void SimulateOldUnsupportedText(string databasePath, CapturedOriginal source)
+    {
+        using var database = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false
+        }.ToString());
+        database.Open();
+        using var transaction = database.BeginTransaction();
+        using var job = database.CreateCommand();
+        job.Transaction = transaction;
+        job.CommandText = """
+            UPDATE processing_jobs SET state = 'unsupported'
+            WHERE item_id = $item AND revision = $revision
+              AND processor_key = 'source-text-v1' AND state = 'queued'
+            """;
+        job.Parameters.AddWithValue("$item", source.ItemId.ToString("D"));
+        job.Parameters.AddWithValue("$revision", source.Revision);
+        Assert.Equal(1, job.ExecuteNonQuery());
+        using var derivative = database.CreateCommand();
+        derivative.Transaction = transaction;
+        derivative.CommandText = """
+            INSERT INTO text_derivatives
+                (item_id, revision, processor_key, source_digest,
+                 outcome, content, reason_code, created_utc)
+            VALUES ($item, $revision, 'source-text-v1', $digest,
+                    'unsupported', NULL, 'unsupported_format', $now)
+            """;
+        derivative.Parameters.AddWithValue("$item", source.ItemId.ToString("D"));
+        derivative.Parameters.AddWithValue("$revision", source.Revision);
+        derivative.Parameters.AddWithValue("$digest", source.Sha256);
+        derivative.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        Assert.Equal(1, derivative.ExecuteNonQuery());
+        transaction.Commit();
+    }
+
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string name, byte[] bytes, string key)
     {
