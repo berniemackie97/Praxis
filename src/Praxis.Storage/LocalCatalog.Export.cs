@@ -19,18 +19,18 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("The export destination must be absolute.", nameof(destinationPath));
         }
 
-        var destination = Path.GetFullPath(destinationPath);
+        var requestedDestination = Path.GetFullPath(destinationPath);
         var catalogRoot = Path.GetDirectoryName(DatabasePath)!;
-        var folder = Path.GetDirectoryName(destination)!;
-        if (!Directory.Exists(folder))
+        var requestedFolder = Path.GetDirectoryName(requestedDestination)!;
+        if (!Directory.Exists(requestedFolder))
         {
-            throw new DirectoryNotFoundException(folder);
+            throw new DirectoryNotFoundException(requestedFolder);
         }
 
         var resolvedCatalog = ResolveExistingDirectory(catalogRoot);
-        var resolvedExportFolder = ResolveExistingDirectory(folder);
-        var relative = Path.GetRelativePath(resolvedCatalog,
-            Path.Combine(resolvedExportFolder, Path.GetFileName(destination)));
+        var folder = ResolveExistingDirectory(requestedFolder);
+        var destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
+        var relative = Path.GetRelativePath(resolvedCatalog, destination);
         if (relative is "." or ".." ||
             (!relative.StartsWith(".." + Path.DirectorySeparatorChar,
                 StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
@@ -93,10 +93,15 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static string ResolveExistingDirectory(string path)
+    private static string ResolveExistingDirectory(string path, int linkDepth = 0)
     {
+        if (linkDepth > 40)
+        {
+            throw new InvalidDataException("The export directory contains too many symbolic links.");
+        }
+
         var parents = new Stack<string>();
-        var current = new DirectoryInfo(path);
+        var current = new DirectoryInfo(Path.GetFullPath(path));
         while (current.Parent is { } parent)
         {
             parents.Push(current.Name);
@@ -115,8 +120,9 @@ public sealed partial class LocalCatalog
             if (entry.LinkTarget is not null ||
                 (entry.Attributes & FileAttributes.ReparsePoint) != 0)
             {
-                resolved = (entry.ResolveLinkTarget(true) as DirectoryInfo)?.FullName
+                var target = entry.ResolveLinkTarget(true) as DirectoryInfo
                     ?? throw new InvalidDataException("An export directory link is not a directory.");
+                resolved = ResolveExistingDirectory(target.FullName, linkDepth + 1);
             }
             else
             {
