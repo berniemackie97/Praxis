@@ -150,6 +150,6 @@ The owner acceptance exercise must demonstrate a missing Inbox before launch, re
 The first-party watched-Inbox worker has a draft conservative rename path. Only an observed file rename followed by verified stable SHA-256, active source and unoccupied destination can update the canonical locator. It keeps the source and item identities, revisions, original digests, manual collections and reviewed derivatives intact, while saving the old/new locator in schema-v8 history. Independent copies and unobserved moves do not merge. The owner Library inspector can display the recorded move evidence. This is not proof of physical removable-volume identity, which remains #128/#130 acceptance.
 
 
-## Read-only cross-domain evidence checkpoint — PR #187
+## Cross-domain evidence
 
-Concrete tasks #181 (timecoded caption evidence) and #184 (local financial CSV reconciliation) extend canonical multimodal feature #176 and the #177/#178 owner-facing stories. The proposed worker uses the existing private catalog and first-party pipes, with digest-specific media sidecar lookup and strictly verified owner-selected USD financial exports. Source-backed cue timestamps and monthly aggregates are **not** an in-chat player or an optimized monthly budget recommendation. Owner approval, direct macOS playback, editable budgets, real tests and #179/#170 release evaluation remain mandatory. Live bank credentials and universal arbitrary-media transcription are not prerequisites for the supported MVP fixture.
+Digest-bound caption search (#181) supports exact time ranges for captured video sources. Budget creation is an example assistant task (#178) using permitted records and scoped tools. Both outcomes depend on the integrated assistant and evidence model in #170.
