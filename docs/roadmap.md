@@ -73,8 +73,8 @@ The technical corpus is **an example**, not a specialization of Praxis. The actu
 | Domain | MVP workflow | Critical path |
 | --- | --- | --- |
 | Technical knowledge | Cross-file research, cited source spans, verified contradictions and an executable owner-approved output | #149/#150/#152–#156 |
-| Media | Search an authorized captioned video, play the exact cited excerpt inside chat and open the verified full original | #114/#180/#181/#182 |
-| Personal finance | Reconcile authorized income, bills and spending; explain meaningful cost cuts and draft a balanced editable monthly budget with row citations | #183/#184/#185 |
+| Media | Search an authorized captioned video, play the exact cited excerpt inside chat and open the verified full original | #114/#176/#181/#177 |
+| Personal finance | Reconcile authorized income, bills and spending; explain meaningful cost cuts and draft a balanced editable monthly budget with row citations | #176/#184/#178 |
 
 A narrow proven supported set is acceptable. Not required for first release: video comprehension without a supported transcript, arbitrary codecs, universal provider connectors, banking credentials/aggregators, cross-device sync, automatic money movement, or unreviewed AI-generated calculations. This **does not** reduce the required actual clip playback, budgeting, grounded reasoning, or independent permission controls.
 

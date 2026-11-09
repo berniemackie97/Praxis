@@ -1,6 +1,6 @@
 # ADR 0027 — Typed local financial evidence and version-specific timed media cues
 
-**Status:** Proposed; implementation and real-device verification pending. Tracks #181/#184; #182/#185 remain separate product acceptance.
+**Status:** Proposed; implementation and real-device verification pending. Tracks #181/#184; #177/#178 remain separate product acceptance.
 
 ## Context and constraints
 
@@ -12,7 +12,7 @@ A `.vtt` or `.srt` sidecar is preserved and decoded strictly as bounded UTF-8 te
 
 The media link must be explicitly digest-bound by the caption filename: `<full-media-filename>.<full-video-SHA256>.vtt` or `.srt`, e.g. `demo.mp4.<64 lowercase hex>.vtt`, alongside the captured `demo.mp4`. It must match a single active `.mp4`, `.mov`, `.m4v`, `.webm` or `.mkv` original currently carrying exactly that digest. The filename is an owner/provenance binding, **not proof that the captions accurately describe the video**. A next-stage approval/review flow must validate associations. Plain `demo.vtt` or `demo.mp4.vtt` is still preserved/searchable but cannot silently bind to a video; no guessing when captions/paths are ambiguous.
 
-The returned evidence includes source IDs, item IDs, revisions, digests, original media locator, cue text, UTF-16 character span, exact millisecond range and processor identity. It is a **read-only locator**, not permission to open or play arbitrary media. #182 must verify original bytes and independent access again when opening/exporting the clip; do not retain access after revocation. Malformed timed cues abstain rather than supply a fabricated timestamp. No video is decoded by this pass; neither unsupported codec playback nor silent remote transcription is claimed.
+The returned evidence includes source IDs, item IDs, revisions, digests, original media locator, cue text, UTF-16 character span, exact millisecond range and processor identity. It is a **read-only locator**, not permission to open or play arbitrary media. #177 must verify original bytes and independent access again when opening/exporting the clip; do not retain access after revocation. Malformed timed cues abstain rather than supply a fabricated timestamp. No video is decoded by this pass; neither unsupported codec playback nor silent remote transcription is claimed.
 
 ## Initial local financial evidence contract
 
@@ -32,9 +32,9 @@ Required:
 - Date = date-only `yyyy-MM-dd` in the export's calendar (no inferred timezone or FX); currency = USD (no silent conversions).
 - `kind` = `income`, `expense`, `bill`, `refund`, or `transfer`; all entered amounts are positive decimals with at most two fraction digits and a bounded magnitude. `status` = `posted`, `pending`, or `estimated`; only `bill` is `estimated`.
 - Unique `record_id` within the selected snapshot. Byte-for-byte equivalent typed repeats are skipped; conflicting IDs fail the entire report. Transfers do not count as spending; refunds subtract from spent totals. Pending amounts are shown separately, not silently booked. `bill/estimated` is an **unpaid planned obligation**, separate from already posted expenses. If the same liability appears both as planned bill and posted transaction with unrelated IDs, the owner must reconcile it before relying on the net estimate—no model quietly guesses.
-- At most 5,000 rows, 100 returned source-row citations, 256-character field limit for typed values and strict quotation/line limits. Source revision/digest and a truncated-evidence flag accompany the result.
+- At most 5,000 rows, 100 returned source-row citations, 2,000-character parser field cap with stricter per-column typed-value limits and strict quotation/line limits. Source revision/digest and a truncated-evidence flag accompany the result.
 
-`actualBalance = postedIncome - postedSpending`. `balanceAfterPlannedBills = actualBalance - plannedBills`. No recurring-bill inference, hypothetical cuts, household coverage claim, financial write or tax/investment advice is provided by this deterministic baseline. #185 will add reviewed scenario budgets, transparent assumptions, grounded recommendation and approved output. #162 remains research for **optional** bank API connectivity; this local-import workflow requires none.
+`actualBalance = postedIncome - postedSpending`. `balanceAfterPlannedBills = actualBalance - plannedBills`. No recurring-bill inference, hypothetical cuts, household coverage claim, financial write or tax/investment advice is provided by this deterministic baseline. #178 will add reviewed scenario budgets, transparent assumptions, grounded recommendation and approved output. #162 remains research for **optional** bank API connectivity; this local-import workflow requires none.
 
 ## Trust, limitations and acceptance
 
