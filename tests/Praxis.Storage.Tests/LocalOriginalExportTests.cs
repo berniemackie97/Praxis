@@ -118,6 +118,19 @@ public sealed class LocalOriginalExportTests : IDisposable
                 Path.Combine(catalogRoot, "illegal.bin")));
         Assert.False(File.Exists(Path.Combine(catalogRoot, "illegal.bin")));
 
+        if (OperatingSystem.IsMacOS() &&
+            catalogRoot.StartsWith("/var/", StringComparison.Ordinal))
+        {
+            var alternateRoot = "/private" + catalogRoot;
+            if (Directory.Exists(alternateRoot))
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    catalog.ExportOriginalAsync(captured.ItemId, 1,
+                        Path.Combine(alternateRoot, "alternate.bin")));
+                Assert.False(File.Exists(Path.Combine(catalogRoot, "alternate.bin")));
+            }
+        }
+
         if (OperatingSystem.IsWindows())
         {
             return;
