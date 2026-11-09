@@ -160,6 +160,7 @@ public sealed class LocalMonthlyBudgetAnalyzer(LocalCatalog catalog)
             }
         }
 
+        catalog.AssertBudgetSourceCurrent(source);
         var actualBalance = actualIncome - postedSpending;
         return new MonthlyBudgetReport(source.SourceId, source.ItemId, source.Revision,
             source.Sha256, year, month, "USD", actualIncome, postedSpending,
