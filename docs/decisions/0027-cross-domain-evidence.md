@@ -28,7 +28,9 @@ Independent scoped authorization controls connections, sync, retention, model ex
 
 Budgeting belongs to the assistant's general task interface. When the owner asks for a budget, the assistant can use permitted Second Brain records and separately authorized tools, including MCP connections where needed. A reviewable artifact must cite its inputs, separate recorded amounts from assumptions and identify missing evidence. Provider reconciliation, access revocation and approval of saved output apply independently of the request.
 
-The former CSV Budget prototype and its private worker commands were removed. Captured originals continue to use the common catalog and recovery path.
+The offline, owner-selected CSV budget calculation path is restored under #196 within the modular catalog and first-party macOS workbench. The `budgetSummary` and `budgetScenario` actions use the trusted inherited-pipe worker and `LocalFinancialEvidence` service. That service reads current active originals using the shared source-identity lookup, verifies exact SHA-256 and byte length, enforces a 1 MiB/5,000-row profile, and calculates posted income/expenses, refunds, pending items and unpaid bills with .NET `decimal`. Source IDs, revisions, digests and physical row citations remain explicit. A user-entered spending cap is only a hypothetical comparable-month calculation; nothing is posted to an account or silently categorized as discretionary.
+
+This adapter is **not** a bank event feed, payment initiator, canonical account ledger, multi-source reconciliation engine or completed agent-driven budget. Provider/account typed incremental events and reconciliation remain #157/#162, while #178/#170 require grounded assistant reasoning, approved output, complete permissions and independent acceptance. Captured originals continue using the shared catalog and recovery path.
 
 ## On-demand verified media header inspection (#114)
 

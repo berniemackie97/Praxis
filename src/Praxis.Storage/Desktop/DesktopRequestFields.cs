@@ -19,7 +19,7 @@ internal readonly struct DesktopRequestFields(JsonElement root)
             if (entry.ValueKind != JsonValueKind.Object ||
                 !entry.TryGetProperty("category", out var category) ||
                 category.ValueKind != JsonValueKind.String ||
-                category.GetString() is not { Length: > 0 and <= 80 } name ||
+                category.GetString() is not { Length: > 0 and <= 80 } ||
                 !entry.TryGetProperty("target", out var target) ||
                 target.ValueKind != JsonValueKind.String ||
                 target.GetString() is not { } amount ||
@@ -31,7 +31,7 @@ internal readonly struct DesktopRequestFields(JsonElement root)
                 throw new ArgumentException("Budget targets contain invalid typed values.");
             }
 
-            targets.Add(new MonthlyBudgetTarget(name, parsed));
+            targets.Add(new MonthlyBudgetTarget(category.GetString()!, parsed));
         }
 
         return targets;

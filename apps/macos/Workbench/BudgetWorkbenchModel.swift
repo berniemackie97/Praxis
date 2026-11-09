@@ -59,7 +59,8 @@ final class BudgetWorkbenchModel: ObservableObject {
     }
 
     func analyze() {
-        guard let source = selected, hasActiveSource, !analyzing else {
+        guard !analyzing else { return }
+        guard let source = selected, hasActiveSource else {
             error = "Select an active financial CSV in the Library first."
             return
         }
@@ -72,8 +73,8 @@ final class BudgetWorkbenchModel: ObservableObject {
                 "sourceId": source.sourceId, "year": year, "month": month
             ]) { [weak self] response in
                 guard let self else { return }
-                self.analyzing = false
                 guard self.revisionToken == token else { return }
+                self.analyzing = false
                 guard response.ok, let result = response.data?.budget else {
                     self.error = response.error ?? "Budget analysis is unavailable."
                     return
@@ -112,8 +113,8 @@ final class BudgetWorkbenchModel: ObservableObject {
                 "targets": targets
             ]) { [weak self] response in
                 guard let self else { return }
-                self.previewing = false
                 guard self.revisionToken == version, self.scenarioToken == token else { return }
+                self.previewing = false
                 guard response.ok, let result = response.data?.scenario else {
                     self.error = response.error ?? "Budget scenario is unavailable."
                     return
