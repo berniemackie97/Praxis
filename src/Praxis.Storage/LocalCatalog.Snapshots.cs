@@ -25,15 +25,15 @@ public sealed partial class LocalCatalog
         string destinationDirectory, long maxBytes,
         CancellationToken cancellationToken = default)
     {
-        var root = Path.GetDirectoryName(DatabasePath)!;
+        string root = Path.GetDirectoryName(DatabasePath)!;
         ValidateRoot(root);
-        var destination = ValidateNewDestination(destinationDirectory, root);
+        string destination = ValidateNewDestination(destinationDirectory, root);
         ValidateBudget(maxBytes);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var staging = CreateStagingDirectory(destination);
-        var catalogPath = Path.Combine(staging, "catalog.sqlite");
-        using (var snapshot = new SqliteConnection(new SqliteConnectionStringBuilder
+        string staging = CreateStagingDirectory(destination);
+        string catalogPath = Path.Combine(staging, "catalog.sqlite");
+        using (SqliteConnection snapshot = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = catalogPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
@@ -47,7 +47,7 @@ public sealed partial class LocalCatalog
                 connection.BackupDatabase(snapshot);
             }
 
-            using var journal = Command(snapshot, "PRAGMA journal_mode = DELETE");
+            using SqliteCommand journal = Command(snapshot, "PRAGMA journal_mode = DELETE");
             if (!string.Equals(journal.ExecuteScalar() as string,
                 "delete", StringComparison.OrdinalIgnoreCase))
             {
@@ -56,13 +56,13 @@ public sealed partial class LocalCatalog
         }
 
         RestrictFile(catalogPath);
-        var objects = ReadSnapshotObjects(catalogPath, CurrentSchemaVersion);
-        var (catalogLength, catalogDigest) =
+        List<LocalSnapshotObject> objects = ReadSnapshotObjects(catalogPath, CurrentSchemaVersion);
+        (long catalogLength, string catalogDigest) =
             await HashFileAsync(catalogPath, cancellationToken);
-        var totalBytes = EnforceBudget(catalogLength, objects, maxBytes);
-        var source = new OriginalFileStore(root);
-        var target = new OriginalFileStore(staging);
-        foreach (var original in objects)
+        long totalBytes = EnforceBudget(catalogLength, objects, maxBytes);
+        OriginalFileStore source = new OriginalFileStore(root);
+        OriginalFileStore target = new OriginalFileStore(staging);
+        foreach (LocalSnapshotObject original in objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await source.CopyVerifiedAsync(
@@ -70,11 +70,11 @@ public sealed partial class LocalCatalog
                 target, cancellationToken);
         }
 
-        var manifest = new LocalSnapshotManifest(
+        LocalSnapshotManifest manifest = new LocalSnapshotManifest(
             SnapshotFormatVersion, CurrentSchemaVersion,
             catalogDigest, catalogLength, objects);
-        var manifestPath = Path.Combine(staging, "manifest.json");
-        await using (var output = OpenNewPrivateFile(manifestPath))
+        string manifestPath = Path.Combine(staging, "manifest.json");
+        await using (FileStream output = OpenNewPrivateFile(manifestPath))
         {
             await JsonSerializer.SerializeAsync(output, manifest,
                 cancellationToken: cancellationToken);
@@ -82,7 +82,7 @@ public sealed partial class LocalCatalog
             output.Flush(flushToDisk: true);
         }
 
-        var verified = await VerifyBackupAsync(staging, maxBytes, cancellationToken);
+        LocalSnapshotReport verified = await VerifyBackupAsync(staging, maxBytes, cancellationToken);
         Directory.Move(staging, destination);
         return verified with { TotalBytes = totalBytes };
     }
@@ -91,22 +91,22 @@ public sealed partial class LocalCatalog
         string backupDirectory, string destinationDirectory, long maxBytes,
         CancellationToken cancellationToken = default)
     {
-        var backup = ValidateExistingBackup(backupDirectory);
-        var destination = ValidateNewDestination(destinationDirectory, backup);
+        string backup = ValidateExistingBackup(backupDirectory);
+        string destination = ValidateNewDestination(destinationDirectory, backup);
         ValidateBudget(maxBytes);
-        var verified = await VerifyBackupAsync(backup, maxBytes, cancellationToken);
+        LocalSnapshotReport verified = await VerifyBackupAsync(backup, maxBytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var staging = CreateStagingDirectory(destination);
-        var expected = ReadSnapshotManifest(backup);
+        string staging = CreateStagingDirectory(destination);
+        LocalSnapshotManifest expected = ReadSnapshotManifest(backup);
         await CopyCheckedFileAsync(
             Path.Combine(backup, "catalog.sqlite"),
             Path.Combine(staging, "catalog.sqlite"),
             expected.CatalogLength, expected.CatalogSha256, cancellationToken);
 
-        var source = new OriginalFileStore(backup);
-        var target = new OriginalFileStore(staging);
-        foreach (var original in expected.Objects)
+        OriginalFileStore source = new OriginalFileStore(backup);
+        OriginalFileStore target = new OriginalFileStore(staging);
+        foreach (LocalSnapshotObject original in expected.Objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await source.CopyVerifiedAsync(
@@ -115,9 +115,9 @@ public sealed partial class LocalCatalog
         }
 
         await VerifySnapshotContentsAsync(staging, expected, maxBytes, cancellationToken);
-        using (var restored = Open(staging))
+        using (LocalCatalog restored = Open(staging))
         {
-            var inspection = await restored.InspectRecoveryAsync(cancellationToken);
+            OriginalRecoveryInspection inspection = await restored.InspectRecoveryAsync(cancellationToken);
             if (inspection.MissingObjects != 0 || inspection.CorruptObjects != 0)
             {
                 throw new InvalidDataException("The restored catalog has invalid originals.");
@@ -133,9 +133,9 @@ public sealed partial class LocalCatalog
         string backupDirectory, long maxBytes,
         CancellationToken cancellationToken = default)
     {
-        var backup = ValidateExistingBackup(backupDirectory);
+        string backup = ValidateExistingBackup(backupDirectory);
         ValidateBudget(maxBytes);
-        var manifest = ReadSnapshotManifest(backup);
+        LocalSnapshotManifest manifest = ReadSnapshotManifest(backup);
         return await VerifySnapshotContentsAsync(
             backup, manifest, maxBytes, cancellationToken);
     }
@@ -153,30 +153,30 @@ public sealed partial class LocalCatalog
             throw new InvalidDataException("The snapshot manifest is incompatible.");
         }
 
-        var (length, hash) = await HashFileAsync(
+        (long length, string hash) = await HashFileAsync(
             Path.Combine(directory, "catalog.sqlite"), cancellationToken);
         if (length != manifest.CatalogLength || hash != manifest.CatalogSha256)
         {
             throw new InvalidDataException("The snapshot catalog failed integrity verification.");
         }
 
-        var objects = ReadSnapshotObjects(Path.Combine(directory, "catalog.sqlite"), manifest.CatalogVersion);
+        List<LocalSnapshotObject> objects = ReadSnapshotObjects(Path.Combine(directory, "catalog.sqlite"), manifest.CatalogVersion);
         if (!objects.SequenceEqual(manifest.Objects))
         {
             throw new InvalidDataException("The manifest does not match the catalog objects.");
         }
 
-        var total = EnforceBudget(manifest.CatalogLength, objects, maxBytes);
+        long total = EnforceBudget(manifest.CatalogLength, objects, maxBytes);
 
-        var store = new OriginalFileStore(directory);
-        var published = store.EnumeratePublishedDigests().ToHashSet(StringComparer.Ordinal);
+        OriginalFileStore store = new OriginalFileStore(directory);
+        HashSet<string> published = store.EnumeratePublishedDigests().ToHashSet(StringComparer.Ordinal);
         if (published.Count != objects.Count ||
             objects.Any(item => !published.Contains(item.Digest)))
         {
             throw new InvalidDataException("The snapshot object inventory is incomplete or unexpected.");
         }
 
-        foreach (var item in objects)
+        foreach (LocalSnapshotObject item in objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await store.VerifyAsync(

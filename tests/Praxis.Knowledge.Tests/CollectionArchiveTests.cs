@@ -12,19 +12,19 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void RoundTripPreservesNotesBinaryAttachmentsAndStableReferences()
     {
-        var note = NoteRecord.Create("Ideas/first.md", "# First\r\n")
+        NoteRecord note = NoteRecord.Create("Ideas/first.md", "# First\r\n")
             .Revise("Archive/renamed.md", "# Second\n");
-        var original = new byte[] { 0, 1, 255, 0, 7, 42 };
-        var attachment = AttachmentRecord.Create("images/original.png", original);
-        var renamed = attachment.Rename("Images/renamed.png");
-        var link = new AttachmentReference(note.Id, renamed.Id);
+        byte[] original = new byte[] { 0, 1, 255, 0, 7, 42 };
+        AttachmentRecord attachment = AttachmentRecord.Create("images/original.png", original);
+        AttachmentRecord renamed = attachment.Rename("Images/renamed.png");
+        AttachmentReference link = new AttachmentReference(note.Id, renamed.Id);
 
         original[0] = 99;
-        using var archive = Export(new KnowledgeCollection([note], [renamed], [link]));
-        var restored = NoteArchive.ReadCollection(archive);
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [renamed], [link]));
+        KnowledgeCollection restored = NoteArchive.ReadCollection(archive);
 
-        var restoredNote = Assert.Single(restored.Notes);
-        var restoredAttachment = Assert.Single(restored.Attachments);
+        NoteRecord restoredNote = Assert.Single(restored.Notes);
+        AttachmentRecord restoredAttachment = Assert.Single(restored.Attachments);
         Assert.Equal(note.Id, restoredNote.Id);
         Assert.Equal(note.Revisions.ToArray(), restoredNote.Revisions.ToArray());
         Assert.Equal(attachment.Id, restoredAttachment.Id);
@@ -40,21 +40,21 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void IdenticalBinaryDataIsStoredOnceWithoutMergingAttachmentIdentities()
     {
-        var note = NoteRecord.Create("note.md", "two images");
-        var content = new byte[] { 10, 20, 30 };
-        var first = AttachmentRecord.Create("assets/a.png", content);
-        var second = AttachmentRecord.Create("assets/b.png", content);
-        var collection = new KnowledgeCollection([note], [first, second],
+        NoteRecord note = NoteRecord.Create("note.md", "two images");
+        byte[] content = new byte[] { 10, 20, 30 };
+        AttachmentRecord first = AttachmentRecord.Create("assets/a.png", content);
+        AttachmentRecord second = AttachmentRecord.Create("assets/b.png", content);
+        KnowledgeCollection collection = new KnowledgeCollection([note], [first, second],
             [new(note.Id, first.Id), new(note.Id, second.Id)]);
 
-        using var archive = Export(collection);
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true))
+        using MemoryStream archive = Export(collection);
+        using (ZipArchive zip = new ZipArchive(archive, ZipArchiveMode.Read, leaveOpen: true))
         {
             Assert.Single(zip.Entries, item => item.FullName.StartsWith("attachments/", StringComparison.Ordinal));
         }
 
         archive.Position = 0;
-        var restored = NoteArchive.ReadCollection(archive);
+        KnowledgeCollection restored = NoteArchive.ReadCollection(archive);
         Assert.Equal(2, restored.Attachments.Count);
         Assert.NotEqual(restored.Attachments[0].Id, restored.Attachments[1].Id);
         Assert.Equal(first.Sha256, second.Sha256);
@@ -66,11 +66,11 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void EmptyOrUnreferencedAttachmentsArePreserved()
     {
-        var empty = AttachmentRecord.Create("assets/empty.bin", []);
-        var orphan = AttachmentRecord.Create("assets/orphan.bin", [1, 2]);
-        using var archive = Export(new KnowledgeCollection([], [empty, orphan], []));
+        AttachmentRecord empty = AttachmentRecord.Create("assets/empty.bin", []);
+        AttachmentRecord orphan = AttachmentRecord.Create("assets/orphan.bin", [1, 2]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [empty, orphan], []));
 
-        var result = NoteArchive.ReadCollection(archive);
+        KnowledgeCollection result = NoteArchive.ReadCollection(archive);
 
         Assert.Empty(result.Notes);
         Assert.Empty(result.References);
@@ -82,12 +82,12 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void LegacyArchiveCanBeReadAsCollectionWithoutAttachments()
     {
-        var note = NoteRecord.Create("legacy.md", "# Original");
-        using var archive = new MemoryStream();
+        NoteRecord note = NoteRecord.Create("legacy.md", "# Original");
+        using MemoryStream archive = new MemoryStream();
         NoteArchive.Write(archive, [note]);
         archive.Position = 0;
 
-        var restored = NoteArchive.ReadCollection(archive);
+        KnowledgeCollection restored = NoteArchive.ReadCollection(archive);
 
         Assert.Equal(note.Id, Assert.Single(restored.Notes).Id);
         Assert.Empty(restored.Attachments);
@@ -99,8 +99,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void NoteOnlyReaderCannotSilentlyDiscardAttachments()
     {
-        var note = NoteRecord.Create("note.md", "body");
-        using var archive = Export(new KnowledgeCollection([note],
+        NoteRecord note = NoteRecord.Create("note.md", "body");
+        using MemoryStream archive = Export(new KnowledgeCollection([note],
             [AttachmentRecord.Create("attachment.bin", [1])], []));
 
         Assert.Throws<NotSupportedException>(() => NoteArchive.Read(archive));
@@ -109,7 +109,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void CollectionArchiveKeepsCallerStreamOpen()
     {
-        using var archive = Export(new KnowledgeCollection([], [], []));
+        using MemoryStream archive = Export(new KnowledgeCollection([], [], []));
         Assert.True(archive.CanRead);
         Assert.Empty(NoteArchive.ReadCollection(archive).Notes);
         Assert.True(archive.CanRead);
@@ -118,10 +118,10 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void SourceBytesCannotBeMutatedThroughAttachmentRecord()
     {
-        var source = new byte[] { 9, 8, 7 };
-        var attachment = AttachmentRecord.Create("bytes.bin", source);
+        byte[] source = new byte[] { 9, 8, 7 };
+        AttachmentRecord attachment = AttachmentRecord.Create("bytes.bin", source);
         source[0] = 1;
-        var copy = attachment.ReadContent();
+        byte[] copy = attachment.ReadContent();
         copy[1] = 1;
 
         Assert.Equal([9, 8, 7], attachment.ReadContent());
@@ -146,8 +146,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void DuplicatePathsAcrossNotesAndAttachmentsAreRejected()
     {
-        var note = NoteRecord.Create("Notes/entry.md", "content");
-        var attachment = AttachmentRecord.Create("notes/ENTRY.md", [1]);
+        NoteRecord note = NoteRecord.Create("Notes/entry.md", "content");
+        AttachmentRecord attachment = AttachmentRecord.Create("notes/ENTRY.md", [1]);
 
         Assert.Throws<ArgumentException>(() =>
             new KnowledgeCollection([note], [attachment], []));
@@ -156,9 +156,9 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void MissingOrDuplicateReferencesAreRejectedBeforeExport()
     {
-        var note = NoteRecord.Create("note.md", "content");
-        var attachment = AttachmentRecord.Create("asset.png", [1]);
-        var link = new AttachmentReference(note.Id, attachment.Id);
+        NoteRecord note = NoteRecord.Create("note.md", "content");
+        AttachmentRecord attachment = AttachmentRecord.Create("asset.png", [1]);
+        AttachmentReference link = new AttachmentReference(note.Id, attachment.Id);
 
         Assert.Throws<ArgumentException>(() =>
             new KnowledgeCollection([note], [], [link]));
@@ -171,9 +171,9 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void OversizedAttachmentIsRejectedBeforeWriting()
     {
-        var bytes = new byte[32 * 1024 * 1024 + 1];
-        var attachment = AttachmentRecord.Create("large.bin", bytes);
-        using var archive = new MemoryStream();
+        byte[] bytes = new byte[32 * 1024 * 1024 + 1];
+        AttachmentRecord attachment = AttachmentRecord.Create("large.bin", bytes);
+        using MemoryStream archive = new MemoryStream();
 
         Assert.Throws<InvalidDataException>(() =>
             NoteArchive.WriteCollection(archive, new KnowledgeCollection([], [attachment], [])));
@@ -183,8 +183,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void TamperedBinaryContentIsRejected()
     {
-        var attachment = AttachmentRecord.Create("image.png", [1, 2, 3, 4]);
-        using var archive = Export(new KnowledgeCollection([], [attachment], []));
+        AttachmentRecord attachment = AttachmentRecord.Create("image.png", [1, 2, 3, 4]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [attachment], []));
         ArchiveFixture.ReplaceEntry(archive, $"attachments/{attachment.Sha256}", _ => [1, 2, 3, 5]);
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -193,8 +193,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void MissingBinaryPayloadIsRejected()
     {
-        var attachment = AttachmentRecord.Create("image.png", [1, 2, 3]);
-        using var archive = Export(new KnowledgeCollection([], [attachment], []));
+        AttachmentRecord attachment = AttachmentRecord.Create("image.png", [1, 2, 3]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [attachment], []));
         RemoveEntry(archive, $"attachments/{attachment.Sha256}");
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -203,10 +203,10 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void UnlistedArchivePayloadIsRejected()
     {
-        using var archive = Export(new KnowledgeCollection([], [], []));
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
+        using MemoryStream archive = Export(new KnowledgeCollection([], [], []));
+        using (ZipArchive zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
         {
-            using var extra = zip.CreateEntry("../unlisted").Open();
+            using Stream extra = zip.CreateEntry("../unlisted").Open();
             extra.WriteByte(1);
         }
 
@@ -217,8 +217,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void TamperedAttachmentPathIsRejected()
     {
-        var attachment = AttachmentRecord.Create("valid.bin", [1]);
-        using var archive = Export(new KnowledgeCollection([], [attachment], []));
+        AttachmentRecord attachment = AttachmentRecord.Create("valid.bin", [1]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [attachment], []));
         EditManifest(archive, json => json["attachments"]!.AsArray()[0]!["path"] = "../escape.bin");
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -227,8 +227,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void TamperedAttachmentDigestIsRejected()
     {
-        var attachment = AttachmentRecord.Create("valid.bin", [1, 2]);
-        using var archive = Export(new KnowledgeCollection([], [attachment], []));
+        AttachmentRecord attachment = AttachmentRecord.Create("valid.bin", [1, 2]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [attachment], []));
         EditManifest(archive, json =>
             json["attachments"]!.AsArray()[0]!["sha256"] = new string('0', 64));
 
@@ -238,10 +238,10 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void TamperedAttachmentReferenceIsRejected()
     {
-        var note = NoteRecord.Create("note.md", "");
-        var attachment = AttachmentRecord.Create("valid.bin", [1]);
-        var reference = new AttachmentReference(note.Id, attachment.Id);
-        using var archive = Export(new KnowledgeCollection([note], [attachment], [reference]));
+        NoteRecord note = NoteRecord.Create("note.md", "");
+        AttachmentRecord attachment = AttachmentRecord.Create("valid.bin", [1]);
+        AttachmentReference reference = new AttachmentReference(note.Id, attachment.Id);
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [attachment], [reference]));
         EditManifest(archive, json => json["references"]!.AsArray()[0]!["noteId"] = Guid.NewGuid());
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -250,13 +250,13 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void DuplicateReferencesInManifestAreRejected()
     {
-        var note = NoteRecord.Create("note.md", "");
-        var attachment = AttachmentRecord.Create("valid.bin", [1]);
-        using var archive = Export(new KnowledgeCollection([note], [attachment],
+        NoteRecord note = NoteRecord.Create("note.md", "");
+        AttachmentRecord attachment = AttachmentRecord.Create("valid.bin", [1]);
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [attachment],
             [new(note.Id, attachment.Id)]));
         EditManifest(archive, json =>
         {
-            var links = json["references"]!.AsArray();
+            JsonArray links = json["references"]!.AsArray();
             links.Add(links[0]!.DeepClone());
         });
 
@@ -266,13 +266,13 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void DuplicateAttachmentPathsInManifestAreRejected()
     {
-        var first = AttachmentRecord.Create("a.png", [1]);
-        var second = AttachmentRecord.Create("b.png", [2]);
-        using var archive = Export(new KnowledgeCollection([], [first, second], []));
+        AttachmentRecord first = AttachmentRecord.Create("a.png", [1]);
+        AttachmentRecord second = AttachmentRecord.Create("b.png", [2]);
+        using MemoryStream archive = Export(new KnowledgeCollection([], [first, second], []));
         EditManifest(archive, json =>
         {
-            var attachments = json["attachments"]!.AsArray();
-            var firstPath = attachments[0]!["path"]!.GetValue<string>();
+            JsonArray attachments = json["attachments"]!.AsArray();
+            string firstPath = attachments[0]!["path"]!.GetValue<string>();
             attachments[1]!["path"] = firstPath.ToUpperInvariant();
         });
 
@@ -282,7 +282,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void UnknownCollectionVersionIsRejected()
     {
-        using var archive = Export(new KnowledgeCollection([], [], []));
+        using MemoryStream archive = Export(new KnowledgeCollection([], [], []));
         EditManifest(archive, json => json["formatVersion"] = 4);
 
         Assert.Throws<NotSupportedException>(() => NoteArchive.ReadCollection(archive));
@@ -291,8 +291,8 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void VersionThreeRequiresVaultReferenceMetadataEvenWhenEmpty()
     {
-        var note = NoteRecord.Create("note.md", "plain");
-        using var archive = Export(new KnowledgeCollection([note], [], [], []));
+        NoteRecord note = NoteRecord.Create("note.md", "plain");
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [], [], []));
         EditManifest(archive, json => json.Remove("vaultReferences"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -301,7 +301,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void VersionTwoCannotClaimTrackedVaultLinksWithoutVersionChange()
     {
-        using var archive = Export(new KnowledgeCollection([], [], []));
+        using MemoryStream archive = Export(new KnowledgeCollection([], [], []));
         EditManifest(archive, json => json["vaultReferences"] = new JsonArray());
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -310,9 +310,9 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void TamperedVaultDerivedReferenceIsRejected()
     {
-        var note = NoteRecord.Create("note.md", "![[image.png]]");
-        var image = AttachmentRecord.Create("image.png", [2]);
-        using var archive = Export(new KnowledgeCollection([note], [image], [],
+        NoteRecord note = NoteRecord.Create("note.md", "![[image.png]]");
+        AttachmentRecord image = AttachmentRecord.Create("image.png", [2]);
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [image], [],
             [new AttachmentReference(note.Id, image.Id)]));
         EditManifest(archive, json =>
             json["vaultReferences"]!.AsArray()[0]!["attachmentId"] = Guid.NewGuid());
@@ -323,13 +323,13 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void DuplicateVaultDerivedReferencesInManifestAreRejected()
     {
-        var note = NoteRecord.Create("note.md", "![[image.png]]");
-        var image = AttachmentRecord.Create("image.png", [2]);
-        using var archive = Export(new KnowledgeCollection([note], [image], [],
+        NoteRecord note = NoteRecord.Create("note.md", "![[image.png]]");
+        AttachmentRecord image = AttachmentRecord.Create("image.png", [2]);
+        using MemoryStream archive = Export(new KnowledgeCollection([note], [image], [],
             [new AttachmentReference(note.Id, image.Id)]));
         EditManifest(archive, json =>
         {
-            var references = json["vaultReferences"]!.AsArray();
+            JsonArray references = json["vaultReferences"]!.AsArray();
             references.Add(references[0]!.DeepClone());
         });
 
@@ -339,7 +339,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void NoteOnlyReaderRejectsVersionThreeCollection()
     {
-        using var archive = Export(new KnowledgeCollection(
+        using MemoryStream archive = Export(new KnowledgeCollection(
             [NoteRecord.Create("note.md", "body")], [], [], []));
 
         Assert.Throws<NotSupportedException>(() => NoteArchive.Read(archive));
@@ -348,7 +348,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void ExtraManifestFieldsAreRejected()
     {
-        using var archive = Export(new KnowledgeCollection([], [], []));
+        using MemoryStream archive = Export(new KnowledgeCollection([], [], []));
         EditManifest(archive, json => json["unexpected"] = true);
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.ReadCollection(archive));
@@ -357,7 +357,7 @@ public sealed class CollectionArchiveTests
     [Fact]
     public void VersionOneCannotContainAttachmentMetadata()
     {
-        using var archive = new MemoryStream();
+        using MemoryStream archive = new MemoryStream();
         NoteArchive.Write(archive, [NoteRecord.Create("note.md", "body")]);
         archive.Position = 0;
         EditManifest(archive, json => json["attachments"] = new JsonArray());
@@ -367,7 +367,7 @@ public sealed class CollectionArchiveTests
 
     private static MemoryStream Export(KnowledgeCollection collection)
     {
-        var stream = new MemoryStream();
+        MemoryStream stream = new MemoryStream();
         NoteArchive.WriteCollection(stream, collection);
         stream.Position = 0;
         return stream;
@@ -377,7 +377,7 @@ public sealed class CollectionArchiveTests
     {
         ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
         {
-            var json = JsonNode.Parse(Encoding.UTF8.GetString(bytes))!.AsObject();
+            JsonObject json = JsonNode.Parse(Encoding.UTF8.GetString(bytes))!.AsObject();
             edit(json);
             return Encoding.UTF8.GetBytes(json.ToJsonString());
         });
@@ -386,7 +386,7 @@ public sealed class CollectionArchiveTests
     private static void RemoveEntry(MemoryStream archive, string name)
     {
         archive.Position = 0;
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
+        using (ZipArchive zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
         {
             zip.GetEntry(name)!.Delete();
         }

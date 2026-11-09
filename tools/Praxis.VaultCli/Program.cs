@@ -6,8 +6,8 @@ if (args.Length == 2 && args[0] == "verify")
 {
     return Run(() =>
     {
-        using var stream = File.OpenRead(args[1]);
-        var collection = NoteArchive.ReadCollection(stream);
+        using FileStream stream = File.OpenRead(args[1]);
+        KnowledgeCollection collection = NoteArchive.ReadCollection(stream);
         Console.WriteLine($"Verified {collection.Notes.Count} notes and {collection.Attachments.Count} attachments.");
         if (collection.VaultReferences is not null)
         {
@@ -20,10 +20,10 @@ if (args.Length == 2 && args[0] == "links")
 {
     return Run(() =>
     {
-        using var stream = File.OpenRead(args[1]);
-        var report = LocalVaultAttachmentLinks.Inspect(NoteArchive.ReadCollection(stream));
+        using FileStream stream = File.OpenRead(args[1]);
+        VaultLinkReport report = LocalVaultAttachmentLinks.Inspect(NoteArchive.ReadCollection(stream));
         Console.WriteLine($"Resolved {report.References.Count} note-to-attachment links; {report.Problems.Count} unresolved or ambiguous.");
-        foreach (var problem in report.Problems)
+        foreach (VaultLinkProblem problem in report.Problems)
         {
             Console.Error.WriteLine($"{problem.NotePath}: {problem.Target}: {problem.Reason}");
         }
@@ -39,7 +39,7 @@ if (args.Length >= 3 && args[0] == "capture")
 {
     return Run(() =>
     {
-        var options = ReadOptions(args, 3, allowRenames: false, allowUnlinks: false);
+        (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 3, allowRenames: false, allowUnlinks: false);
         LocalVaultExchange.CaptureArchive(args[1], args[2], options.TrackLinks);
         Console.WriteLine("Vault archive created.");
     });
@@ -49,9 +49,9 @@ if (args.Length == 3 && args[0] == "compare")
 {
     return Run(() =>
     {
-        var report = LocalVaultComparison.CompareArchive(args[1], args[2]);
+        VaultComparison report = LocalVaultComparison.CompareArchive(args[1], args[2]);
         Console.WriteLine($"Matched {report.MatchedFiles} files; {report.Differences.Count} differences.");
-        foreach (var difference in report.Differences.Take(20))
+        foreach (VaultFileDifference difference in report.Differences.Take(20))
         {
             Console.Error.WriteLine($"{difference.Reason}: {difference.Path}");
         }
@@ -77,8 +77,8 @@ if (args.Length >= 3 && args[0] == "plan")
 {
     return Run(() =>
     {
-        var options = ReadOptions(args, 3, allowUnlinks: false);
-        var update = LocalVaultExchange.PlanUpdate(args[1], args[2], options.Renames,
+        (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 3, allowUnlinks: false);
+        VaultUpdate update = LocalVaultExchange.PlanUpdate(args[1], args[2], options.Renames,
             options.TrackLinks);
         PrintChanges(update);
     });
@@ -88,8 +88,8 @@ if (args.Length >= 4 && args[0] == "update")
 {
     return Run(() =>
     {
-        var options = ReadOptions(args, 4);
-        var update = LocalVaultExchange.UpdateArchive(args[1], args[2], args[3],
+        (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 4);
+        VaultUpdate update = LocalVaultExchange.UpdateArchive(args[1], args[2], args[3],
             options.Renames, options.TrackLinks, options.ApprovedUnlinks);
         PrintChanges(update);
         Console.WriteLine("Updated archive created.");
@@ -125,9 +125,9 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     ReadOptions(string[] arguments, int baseLength, bool allowRenames = true, bool allowUnlinks = true)
 {
     string? renamePath = null;
-    var trackLinks = false;
+    bool trackLinks = false;
     string? unlinkPath = null;
-    for (var index = baseLength; index < arguments.Length; index++)
+    for (int index = baseLength; index < arguments.Length; index++)
     {
         switch (arguments[index])
         {
@@ -145,7 +145,7 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
         }
     }
 
-    var options = new JsonSerializerOptions
+    JsonSerializerOptions options = new JsonSerializerOptions
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
@@ -153,9 +153,9 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     IReadOnlyList<VaultRename> mappings = [];
     if (renamePath is not null)
     {
-        var renames = JsonSerializer.Deserialize<VaultRename[]>(
-            ReadBoundedJson(renamePath, 256 * 1024), options)
-            ?? throw new InvalidDataException("The rename mapping is empty.");
+        VaultRename[] renames = JsonSerializer.Deserialize<VaultRename[]>(
+                                    ReadBoundedJson(renamePath, 256 * 1024), options)
+                                ?? throw new InvalidDataException("The rename mapping is empty.");
         if (renames.Length > 20_000)
         {
             throw new InvalidDataException("The rename mapping contains too many entries.");
@@ -165,61 +165,62 @@ static (IReadOnlyList<VaultRename> Renames, bool TrackLinks,
     }
 
     IReadOnlyList<AttachmentReference>? approved = null;
-    if (unlinkPath is not null)
+    if (unlinkPath is null)
     {
-        var pairs = JsonSerializer.Deserialize<AttachmentReference[]>(
-            ReadBoundedJson(unlinkPath, 4 * 1024 * 1024), options)
-            ?? throw new InvalidDataException("The link removal approval is empty.");
-        if (pairs.Length > 50_000 || pairs.Any(pair => pair is null ||
-                pair.NoteId == Guid.Empty || pair.AttachmentId == Guid.Empty))
-        {
-            throw new InvalidDataException("The link removal approval contains invalid pairs.");
-        }
-
-        approved = Array.AsReadOnly(pairs);
+        return (mappings, trackLinks, approved);
     }
+
+    AttachmentReference[] pairs = JsonSerializer.Deserialize<AttachmentReference[]>(
+                                      ReadBoundedJson(unlinkPath, 4 * 1024 * 1024), options)
+                                  ?? throw new InvalidDataException("The link removal approval is empty.");
+    if (pairs.Length > 50_000 || pairs.Any(pair => pair is null ||
+                                                   pair.NoteId == Guid.Empty || pair.AttachmentId == Guid.Empty))
+    {
+        throw new InvalidDataException("The link removal approval contains invalid pairs.");
+    }
+
+    approved = Array.AsReadOnly(pairs);
 
     return (mappings, trackLinks, approved);
 }
 
 static byte[] ReadBoundedJson(string path, int maximum)
 {
-    using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+    using FileStream file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
     if (file.Length > maximum)
     {
         throw new InvalidDataException("The supplied JSON file exceeds its size limit.");
     }
 
-    var bytes = new byte[(int)file.Length];
+    byte[] bytes = new byte[(int)file.Length];
     file.ReadExactly(bytes);
-    if (file.ReadByte() != -1)
-    {
-        throw new InvalidDataException("The supplied JSON file changed during reading.");
-    }
-
-    return bytes;
+    return file.ReadByte() != -1 ? throw new InvalidDataException("The supplied JSON file changed during reading.") : bytes;
 }
 
 static void PrintChanges(VaultUpdate update)
 {
-    var added = update.Changes.Count(change => change.PreviousPath is null);
-    var updated = update.Changes.Count(change => change.ContentChanged && change.PreviousPath is not null);
-    var moved = update.Changes.Count(change => change.PathChanged);
+    int added = update.Changes.Count(change => change.PreviousPath is null);
+    int updated = update.Changes.Count(change => change.ContentChanged && change.PreviousPath is not null);
+    int moved = update.Changes.Count(change => change.PathChanged);
     Console.WriteLine($"Changes: {added} added, {updated} updated, {moved} renamed.");
     Console.WriteLine($"Collection: {update.Collection.Notes.Count} notes, {update.Collection.Attachments.Count} attachments.");
-    if (update.Collection.VaultReferences is not null)
+    if (update.Collection.VaultReferences is null)
     {
-        Console.WriteLine($"Vault links: {update.Collection.VaultReferences.Count} tracked, " +
-            $"{update.AddedLinks} added, {update.RemovedLinks} removed.");
-        if (update.RemovedLinks != 0)
-        {
-            var notes = update.Collection.Notes.ToDictionary(note => note.Id);
-            var attachments = update.Collection.Attachments.ToDictionary(attachment => attachment.Id);
-            foreach (var pair in update.RemovedLinkPairs!)
-            {
-                Console.WriteLine($"Removed vault link: noteId={pair.NoteId} ({notes[pair.NoteId].Current.Path}), " +
-                    $"attachmentId={pair.AttachmentId} ({attachments[pair.AttachmentId].Path})");
-            }
-        }
+        return;
+    }
+
+    Console.WriteLine($"Vault links: {update.Collection.VaultReferences.Count} tracked, " +
+                      $"{update.AddedLinks} added, {update.RemovedLinks} removed.");
+    if (update.RemovedLinks == 0)
+    {
+        return;
+    }
+
+    Dictionary<Guid, NoteRecord> notes = update.Collection.Notes.ToDictionary(note => note.Id);
+    Dictionary<Guid, AttachmentRecord> attachments = update.Collection.Attachments.ToDictionary(attachment => attachment.Id);
+    foreach (AttachmentReference pair in update.RemovedLinkPairs!)
+    {
+        Console.WriteLine($"Removed vault link: noteId={pair.NoteId} ({notes[pair.NoteId].Current.Path}), " +
+                          $"attachmentId={pair.AttachmentId} ({attachments[pair.AttachmentId].Path})");
     }
 }

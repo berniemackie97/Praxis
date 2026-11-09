@@ -15,23 +15,23 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void RepresentativeVaultRoundTripsNestedNotesLinksAttachmentsAndHiddenConfiguration()
     {
-        var source = Folder("source");
-        var markdown = Encoding.UTF8.GetBytes(
+        string source = Folder("source");
+        byte[] markdown = Encoding.UTF8.GetBytes(
             "---\r\ntitle: Réunion\r\n---\r\n# First\r\n![[media/photo.png]]\r\n" +
             "![Preview](../media/photo.png)\r\n[[Notes/second]]\r\n");
-        var other = Encoding.UTF8.GetBytes("# Second\n\n[link](first.md)\n");
-        var binary = new byte[] { 0, 255, 1, 2, 0, 16, 42 };
+        byte[] other = Encoding.UTF8.GetBytes("# Second\n\n[link](first.md)\n");
+        byte[] binary = new byte[] { 0, 255, 1, 2, 0, 16, 42 };
         Put(source, "Notes/first.md", markdown);
         Put(source, "Notes/second.md", other);
         Put(source, "media/photo.png", binary);
         Put(source, ".obsidian/app.json", Encoding.UTF8.GetBytes("{\"theme\":\"dark\"}"));
         Put(source, "media/empty.bin", []);
 
-        var archive = Path.Combine(root, "complete.zip");
+        string archive = Path.Combine(root, "complete.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
-        using (var stream = File.OpenRead(archive))
+        using (FileStream stream = File.OpenRead(archive))
         {
-            var collection = NoteArchive.ReadCollection(stream);
+            KnowledgeCollection collection = NoteArchive.ReadCollection(stream);
             Assert.Equal(2, collection.Notes.Count);
             Assert.Equal(3, collection.Attachments.Count);
             Assert.Empty(collection.References);
@@ -43,7 +43,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
                     attachment.Path == "media/photo.png").ReadContent());
         }
 
-        var destination = Path.Combine(root, "restored");
+        string destination = Path.Combine(root, "restored");
         LocalVaultExchange.RestoreArchive(archive, destination);
         AssertFilesEqual(source, destination);
         Assert.Empty(Directory.EnumerateFiles(root, "*.pending"));
@@ -54,25 +54,25 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void ArchiveRetainsHistoricalRevisionsWhileFolderRestoresOnlyCurrentContent()
     {
-        var note = NoteRecord.Create("old.md", "# First\n")
+        NoteRecord note = NoteRecord.Create("old.md", "# First\n")
             .Revise("Notes/new.md", "# Second\r\n");
-        var attachment = AttachmentRecord.Create("media/file.bin", [1, 2, 3]);
-        var collection = new KnowledgeCollection([note], [attachment],
+        AttachmentRecord attachment = AttachmentRecord.Create("media/file.bin", [1, 2, 3]);
+        KnowledgeCollection collection = new KnowledgeCollection([note], [attachment],
             [new AttachmentReference(note.Id, attachment.Id)]);
-        var archive = Path.Combine(root, "history.zip");
-        using (var stream = File.Create(archive))
+        string archive = Path.Combine(root, "history.zip");
+        using (FileStream stream = File.Create(archive))
         {
             NoteArchive.WriteCollection(stream, collection);
         }
 
-        var destination = Path.Combine(root, "current");
+        string destination = Path.Combine(root, "current");
         LocalVaultExchange.RestoreArchive(archive, destination);
         Assert.Equal("# Second\r\n", File.ReadAllText(Path.Combine(destination, "Notes/new.md")));
         Assert.False(File.Exists(Path.Combine(destination, "old.md")));
         Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(destination, "media/file.bin")));
 
-        using var read = File.OpenRead(archive);
-        var preserved = NoteArchive.ReadCollection(read);
+        using FileStream read = File.OpenRead(archive);
+        KnowledgeCollection preserved = NoteArchive.ReadCollection(read);
         Assert.Equal(note.Revisions.ToArray(), Assert.Single(preserved.Notes).Revisions.ToArray());
         Assert.Equal(Assert.Single(collection.References), Assert.Single(preserved.References));
     }
@@ -80,9 +80,9 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void RestoreCollectionRejectsConflictingFileDirectoryPathsBeforeWriting()
     {
-        var note = NoteRecord.Create("assets.md", "note");
-        var attachment = AttachmentRecord.Create("assets.md/photo.png", [1]);
-        var destination = Path.Combine(root, "blocked");
+        NoteRecord note = NoteRecord.Create("assets.md", "note");
+        AttachmentRecord attachment = AttachmentRecord.Create("assets.md/photo.png", [1]);
+        string destination = Path.Combine(root, "blocked");
 
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.RestoreCollection(
             new KnowledgeCollection([note], [attachment], []), destination));
@@ -92,9 +92,9 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void RestoreRejectsDirectoryCaseVariantsBeforeCreatingTarget()
     {
-        var first = NoteRecord.Create("Notes/one.md", "one");
-        var second = NoteRecord.Create("notes/two.md", "two");
-        var destination = Path.Combine(root, "case-folded");
+        NoteRecord first = NoteRecord.Create("Notes/one.md", "one");
+        NoteRecord second = NoteRecord.Create("notes/two.md", "two");
+        string destination = Path.Combine(root, "case-folded");
 
         Assert.Throws<InvalidDataException>(() =>
             LocalVaultExchange.RestoreCollection(new KnowledgeCollection(
@@ -105,11 +105,11 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void ExistingDestinationIsNeverOverwritten()
     {
-        var original = Folder("original");
+        string original = Folder("original");
         Put(original, "note.md", Encoding.UTF8.GetBytes("new"));
-        var archive = Path.Combine(root, "archive.zip");
+        string archive = Path.Combine(root, "archive.zip");
         LocalVaultExchange.CaptureArchive(original, archive);
-        var existing = Folder("existing");
+        string existing = Folder("existing");
         Put(existing, "note.md", Encoding.UTF8.GetBytes("old"));
 
         Assert.Throws<IOException>(() => LocalVaultExchange.RestoreArchive(archive, existing));
@@ -120,9 +120,9 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void ExistingArchiveIsNeverOverwritten()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "note.md", Encoding.UTF8.GetBytes("new"));
-        var destination = Path.Combine(root, "archive.zip");
+        string destination = Path.Combine(root, "archive.zip");
         File.WriteAllBytes(destination, [1, 2, 3]);
 
         Assert.Throws<IOException>(() => LocalVaultExchange.CaptureArchive(source, destination));
@@ -132,7 +132,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void ArchiveCannotBePlacedInsideItsSourceVault()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "note.md", Encoding.UTF8.GetBytes("original"));
 
         Assert.Throws<ArgumentException>(() =>
@@ -143,9 +143,9 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void MalformedArchiveDoesNotCreateRestorationTarget()
     {
-        var archive = Path.Combine(root, "bad.zip");
+        string archive = Path.Combine(root, "bad.zip");
         File.WriteAllBytes(archive, [1, 2, 3, 4]);
-        var target = Path.Combine(root, "not-created");
+        string target = Path.Combine(root, "not-created");
 
         Assert.ThrowsAny<InvalidDataException>(() =>
             LocalVaultExchange.RestoreArchive(archive, target));
@@ -155,20 +155,20 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void TamperedAttachmentFailsBeforeAnyRestoredFilesArePublished()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "note.md", Encoding.UTF8.GetBytes("private"));
         Put(source, "media/original.bin", [1, 2, 3]);
-        var archive = Path.Combine(root, "modified.zip");
+        string archive = Path.Combine(root, "modified.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
         string entry;
-        using (var stream = File.OpenRead(archive))
+        using (FileStream stream = File.OpenRead(archive))
         {
-            using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
+            using ZipArchive zip = new ZipArchive(stream, ZipArchiveMode.Read);
             entry = Assert.Single(zip.Entries, item =>
                 item.FullName.StartsWith("attachments/", StringComparison.Ordinal)).FullName;
         }
 
-        using (var buffer = new MemoryStream())
+        using (MemoryStream buffer = new MemoryStream())
         {
             buffer.Write(File.ReadAllBytes(archive));
             buffer.Position = 0;
@@ -176,7 +176,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
             File.WriteAllBytes(archive, buffer.ToArray());
         }
 
-        var destination = Path.Combine(root, "never-published");
+        string destination = Path.Combine(root, "never-published");
         Assert.Throws<InvalidDataException>(() =>
             LocalVaultExchange.RestoreArchive(archive, destination));
         Assert.False(Path.Exists(destination));
@@ -185,9 +185,9 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void InvalidMarkdownUtf8IsRejectedWithoutCreatingArchive()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "invalid.md", [0xc3, 0x28]);
-        var archive = Path.Combine(root, "invalid.zip");
+        string archive = Path.Combine(root, "invalid.zip");
 
         Assert.Throws<InvalidDataException>(() =>
             LocalVaultExchange.CaptureArchive(source, archive));
@@ -197,7 +197,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void OversizedMarkdownIsRejectedBeforeAllocationOrPublication()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "too-large.md", new byte[8 * 1024 * 1024 + 1]);
 
         Assert.Throws<InvalidDataException>(() =>
@@ -208,7 +208,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void OversizedAttachmentIsRejected()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "too-large.bin", new byte[32 * 1024 * 1024 + 1]);
 
         Assert.Throws<InvalidDataException>(() =>
@@ -218,7 +218,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void EmptyNestedDirectoryIsRejectedRatherThanSilentlyLost()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Directory.CreateDirectory(Path.Combine(source, "empty"));
 
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.Capture(source));
@@ -227,10 +227,10 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void EmptyVaultCanRoundTrip()
     {
-        var source = Folder("source");
-        var archive = Path.Combine(root, "empty.zip");
+        string source = Folder("source");
+        string archive = Path.Combine(root, "empty.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
-        var output = Path.Combine(root, "empty-restore");
+        string output = Path.Combine(root, "empty-restore");
         LocalVaultExchange.RestoreArchive(archive, output);
         Assert.True(Directory.Exists(output));
         Assert.Empty(Directory.EnumerateFileSystemEntries(output));
@@ -244,8 +244,8 @@ public sealed class LocalVaultExchangeTests : IDisposable
             return;
         }
 
-        var source = Folder("source");
-        var outside = Path.Combine(root, "secret.txt");
+        string source = Folder("source");
+        string outside = Path.Combine(root, "secret.txt");
         File.WriteAllText(outside, "secret");
         File.CreateSymbolicLink(Path.Combine(source, "secret.txt"), outside);
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.Capture(source));
@@ -259,8 +259,8 @@ public sealed class LocalVaultExchangeTests : IDisposable
             return;
         }
 
-        var source = Folder("source");
-        var outside = Folder("outside");
+        string source = Folder("source");
+        string outside = Folder("outside");
         Put(outside, "private.md", Encoding.UTF8.GetBytes("private"));
         Directory.CreateSymbolicLink(Path.Combine(source, "linked"), outside);
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.Capture(source));
@@ -274,7 +274,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
             return;
         }
 
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "Notes/Draft.md", [1]);
         Put(source, "notes/draft.md", [2]);
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.Capture(source));
@@ -288,7 +288,7 @@ public sealed class LocalVaultExchangeTests : IDisposable
             return;
         }
 
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "bad?.md", Encoding.UTF8.GetBytes("content"));
         Assert.Throws<InvalidDataException>(() => LocalVaultExchange.Capture(source));
     }
@@ -296,12 +296,12 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void RepeatedCapturePreservesFileContentButCreatesNewIndependentIdentities()
     {
-        var source = Folder("source");
+        string source = Folder("source");
         Put(source, "Notes/one.md", Encoding.UTF8.GetBytes("body"));
         Put(source, "data.bin", [9, 9]);
 
-        var first = LocalVaultExchange.Capture(source);
-        var second = LocalVaultExchange.Capture(source);
+        KnowledgeCollection first = LocalVaultExchange.Capture(source);
+        KnowledgeCollection second = LocalVaultExchange.Capture(source);
 
         Assert.NotEqual(Assert.Single(first.Notes).Id, Assert.Single(second.Notes).Id);
         Assert.NotEqual(Assert.Single(first.Attachments).Id, Assert.Single(second.Attachments).Id);
@@ -314,40 +314,40 @@ public sealed class LocalVaultExchangeTests : IDisposable
     [Fact]
     public void CaptureAndRestoreRetainsMarkdownBomAndLineEndings()
     {
-        var source = Folder("source");
-        var bytes = new byte[] { 0xef, 0xbb, 0xbf, 35, 32, 84, 13, 10 };
+        string source = Folder("source");
+        byte[] bytes = new byte[] { 0xef, 0xbb, 0xbf, 35, 32, 84, 13, 10 };
         Put(source, "bom.md", bytes);
-        var archive = Path.Combine(root, "bom.zip");
+        string archive = Path.Combine(root, "bom.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
-        var output = Path.Combine(root, "restore");
+        string output = Path.Combine(root, "restore");
         LocalVaultExchange.RestoreArchive(archive, output);
         Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(output, "bom.md")));
     }
 
     private string Folder(string name)
     {
-        var path = Path.Combine(root, name);
+        string path = Path.Combine(root, name);
         Directory.CreateDirectory(path);
         return path;
     }
 
     private static void Put(string root, string path, byte[] contents)
     {
-        var file = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
+        string file = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllBytes(file, contents);
     }
 
     private static void AssertFilesEqual(string source, string restored)
     {
-        var originals = Directory.GetFiles(source, "*", SearchOption.AllDirectories)
+        string[] originals = Directory.GetFiles(source, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(source, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal).ToArray();
-        var result = Directory.GetFiles(restored, "*", SearchOption.AllDirectories)
+        string[] result = Directory.GetFiles(restored, "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(restored, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(originals, result);
-        foreach (var path in originals)
+        foreach (string path in originals)
         {
             Assert.Equal(File.ReadAllBytes(Path.Combine(source, path)),
                 File.ReadAllBytes(Path.Combine(restored, path)));

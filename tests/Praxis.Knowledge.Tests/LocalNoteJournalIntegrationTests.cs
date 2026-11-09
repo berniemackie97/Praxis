@@ -15,12 +15,12 @@ public sealed class LocalNoteJournalIntegrationTests : IDisposable
     [Fact]
     public void TwoClientsPreserveOfflineConflictAndConvergeAfterExplicitMerge()
     {
-        var server = new SyncContractFixture(Epoch);
-        using (var first = LocalNoteJournal.Open(Path.Combine(directory, "first"), Epoch, DeviceA))
-        using (var second = LocalNoteJournal.Open(Path.Combine(directory, "second"), Epoch, DeviceB))
+        SyncContractFixture server = new SyncContractFixture(Epoch);
+        using (LocalNoteJournal first = LocalNoteJournal.Open(Path.Combine(directory, "first"), Epoch, DeviceA))
+        using (LocalNoteJournal second = LocalNoteJournal.Open(Path.Combine(directory, "second"), Epoch, DeviceB))
         {
-            var created = first.Queue(Note, LocalNoteAction.Upsert, "note.md", "base");
-            var createReceipt = server.Apply(Mutation(DeviceA, created));
+            PendingNoteEdit created = first.Queue(Note, LocalNoteAction.Upsert, "note.md", "base");
+            SyncReply createReceipt = server.Apply(Mutation(DeviceA, created));
             Assert.Equal(ApplyStatus.Applied, createReceipt.Status);
             first.Accept(created.OperationId, createReceipt.HeadSequence, Convert(createReceipt.Current!));
 
@@ -28,24 +28,24 @@ public sealed class LocalNoteJournalIntegrationTests : IDisposable
             Pull(server, second);
             Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
 
-            var a = first.Queue(Note, LocalNoteAction.Upsert, "note.md", "first offline");
-            var b = second.Queue(Note, LocalNoteAction.Upsert, "note.md", "second offline");
-            var accepted = server.Apply(Mutation(DeviceA, a));
+            PendingNoteEdit a = first.Queue(Note, LocalNoteAction.Upsert, "note.md", "first offline");
+            PendingNoteEdit b = second.Queue(Note, LocalNoteAction.Upsert, "note.md", "second offline");
+            SyncReply accepted = server.Apply(Mutation(DeviceA, a));
             Assert.Equal(ApplyStatus.Applied, accepted.Status);
             first.Accept(a.OperationId, accepted.HeadSequence, Convert(accepted.Current!));
 
-            var rejected = server.Apply(Mutation(DeviceB, b));
+            SyncReply rejected = server.Apply(Mutation(DeviceB, b));
             Assert.Equal(ApplyStatus.StaleRevision, rejected.Status);
             second.Reject(b.OperationId, LocalNoteConflictReason.StaleRevision,
                 Convert(rejected.Current!));
             Assert.Equal("second offline", Assert.Single(second.Pending).Markdown);
 
             Pull(server, second);
-            var resolved = second.Resolve(b.OperationId, LocalNoteAction.Upsert,
+            PendingNoteEdit resolved = second.Resolve(b.OperationId, LocalNoteAction.Upsert,
                 "note.md", "first offline + second offline");
             Assert.Equal("second offline",
                 Assert.Single(second.ResolvedConflicts).Edit.Markdown);
-            var resolutionReceipt = server.Apply(Mutation(DeviceB, resolved));
+            SyncReply resolutionReceipt = server.Apply(Mutation(DeviceB, resolved));
             Assert.Equal(ApplyStatus.Applied, resolutionReceipt.Status);
             second.Accept(resolved.OperationId, resolutionReceipt.HeadSequence,
                 Convert(resolutionReceipt.Current!));
@@ -61,8 +61,8 @@ public sealed class LocalNoteJournalIntegrationTests : IDisposable
             Assert.Empty(second.Pending);
         }
 
-        using var reopenedA = LocalNoteJournal.Open(Path.Combine(directory, "first"), Epoch, DeviceA);
-        using var reopenedB = LocalNoteJournal.Open(Path.Combine(directory, "second"), Epoch, DeviceB);
+        using LocalNoteJournal reopenedA = LocalNoteJournal.Open(Path.Combine(directory, "first"), Epoch, DeviceA);
+        using LocalNoteJournal reopenedB = LocalNoteJournal.Open(Path.Combine(directory, "second"), Epoch, DeviceB);
         Assert.Equal(reopenedA.Records.ToArray(), reopenedB.Records.ToArray());
         Assert.Equal(3, reopenedA.Cursor);
         Assert.Equal(3, reopenedB.Cursor);
@@ -71,7 +71,7 @@ public sealed class LocalNoteJournalIntegrationTests : IDisposable
 
     private static void Pull(SyncContractFixture server, LocalNoteJournal client)
     {
-        var page = server.Pull(Epoch, client.Cursor, 100);
+        SyncPage page = server.Pull(Epoch, client.Cursor, 100);
         Assert.Equal(PullStatus.Ok, page.Status);
         client.ApplyPage(client.Cursor,
             page.Changes.Select(change =>

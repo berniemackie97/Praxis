@@ -19,21 +19,21 @@ public static class LocalVaultAttachmentLinks
     public static VaultLinkReport Inspect(KnowledgeCollection collection)
     {
         ArgumentNullException.ThrowIfNull(collection);
-        var byPath = collection.Attachments.ToDictionary(
+        Dictionary<string, AttachmentRecord> byPath = collection.Attachments.ToDictionary(
             item => item.Path, StringComparer.OrdinalIgnoreCase);
-        var byName = collection.Attachments.ToLookup(
+        ILookup<string, AttachmentRecord> byName = collection.Attachments.ToLookup(
             item => item.Path[(item.Path.LastIndexOf('/') + 1)..],
             StringComparer.OrdinalIgnoreCase);
-        var references = new HashSet<AttachmentReference>();
-        var problems = new List<VaultLinkProblem>();
-        var scannedEmbeds = 0;
+        HashSet<AttachmentReference> references = new HashSet<AttachmentReference>();
+        List<VaultLinkProblem> problems = new List<VaultLinkProblem>();
+        int scannedEmbeds = 0;
 
-        foreach (var note in collection.Notes)
+        foreach (NoteRecord note in collection.Notes)
         {
             char fence = '\0';
-            foreach (var line in note.Current.Markdown.Split('\n'))
+            foreach (string line in note.Current.Markdown.Split('\n'))
             {
-                var trimmed = line.TrimStart();
+                string trimmed = line.TrimStart();
                 if (fence == '\0' && (trimmed.StartsWith("~~~") || trimmed.StartsWith("\u0060\u0060\u0060")))
                 {
                     fence = trimmed[0];
@@ -51,10 +51,10 @@ public static class LocalVaultAttachmentLinks
                     continue;
                 }
 
-                var visible = HideInlineCode(line);
+                string visible = HideInlineCode(line);
                 foreach (Match match in WikiEmbed.Matches(visible))
                 {
-                    var target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
+                    string target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
                     CheckLimit();
                     if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
                         !Path.HasExtension(target))
@@ -68,7 +68,7 @@ public static class LocalVaultAttachmentLinks
                 foreach (Match match in MarkdownEmbed.Matches(visible))
                 {
                     CheckLimit();
-                    var value = match.Groups[1].Value.Trim();
+                    string value = match.Groups[1].Value.Trim();
                     if (Uri.TryCreate(value, UriKind.Absolute, out _) ||
                         value.StartsWith("//", StringComparison.Ordinal) ||
                         value.StartsWith('#'))
@@ -76,7 +76,7 @@ public static class LocalVaultAttachmentLinks
                         continue;
                     }
 
-                    var target = value.Split('#', 2)[0].Split('?', 2)[0];
+                    string target = value.Split('#', 2)[0].Split('?', 2)[0];
                     try
                     {
                         Resolve(note, Uri.UnescapeDataString(target), wiki: false);
@@ -105,23 +105,23 @@ public static class LocalVaultAttachmentLinks
 
         void Resolve(NoteRecord note, string target, bool wiki)
         {
-            var path = note.Current.Path;
+            string path = note.Current.Path;
             if (string.IsNullOrWhiteSpace(target))
             {
                 return;
             }
 
-            var candidates = new HashSet<Guid>();
-            var attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var relative = target.StartsWith("./", StringComparison.Ordinal) ||
-                           target.StartsWith("../", StringComparison.Ordinal);
+            HashSet<Guid> candidates = new HashSet<Guid>();
+            HashSet<string> attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool relative = target.StartsWith("./", StringComparison.Ordinal) ||
+                            target.StartsWith("../", StringComparison.Ordinal);
 
             if (relative || !wiki)
             {
-                var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
-                var segments = new List<string>(parent.Length == 0 ? [] : parent.Split('/'));
-                var escaped = false;
-                foreach (var segment in target.Split('/'))
+                string parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+                List<string> segments = new List<string>(parent.Length == 0 ? [] : parent.Split('/'));
+                bool escaped = false;
+                foreach (string segment in target.Split('/'))
                 {
                     if (segment is "" or ".")
                     {
@@ -160,9 +160,9 @@ public static class LocalVaultAttachmentLinks
                 attempted.Add(target.TrimStart('/'));
             }
 
-            foreach (var candidate in attempted)
+            foreach (string candidate in attempted)
             {
-                if (byPath.TryGetValue(candidate, out var attachment))
+                if (byPath.TryGetValue(candidate, out AttachmentRecord? attachment))
                 {
                     candidates.Add(attachment.Id);
                 }
@@ -170,7 +170,7 @@ public static class LocalVaultAttachmentLinks
 
             if (wiki && !target.Contains('/'))
             {
-                foreach (var attachment in byName[target])
+                foreach (AttachmentRecord attachment in byName[target])
                 {
                     candidates.Add(attachment.Id);
                 }
@@ -193,10 +193,10 @@ public static class LocalVaultAttachmentLinks
 
     public static KnowledgeCollection Track(KnowledgeCollection collection)
     {
-        var report = Inspect(collection);
+        VaultLinkReport report = Inspect(collection);
         if (report.Problems.Count != 0)
         {
-            var problem = report.Problems[0];
+            VaultLinkProblem problem = report.Problems[0];
             throw new InvalidDataException(
                 $"Attachment link audit found {report.Problems.Count} problem(s); " +
                 $"{problem.NotePath}: {problem.Target}: {problem.Reason}");
@@ -208,8 +208,8 @@ public static class LocalVaultAttachmentLinks
 
     private static string HideInlineCode(string line)
     {
-        var characters = line.ToCharArray();
-        for (var i = 0; i < characters.Length;)
+        char[] characters = line.ToCharArray();
+        for (int i = 0; i < characters.Length;)
         {
             if (characters[i] != '\u0060')
             {
@@ -217,22 +217,22 @@ public static class LocalVaultAttachmentLinks
                 continue;
             }
 
-            var start = i;
+            int start = i;
             while (i < characters.Length && characters[i] == '\u0060')
             {
                 i++;
             }
 
-            var delimiterLength = i - start;
-            var end = -1;
-            for (var j = i; j < characters.Length; j++)
+            int delimiterLength = i - start;
+            int end = -1;
+            for (int j = i; j < characters.Length; j++)
             {
                 if (characters[j] != '\u0060')
                 {
                     continue;
                 }
 
-                var runStart = j;
+                int runStart = j;
                 while (j < characters.Length && characters[j] == '\u0060')
                 {
                     j++;

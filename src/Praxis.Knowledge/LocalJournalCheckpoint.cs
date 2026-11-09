@@ -21,7 +21,7 @@ internal static class LocalJournalCheckpoint
 
     public static LocalJournalState Read(string path)
     {
-        var info = new FileInfo(path);
+        FileInfo info = new FileInfo(path);
         if (info.Length > MaxFileBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
@@ -29,7 +29,7 @@ internal static class LocalJournalCheckpoint
 
         try
         {
-            var container = JsonSerializer.Deserialize<CheckpointEnvelope>(
+            CheckpointEnvelope container = JsonSerializer.Deserialize<CheckpointEnvelope>(
                 File.ReadAllBytes(path), Options) ?? throw new InvalidDataException("The local checkpoint is empty.");
             if (container.Version != 1 || container.Payload is null ||
                 container.Payload.Length > MaxPayloadBytes || container.Sha256 is null ||
@@ -40,8 +40,8 @@ internal static class LocalJournalCheckpoint
                 throw new InvalidDataException("The local checkpoint failed integrity verification.");
             }
 
-            var result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options)
-                ?? throw new InvalidDataException("The local checkpoint payload is empty.");
+            LocalJournalState result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options)
+                                       ?? throw new InvalidDataException("The local checkpoint payload is empty.");
             Validate(result);
             return result;
         }
@@ -54,28 +54,28 @@ internal static class LocalJournalCheckpoint
     public static void Write(string path, LocalJournalState state)
     {
         Validate(state);
-        var payload = JsonSerializer.SerializeToUtf8Bytes(state, Options);
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(state, Options);
         if (payload.Length > MaxPayloadBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
         }
 
-        var envelope = new CheckpointEnvelope
+        CheckpointEnvelope envelope = new CheckpointEnvelope
         {
             Version = 1,
             Sha256 = Convert.ToHexStringLower(SHA256.HashData(payload)),
             Payload = payload
         };
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, Options);
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, Options);
         if (bytes.Length > MaxFileBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
         }
 
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".pending";
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".pending";
         try
         {
-            using (var output = new FileStream(temporary, FileMode.CreateNew,
+            using (FileStream output = new FileStream(temporary, FileMode.CreateNew,
                        FileAccess.Write, FileShare.None))
             {
                 output.Write(bytes);
@@ -103,9 +103,9 @@ internal static class LocalJournalCheckpoint
             throw new InvalidDataException("The local checkpoint metadata is invalid.");
         }
 
-        var ids = new HashSet<Guid>();
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var record in state.Records)
+        HashSet<Guid> ids = new HashSet<Guid>();
+        HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (LocalNoteState record in state.Records)
         {
             ValidateRecord(record);
             if (!ids.Add(record.Id) || !record.Deleted && !paths.Add(record.Path))
@@ -114,9 +114,9 @@ internal static class LocalJournalCheckpoint
             }
         }
 
-        var acceptedSequences = new HashSet<long>();
-        var acceptedOperations = new HashSet<Guid>();
-        foreach (var accepted in state.AwaitingPull)
+        HashSet<long> acceptedSequences = new HashSet<long>();
+        HashSet<Guid> acceptedOperations = new HashSet<Guid>();
+        foreach (AcceptedNoteReceipt? accepted in state.AwaitingPull)
         {
             if (accepted is null || accepted.OperationId == Guid.Empty ||
                 accepted.Sequence <= state.Cursor ||
@@ -133,9 +133,9 @@ internal static class LocalJournalCheckpoint
             }
         }
 
-        var operations = new HashSet<Guid>();
-        var lastRevision = new Dictionary<Guid, long>();
-        foreach (var pending in state.Pending)
+        HashSet<Guid> operations = new HashSet<Guid>();
+        Dictionary<Guid, long> lastRevision = new Dictionary<Guid, long>();
+        foreach (PendingNoteEdit pending in state.Pending)
         {
             ValidateEdit(pending);
             if (!operations.Add(pending.OperationId))
@@ -143,7 +143,7 @@ internal static class LocalJournalCheckpoint
                 throw new InvalidDataException("The local checkpoint repeats an operation identity.");
             }
 
-            if (lastRevision.TryGetValue(pending.RecordId, out var prior) &&
+            if (lastRevision.TryGetValue(pending.RecordId, out long prior) &&
                 pending.ExpectedRevision != prior + 1)
             {
                 throw new InvalidDataException("The local outbox has inconsistent revisions.");
@@ -152,8 +152,8 @@ internal static class LocalJournalCheckpoint
             lastRevision[pending.RecordId] = pending.ExpectedRevision;
         }
 
-        var conflictIds = new HashSet<Guid>();
-        foreach (var conflict in state.Conflicts)
+        HashSet<Guid> conflictIds = new HashSet<Guid>();
+        foreach (RejectedNoteEdit conflict in state.Conflicts)
         {
             ValidateConflict(conflict);
             if (!operations.Contains(conflict.Edit.OperationId) ||
@@ -164,7 +164,7 @@ internal static class LocalJournalCheckpoint
             }
         }
 
-        foreach (var conflict in state.Resolved)
+        foreach (RejectedNoteEdit conflict in state.Resolved)
         {
             ValidateConflict(conflict);
             if (operations.Contains(conflict.Edit.OperationId))

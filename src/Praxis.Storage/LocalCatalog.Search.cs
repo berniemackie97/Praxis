@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage;
 
@@ -16,44 +17,44 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        var expression = BuildTextQuery(query);
+        string expression = BuildTextQuery(query);
         lock (connection)
         {
-            using var command = Command(connection, """
-                SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
-                       snippet(text_search, -1, '⟦', '⟧', '…', 24)
-                FROM text_search
-                JOIN search_index_keys k ON k.rowid = text_search.rowid
-                JOIN item_versions v
-                    ON v.item_id = k.item_id AND v.revision = k.revision
-                JOIN items i ON i.item_id = v.item_id
-                JOIN sources s
-                    ON s.source_id = i.source_id AND s.source_id = k.source_id
-                JOIN text_derivatives d
-                    ON d.item_id = v.item_id AND d.revision = v.revision
-                    AND d.source_digest = v.digest AND d.outcome = 'completed'
-                    AND d.processor_key = 'source-text-v1'
-                JOIN processing_jobs j
-                    ON j.item_id = d.item_id AND j.revision = d.revision
-                    AND j.processor_key = d.processor_key AND j.state = 'completed'
-                WHERE text_search MATCH $query
-                  AND s.status = 'active'
-                  AND v.revision = (
-                      SELECT MAX(latest.revision) FROM item_versions latest
-                      WHERE latest.item_id = v.item_id)
-                ORDER BY bm25(text_search), s.locator COLLATE BINARY,
-                         v.item_id, v.revision
-                LIMIT $limit
-                """);
+            using SqliteCommand command = Command(connection, """
+                                                              SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
+                                                                     snippet(text_search, -1, '⟦', '⟧', '…', 24)
+                                                              FROM text_search
+                                                              JOIN search_index_keys k ON k.rowid = text_search.rowid
+                                                              JOIN item_versions v
+                                                                  ON v.item_id = k.item_id AND v.revision = k.revision
+                                                              JOIN items i ON i.item_id = v.item_id
+                                                              JOIN sources s
+                                                                  ON s.source_id = i.source_id AND s.source_id = k.source_id
+                                                              JOIN text_derivatives d
+                                                                  ON d.item_id = v.item_id AND d.revision = v.revision
+                                                                  AND d.source_digest = v.digest AND d.outcome = 'completed'
+                                                                  AND d.processor_key = 'source-text-v1'
+                                                              JOIN processing_jobs j
+                                                                  ON j.item_id = d.item_id AND j.revision = d.revision
+                                                                  AND j.processor_key = d.processor_key AND j.state = 'completed'
+                                                              WHERE text_search MATCH $query
+                                                                AND s.status = 'active'
+                                                                AND v.revision = (
+                                                                    SELECT MAX(latest.revision) FROM item_versions latest
+                                                                    WHERE latest.item_id = v.item_id)
+                                                              ORDER BY bm25(text_search), s.locator COLLATE BINARY,
+                                                                       v.item_id, v.revision
+                                                              LIMIT $limit
+                                                              """);
             command.CommandTimeout = 5;
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$limit", limit);
-            using var reader = command.ExecuteReader();
-            var hits = new List<LocalSearchHit>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            List<LocalSearchHit> hits = new List<LocalSearchHit>();
             while (reader.Read())
             {
-                var locator = reader.GetString(3);
-                var snippet = reader.IsDBNull(5) ? "" : reader.GetString(5);
+                string locator = reader.GetString(3);
+                string snippet = reader.IsDBNull(5) ? "" : reader.GetString(5);
                 if (snippet.Length > 480)
                 {
                     snippet = snippet[..480];
@@ -84,18 +85,18 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var transaction = connection.BeginTransaction();
-            using var count = Command(connection, """
-                SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
-                FROM eligible_text_search
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand count = Command(connection, """
+                                                            SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
+                                                            FROM eligible_text_search
+                                                            """);
             count.Transaction = transaction;
             count.CommandTimeout = 30;
             int eligible;
-            using (var reader = count.ExecuteReader())
+            using (SqliteDataReader reader = count.ExecuteReader())
             {
                 reader.Read();
-                var documentCount = reader.GetInt64(0);
+                long documentCount = reader.GetInt64(0);
                 if (documentCount > maxDocuments || reader.GetInt64(1) > maxTextBytes)
                 {
                     throw new InvalidOperationException("The rebuild exceeds its data budget.");
@@ -104,33 +105,33 @@ public sealed partial class LocalCatalog
                 eligible = (int)documentCount;
             }
 
-            using var clear = Command(connection, "DELETE FROM text_search");
+            using SqliteCommand clear = Command(connection, "DELETE FROM text_search");
             clear.Transaction = transaction;
             clear.CommandTimeout = 30;
             clear.ExecuteNonQuery();
 
-            using var removeKeys = Command(connection, "DELETE FROM search_index_keys");
+            using SqliteCommand removeKeys = Command(connection, "DELETE FROM search_index_keys");
             removeKeys.Transaction = transaction;
             removeKeys.CommandTimeout = 30;
             removeKeys.ExecuteNonQuery();
 
-            using var insertKeys = Command(connection, """
-                INSERT INTO search_index_keys (item_id, revision, source_id)
-                SELECT item_id, revision, source_id
-                FROM eligible_text_search ORDER BY item_id, revision
-                """);
+            using SqliteCommand insertKeys = Command(connection, """
+                                                                 INSERT INTO search_index_keys (item_id, revision, source_id)
+                                                                 SELECT item_id, revision, source_id
+                                                                 FROM eligible_text_search ORDER BY item_id, revision
+                                                                 """);
             insertKeys.Transaction = transaction;
             insertKeys.CommandTimeout = 30;
             insertKeys.ExecuteNonQuery();
 
-            using var populate = Command(connection, """
-                INSERT INTO text_search (rowid, locator, content)
-                SELECT k.rowid, e.locator, e.content
-                FROM eligible_text_search e
-                JOIN search_index_keys k
-                    ON k.item_id = e.item_id AND k.revision = e.revision
-                ORDER BY e.item_id, e.revision
-                """);
+            using SqliteCommand populate = Command(connection, """
+                                                               INSERT INTO text_search (rowid, locator, content)
+                                                               SELECT k.rowid, e.locator, e.content
+                                                               FROM eligible_text_search e
+                                                               JOIN search_index_keys k
+                                                                   ON k.item_id = e.item_id AND k.revision = e.revision
+                                                               ORDER BY e.item_id, e.revision
+                                                               """);
             populate.Transaction = transaction;
             populate.CommandTimeout = 30;
             populate.ExecuteNonQuery();
@@ -147,9 +148,9 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("Search queries must be bounded printable text.", nameof(query));
         }
 
-        var terms = new List<string>();
-        var token = new StringBuilder();
-        foreach (var character in query)
+        List<string> terms = new List<string>();
+        StringBuilder token = new StringBuilder();
+        foreach (char character in query)
         {
             if (char.IsLetterOrDigit(character))
             {

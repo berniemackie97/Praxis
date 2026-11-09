@@ -11,9 +11,9 @@ public sealed class NoteRecord
             throw new ArgumentException("A note needs an identity and at least one revision.");
         }
 
-        for (var index = 0; index < revisions.Length; index++)
+        for (int index = 0; index < revisions.Length; index++)
         {
-            var revision = revisions[index];
+            NoteRevision? revision = revisions[index];
             if (revision is null || revision.Number != index + 1)
             {
                 throw new ArgumentException("Note revisions must be contiguous and start at one.");
@@ -46,8 +46,8 @@ public sealed class NoteRecord
         PortablePath.Validate(path, markdown: true);
         ArgumentNullException.ThrowIfNull(markdown);
 
-        var next = new NoteRevision(checked(Current.Number + 1), path, markdown);
-        var updated = new NoteRevision[revisions.Length + 1];
+        NoteRevision next = new NoteRevision(checked(Current.Number + 1), path, markdown);
+        NoteRevision[] updated = new NoteRevision[revisions.Length + 1];
         Array.Copy(revisions, updated, revisions.Length);
         updated[^1] = next;
         return new NoteRecord(Id, updated);

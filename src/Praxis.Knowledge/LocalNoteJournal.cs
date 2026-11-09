@@ -23,15 +23,15 @@ public sealed class LocalNoteJournal : IDisposable
             throw new ArgumentException("The collection epoch and device identity must be nonempty.");
         }
 
-        var root = Path.GetFullPath(directory);
+        string root = Path.GetFullPath(directory);
         Directory.CreateDirectory(root);
-        var lease = new FileStream(Path.Combine(root, "journal.lock"),
+        FileStream lease = new FileStream(Path.Combine(root, "journal.lock"),
             FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         try
         {
-            var checkpoint = Path.Combine(root, "journal.json");
-            var exists = File.Exists(checkpoint);
-            var state = exists
+            string checkpoint = Path.Combine(root, "journal.json");
+            bool exists = File.Exists(checkpoint);
+            LocalJournalState state = exists
                 ? LocalJournalCheckpoint.Read(checkpoint)
                 : new LocalJournalState { CollectionEpoch = collectionEpoch, DeviceId = deviceId };
             if (state.CollectionEpoch != collectionEpoch || state.DeviceId != deviceId)
@@ -88,8 +88,8 @@ public sealed class LocalNoteJournal : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            var blocked = state.Conflicts.Select(item => item.Edit.RecordId).ToHashSet();
-            var seen = new HashSet<Guid>();
+            HashSet<Guid> blocked = state.Conflicts.Select(item => item.Edit.RecordId).ToHashSet();
+            HashSet<Guid> seen = new HashSet<Guid>();
             return Array.AsReadOnly(state.Pending.Where(item => seen.Add(item.RecordId) &&
                 !blocked.Contains(item.RecordId) &&
                 item.ExpectedRevision == (state.Records.FirstOrDefault(record =>
@@ -103,8 +103,8 @@ public sealed class LocalNoteJournal : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            var candidate = state.Copy();
-            var edit = Stage(candidate, recordId, action, path, markdown);
+            LocalJournalState candidate = state.Copy();
+            PendingNoteEdit edit = Stage(candidate, recordId, action, path, markdown);
             Commit(candidate);
             return edit;
         }
@@ -116,7 +116,7 @@ public sealed class LocalNoteJournal : IDisposable
         {
             EnsureOpen();
             LocalJournalCheckpoint.ValidateRecord(accepted);
-            var previous = state.AwaitingPull.FirstOrDefault(
+            AcceptedNoteReceipt? previous = state.AwaitingPull.FirstOrDefault(
                 receipt => receipt.OperationId == operationId);
             if (previous is not null)
             {
@@ -134,15 +134,15 @@ public sealed class LocalNoteJournal : IDisposable
                 throw new InvalidDataException("The accepted change sequence is invalid.");
             }
 
-            var edit = FirstPending(operationId);
-            var current = state.Records.FirstOrDefault(record => record.Id == edit.RecordId);
+            PendingNoteEdit edit = FirstPending(operationId);
+            LocalNoteState? current = state.Records.FirstOrDefault(record => record.Id == edit.RecordId);
             if (state.Conflicts.Any(conflict => conflict.Edit.OperationId == operationId) ||
                 edit.ExpectedRevision != (current?.Revision ?? 0))
             {
                 throw new InvalidOperationException("The operation is blocked by an unresolved conflict.");
             }
 
-            var expected = edit.Action == LocalNoteAction.Delete
+            LocalNoteState expected = edit.Action == LocalNoteAction.Delete
                 ? new LocalNoteState(edit.RecordId, edit.ExpectedRevision + 1,
                     current!.Path, current.Markdown, true)
                 : new LocalNoteState(edit.RecordId, edit.ExpectedRevision + 1,
@@ -152,7 +152,7 @@ public sealed class LocalNoteJournal : IDisposable
                 throw new InvalidDataException("The acknowledgment does not match the queued operation.");
             }
 
-            var candidate = state.Copy();
+            LocalJournalState candidate = state.Copy();
             candidate.Records.RemoveAll(record => record.Id == accepted.Id);
             candidate.Records.Add(accepted);
             candidate.Pending.Remove(edit);
@@ -171,7 +171,7 @@ public sealed class LocalNoteJournal : IDisposable
                 throw new ArgumentOutOfRangeException(nameof(reason));
             }
 
-            var edit = FirstPending(operationId);
+            PendingNoteEdit edit = FirstPending(operationId);
             if (current is not null)
             {
                 LocalJournalCheckpoint.ValidateRecord(current);
@@ -181,8 +181,8 @@ public sealed class LocalNoteJournal : IDisposable
                 }
             }
 
-            var conflict = new RejectedNoteEdit(edit, reason, current);
-            var previous = state.Conflicts.FirstOrDefault(item => item.Edit.OperationId == operationId);
+            RejectedNoteEdit conflict = new RejectedNoteEdit(edit, reason, current);
+            RejectedNoteEdit? previous = state.Conflicts.FirstOrDefault(item => item.Edit.OperationId == operationId);
             if (previous is not null)
             {
                 if (previous != conflict)
@@ -193,7 +193,7 @@ public sealed class LocalNoteJournal : IDisposable
                 return;
             }
 
-            var candidate = state.Copy();
+            LocalJournalState candidate = state.Copy();
             candidate.Conflicts.Add(conflict);
             Commit(candidate);
         }
@@ -205,10 +205,10 @@ public sealed class LocalNoteJournal : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            var conflict = state.Conflicts.SingleOrDefault(item =>
-                item.Edit.OperationId == conflictedOperationId)
-                ?? throw new InvalidOperationException("The operation has no recorded conflict.");
-            var recordId = conflict.Edit.RecordId;
+            RejectedNoteEdit conflict = state.Conflicts.SingleOrDefault(item =>
+                                            item.Edit.OperationId == conflictedOperationId)
+                                        ?? throw new InvalidOperationException("The operation has no recorded conflict.");
+            Guid recordId = conflict.Edit.RecordId;
             if (state.Pending.Count(item => item.RecordId == recordId) != 1 ||
                 state.Records.FirstOrDefault(record => record.Id == recordId) != conflict.Current)
             {
@@ -216,11 +216,11 @@ public sealed class LocalNoteJournal : IDisposable
                     "Resolve dependent edits and refresh the authoritative record before rebasing.");
             }
 
-            var candidate = state.Copy();
+            LocalJournalState candidate = state.Copy();
             candidate.Pending.Remove(conflict.Edit);
             candidate.Conflicts.Remove(conflict);
             candidate.Resolved.Add(conflict);
-            var result = Stage(candidate, recordId, replacement, path, markdown);
+            PendingNoteEdit result = Stage(candidate, recordId, replacement, path, markdown);
             Commit(candidate);
             return result;
         }
@@ -237,8 +237,8 @@ public sealed class LocalNoteJournal : IDisposable
                 throw new InvalidDataException("The remote page cursor or size is invalid.");
             }
 
-            var candidate = state.Copy();
-            foreach (var change in events)
+            LocalJournalState candidate = state.Copy();
+            foreach (AppliedNoteChange? change in events)
             {
                 if (change is null || change.Sequence != candidate.Cursor + 1)
                 {
@@ -246,7 +246,7 @@ public sealed class LocalNoteJournal : IDisposable
                 }
 
                 LocalJournalCheckpoint.ValidateRecord(change.Record);
-                var acknowledged = candidate.AwaitingPull.FirstOrDefault(
+                AcceptedNoteReceipt? acknowledged = candidate.AwaitingPull.FirstOrDefault(
                     receipt => receipt.Sequence == change.Sequence);
                 if (acknowledged is not null)
                 {
@@ -259,7 +259,7 @@ public sealed class LocalNoteJournal : IDisposable
                 }
                 else
                 {
-                    var existing = candidate.Records.FirstOrDefault(record =>
+                    LocalNoteState? existing = candidate.Records.FirstOrDefault(record =>
                         record.Id == change.Record.Id);
                     if (change.Record.Revision != (existing?.Revision ?? 0) + 1)
                     {
@@ -290,7 +290,7 @@ public sealed class LocalNoteJournal : IDisposable
                 throw new InvalidDataException("The snapshot uses an incompatible collection epoch or cursor.");
             }
 
-            var candidate = state.Copy();
+            LocalJournalState candidate = state.Copy();
             candidate.Cursor = snapshot.Cursor;
             candidate.Records = snapshot.Records.ToList();
             candidate.AwaitingPull.RemoveAll(change => change.Sequence <= snapshot.Cursor);
@@ -307,12 +307,12 @@ public sealed class LocalNoteJournal : IDisposable
             throw new ArgumentException("The record identity must be nonempty.", nameof(recordId));
         }
 
-        var current = candidate.Records.FirstOrDefault(record => record.Id == recordId);
-        var chain = candidate.Pending.Where(item => item.RecordId == recordId).ToArray();
-        var deleted = chain.Length > 0
+        LocalNoteState? current = candidate.Records.FirstOrDefault(record => record.Id == recordId);
+        PendingNoteEdit[] chain = candidate.Pending.Where(item => item.RecordId == recordId).ToArray();
+        bool deleted = chain.Length > 0
             ? chain[^1].Action == LocalNoteAction.Delete
             : current?.Deleted ?? false;
-        var exists = chain.Length > 0 || current is not null;
+        bool exists = chain.Length > 0 || current is not null;
         if (!exists && action != LocalNoteAction.Upsert ||
             exists && deleted && action != LocalNoteAction.Restore ||
             exists && !deleted && action != LocalNoteAction.Upsert && action != LocalNoteAction.Delete)
@@ -320,10 +320,10 @@ public sealed class LocalNoteJournal : IDisposable
             throw new InvalidOperationException("The requested edit does not match the local note lifecycle.");
         }
 
-        var revision = chain.Length > 0
+        long revision = chain.Length > 0
             ? checked(chain[^1].ExpectedRevision + 1)
             : current?.Revision ?? 0;
-        var edit = new PendingNoteEdit(Guid.NewGuid(), recordId, revision, action, path, markdown);
+        PendingNoteEdit edit = new PendingNoteEdit(Guid.NewGuid(), recordId, revision, action, path, markdown);
         LocalJournalCheckpoint.ValidateEdit(edit);
 
         if (action != LocalNoteAction.Delete &&
@@ -350,8 +350,8 @@ public sealed class LocalNoteJournal : IDisposable
 
     private PendingNoteEdit FirstPending(Guid operationId)
     {
-        var edit = state.Pending.FirstOrDefault(item => item.OperationId == operationId)
-            ?? throw new InvalidOperationException("The operation is not queued.");
+        PendingNoteEdit edit = state.Pending.FirstOrDefault(item => item.OperationId == operationId)
+                               ?? throw new InvalidOperationException("The operation is not queued.");
         if (state.Pending.First(item => item.RecordId == edit.RecordId) != edit)
         {
             throw new InvalidOperationException("Earlier edits for this note must be resolved first.");
@@ -362,9 +362,9 @@ public sealed class LocalNoteJournal : IDisposable
 
     private static void AddStaleConflicts(LocalJournalState candidate)
     {
-        foreach (var edit in candidate.Pending.GroupBy(item => item.RecordId).Select(group => group.First()))
+        foreach (PendingNoteEdit edit in candidate.Pending.GroupBy(item => item.RecordId).Select(group => group.First()))
         {
-            var current = candidate.Records.FirstOrDefault(record => record.Id == edit.RecordId);
+            LocalNoteState? current = candidate.Records.FirstOrDefault(record => record.Id == edit.RecordId);
             if (edit.ExpectedRevision != (current?.Revision ?? 0) &&
                 !candidate.Conflicts.Any(conflict => conflict.Edit.OperationId == edit.OperationId))
             {

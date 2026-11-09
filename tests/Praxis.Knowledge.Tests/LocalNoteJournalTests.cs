@@ -20,10 +20,10 @@ public sealed class LocalNoteJournalTests : IDisposable
     {
         Guid firstOperation;
         Guid secondOperation;
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
-            var first = journal.Queue(Note, LocalNoteAction.Upsert, "Ideas/first.md", "# First");
-            var second = journal.Queue(Note, LocalNoteAction.Upsert, "Ideas/renamed.md", "# Revised");
+            PendingNoteEdit first = journal.Queue(Note, LocalNoteAction.Upsert, "Ideas/first.md", "# First");
+            PendingNoteEdit second = journal.Queue(Note, LocalNoteAction.Upsert, "Ideas/renamed.md", "# Revised");
             firstOperation = first.OperationId;
             secondOperation = second.OperationId;
             Assert.Equal(0, first.ExpectedRevision);
@@ -32,7 +32,7 @@ public sealed class LocalNoteJournalTests : IDisposable
             Assert.Equal(2, journal.Pending.Count);
         }
 
-        using (var reopened = Open())
+        using (LocalNoteJournal reopened = Open())
         {
             Assert.Equal(firstOperation, reopened.Pending[0].OperationId);
             Assert.Equal(secondOperation, reopened.Pending[1].OperationId);
@@ -44,7 +44,7 @@ public sealed class LocalNoteJournalTests : IDisposable
             Assert.Equal(2, Assert.Single(reopened.Records).Revision);
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Empty(restored.Pending);
         Assert.Equal("Ideas/renamed.md", Assert.Single(restored.Records).Path);
         Assert.Equal(0, restored.Cursor);
@@ -53,8 +53,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void RejectedReceiptCannotDiscardAnUnacknowledgedEdit()
     {
-        using var journal = Open();
-        var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "original");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "original");
 
         Assert.Throws<InvalidDataException>(() =>
             journal.Accept(edit.OperationId, 1, Record(Note, 1, "note.md", "changed")));
@@ -69,17 +69,17 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void DeleteAndRestoreKeepIdentityAndPriorContentRecoverable()
     {
-        using var journal = Open();
-        var created = journal.Queue(Note, LocalNoteAction.Upsert, "notes/first.md", "# Original");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit created = journal.Queue(Note, LocalNoteAction.Upsert, "notes/first.md", "# Original");
         journal.Accept(created.OperationId, 1, Record(Note, 1, "notes/first.md", "# Original"));
 
-        var deletion = journal.Queue(Note, LocalNoteAction.Delete);
+        PendingNoteEdit deletion = journal.Queue(Note, LocalNoteAction.Delete);
         Assert.Throws<InvalidOperationException>(() =>
             journal.Queue(Note, LocalNoteAction.Upsert, "notes/first.md", "invalid"));
         journal.Accept(deletion.OperationId, 2, Record(Note, 2, "notes/first.md", "# Original", deleted: true));
         Assert.True(Assert.Single(journal.Records).Deleted);
 
-        var restoration = journal.Queue(Note, LocalNoteAction.Restore, "notes/recovered.md", "# Original");
+        PendingNoteEdit restoration = journal.Queue(Note, LocalNoteAction.Restore, "notes/recovered.md", "# Original");
         journal.Accept(restoration.OperationId, 3, Record(Note, 3, "notes/recovered.md", "# Original"));
         Assert.Equal(Note, Assert.Single(journal.Records).Id);
         Assert.False(Assert.Single(journal.Records).Deleted);
@@ -89,9 +89,9 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void AcknowledgedEditIsVerifiedWhenEchoedByTheChangeLog()
     {
-        using var journal = Open();
-        var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "accepted");
-        var accepted = Record(Note, 1, "note.md", "accepted");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "accepted");
+        LocalNoteState accepted = Record(Note, 1, "note.md", "accepted");
         journal.Accept(edit.OperationId, 1, accepted);
 
         Assert.Equal(0, journal.Cursor);
@@ -111,10 +111,10 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void DuplicateAcknowledgementIsIdempotentWhileReceiptIsPending()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
-            var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "accepted");
-            var result = Record(Note, 1, "note.md", "accepted");
+            PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "accepted");
+            LocalNoteState result = Record(Note, 1, "note.md", "accepted");
             journal.Accept(edit.OperationId, 1, result);
             journal.Accept(edit.OperationId, 1, result);
 
@@ -127,7 +127,7 @@ public sealed class LocalNoteJournalTests : IDisposable
             Assert.Equal(0, journal.Cursor);
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Single(restored.AcknowledgedChanges);
         Assert.Equal("accepted", Assert.Single(restored.Records).Markdown);
     }
@@ -135,13 +135,13 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void AcknowledgedReceiptSurvivesRestartUntilMatchingPull()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
-            var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
+            PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
             journal.Accept(edit.OperationId, 3, Record(Note, 1, "note.md", "body"));
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Equal(3, Assert.Single(restored.AcknowledgedChanges).Sequence);
         Assert.Empty(restored.Pending);
         restored.ApplyPage(0, [
@@ -157,9 +157,9 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void SameChangeSequenceCannotAcknowledgeDifferentOperations()
     {
-        using var journal = Open();
-        var first = journal.Queue(Note, LocalNoteAction.Upsert, "one.md", "one");
-        var second = journal.Queue(Other, LocalNoteAction.Upsert, "two.md", "two");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit first = journal.Queue(Note, LocalNoteAction.Upsert, "one.md", "one");
+        PendingNoteEdit second = journal.Queue(Other, LocalNoteAction.Upsert, "two.md", "two");
         journal.Accept(first.OperationId, 1, Record(Note, 1, "one.md", "one"));
 
         Assert.Throws<InvalidDataException>(() =>
@@ -170,7 +170,7 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void RemotePageAtomicallyCommitsCursorAndRecordsAcrossRestart()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             journal.ApplyPage(0, [
                 new AppliedNoteChange(1, Record(Note, 1, "first.md", "one")),
@@ -180,7 +180,7 @@ public sealed class LocalNoteJournalTests : IDisposable
             Assert.Equal(2, journal.Records.Count);
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Equal(2, restored.Cursor);
         Assert.Equal(2, restored.Records.Count);
         Assert.Throws<InvalidDataException>(() =>
@@ -191,9 +191,9 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void MissingOrOutOfOrderPageFailsWithoutPartialCommit()
     {
-        using var journal = Open();
-        var initial = new AppliedNoteChange(1, Record(Note, 1, "first.md", "one"));
-        var skipped = new AppliedNoteChange(3, Record(Other, 1, "other.md", "two"));
+        using LocalNoteJournal journal = Open();
+        AppliedNoteChange initial = new AppliedNoteChange(1, Record(Note, 1, "first.md", "one"));
+        AppliedNoteChange skipped = new AppliedNoteChange(3, Record(Other, 1, "other.md", "two"));
         Assert.Throws<InvalidDataException>(() => journal.ApplyPage(0, [initial, skipped]));
         Assert.Equal(0, journal.Cursor);
         Assert.Empty(journal.Records);
@@ -210,22 +210,22 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void RemoteChangesNeverDropOfflineEditsAndExposeConflicts()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             journal.ApplyPage(0, [new AppliedNoteChange(1, Record(Note, 1, "note.md", "base"))]);
-            var offline = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
+            PendingNoteEdit offline = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
             journal.ApplyPage(1, [new AppliedNoteChange(2, Record(Note, 2, "note.md", "other"))]);
 
             Assert.Equal(2, journal.Cursor);
             Assert.Empty(journal.Outbound());
             Assert.Equal(offline, Assert.Single(journal.Pending));
-            var conflict = Assert.Single(journal.Conflicts);
+            RejectedNoteEdit conflict = Assert.Single(journal.Conflicts);
             Assert.Equal(LocalNoteConflictReason.StaleRevision, conflict.Reason);
             Assert.Equal("offline", conflict.Edit.Markdown);
             Assert.Equal("other", conflict.Current!.Markdown);
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Single(restored.Conflicts);
         Assert.Equal("offline", Assert.Single(restored.Pending).Markdown);
     }
@@ -233,12 +233,12 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void ExplicitConflictResolutionPreservesTheLosingOriginal()
     {
-        using var journal = Open();
+        using LocalNoteJournal journal = Open();
         journal.ApplyPage(0, [new AppliedNoteChange(1, Record(Note, 1, "note.md", "base"))]);
-        var offline = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "my edit");
+        PendingNoteEdit offline = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "my edit");
         journal.ApplyPage(1, [new AppliedNoteChange(2, Record(Note, 2, "note.md", "remote"))]);
 
-        var resolved = journal.Resolve(offline.OperationId, LocalNoteAction.Upsert,
+        PendingNoteEdit resolved = journal.Resolve(offline.OperationId, LocalNoteAction.Upsert,
             "note.md", "remote + my edit");
         Assert.NotEqual(offline.OperationId, resolved.OperationId);
         Assert.Equal(2, resolved.ExpectedRevision);
@@ -255,10 +255,10 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void DependentOfflineEditsCannotBeSilentlyAbandonedOnConflict()
     {
-        using var journal = Open();
+        using LocalNoteJournal journal = Open();
         journal.ApplyPage(0, [new AppliedNoteChange(1, Record(Note, 1, "note.md", "base"))]);
-        var first = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "first offline");
-        var second = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "second offline");
+        PendingNoteEdit first = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "first offline");
+        PendingNoteEdit second = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "second offline");
         journal.ApplyPage(1, [new AppliedNoteChange(2, Record(Note, 2, "note.md", "remote"))]);
 
         Assert.Throws<InvalidOperationException>(() =>
@@ -271,10 +271,10 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void SnapshotResetRetainsPendingEditsAndDetectsNewConflicts()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             journal.ApplyPage(0, [new AppliedNoteChange(1, Record(Note, 1, "note.md", "base"))]);
-            var pending = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
+            PendingNoteEdit pending = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
             journal.Rebootstrap(new LocalNoteSnapshot(Epoch, 45,
                 [Record(Note, 4, "note.md", "remote", deleted: true)]));
 
@@ -284,7 +284,7 @@ public sealed class LocalNoteJournalTests : IDisposable
             Assert.True(Assert.Single(journal.Records).Deleted);
         }
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Equal(45, restored.Cursor);
         Assert.Single(restored.Pending);
         Assert.Single(restored.Conflicts);
@@ -293,8 +293,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void ForeignEpochAndInvalidSnapshotCannotReplaceExistingState()
     {
-        using var journal = Open();
-        var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "offline");
 
         Assert.Throws<InvalidDataException>(() =>
             journal.Rebootstrap(new LocalNoteSnapshot(Guid.NewGuid(), 20, [])));
@@ -311,8 +311,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void ConflictingPathsAndInvalidMetadataAreRejectedBeforeWriting()
     {
-        using var journal = Open();
-        var edit = journal.Queue(Note, LocalNoteAction.Upsert, "notes/first.md", "first");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "notes/first.md", "first");
         Assert.Throws<InvalidDataException>(() =>
             journal.Queue(Other, LocalNoteAction.Upsert, "../outside.md", "bad"));
         Assert.Throws<InvalidOperationException>(() =>
@@ -328,8 +328,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void PendingCreatesCannotClaimTheSamePath()
     {
-        using var journal = Open();
-        var first = journal.Queue(Note, LocalNoteAction.Upsert, "same.md", "one");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit first = journal.Queue(Note, LocalNoteAction.Upsert, "same.md", "one");
 
         Assert.Throws<InvalidOperationException>(() =>
             journal.Queue(Other, LocalNoteAction.Upsert, "SAME.MD", "two"));
@@ -340,8 +340,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void InvalidAcknowledgementAndConflictsAreNotReplayedDifferently()
     {
-        using var journal = Open();
-        var edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
+        using LocalNoteJournal journal = Open();
+        PendingNoteEdit edit = journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
         journal.Reject(edit.OperationId, LocalNoteConflictReason.PathCollision, null);
         journal.Reject(edit.OperationId, LocalNoteConflictReason.PathCollision, null);
         Assert.Single(journal.Conflicts);
@@ -357,21 +357,21 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void CorruptedCheckpointFailsExplicitlyWithoutResettingOfflineContent()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "private note");
         }
 
-        var checkpoint = Path.Combine(directory, "journal.json");
-        var envelope = JsonNode.Parse(File.ReadAllText(checkpoint))!.AsObject();
-        var payload = envelope["payload"]!.GetValue<string>();
+        string checkpoint = Path.Combine(directory, "journal.json");
+        JsonObject envelope = JsonNode.Parse(File.ReadAllText(checkpoint))!.AsObject();
+        string payload = envelope["payload"]!.GetValue<string>();
         envelope["payload"] = (payload[0] == 'A' ? 'B' : 'A') + payload[1..];
-        var corrupted = envelope.ToJsonString();
+        string corrupted = envelope.ToJsonString();
         File.WriteAllText(checkpoint, corrupted);
 
         Assert.Throws<InvalidDataException>(() =>
         {
-            using var _ = Open();
+            using LocalNoteJournal _ = Open();
         });
         Assert.Equal(corrupted, File.ReadAllText(checkpoint));
     }
@@ -379,50 +379,50 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void OrphanedTemporaryCheckpointDoesNotOverrideCommittedData()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             journal.Queue(Note, LocalNoteAction.Upsert, "note.md", "durable");
         }
 
         File.WriteAllText(Path.Combine(directory, "journal.json.123456.pending"), "partial");
-        using var reopened = Open();
+        using LocalNoteJournal reopened = Open();
         Assert.Equal("durable", Assert.Single(reopened.Pending).Markdown);
     }
 
     [Fact]
     public void AJournalCannotBeSilentlyReopenedUnderAnotherIdentity()
     {
-        using (var first = Open())
+        using (LocalNoteJournal first = Open())
         {
             first.Queue(Note, LocalNoteAction.Upsert, "note.md", "private");
         }
 
         Assert.Throws<InvalidDataException>(() =>
         {
-            using var _ = LocalNoteJournal.Open(directory, Guid.NewGuid(), DeviceA);
+            using LocalNoteJournal _ = LocalNoteJournal.Open(directory, Guid.NewGuid(), DeviceA);
         });
         Assert.Throws<InvalidDataException>(() =>
         {
-            using var _ = LocalNoteJournal.Open(directory, Epoch, DeviceB);
+            using LocalNoteJournal _ = LocalNoteJournal.Open(directory, Epoch, DeviceB);
         });
 
-        using var restored = Open();
+        using LocalNoteJournal restored = Open();
         Assert.Equal("private", Assert.Single(restored.Pending).Markdown);
     }
 
     [Fact]
     public void MalformedCheckpointFailsWithoutReinitializingLocalEdits()
     {
-        using (var first = Open())
+        using (LocalNoteJournal first = Open())
         {
             first.Queue(Note, LocalNoteAction.Upsert, "note.md", "private");
         }
 
-        var checkpoint = Path.Combine(directory, "journal.json");
+        string checkpoint = Path.Combine(directory, "journal.json");
         File.WriteAllText(checkpoint, "{unparseable");
         Assert.Throws<InvalidDataException>(() =>
         {
-            using var _ = Open();
+            using LocalNoteJournal _ = Open();
         });
         Assert.Equal("{unparseable", File.ReadAllText(checkpoint));
     }
@@ -430,16 +430,16 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void JournalIsSingleWriterAndDisposeReleasesItsLease()
     {
-        using (var first = Open())
+        using (LocalNoteJournal first = Open())
         {
             Assert.Throws<IOException>(() =>
             {
-                using var _ = Open();
+                using LocalNoteJournal _ = Open();
             });
         }
 
-        using var second = Open();
-        var edit = second.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
+        using LocalNoteJournal second = Open();
+        PendingNoteEdit edit = second.Queue(Note, LocalNoteAction.Upsert, "note.md", "body");
         Assert.Equal(edit, Assert.Single(second.Pending));
         second.Dispose();
         Assert.Throws<ObjectDisposedException>(() => second.Queue(Other,
@@ -449,8 +449,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void OversizedNoteDoesNotMutateTheCheckpoint()
     {
-        using var journal = Open();
-        var original = File.ReadAllBytes(Path.Combine(directory, "journal.json"));
+        using LocalNoteJournal journal = Open();
+        byte[] original = File.ReadAllBytes(Path.Combine(directory, "journal.json"));
         Assert.Throws<InvalidDataException>(() =>
             journal.Queue(Note, LocalNoteAction.Upsert, "note.md", new string('x', 1024 * 1024 + 1)));
 
@@ -461,18 +461,18 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void ConcurrentQueuesWithinProcessCannotLoseCommittedOperations()
     {
-        using (var journal = Open())
+        using (LocalNoteJournal journal = Open())
         {
             Parallel.For(1, 17, index =>
             {
-                var id = Guid.Parse($"12341234-1234-4234-8234-{index:D12}");
+                Guid id = Guid.Parse($"12341234-1234-4234-8234-{index:D12}");
                 journal.Queue(id, LocalNoteAction.Upsert, $"Notes/{index}.md", $"#{index}");
             });
             Assert.Equal(16, journal.Pending.Count);
             Assert.Equal(16, journal.Outbound().Count);
         }
 
-        using var reopened = Open();
+        using LocalNoteJournal reopened = Open();
         Assert.Equal(16, reopened.Pending.Count);
         Assert.Equal(16, reopened.Pending.Select(edit => edit.OperationId).Distinct().Count());
     }
@@ -480,8 +480,8 @@ public sealed class LocalNoteJournalTests : IDisposable
     [Fact]
     public void RemotePageCannotApplyMoreThanOneHundredChanges()
     {
-        using var journal = Open();
-        var page = Enumerable.Range(1, 101)
+        using LocalNoteJournal journal = Open();
+        AppliedNoteChange[] page = Enumerable.Range(1, 101)
             .Select(index => new AppliedNoteChange(index,
                 Record(Guid.Parse($"78907890-7890-4890-8890-{index:D12}"), 1,
                     $"Notes/{index}.md", $"{index}"))).ToArray();

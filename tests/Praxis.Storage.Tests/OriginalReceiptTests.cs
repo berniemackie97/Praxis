@@ -24,19 +24,19 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         const string key = "initial-request";
         CapturedOriginal first;
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
-            using var initial = new MemoryStream([1, 2, 3]);
+            using MemoryStream initial = new MemoryStream([1, 2, 3]);
             first = await catalog.CaptureFileAsync(Source("note.md"), initial, 10, key);
             Assert.Equal(1, first.Revision);
         }
 
-        using var reopened = LocalCatalog.Open(root);
-        using var neverRead = new ThrowOnReadStream();
-        var retry = await reopened.CaptureFileAsync(Source("note.md"), neverRead, 10, key);
+        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using ThrowOnReadStream neverRead = new ThrowOnReadStream();
+        CapturedOriginal retry = await reopened.CaptureFileAsync(Source("note.md"), neverRead, 10, key);
         Assert.Equal(first, retry);
         Assert.False(neverRead.WasRead);
-        using var db = Connect(reopened.DatabasePath);
+        using SqliteConnection db = Connect(reopened.DatabasePath);
         Assert.Equal(1L, Count(db, "sources"));
         Assert.Equal(1L, Count(db, "item_versions"));
         Assert.Equal(1L, Count(db, "ingest_requests"));
@@ -45,11 +45,11 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task NewKeyForChangedContentAddsRevisionWithoutLosingOriginal()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var initial = new MemoryStream([10, 20]);
-        var first = await catalog.CaptureFileAsync(Source("versioned.md"), initial, 10, "first");
-        using var changed = new MemoryStream([30, 40]);
-        var next = await catalog.CaptureFileAsync(Source("versioned.md"), changed, 10, "second");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream initial = new MemoryStream([10, 20]);
+        CapturedOriginal first = await catalog.CaptureFileAsync(Source("versioned.md"), initial, 10, "first");
+        using MemoryStream changed = new MemoryStream([30, 40]);
+        CapturedOriginal next = await catalog.CaptureFileAsync(Source("versioned.md"), changed, 10, "second");
 
         Assert.Equal(first.SourceId, next.SourceId);
         Assert.Equal(first.ItemId, next.ItemId);
@@ -57,12 +57,12 @@ public sealed class OriginalReceiptTests : IDisposable
         Assert.Equal(2, next.Revision);
         Assert.NotEqual(first.Sha256, next.Sha256);
 
-        using var retryInput = new ThrowOnReadStream();
-        var replay = await catalog.CaptureFileAsync(Source("versioned.md"), retryInput, 10, "first");
+        using ThrowOnReadStream retryInput = new ThrowOnReadStream();
+        CapturedOriginal replay = await catalog.CaptureFileAsync(Source("versioned.md"), retryInput, 10, "first");
         Assert.Equal(first, replay);
         Assert.False(retryInput.WasRead);
         await catalog.VerifyOriginalAsync(first.ItemId);
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(2L, Count(db, "item_versions"));
         Assert.Equal(2L, Count(db, "ingest_requests"));
         Assert.Equal(2L, Count(db, "original_objects"));
@@ -71,14 +71,14 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task UnchangedContentWithNewKeyRecordsReceiptWithoutNewRevision()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var firstInput = new MemoryStream([1, 2, 3]);
-        var first = await catalog.CaptureFileAsync(Source("same.md"), firstInput, 10, "a");
-        using var secondInput = new MemoryStream([1, 2, 3]);
-        var second = await catalog.CaptureFileAsync(Source("same.md"), secondInput, 10, "b");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream firstInput = new MemoryStream([1, 2, 3]);
+        CapturedOriginal first = await catalog.CaptureFileAsync(Source("same.md"), firstInput, 10, "a");
+        using MemoryStream secondInput = new MemoryStream([1, 2, 3]);
+        CapturedOriginal second = await catalog.CaptureFileAsync(Source("same.md"), secondInput, 10, "b");
         Assert.Equal(first, second);
 
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Count(db, "item_versions"));
         Assert.Equal(2L, Count(db, "ingest_requests"));
     }
@@ -86,18 +86,18 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ReintroducingHistoricalBytesRecordsNewRevisionButReusesObject()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var a = new MemoryStream([1]);
-        var first = await catalog.CaptureFileAsync(Source("history.md"), a, 10, "a");
-        using var b = new MemoryStream([2]);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream a = new MemoryStream([1]);
+        CapturedOriginal first = await catalog.CaptureFileAsync(Source("history.md"), a, 10, "a");
+        using MemoryStream b = new MemoryStream([2]);
         await catalog.CaptureFileAsync(Source("history.md"), b, 10, "b");
-        using var again = new MemoryStream([1]);
-        var third = await catalog.CaptureFileAsync(Source("history.md"), again, 10, "c");
+        using MemoryStream again = new MemoryStream([1]);
+        CapturedOriginal third = await catalog.CaptureFileAsync(Source("history.md"), again, 10, "c");
 
         Assert.Equal(first.ItemId, third.ItemId);
         Assert.Equal(first.Sha256, third.Sha256);
         Assert.Equal(3, third.Revision);
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(3L, Count(db, "item_versions"));
         Assert.Equal(2L, Count(db, "original_objects"));
         Assert.Equal(3L, Count(db, "ingest_requests"));
@@ -106,24 +106,24 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task FailedRequestKeyCanBeRetriedWithoutAStaleReceipt()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var oversized = new MemoryStream(new byte[8]);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream oversized = new MemoryStream(new byte[8]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.CaptureFileAsync(Source("retry.md"), oversized, 4, "attempt"));
-        using var retry = new MemoryStream([1, 2, 3]);
-        var captured = await catalog.CaptureFileAsync(Source("retry.md"), retry, 4, "attempt");
+        using MemoryStream retry = new MemoryStream([1, 2, 3]);
+        CapturedOriginal captured = await catalog.CaptureFileAsync(Source("retry.md"), retry, 4, "attempt");
         Assert.Equal(1, captured.Revision);
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Count(db, "ingest_requests"));
     }
 
     [Fact]
     public async Task RequestKeysCannotCrossSourceBoundaries()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var input = new MemoryStream([1]);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream input = new MemoryStream([1]);
         await catalog.CaptureFileAsync(Source("one.md"), input, 10, "bound-key");
-        using var other = new ThrowOnReadStream();
+        using ThrowOnReadStream other = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.CaptureFileAsync(Source("two.md"), other, 10, "bound-key"));
         Assert.False(other.WasRead);
@@ -132,14 +132,14 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ParallelCaptureOfSameRequestCreatesOneCommittedRevision()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(async _ =>
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal[] results = await Task.WhenAll(Enumerable.Range(0, 6).Select(async _ =>
         {
-            using var input = new MemoryStream(new byte[100_000]);
+            using MemoryStream input = new MemoryStream(new byte[100_000]);
             return await catalog.CaptureFileAsync(Source("parallel.bin"), input, 100_000, "shared-key");
         }));
         Assert.All(results, x => Assert.Equal(results[0], x));
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Count(db, "sources"));
         Assert.Equal(1L, Count(db, "item_versions"));
         Assert.Equal(1L, Count(db, "ingest_requests"));
@@ -148,15 +148,15 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ParallelKeyConflictRejectsDifferentContentWithoutCommittingAnotherVersion()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var gate = new PairGate();
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        PairGate gate = new PairGate();
         async Task<CapturedOriginal> Capture(byte value)
         {
-            using var input = new GatedReadStream(Enumerable.Repeat(value, 80_000).ToArray(), gate);
+            using GatedReadStream input = new GatedReadStream(Enumerable.Repeat(value, 80_000).ToArray(), gate);
             return await catalog.CaptureFileAsync(Source("parallel.md"), input, 80_000, "key");
         }
 
-        var tasks = new[] { Capture(1), Capture(2) };
+        Task<CapturedOriginal>[] tasks = new[] { Capture(1), Capture(2) };
         try
         {
             await Task.WhenAll(tasks);
@@ -167,7 +167,7 @@ public sealed class OriginalReceiptTests : IDisposable
             Assert.Equal(1, tasks.Count(x => x.Status == TaskStatus.RanToCompletion));
         }
 
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Count(db, "sources"));
         Assert.Equal(1L, Count(db, "item_versions"));
         Assert.Equal(1L, Count(db, "ingest_requests"));
@@ -176,20 +176,20 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task RevokedSourcesRejectRecaptureAndReceiptReplays()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var input = new MemoryStream([3]);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream input = new MemoryStream([3]);
         await catalog.CaptureFileAsync(Source("removed.md"), input, 10, "first");
-        using (var db = Connect(catalog.DatabasePath))
+        using (SqliteConnection db = Connect(catalog.DatabasePath))
         {
-            using var command = db.CreateCommand();
+            using SqliteCommand command = db.CreateCommand();
             command.CommandText = "UPDATE sources SET status='revoked'";
             command.ExecuteNonQuery();
         }
 
-        using var fresh = new MemoryStream([4]);
+        using MemoryStream fresh = new MemoryStream([4]);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.CaptureFileAsync(Source("removed.md"), fresh, 10, "next"));
-        using var replay = new ThrowOnReadStream();
+        using ThrowOnReadStream replay = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.CaptureFileAsync(Source("removed.md"), replay, 10, "first"));
         Assert.False(replay.WasRead);
@@ -198,16 +198,16 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task FailedAndCanceledReadsNeverCommitReceipts()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var canceled = new CancellationTokenSource();
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using CancellationTokenSource canceled = new CancellationTokenSource();
         canceled.Cancel();
-        using var input = new MemoryStream([1, 2, 3]);
+        using MemoryStream input = new MemoryStream([1, 2, 3]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             catalog.CaptureFileAsync(Source("canceled.md"), input, 10, "canceled", canceled.Token));
-        using var oversized = new MemoryStream(new byte[5]);
+        using MemoryStream oversized = new MemoryStream(new byte[5]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.CaptureFileAsync(Source("oversized.md"), oversized, 1, "oversized"));
-        using var db = Connect(catalog.DatabasePath);
+        using SqliteConnection db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Count(db, "sources"));
         Assert.Equal(0L, Count(db, "ingest_requests"));
     }
@@ -215,15 +215,15 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task TamperedHistoricalVersionBlocksItsReceiptReplay()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var firstInput = new MemoryStream([1]);
-        var first = await catalog.CaptureFileAsync(Source("history.md"), firstInput, 10, "first");
-        using var secondInput = new MemoryStream([2]);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream firstInput = new MemoryStream([1]);
+        CapturedOriginal first = await catalog.CaptureFileAsync(Source("history.md"), firstInput, 10, "first");
+        using MemoryStream secondInput = new MemoryStream([2]);
         await catalog.CaptureFileAsync(Source("history.md"), secondInput, 10, "second");
 
         File.WriteAllBytes(Path.Combine(root, "objects", first.Sha256[..2],
             first.Sha256[2..4], first.Sha256), [9]);
-        using var replay = new ThrowOnReadStream();
+        using ThrowOnReadStream replay = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.CaptureFileAsync(Source("history.md"), replay, 10, "first"));
     }
@@ -232,7 +232,7 @@ public sealed class OriginalReceiptTests : IDisposable
 
     private static SqliteConnection Connect(string databasePath)
     {
-        var db = new SqliteConnection(new SqliteConnectionStringBuilder
+        SqliteConnection db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWrite,
@@ -244,7 +244,7 @@ public sealed class OriginalReceiptTests : IDisposable
 
     private static long Count(SqliteConnection db, string table)
     {
-        using var command = db.CreateCommand();
+        using SqliteCommand command = db.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {table}";
         return (long)command.ExecuteScalar()!;
     }

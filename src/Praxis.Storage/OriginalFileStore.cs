@@ -31,14 +31,14 @@ internal sealed class OriginalFileStore
             throw new ArgumentOutOfRangeException(nameof(maxBytes));
         }
 
-        var staging = EnsureDirectory(Path.Combine(dataDirectory, "staging"));
-        var objects = EnsureDirectory(Path.Combine(dataDirectory, "objects"));
-        var pending = Path.Combine(staging, $"{Guid.NewGuid():N}.part");
+        string staging = EnsureDirectory(Path.Combine(dataDirectory, "staging"));
+        string objects = EnsureDirectory(Path.Combine(dataDirectory, "objects"));
+        string pending = Path.Combine(staging, $"{Guid.NewGuid():N}.part");
         try
         {
-            var length = 0L;
+            long length = 0L;
             string digest;
-            var options = new FileStreamOptions
+            FileStreamOptions options = new FileStreamOptions
             {
                 Mode = FileMode.CreateNew,
                 Access = FileAccess.Write,
@@ -51,16 +51,16 @@ internal sealed class OriginalFileStore
                 options.UnixCreateMode = PrivateFileMode;
             }
 
-            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+            using (IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                await using (var output = new FileStream(pending, options))
+                await using (FileStream output = new FileStream(pending, options))
                 {
-                    var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
                     try
                     {
                         while (true)
                         {
-                            var count = await input.ReadAsync(buffer.AsMemory(0, BufferLength), cancellationToken);
+                            int count = await input.ReadAsync(buffer.AsMemory(0, BufferLength), cancellationToken);
                             if (count == 0)
                             {
                                 break;
@@ -90,9 +90,9 @@ internal sealed class OriginalFileStore
             }
 
             await VerifyAsync(pending, digest, length, cancellationToken);
-            var directory = EnsureDirectory(Path.Combine(objects, digest[..2]));
+            string directory = EnsureDirectory(Path.Combine(objects, digest[..2]));
             directory = EnsureDirectory(Path.Combine(directory, digest[2..4]));
-            var published = Path.Combine(directory, digest);
+            string published = Path.Combine(directory, digest);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (!File.Exists(published))
@@ -138,20 +138,20 @@ internal sealed class OriginalFileStore
             throw new InvalidDataException("The original exceeds the extraction byte budget.");
         }
 
-        var path = ExistingObjectPath(original.Digest);
+        string path = ExistingObjectPath(original.Digest);
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("An original object path is a symbolic link.");
         }
 
-        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+        await using FileStream input = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
         if (input.Length != original.Length)
         {
             throw new InvalidDataException("An original object has a conflicting length.");
         }
 
-        var bytes = new byte[(int)original.Length];
+        byte[] bytes = new byte[(int)original.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);
         if (input.Length != original.Length)
         {
@@ -177,17 +177,17 @@ internal sealed class OriginalFileStore
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        var sourcePath = ExistingObjectPath(original.Digest);
+        string sourcePath = ExistingObjectPath(original.Digest);
         if ((File.GetAttributes(sourcePath) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("An original object path is a symbolic link.");
         }
 
-        var objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
-        var first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
-        var second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
-        var targetPath = Path.Combine(second, original.Digest);
-        var options = new FileStreamOptions
+        string objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
+        string first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
+        string second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
+        string targetPath = Path.Combine(second, original.Digest);
+        FileStreamOptions options = new FileStreamOptions
         {
             Mode = FileMode.CreateNew,
             Access = FileAccess.Write,
@@ -200,10 +200,10 @@ internal sealed class OriginalFileStore
             options.UnixCreateMode = PrivateFileMode;
         }
 
-        await using (var input = new FileStream(sourcePath, FileMode.Open,
+        await using (FileStream input = new FileStream(sourcePath, FileMode.Open,
             FileAccess.Read, FileShare.Read, BufferLength,
             FileOptions.Asynchronous | FileOptions.SequentialScan))
-        await using (var output = new FileStream(targetPath, options))
+        await using (FileStream output = new FileStream(targetPath, options))
         {
             await input.CopyToAsync(output, BufferLength, cancellationToken);
             await output.FlushAsync(cancellationToken);
@@ -215,28 +215,28 @@ internal sealed class OriginalFileStore
 
     private string ExistingObjectPath(string digest)
     {
-        var objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
-        var first = CheckDirectory(Path.Combine(objects, digest[..2]));
-        var second = CheckDirectory(Path.Combine(first, digest[2..4]));
+        string objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
+        string first = CheckDirectory(Path.Combine(objects, digest[..2]));
+        string second = CheckDirectory(Path.Combine(first, digest[2..4]));
         return Path.Combine(second, digest);
     }
 
     public IEnumerable<string> EnumeratePublishedDigests()
     {
-        var root = Path.Combine(dataDirectory, "objects");
+        string root = Path.Combine(dataDirectory, "objects");
         if (!Directory.Exists(root) && !File.Exists(root))
         {
             yield break;
         }
 
         CheckDirectory(root);
-        foreach (var first in Directory.EnumerateFileSystemEntries(root))
+        foreach (string first in Directory.EnumerateFileSystemEntries(root))
         {
             CheckDirectory(first);
-            foreach (var second in Directory.EnumerateFileSystemEntries(first))
+            foreach (string second in Directory.EnumerateFileSystemEntries(first))
             {
                 CheckDirectory(second);
-                foreach (var file in Directory.EnumerateFileSystemEntries(second))
+                foreach (string file in Directory.EnumerateFileSystemEntries(second))
                 {
                     if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0 ||
                         !File.Exists(file))
@@ -244,7 +244,7 @@ internal sealed class OriginalFileStore
                         throw new InvalidDataException("The object inventory contains an unexpected file.");
                     }
 
-                    var digest = Path.GetFileName(file);
+                    string digest = Path.GetFileName(file);
                     ValidateDigest(digest);
                     if (digest[..2] != Path.GetFileName(first) ||
                         digest[2..4] != Path.GetFileName(second))
@@ -260,15 +260,15 @@ internal sealed class OriginalFileStore
 
     public int CountStagedFiles()
     {
-        var staging = Path.Combine(dataDirectory, "staging");
+        string staging = Path.Combine(dataDirectory, "staging");
         if (!Directory.Exists(staging) && !File.Exists(staging))
         {
             return 0;
         }
 
         CheckDirectory(staging);
-        var count = 0;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(staging))
+        int count = 0;
+        foreach (string entry in Directory.EnumerateFileSystemEntries(staging))
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
                 !File.Exists(entry) ||
@@ -286,13 +286,13 @@ internal sealed class OriginalFileStore
     private static async Task VerifyAsync(
         string path, string digest, long length, CancellationToken cancellationToken)
     {
-        var attributes = File.GetAttributes(path);
+        FileAttributes attributes = File.GetAttributes(path);
         if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("An original object path is a symbolic link.");
         }
 
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+        await using FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
         if (stream.Length != length ||
             !CryptographicOperations.FixedTimeEquals(

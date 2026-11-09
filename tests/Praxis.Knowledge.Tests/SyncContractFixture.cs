@@ -78,8 +78,8 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
             return Reject(ApplyStatus.InvalidRequest);
         }
 
-        var operationKey = (mutation.DeviceId, mutation.OperationId);
-        if (receipts.TryGetValue(operationKey, out var previous))
+        (Guid DeviceId, Guid OperationId) operationKey = (mutation.DeviceId, mutation.OperationId);
+        if (receipts.TryGetValue(operationKey, out (SyncMutation Request, SyncReply Reply) previous))
         {
             return previous.Request == mutation
                 ? previous.Reply
@@ -96,7 +96,7 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
             return Reject(ApplyStatus.InvalidRequest);
         }
 
-        records.TryGetValue(mutation.RecordId, out var current);
+        records.TryGetValue(mutation.RecordId, out SyncRecord? current);
         if (mutation.BaseRevision != (current?.Revision ?? 0))
         {
             return new SyncReply(ApplyStatus.StaleRevision, sequence, current);
@@ -120,7 +120,7 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
             return new SyncReply(ApplyStatus.PathCollision, sequence, current);
         }
 
-        var next = mutation.Action == SyncAction.Delete
+        SyncRecord next = mutation.Action == SyncAction.Delete
             ? new SyncRecord(mutation.RecordId, current!.Revision + 1,
                 current.Path, current.Body, true)
             : new SyncRecord(mutation.RecordId, (current?.Revision ?? 0) + 1,
@@ -128,7 +128,7 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
         records[mutation.RecordId] = next;
         changes.Add(new SyncChange(++sequence, next));
 
-        var reply = new SyncReply(ApplyStatus.Applied, sequence, next);
+        SyncReply reply = new SyncReply(ApplyStatus.Applied, sequence, next);
         receipts.Add(operationKey, (mutation, reply));
         return reply;
     }
@@ -155,7 +155,7 @@ internal sealed class SyncContractFixture(Guid collectionEpoch)
             return new SyncPage(PullStatus.CursorExpired, cursor, sequence, []);
         }
 
-        var page = changes.Where(change => change.Sequence > cursor).Take(limit).ToArray();
+        SyncChange[] page = changes.Where(change => change.Sequence > cursor).Take(limit).ToArray();
         return new SyncPage(PullStatus.Ok,
             page.Length == 0 ? cursor : page[^1].Sequence, sequence, Array.AsReadOnly(page));
     }

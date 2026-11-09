@@ -24,8 +24,8 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(requestKey), "Request keys cannot exceed 128 characters.");
         }
 
-        var locator = Path.GetFullPath(sourcePath);
-        var root = Path.GetDirectoryName(DatabasePath)!;
+        string locator = Path.GetFullPath(sourcePath);
+        string root = Path.GetDirectoryName(DatabasePath)!;
         ValidateRoot(root);
 
         CapturedOriginal? receipt;
@@ -41,14 +41,14 @@ public sealed partial class LocalCatalog
             return receipt;
         }
 
-        var original = await new OriginalFileStore(root)
+        OriginalObject original = await new OriginalFileStore(root)
             .PublishAsync(content, maxBytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         CapturedOriginal recorded;
         lock (connection)
         {
-            using var transaction = connection.BeginTransaction();
+            using SqliteTransaction transaction = connection.BeginTransaction();
             receipt = ReadReceipt(requestKey, locator, transaction);
             if (receipt is not null)
             {
@@ -72,8 +72,8 @@ public sealed partial class LocalCatalog
     private CapturedOriginal CommitOriginal(
         string locator, string requestKey, OriginalObject original, SqliteTransaction transaction)
     {
-        var recordedUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-        using (var check = Command(connection,
+        string recordedUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+        using (SqliteCommand check = Command(connection,
             "SELECT byte_length FROM original_objects WHERE digest=$digest"))
         {
             check.Transaction = transaction;
@@ -87,18 +87,18 @@ public sealed partial class LocalCatalog
         Guid sourceId, itemId;
         int revision;
         string? previousDigest = null;
-        using (var source = Command(connection, """
-            SELECT s.source_id, s.status, i.item_id, v.revision, v.digest
-            FROM sources s
-            JOIN items i ON i.source_id = s.source_id
-            JOIN item_versions v ON v.item_id = i.item_id
-            WHERE s.source_kind = 'file' AND s.locator = $locator
-            ORDER BY v.revision DESC LIMIT 1
-            """))
+        using (SqliteCommand source = Command(connection, """
+                                                          SELECT s.source_id, s.status, i.item_id, v.revision, v.digest
+                                                          FROM sources s
+                                                          JOIN items i ON i.source_id = s.source_id
+                                                          JOIN item_versions v ON v.item_id = i.item_id
+                                                          WHERE s.source_kind = 'file' AND s.locator = $locator
+                                                          ORDER BY v.revision DESC LIMIT 1
+                                                          """))
         {
             source.Transaction = transaction;
             source.Parameters.AddWithValue("$locator", locator);
-            using var reader = source.ExecuteReader();
+            using SqliteDataReader reader = source.ExecuteReader();
             if (reader.Read())
             {
                 if (reader.GetString(1) != "active")
@@ -123,11 +123,11 @@ public sealed partial class LocalCatalog
             }
         }
 
-        using var command = Command(connection, """
-            INSERT INTO original_objects (digest, byte_length, recorded_utc)
-                VALUES ($digest, $length, $recorded)
-                ON CONFLICT(digest) DO NOTHING;
-            """);
+        using SqliteCommand command = Command(connection, """
+                                                          INSERT INTO original_objects (digest, byte_length, recorded_utc)
+                                                              VALUES ($digest, $length, $recorded)
+                                                              ON CONFLICT(digest) DO NOTHING;
+                                                          """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$digest", original.Digest);
         command.Parameters.AddWithValue("$length", original.Length);
@@ -136,11 +136,11 @@ public sealed partial class LocalCatalog
 
         if (previousDigest is null)
         {
-            using var source = Command(connection, """
-                INSERT INTO sources (source_id, source_kind, locator, created_utc)
-                    VALUES ($source, 'file', $locator, $recorded);
-                INSERT INTO items (item_id, source_id) VALUES ($item, $source);
-                """);
+            using SqliteCommand source = Command(connection, """
+                                                             INSERT INTO sources (source_id, source_kind, locator, created_utc)
+                                                                 VALUES ($source, 'file', $locator, $recorded);
+                                                             INSERT INTO items (item_id, source_id) VALUES ($item, $source);
+                                                             """);
             source.Transaction = transaction;
             source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             source.Parameters.AddWithValue("$item", itemId.ToString("D"));
@@ -151,10 +151,10 @@ public sealed partial class LocalCatalog
 
         if (previousDigest != original.Digest)
         {
-            using var version = Command(connection, """
-                INSERT INTO item_versions (item_id, revision, digest, observed_utc)
-                    VALUES ($item, $revision, $digest, $recorded)
-                """);
+            using SqliteCommand version = Command(connection, """
+                                                              INSERT INTO item_versions (item_id, revision, digest, observed_utc)
+                                                                  VALUES ($item, $revision, $digest, $recorded)
+                                                              """);
             version.Transaction = transaction;
             version.Parameters.AddWithValue("$item", itemId.ToString("D"));
             version.Parameters.AddWithValue("$revision", revision);
@@ -164,10 +164,10 @@ public sealed partial class LocalCatalog
             QueueProcessingVersion(itemId, revision, DefaultProcessorKey, recordedUtc, transaction);
         }
 
-        using var receipt = Command(connection, """
-            INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
-                VALUES ($key, $source, 'committed', 1, NULL, $revision)
-            """);
+        using SqliteCommand receipt = Command(connection, """
+                                                          INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
+                                                              VALUES ($key, $source, 'committed', 1, NULL, $revision)
+                                                          """);
         receipt.Transaction = transaction;
         receipt.Parameters.AddWithValue("$key", requestKey);
         receipt.Parameters.AddWithValue("$source", sourceId.ToString("D"));
@@ -180,19 +180,19 @@ public sealed partial class LocalCatalog
     private CapturedOriginal? ReadReceipt(
         string requestKey, string locator, SqliteTransaction? transaction = null)
     {
-        using var command = Command(connection, """
-            SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
-                   r.revision, o.digest, o.byte_length
-            FROM ingest_requests r
-            JOIN sources s ON s.source_id = r.source_id
-            JOIN items i ON i.source_id = s.source_id
-            LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
-            LEFT JOIN original_objects o ON o.digest = v.digest
-            WHERE r.request_key = $key
-            """);
+        using SqliteCommand command = Command(connection, """
+                                                          SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
+                                                                 r.revision, o.digest, o.byte_length
+                                                          FROM ingest_requests r
+                                                          JOIN sources s ON s.source_id = r.source_id
+                                                          JOIN items i ON i.source_id = s.source_id
+                                                          LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
+                                                          LEFT JOIN original_objects o ON o.digest = v.digest
+                                                          WHERE r.request_key = $key
+                                                          """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$key", requestKey);
-        using var reader = command.ExecuteReader();
+        using SqliteDataReader reader = command.ExecuteReader();
         if (!reader.Read())
         {
             return null;
@@ -229,16 +229,16 @@ public sealed partial class LocalCatalog
         OriginalObject original;
         lock (connection)
         {
-            using var command = Command(connection, """
-                SELECT o.digest, o.byte_length
-                FROM item_versions v
-                JOIN original_objects o ON o.digest = v.digest
-                WHERE v.item_id = $item
-                ORDER BY v.revision DESC
-                LIMIT 1
-                """);
+            using SqliteCommand command = Command(connection, """
+                                                              SELECT o.digest, o.byte_length
+                                                              FROM item_versions v
+                                                              JOIN original_objects o ON o.digest = v.digest
+                                                              WHERE v.item_id = $item
+                                                              ORDER BY v.revision DESC
+                                                              LIMIT 1
+                                                              """);
             command.Parameters.AddWithValue("$item", itemId.ToString("D"));
-            using var reader = command.ExecuteReader();
+            using SqliteDataReader reader = command.ExecuteReader();
             if (!reader.Read())
             {
                 throw new KeyNotFoundException("The catalog item has no original version.");

@@ -12,14 +12,14 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var lease = catalog.TryClaimProcessing(LeaseDuration,
+        ProcessingLease? lease = catalog.TryClaimProcessing(LeaseDuration,
             processorKey: LocalCatalog.DefaultProcessorKey);
         if (lease is null)
         {
             return false;
         }
 
-        var source = catalog.ReadLeasedTextSource(lease);
+        LeasedTextSource? source = catalog.ReadLeasedTextSource(lease);
         if (source is null)
         {
             return true;
@@ -32,7 +32,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             return true;
         }
 
-        var extension = Path.GetExtension(source.Locator).ToLowerInvariant();
+        string extension = Path.GetExtension(source.Locator).ToLowerInvariant();
         if (extension is not (".txt" or ".md" or ".markdown"))
         {
             catalog.CommitTextResult(lease, null,
@@ -48,8 +48,8 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
 
         try
         {
-            var store = new OriginalFileStore(Path.GetDirectoryName(catalog.DatabasePath)!);
-            var original = await store.ReadVerifiedBytesAsync(
+            OriginalFileStore store = new OriginalFileStore(Path.GetDirectoryName(catalog.DatabasePath)!);
+            byte[] original = await store.ReadVerifiedBytesAsync(
                 source.Original, MaximumTextBytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (original.AsSpan().StartsWith("%PDF-"u8))
@@ -58,9 +58,9 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
                 return true;
             }
 
-            var offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
+            int offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
                 ? Encoding.UTF8.Preamble.Length : 0;
-            var text = StrictUtf8.GetString(original, offset, original.Length - offset);
+            string text = StrictUtf8.GetString(original, offset, original.Length - offset);
             if (text.Any(c => (c < 0x20 && c is not ('\n' or '\r' or '\t')) ||
                 c == 0x7f))
             {

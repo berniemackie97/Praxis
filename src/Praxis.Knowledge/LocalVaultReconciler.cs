@@ -28,28 +28,28 @@ public static class LocalVaultReconciler
             throw new ArgumentException("The observed vault must be a fresh filesystem capture.", nameof(captured));
         }
 
-        var priorByPath = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
-        var priorNotes = previous.Notes.ToDictionary(note => note.Id);
-        var priorAttachments = previous.Attachments.ToDictionary(attachment => attachment.Id);
-        foreach (var note in previous.Notes)
+        Dictionary<string, PriorFile> priorByPath = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<Guid, NoteRecord> priorNotes = previous.Notes.ToDictionary(note => note.Id);
+        Dictionary<Guid, AttachmentRecord> priorAttachments = previous.Attachments.ToDictionary(attachment => attachment.Id);
+        foreach (NoteRecord note in previous.Notes)
         {
             priorByPath.Add(note.Current.Path, new PriorFile(note.Id, note.Current.Path, false));
         }
 
-        foreach (var attachment in previous.Attachments)
+        foreach (AttachmentRecord attachment in previous.Attachments)
         {
             priorByPath.Add(attachment.Path, new PriorFile(attachment.Id, attachment.Path, true));
         }
 
-        var capturedPaths = captured.Notes.Select(note => note.Current.Path)
+        HashSet<string> capturedPaths = captured.Notes.Select(note => note.Current.Path)
             .Concat(captured.Attachments.Select(attachment => attachment.Path))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var remapped = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
-        var remappedSources = new HashSet<PriorFile>();
-        var rules = renames ?? [];
-        var mappings = rules.Any(rule => rule?.IsFolder == true)
+        Dictionary<string, PriorFile> remapped = new Dictionary<string, PriorFile>(StringComparer.OrdinalIgnoreCase);
+        HashSet<PriorFile> remappedSources = new HashSet<PriorFile>();
+        IReadOnlyList<VaultRename> rules = renames ?? [];
+        IReadOnlyList<VaultRename> mappings = rules.Any(rule => rule?.IsFolder == true)
             ? ExpandMoves(priorByPath, rules) : rules;
-        foreach (var rule in mappings)
+        foreach (VaultRename? rule in mappings)
         {
             if (rule is null)
             {
@@ -59,7 +59,7 @@ public static class LocalVaultReconciler
             PortablePath.Validate(rule.FromPath);
             PortablePath.Validate(rule.ToPath);
             if (string.Equals(rule.FromPath, rule.ToPath, StringComparison.Ordinal) ||
-                !priorByPath.TryGetValue(rule.FromPath, out var origin) ||
+                !priorByPath.TryGetValue(rule.FromPath, out PriorFile? origin) ||
                 !capturedPaths.Contains(rule.ToPath) ||
                 !remappedSources.Add(origin) ||
                 !remapped.TryAdd(rule.ToPath, origin))
@@ -68,15 +68,15 @@ public static class LocalVaultReconciler
             }
         }
 
-        var visited = new HashSet<PriorFile>();
-        var notes = new List<NoteRecord>(captured.Notes.Count);
-        var attachments = new List<AttachmentRecord>(captured.Attachments.Count);
-        var changes = new List<VaultChange>();
+        HashSet<PriorFile> visited = new HashSet<PriorFile>();
+        List<NoteRecord> notes = new List<NoteRecord>(captured.Notes.Count);
+        List<AttachmentRecord> attachments = new List<AttachmentRecord>(captured.Attachments.Count);
+        List<VaultChange> changes = new List<VaultChange>();
 
-        foreach (var note in captured.Notes)
+        foreach (NoteRecord note in captured.Notes)
         {
-            var path = note.Current.Path;
-            var prior = Find(path, isAttachment: false);
+            string path = note.Current.Path;
+            PriorFile? prior = Find(path, isAttachment: false);
             if (prior is null)
             {
                 notes.Add(note);
@@ -84,9 +84,9 @@ public static class LocalVaultReconciler
                 continue;
             }
 
-            var original = priorNotes[prior.Id];
-            var pathChanged = !string.Equals(original.Current.Path, path, StringComparison.Ordinal);
-            var bodyChanged = !string.Equals(original.Current.Markdown, note.Current.Markdown, StringComparison.Ordinal);
+            NoteRecord original = priorNotes[prior.Id];
+            bool pathChanged = !string.Equals(original.Current.Path, path, StringComparison.Ordinal);
+            bool bodyChanged = !string.Equals(original.Current.Markdown, note.Current.Markdown, StringComparison.Ordinal);
             notes.Add(pathChanged || bodyChanged
                 ? original.Revise(path, note.Current.Markdown) : original);
             if (pathChanged || bodyChanged)
@@ -96,9 +96,9 @@ public static class LocalVaultReconciler
             }
         }
 
-        foreach (var attachment in captured.Attachments)
+        foreach (AttachmentRecord attachment in captured.Attachments)
         {
-            var prior = Find(attachment.Path, isAttachment: true);
+            PriorFile? prior = Find(attachment.Path, isAttachment: true);
             if (prior is null)
             {
                 attachments.Add(attachment);
@@ -106,10 +106,10 @@ public static class LocalVaultReconciler
                 continue;
             }
 
-            var original = priorAttachments[prior.Id];
-            var pathChanged = !string.Equals(original.Path, attachment.Path, StringComparison.Ordinal);
-            var contentChanged = original.Length != attachment.Length ||
-                !original.ContentSpan.SequenceEqual(attachment.ContentSpan);
+            AttachmentRecord original = priorAttachments[prior.Id];
+            bool pathChanged = !string.Equals(original.Path, attachment.Path, StringComparison.Ordinal);
+            bool contentChanged = original.Length != attachment.Length ||
+                                  !original.ContentSpan.SequenceEqual(attachment.ContentSpan);
             attachments.Add(pathChanged || contentChanged
                 ? AttachmentRecord.Restore(original.Id, attachment.Path, attachment.ReadContent())
                 : original);
@@ -122,21 +122,21 @@ public static class LocalVaultReconciler
 
         if (visited.Count != priorByPath.Count)
         {
-            var missing = priorByPath.Values
+            PriorFile missing = priorByPath.Values
                 .Where(item => !visited.Contains(item))
                 .OrderBy(item => item.Path, StringComparer.Ordinal).First();
             throw new InvalidOperationException(
                 $"A prior vault file is missing: {missing.Path}. Restore it or supply an explicit rename mapping.");
         }
 
-        var collection = new KnowledgeCollection(notes, attachments, previous.References);
-        var addedLinks = 0;
+        KnowledgeCollection collection = new KnowledgeCollection(notes, attachments, previous.References);
+        int addedLinks = 0;
         IReadOnlyList<AttachmentReference> removedLinkPairs = [];
         if (trackLinks || previous.VaultReferences is not null)
         {
             collection = LocalVaultAttachmentLinks.Track(collection);
-            var oldLinks = previous.VaultReferences?.ToHashSet() ?? [];
-            var newLinks = collection.VaultReferences!.ToHashSet();
+            HashSet<AttachmentReference> oldLinks = previous.VaultReferences?.ToHashSet() ?? [];
+            HashSet<AttachmentReference> newLinks = collection.VaultReferences!.ToHashSet();
             addedLinks = newLinks.Except(oldLinks).Count();
             removedLinkPairs = Array.AsReadOnly(oldLinks.Except(newLinks)
                 .OrderBy(link => link.NoteId)
@@ -154,7 +154,7 @@ public static class LocalVaultReconciler
 
         PriorFile? Find(string path, bool isAttachment)
         {
-            var prior = remapped.TryGetValue(path, out var mapped)
+            PriorFile? prior = remapped.TryGetValue(path, out PriorFile? mapped)
                 ? mapped : priorByPath.GetValueOrDefault(path);
             if (prior is not null && (prior.IsAttachment != isAttachment || !visited.Add(prior)))
             {
@@ -173,8 +173,8 @@ public static class LocalVaultReconciler
             throw new InvalidDataException("The ordered rename list exceeds its supported limit.");
         }
 
-        var positions = previous.Values.ToDictionary(file => file, file => file.Path);
-        foreach (var rule in rules)
+        Dictionary<PriorFile, string> positions = previous.Values.ToDictionary(file => file, file => file.Path);
+        foreach (VaultRename? rule in rules)
         {
             if (rule is null)
             {
@@ -188,7 +188,7 @@ public static class LocalVaultReconciler
                 throw new InvalidDataException("The rename mapping is redundant.");
             }
 
-            var affected = positions.Where(pair => rule.IsFolder
+            KeyValuePair<PriorFile, string>[] affected = positions.Where(pair => rule.IsFolder
                     ? pair.Value.StartsWith(rule.FromPath + "/", StringComparison.OrdinalIgnoreCase)
                     : string.Equals(pair.Value, rule.FromPath, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -197,9 +197,9 @@ public static class LocalVaultReconciler
                 throw new InvalidDataException("The rename mapping is missing or ambiguous.");
             }
 
-            foreach (var (file, current) in affected)
+            foreach ((PriorFile file, string current) in affected)
             {
-                var destination = rule.IsFolder
+                string destination = rule.IsFolder
                     ? rule.ToPath + current[rule.FromPath.Length..] : rule.ToPath;
                 PortablePath.Validate(destination);
                 positions[file] = destination;

@@ -12,16 +12,16 @@ public sealed class NoteArchiveTests
     [Fact]
     public void ArchivePreservesIdentityPathsHistoryAndMarkdown()
     {
-        var first = NoteRecord.Create("Writing/ideas.md", "# Café\r\n\\* literal\n")
+        NoteRecord first = NoteRecord.Create("Writing/ideas.md", "# Café\r\n\\* literal\n")
             .Revise("Archive/ideas.md", "# Café\r\nFinal\n");
-        var second = NoteRecord.Create("notes/日本語.md", "# 日本語\n");
+        NoteRecord second = NoteRecord.Create("notes/日本語.md", "# 日本語\n");
 
-        using var archive = Export(second, first);
-        var restored = NoteArchive.Read(archive);
+        using MemoryStream archive = Export(second, first);
+        IReadOnlyList<NoteRecord> restored = NoteArchive.Read(archive);
 
         Assert.Equal(2, restored.Count);
-        var firstCopy = Assert.Single(restored, note => note.Id == first.Id);
-        var secondCopy = Assert.Single(restored, note => note.Id == second.Id);
+        NoteRecord firstCopy = Assert.Single(restored, note => note.Id == first.Id);
+        NoteRecord secondCopy = Assert.Single(restored, note => note.Id == second.Id);
         Assert.Equal(first.Revisions.ToArray(), firstCopy.Revisions.ToArray());
         Assert.Equal(second.Revisions.ToArray(), secondCopy.Revisions.ToArray());
     }
@@ -29,7 +29,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void EmptyCollectionRoundTrips()
     {
-        using var archive = Export();
+        using MemoryStream archive = Export();
 
         Assert.Empty(NoteArchive.Read(archive));
     }
@@ -37,7 +37,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void ExportDoesNotCloseCallerStream()
     {
-        using var archive = Export(NoteRecord.Create("note.md", "# Note"));
+        using MemoryStream archive = Export(NoteRecord.Create("note.md", "# Note"));
 
         Assert.True(archive.CanRead);
         Assert.NotEmpty(NoteArchive.Read(archive));
@@ -47,8 +47,8 @@ public sealed class NoteArchiveTests
     [Fact]
     public void DuplicateCurrentPathsAreRejectedCaseInsensitively()
     {
-        var a = NoteRecord.Create("Notes/Entry.md", "a");
-        var b = NoteRecord.Create("notes/entry.md", "b");
+        NoteRecord a = NoteRecord.Create("Notes/Entry.md", "a");
+        NoteRecord b = NoteRecord.Create("notes/entry.md", "b");
 
         Assert.Throws<InvalidDataException>(() => Export(a, b));
     }
@@ -56,7 +56,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void DuplicateIdsAreRejected()
     {
-        var note = NoteRecord.Create("a.md", "a");
+        NoteRecord note = NoteRecord.Create("a.md", "a");
 
         Assert.Throws<InvalidDataException>(() => Export(note, note));
     }
@@ -64,8 +64,8 @@ public sealed class NoteArchiveTests
     [Fact]
     public void AlteredContentIsRejected()
     {
-        var note = NoteRecord.Create("note.md", "original");
-        using var archive = Export(note);
+        NoteRecord note = NoteRecord.Create("note.md", "original");
+        using MemoryStream archive = Export(note);
         ArchiveFixture.ReplaceEntry(archive, $"notes/{note.Id:N}/00000001.md", _ => Encoding.UTF8.GetBytes("altered!"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
@@ -74,7 +74,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void UnknownFormatVersionIsRejected()
     {
-        using var archive = Export(NoteRecord.Create("note.md", "content"));
+        using MemoryStream archive = Export(NoteRecord.Create("note.md", "content"));
         ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
             Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace(
                 "\"formatVersion\": 1", "\"formatVersion\": 2", StringComparison.Ordinal)));
@@ -85,7 +85,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void InvalidManifestPathIsRejected()
     {
-        using var archive = Export(NoteRecord.Create("safe.md", "content"));
+        using MemoryStream archive = Export(NoteRecord.Create("safe.md", "content"));
         ArchiveFixture.ReplaceEntry(archive, "manifest.json", bytes =>
             Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace(
                 "\"path\": \"safe.md\"", "\"path\": \"../escape.md\"", StringComparison.Ordinal)));
@@ -96,10 +96,10 @@ public sealed class NoteArchiveTests
     [Fact]
     public void UnexpectedFilesAreRejected()
     {
-        using var archive = Export(NoteRecord.Create("safe.md", "content"));
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
+        using MemoryStream archive = Export(NoteRecord.Create("safe.md", "content"));
+        using (ZipArchive zip = new ZipArchive(archive, ZipArchiveMode.Update, leaveOpen: true))
         {
-            using var extra = zip.CreateEntry("../outside.md").Open();
+            using Stream extra = zip.CreateEntry("../outside.md").Open();
             extra.WriteByte(42);
         }
 
@@ -110,10 +110,10 @@ public sealed class NoteArchiveTests
     [Fact]
     public void MissingManifestIsRejected()
     {
-        using var archive = new MemoryStream();
-        using (var zip = new ZipArchive(archive, ZipArchiveMode.Create, leaveOpen: true))
+        using MemoryStream archive = new MemoryStream();
+        using (ZipArchive zip = new ZipArchive(archive, ZipArchiveMode.Create, leaveOpen: true))
         {
-            using var entry = zip.CreateEntry("file.md").Open();
+            using Stream entry = zip.CreateEntry("file.md").Open();
             entry.WriteByte(42);
         }
 
@@ -124,7 +124,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void CorruptedManifestIsRejected()
     {
-        using var archive = Export(NoteRecord.Create("note.md", "content"));
+        using MemoryStream archive = Export(NoteRecord.Create("note.md", "content"));
         ArchiveFixture.ReplaceEntry(archive, "manifest.json", _ => Encoding.UTF8.GetBytes("{"));
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
@@ -133,10 +133,10 @@ public sealed class NoteArchiveTests
     [Fact]
     public void ReadsIndependentVersionOneArchive()
     {
-        var id = Guid.NewGuid();
-        using var archive = IndependentArchive(id, "Examples/fixture.md", Encoding.UTF8.GetBytes("# Fixture\r\n"));
+        Guid id = Guid.NewGuid();
+        using MemoryStream archive = IndependentArchive(id, "Examples/fixture.md", Encoding.UTF8.GetBytes("# Fixture\r\n"));
 
-        var note = Assert.Single(NoteArchive.Read(archive));
+        NoteRecord note = Assert.Single(NoteArchive.Read(archive));
         Assert.Equal(id, note.Id);
         Assert.Equal("Examples/fixture.md", note.Current.Path);
         Assert.Equal("# Fixture\r\n", note.Current.Markdown);
@@ -145,7 +145,7 @@ public sealed class NoteArchiveTests
     [Fact]
     public void InvalidUtf8IsRejectedEvenWhenHashMatches()
     {
-        using var archive = IndependentArchive(Guid.NewGuid(), "bad.md", [0xff]);
+        using MemoryStream archive = IndependentArchive(Guid.NewGuid(), "bad.md", [0xff]);
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Read(archive));
     }
@@ -153,8 +153,8 @@ public sealed class NoteArchiveTests
     [Fact]
     public void OversizedNoteIsRejectedBeforeWriting()
     {
-        var note = NoteRecord.Create("large.md", new string('x', 8 * 1024 * 1024 + 1));
-        using var archive = new MemoryStream();
+        NoteRecord note = NoteRecord.Create("large.md", new string('x', 8 * 1024 * 1024 + 1));
+        using MemoryStream archive = new MemoryStream();
 
         Assert.Throws<InvalidDataException>(() => NoteArchive.Write(archive, [note]));
         Assert.Equal(0, archive.Length);
@@ -163,8 +163,8 @@ public sealed class NoteArchiveTests
     [Fact]
     public void ExcessiveRecordInputIsRejectedWithoutEnumeratingItAll()
     {
-        var note = NoteRecord.Create("note.md", "content");
-        using var archive = new MemoryStream();
+        NoteRecord note = NoteRecord.Create("note.md", "content");
+        using MemoryStream archive = new MemoryStream();
 
         Assert.Throws<InvalidDataException>(() =>
             NoteArchive.Write(archive, Enumerable.Repeat(note, int.MaxValue)));
@@ -173,9 +173,9 @@ public sealed class NoteArchiveTests
 
     private static MemoryStream IndependentArchive(Guid id, string path, byte[] content)
     {
-        var entryName = $"notes/{id:N}/00000001.md";
-        var hash = Convert.ToHexStringLower(SHA256.HashData(content));
-        var manifest = JsonSerializer.SerializeToUtf8Bytes(new
+        string entryName = $"notes/{id:N}/00000001.md";
+        string hash = Convert.ToHexStringLower(SHA256.HashData(content));
+        byte[] manifest = JsonSerializer.SerializeToUtf8Bytes(new
         {
             formatVersion = 1,
             notes = new[]
@@ -191,15 +191,15 @@ public sealed class NoteArchiveTests
             }
         });
 
-        var stream = new MemoryStream();
-        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        MemoryStream stream = new MemoryStream();
+        using (ZipArchive zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            using (var payload = zip.CreateEntry(entryName).Open())
+            using (Stream payload = zip.CreateEntry(entryName).Open())
             {
                 payload.Write(content);
             }
 
-            using var index = zip.CreateEntry("manifest.json").Open();
+            using Stream index = zip.CreateEntry("manifest.json").Open();
             index.Write(manifest);
         }
 
@@ -209,7 +209,7 @@ public sealed class NoteArchiveTests
 
     private static MemoryStream Export(params NoteRecord[] records)
     {
-        var stream = new MemoryStream();
+        MemoryStream stream = new MemoryStream();
         NoteArchive.Write(stream, records);
         stream.Position = 0;
         return stream;

@@ -8,8 +8,8 @@ public sealed class NoteRecordTests
     [Fact]
     public void RevisionPreservesIdentityAndOriginalSnapshot()
     {
-        var original = NoteRecord.Create("Notes/first.md", "# First\r\n");
-        var renamed = original.Revise("Archive/renamed.md", "# Second\n");
+        NoteRecord original = NoteRecord.Create("Notes/first.md", "# First\r\n");
+        NoteRecord renamed = original.Revise("Archive/renamed.md", "# Second\n");
 
         Assert.NotEqual(Guid.Empty, original.Id);
         Assert.Equal(original.Id, renamed.Id);
@@ -46,7 +46,7 @@ public sealed class NoteRecordTests
     [Fact]
     public void EmptyMarkdownIsValid()
     {
-        var note = NoteRecord.Create("empty.md", "");
+        NoteRecord note = NoteRecord.Create("empty.md", "");
 
         Assert.Empty(note.Current.Markdown);
     }

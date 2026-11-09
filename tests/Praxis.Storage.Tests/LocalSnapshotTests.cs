@@ -28,32 +28,32 @@ public sealed class LocalSnapshotTests : IDisposable
     public async Task OpenWalCatalogRestoresExactHistoryAndHistoricalReceipts()
     {
         CapturedOriginal old, latest, shared;
-        using (var live = LocalCatalog.Open(Live))
+        using (LocalCatalog live = LocalCatalog.Open(Live))
         {
-            using var first = new MemoryStream([1, 2, 3]);
+            using MemoryStream first = new MemoryStream([1, 2, 3]);
             old = await live.CaptureFileAsync(Source("note.md"), first, 100, "old");
-            using var changed = new MemoryStream([4, 5, 6]);
+            using MemoryStream changed = new MemoryStream([4, 5, 6]);
             latest = await live.CaptureFileAsync(Source("note.md"), changed, 100, "changed");
-            using var same = new MemoryStream([1, 2, 3]);
+            using MemoryStream same = new MemoryStream([1, 2, 3]);
             shared = await live.CaptureFileAsync(Source("other.md"), same, 100, "shared");
 
-            var exported = await live.BackupAsync(Backup, 10_000_000);
+            LocalSnapshotReport exported = await live.BackupAsync(Backup, 10_000_000);
             Assert.Equal(2, exported.ObjectCount);
             Assert.Equal(2, (await LocalCatalog.VerifyBackupAsync(Backup, 10_000_000)).ObjectCount);
 
-            using var later = new MemoryStream([7, 8]);
+            using MemoryStream later = new MemoryStream([7, 8]);
             await live.CaptureFileAsync(Source("note.md"), later, 100, "after-backup");
         }
 
-        var recovered = await LocalCatalog.RestoreAsync(Backup, Restored, 10_000_000);
+        LocalSnapshotReport recovered = await LocalCatalog.RestoreAsync(Backup, Restored, 10_000_000);
         Assert.Equal(2, recovered.ObjectCount);
-        using (var restored = LocalCatalog.Open(Restored))
+        using (LocalCatalog restored = LocalCatalog.Open(Restored))
         {
-            using var notRead = new ThrowingReadStream();
-            var historical = await restored.CaptureFileAsync(
+            using ThrowingReadStream notRead = new ThrowingReadStream();
+            CapturedOriginal historical = await restored.CaptureFileAsync(
                 Source("note.md"), notRead, 0, "old");
             Assert.Equal(old, historical);
-            var current = await restored.CaptureFileAsync(
+            CapturedOriginal current = await restored.CaptureFileAsync(
                 Source("note.md"), notRead, 0, "changed");
             Assert.Equal(latest, current);
             Assert.Equal(2, current.Revision);
@@ -64,7 +64,7 @@ public sealed class LocalSnapshotTests : IDisposable
             await restored.VerifyOriginalAsync(shared.ItemId);
             Assert.Equal(new OriginalRecoveryInspection(0, 2, 2, 0, 0, 0),
                 await restored.InspectRecoveryAsync());
-            using var db = Connect(restored.DatabasePath);
+            using SqliteConnection db = Connect(restored.DatabasePath);
             Assert.Equal(3L, Count(db, "item_versions"));
             Assert.Equal(3L, Count(db, "ingest_requests"));
             Assert.Equal(2L, Count(db, "sources"));
@@ -79,23 +79,23 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task SnapshotExcludesUncommittedPublishedObjects()
     {
-        using var live = LocalCatalog.Open(Live);
-        using var first = new MemoryStream([1]);
+        using LocalCatalog live = LocalCatalog.Open(Live);
+        using MemoryStream first = new MemoryStream([1]);
         await live.CaptureFileAsync(Source("revoked.md"), first, 10, "first");
-        using (var db = Connect(live.DatabasePath))
+        using (SqliteConnection db = Connect(live.DatabasePath))
         {
-            using var statement = db.CreateCommand();
+            using SqliteCommand statement = db.CreateCommand();
             statement.CommandText = "UPDATE sources SET status='revoked'";
             statement.ExecuteNonQuery();
         }
 
-        using var rejected = new MemoryStream([9]);
+        using MemoryStream rejected = new MemoryStream([9]);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             live.CaptureFileAsync(Source("revoked.md"), rejected, 10, "rejected"));
-        var abandoned = Convert.ToHexStringLower(SHA256.HashData([9]));
+        string abandoned = Convert.ToHexStringLower(SHA256.HashData([9]));
         Assert.True(File.Exists(ObjectPath(Live, abandoned)));
 
-        var result = await live.BackupAsync(Backup, 10_000_000);
+        LocalSnapshotReport result = await live.BackupAsync(Backup, 10_000_000);
         Assert.Equal(1, result.ObjectCount);
         Assert.False(File.Exists(ObjectPath(Backup, abandoned)));
     }
@@ -103,9 +103,9 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task MissingOriginalCannotProduceCompletedBackup()
     {
-        using var live = LocalCatalog.Open(Live);
-        using var data = new MemoryStream([1, 2]);
-        var saved = await live.CaptureFileAsync(Source("a"), data, 10, "key");
+        using LocalCatalog live = LocalCatalog.Open(Live);
+        using MemoryStream data = new MemoryStream([1, 2]);
+        CapturedOriginal saved = await live.CaptureFileAsync(Source("a"), data, 10, "key");
         File.Delete(ObjectPath(Live, saved.Sha256));
 
         await Assert.ThrowsAnyAsync<IOException>(() =>
@@ -117,14 +117,14 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task CorruptObjectAndTruncatedDatabasePreventRestore()
     {
-        using (var live = LocalCatalog.Open(Live))
+        using (LocalCatalog live = LocalCatalog.Open(Live))
         {
-            using var content = new MemoryStream([1, 2, 3]);
+            using MemoryStream content = new MemoryStream([1, 2, 3]);
             await live.CaptureFileAsync(Source("a"), content, 10, "one");
             await live.BackupAsync(Backup, 10_000_000);
         }
 
-        var digest = Convert.ToHexStringLower(SHA256.HashData([1, 2, 3]));
+        string digest = Convert.ToHexStringLower(SHA256.HashData([1, 2, 3]));
         File.WriteAllBytes(ObjectPath(Backup, digest), [0, 0, 0]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             LocalCatalog.RestoreAsync(Backup, Restored, 10_000_000));
@@ -140,13 +140,13 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task IncompatibleManifestOrUnexpectedFilesRejectWithoutOverwrite()
     {
-        using (var live = LocalCatalog.Open(Live))
+        using (LocalCatalog live = LocalCatalog.Open(Live))
         {
             await live.BackupAsync(Backup, 10_000_000);
         }
 
-        var path = Path.Combine(Backup, "manifest.json");
-        var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        string path = Path.Combine(Backup, "manifest.json");
+        JsonObject json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["FormatVersion"] = 99;
         File.WriteAllText(path, json.ToJsonString());
         await Assert.ThrowsAsync<InvalidDataException>(() =>
@@ -163,7 +163,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task ExistingDestinationAndLowBudgetNeverOverwriteData()
     {
-        using (var live = LocalCatalog.Open(Live))
+        using (LocalCatalog live = LocalCatalog.Open(Live))
         {
             await live.BackupAsync(Backup, 10_000_000);
         }
@@ -180,8 +180,8 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task CancelledSnapshotDoesNotCreateDestination()
     {
-        using var live = LocalCatalog.Open(Live);
-        using var cancel = new CancellationTokenSource();
+        using LocalCatalog live = LocalCatalog.Open(Live);
+        using CancellationTokenSource cancel = new CancellationTokenSource();
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             live.BackupAsync(Backup, 10_000_000, cancel.Token));
@@ -192,12 +192,12 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task PendingRequestsRemainInertAfterRestore()
     {
-        using (var live = LocalCatalog.Open(Live))
+        using (LocalCatalog live = LocalCatalog.Open(Live))
         {
-            using var data = new MemoryStream([1]);
-            var captured = await live.CaptureFileAsync(Source("a"), data, 10, "done");
-            using var db = Connect(live.DatabasePath);
-            using var command = db.CreateCommand();
+            using MemoryStream data = new MemoryStream([1]);
+            CapturedOriginal captured = await live.CaptureFileAsync(Source("a"), data, 10, "done");
+            using SqliteConnection db = Connect(live.DatabasePath);
+            using SqliteCommand command = db.CreateCommand();
             command.CommandText = """
                 INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
                 VALUES ('queued', $source, 'queued', 0, NULL, NULL)
@@ -208,12 +208,12 @@ public sealed class LocalSnapshotTests : IDisposable
         }
 
         await LocalCatalog.RestoreAsync(Backup, Restored, 10_000_000);
-        using var catalog = LocalCatalog.Open(Restored);
-        using var db2 = Connect(catalog.DatabasePath);
-        using var check = db2.CreateCommand();
+        using LocalCatalog catalog = LocalCatalog.Open(Restored);
+        using SqliteConnection db2 = Connect(catalog.DatabasePath);
+        using SqliteCommand check = db2.CreateCommand();
         check.CommandText = "SELECT state FROM ingest_requests WHERE request_key='queued'";
         Assert.Equal("queued", check.ExecuteScalar());
-        using var unused = new ThrowingReadStream();
+        using ThrowingReadStream unused = new ThrowingReadStream();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.CaptureFileAsync(Source("a"), unused, 10, "queued"));
     }
@@ -223,7 +223,7 @@ public sealed class LocalSnapshotTests : IDisposable
 
     private static SqliteConnection Connect(string path)
     {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        SqliteConnection connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadWrite,
@@ -235,7 +235,7 @@ public sealed class LocalSnapshotTests : IDisposable
 
     private static long Count(SqliteConnection connection, string table)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {table}";
         return (long)command.ExecuteScalar()!;
     }

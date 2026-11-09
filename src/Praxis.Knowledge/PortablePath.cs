@@ -17,7 +17,7 @@ internal static class PortablePath
             throw new ArgumentException("The path must be normalized and relative.", nameof(path));
         }
 
-        foreach (var segment in path.Split('/'))
+        foreach (string segment in path.Split('/'))
         {
             if (segment.Length == 0 ||
                 segment is "." or ".." ||
@@ -30,7 +30,7 @@ internal static class PortablePath
                 throw new ArgumentException("The path contains an invalid segment.", nameof(path));
             }
 
-            var stem = segment.Split('.')[0];
+            string stem = segment.Split('.')[0];
             if (stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
                 stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
                 stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||

@@ -22,11 +22,11 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(maxBytes));
         }
 
-        var path = ValidateSourcePath(sourcePath, expectDirectory: false);
+        string path = ValidateSourcePath(sourcePath, expectDirectory: false);
         cancellationToken.ThrowIfCancellationRequested();
-        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+        await using FileStream input = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var accepted = await catalog.CaptureFileAsync(path, input, maxBytes, requestKey,
+        CapturedOriginal accepted = await catalog.CaptureFileAsync(path, input, maxBytes, requestKey,
             cancellationToken);
         if (accepted.Length > maxBytes)
         {
@@ -67,13 +67,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
         }
 
-        var root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
-        var paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
-        var remaining = maxTotalBytes;
-        foreach (var path in paths)
+        string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
+        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        long remaining = maxTotalBytes;
+        foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var length = new FileInfo(path).Length;
+            long length = new FileInfo(path).Length;
             if (length > maxFileBytes || length > remaining)
             {
                 throw new InvalidDataException("The selected folder exceeds its import budget.");
@@ -82,14 +82,14 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             remaining -= length;
         }
 
-        var imported = new List<LocalImportedFile>(paths.Count);
+        List<LocalImportedFile> imported = new List<LocalImportedFile>(paths.Count);
         remaining = maxTotalBytes;
-        foreach (var path in paths)
+        foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(
+            string scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(
                 Encoding.UTF8.GetBytes($"praxis-folder-v1\n{batchKey}\n{path}")));
-            var accepted = await ImportFileAsync(path, Math.Min(maxFileBytes, remaining),
+            CapturedOriginal accepted = await ImportFileAsync(path, Math.Min(maxFileBytes, remaining),
                 scopedKey, cancellationToken);
             remaining -= accepted.Length;
             imported.Add(new LocalImportedFile(path, accepted));
@@ -106,9 +106,9 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentException("A selected source path must be absolute.", nameof(sourcePath));
         }
 
-        var full = Path.GetFullPath(sourcePath);
-        var dataRoot = ResolvePath(Path.GetDirectoryName(catalog.DatabasePath)!);
-        var relative = Path.GetRelativePath(dataRoot, ResolvePath(full));
+        string full = Path.GetFullPath(sourcePath);
+        string dataRoot = ResolvePath(Path.GetDirectoryName(catalog.DatabasePath)!);
+        string relative = Path.GetRelativePath(dataRoot, ResolvePath(full));
         if (relative == "." ||
             (!Path.IsPathRooted(relative) && relative != ".." &&
              !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
@@ -117,13 +117,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new InvalidOperationException("The data store cannot be imported as a source.");
         }
 
-        var attributes = File.GetAttributes(full);
+        FileAttributes attributes = File.GetAttributes(full);
         if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("A selected source path cannot be a symbolic link.");
         }
 
-        var isDirectory = (attributes & FileAttributes.Directory) != 0;
+        bool isDirectory = (attributes & FileAttributes.Directory) != 0;
         if (isDirectory != expectDirectory)
         {
             throw new InvalidDataException("The selected source has an unexpected file type.");
@@ -134,14 +134,14 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
 
     private static string ResolvePath(string path)
     {
-        var root = Path.GetPathRoot(path)!;
-        var current = root;
-        foreach (var component in Path.GetRelativePath(root, path).Split(
+        string root = Path.GetPathRoot(path)!;
+        string current = root;
+        foreach (string component in Path.GetRelativePath(root, path).Split(
             [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
             StringSplitOptions.RemoveEmptyEntries))
         {
-            var candidate = Path.Combine(current, component);
-            var attributes = File.GetAttributes(candidate);
+            string candidate = Path.Combine(current, component);
+            FileAttributes attributes = File.GetAttributes(candidate);
             if ((attributes & FileAttributes.ReparsePoint) == 0)
             {
                 current = candidate;
@@ -151,8 +151,8 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             FileSystemInfo link = (attributes & FileAttributes.Directory) != 0
                 ? new DirectoryInfo(candidate)
                 : new FileInfo(candidate);
-            var target = link.ResolveLinkTarget(returnFinalTarget: true)?.FullName
-                ?? throw new InvalidDataException("The selected path contains a broken link.");
+            string target = link.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                            ?? throw new InvalidDataException("The selected path contains a broken link.");
             current = ResolvePath(target);
         }
 
@@ -163,15 +163,15 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         string directory, int maxFiles, int maxDepth,
         CancellationToken cancellationToken)
     {
-        var result = new List<string>();
-        var stack = new Stack<(string Directory, int Depth)>();
+        List<string> result = new List<string>();
+        Stack<(string Directory, int Depth)> stack = new Stack<(string Directory, int Depth)>();
         stack.Push((directory, 0));
-        var remainingEntries = checked(maxFiles * 4);
-        while (stack.TryPop(out var pending))
+        int remainingEntries = checked(maxFiles * 4);
+        while (stack.TryPop(out (string Directory, int Depth) pending))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entries = new List<string>();
-            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Directory))
+            List<string> entries = new List<string>();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(pending.Directory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (--remainingEntries < 0)
@@ -183,10 +183,10 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             }
 
             entries.Sort(StringComparer.Ordinal);
-            for (var index = entries.Count - 1; index >= 0; index--)
+            for (int index = entries.Count - 1; index >= 0; index--)
             {
-                var path = entries[index];
-                var attributes = File.GetAttributes(path);
+                string path = entries[index];
+                FileAttributes attributes = File.GetAttributes(path);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     throw new InvalidDataException("Folder imports cannot follow symbolic links.");

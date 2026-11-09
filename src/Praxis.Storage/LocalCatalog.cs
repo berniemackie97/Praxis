@@ -38,15 +38,15 @@ public sealed partial class LocalCatalog : IDisposable
             throw new ArgumentException("The catalog data directory must be absolute.", nameof(dataDirectory));
         }
 
-        var root = Path.GetFullPath(dataDirectory);
+        string root = Path.GetFullPath(dataDirectory);
         ValidateRoot(root);
-        var lockPath = Path.Combine(root, "catalog.lock");
-        var fileLock = new FileStream(lockPath, FileMode.OpenOrCreate,
+        string lockPath = Path.Combine(root, "catalog.lock");
+        FileStream fileLock = new FileStream(lockPath, FileMode.OpenOrCreate,
             FileAccess.ReadWrite, FileShare.None);
         SqliteConnection? database = null;
         try
         {
-            var databasePath = Path.Combine(root, "catalog.sqlite");
+            string databasePath = Path.Combine(root, "catalog.sqlite");
             database = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
@@ -77,7 +77,7 @@ public sealed partial class LocalCatalog : IDisposable
         Execute(database, "PRAGMA busy_timeout = 5000");
         VerifyIntegrity(database);
 
-        var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
+        int version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
         if (version is < 0 or > CurrentSchemaVersion)
         {
             throw new NotSupportedException("The catalog schema version is not supported.");
@@ -98,36 +98,36 @@ public sealed partial class LocalCatalog : IDisposable
 
         if (version < CurrentSchemaVersion)
         {
-            using var transaction = database.BeginTransaction();
+            using SqliteTransaction transaction = database.BeginTransaction();
             if (version == 0)
             {
-                using var initial = Command(database, ReadSchema("LocalCatalog.sql"));
+                using SqliteCommand initial = Command(database, ReadSchema("LocalCatalog.sql"));
                 initial.Transaction = transaction;
                 initial.ExecuteNonQuery();
             }
 
             if (version < 2)
             {
-                using var upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
+                using SqliteCommand upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
                 upgrade.Transaction = transaction;
                 upgrade.ExecuteNonQuery();
             }
 
             if (version < 3)
             {
-                using var processing = Command(database, ReadSchema("LocalCatalog.V3.sql"));
+                using SqliteCommand processing = Command(database, ReadSchema("LocalCatalog.V3.sql"));
                 processing.Transaction = transaction;
                 processing.ExecuteNonQuery();
             }
 
             if (version < 4)
             {
-                using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
+                using SqliteCommand extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
                 extraction.Transaction = transaction;
                 extraction.ExecuteNonQuery();
             }
 
-            using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
+            using SqliteCommand search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
             search.Transaction = transaction;
             search.ExecuteNonQuery();
             transaction.Commit();
@@ -172,14 +172,14 @@ public sealed partial class LocalCatalog : IDisposable
             }
         }
 
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        HashSet<string> allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "catalog.sqlite", "catalog.sqlite-wal", "catalog.sqlite-shm", "catalog.lock",
             "objects", "staging", "derived"
         };
-        foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+        foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
-            var name = Path.GetFileName(entry);
+            string name = Path.GetFileName(entry);
             if (!allowed.Contains(name) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
             {
                 throw new InvalidDataException("The catalog directory contains an unexpected or linked entry.");
@@ -207,7 +207,7 @@ public sealed partial class LocalCatalog : IDisposable
             throw new InvalidDataException("The catalog failed SQLite integrity verification.");
         }
 
-        using var badReference = Command(database, "PRAGMA foreign_key_check").ExecuteReader();
+        using SqliteDataReader badReference = Command(database, "PRAGMA foreign_key_check").ExecuteReader();
         if (badReference.Read())
         {
             throw new InvalidDataException("The catalog contains invalid foreign key references.");
@@ -216,7 +216,7 @@ public sealed partial class LocalCatalog : IDisposable
 
     private static void VerifySchema(SqliteConnection database, int version)
     {
-        foreach (var (name, columns) in Tables)
+        foreach ((string name, string columns) in Tables)
         {
             if ((version < 3 && name == "processing_jobs") ||
                 (version < 4 && name == "text_derivatives") ||
@@ -225,7 +225,7 @@ public sealed partial class LocalCatalog : IDisposable
                 continue;
             }
 
-            using var command = Command(database,
+            using SqliteCommand command = Command(database,
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
             command.Parameters.AddWithValue("$name", name);
             if (command.ExecuteScalar() is not string definition ||
@@ -234,13 +234,13 @@ public sealed partial class LocalCatalog : IDisposable
                 throw new InvalidDataException("The catalog schema is incompatible.");
             }
 
-            var requiredColumns = version >= 2 && name == "ingest_requests"
+            string requiredColumns = version >= 2 && name == "ingest_requests"
                 ? $"{columns}, revision"
                 : columns;
-            using var projection = Command(database, $"SELECT {requiredColumns} FROM {name} LIMIT 0");
+            using SqliteCommand projection = Command(database, $"SELECT {requiredColumns} FROM {name} LIMIT 0");
             try
             {
-                using var reader = projection.ExecuteReader();
+                using SqliteDataReader reader = projection.ExecuteReader();
             }
             catch (SqliteException exception)
             {
@@ -251,7 +251,7 @@ public sealed partial class LocalCatalog : IDisposable
 
     private static void VerifySearchSchema(SqliteConnection database)
     {
-        foreach (var (kind, name) in new (string Kind, string Name)[]
+        foreach ((string kind, string name) in new (string Kind, string Name)[]
         {
             ("table", "text_search"),
             ("view", "eligible_text_search"),
@@ -260,9 +260,9 @@ public sealed partial class LocalCatalog : IDisposable
             ("trigger", "text_search_job_completed")
         })
         {
-            using var command = Command(database, """
-                SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
-                """);
+            using SqliteCommand command = Command(database, """
+                                                            SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
+                                                            """);
             command.Parameters.AddWithValue("$type", kind);
             command.Parameters.AddWithValue("$name", name);
             if (command.ExecuteScalar() is not string definition ||
@@ -273,11 +273,11 @@ public sealed partial class LocalCatalog : IDisposable
             }
         }
 
-        using var projection = Command(database,
+        using SqliteCommand projection = Command(database,
             "SELECT locator, content FROM text_search LIMIT 0");
         try
         {
-            using var reader = projection.ExecuteReader();
+            using SqliteDataReader reader = projection.ExecuteReader();
         }
         catch (SqliteException exception)
         {
@@ -287,28 +287,28 @@ public sealed partial class LocalCatalog : IDisposable
 
     private static string ReadSchema(string fileName)
     {
-        using var stream = typeof(LocalCatalog).Assembly
-            .GetManifestResourceStream($"Praxis.Storage.{fileName}")
-            ?? throw new InvalidOperationException("The catalog migration resource is missing.");
-        using var reader = new StreamReader(stream);
+        using Stream stream = typeof(LocalCatalog).Assembly
+                                  .GetManifestResourceStream($"Praxis.Storage.{fileName}")
+                              ?? throw new InvalidOperationException("The catalog migration resource is missing.");
+        using StreamReader reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
 
     private static object? Scalar(SqliteConnection connection, string sql)
     {
-        using var command = Command(connection, sql);
+        using SqliteCommand command = Command(connection, sql);
         return command.ExecuteScalar();
     }
 
     private static void Execute(SqliteConnection connection, string sql)
     {
-        using var command = Command(connection, sql);
+        using SqliteCommand command = Command(connection, sql);
         command.ExecuteNonQuery();
     }
 
     private static SqliteCommand Command(SqliteConnection connection, string sql)
     {
-        var command = connection.CreateCommand();
+        SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return command;
     }

@@ -108,7 +108,7 @@ internal sealed class OfflineSyncReplica
             throw new InvalidDataException("The page contains invalid cursor metadata.");
         }
 
-        var lastSequence = page.Changes.Count == 0 ? page.Cursor : page.Changes[^1].Sequence;
+        long lastSequence = page.Changes.Count == 0 ? page.Cursor : page.Changes[^1].Sequence;
         if (page.Cursor != lastSequence)
         {
             throw new InvalidDataException("The page cursor does not match its final event.");
@@ -119,10 +119,10 @@ internal sealed class OfflineSyncReplica
             throw new InvalidDataException("An empty page cannot skip unapplied events.");
         }
 
-        var staged = new Dictionary<Guid, SyncRecord>(records);
-        var appliedCursor = Cursor;
+        Dictionary<Guid, SyncRecord> staged = new Dictionary<Guid, SyncRecord>(records);
+        long appliedCursor = Cursor;
         long? previous = null;
-        foreach (var change in page.Changes)
+        foreach (SyncChange change in page.Changes)
         {
             if (previous.HasValue && change.Sequence != previous + 1)
             {
@@ -141,7 +141,7 @@ internal sealed class OfflineSyncReplica
                 throw new InvalidDataException("An event cannot be applied before its predecessor.");
             }
 
-            staged.TryGetValue(change.Record.Id, out var current);
+            staged.TryGetValue(change.Record.Id, out SyncRecord? current);
             if (change.Record.Revision != (current?.Revision ?? 0) + 1)
             {
                 throw new InvalidDataException("The resulting record revision is inconsistent.");
@@ -162,8 +162,8 @@ internal sealed class OfflineSyncReplica
             throw new InvalidDataException("The snapshot does not match the collection generation.");
         }
 
-        var restored = new Dictionary<Guid, SyncRecord>();
-        foreach (var record in snapshot.Records)
+        Dictionary<Guid, SyncRecord> restored = new Dictionary<Guid, SyncRecord>();
+        foreach (SyncRecord record in snapshot.Records)
         {
             if (record.Revision <= 0 || !restored.TryAdd(record.Id, record))
             {

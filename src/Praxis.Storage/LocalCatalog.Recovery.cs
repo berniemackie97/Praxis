@@ -11,35 +11,35 @@ public sealed partial class LocalCatalog
     public async Task<OriginalRecoveryInspection> InspectRecoveryAsync(
         CancellationToken cancellationToken = default)
     {
-        var expected = new Dictionary<string, OriginalObject>(StringComparer.Ordinal);
+        Dictionary<string, OriginalObject> expected = new Dictionary<string, OriginalObject>(StringComparer.Ordinal);
         lock (connection)
         {
-            using var query = Command(connection, """
-                SELECT DISTINCT o.digest, o.byte_length
-                FROM item_versions v
-                JOIN original_objects o ON o.digest = v.digest
-                """);
-            using var reader = query.ExecuteReader();
+            using SqliteCommand query = Command(connection, """
+                                                            SELECT DISTINCT o.digest, o.byte_length
+                                                            FROM item_versions v
+                                                            JOIN original_objects o ON o.digest = v.digest
+                                                            """);
+            using SqliteDataReader reader = query.ExecuteReader();
             while (reader.Read())
             {
-                var original = new OriginalObject(reader.GetString(0), reader.GetInt64(1));
+                OriginalObject original = new OriginalObject(reader.GetString(0), reader.GetInt64(1));
                 expected.Add(original.Digest, original);
             }
         }
 
-        var referenced = expected.Count;
-        var store = new OriginalFileStore(Path.GetDirectoryName(DatabasePath)!);
-        var staged = store.CountStagedFiles();
-        var published = 0;
-        var unreferenced = 0;
-        var missing = 0;
-        var corrupt = 0;
+        int referenced = expected.Count;
+        OriginalFileStore store = new OriginalFileStore(Path.GetDirectoryName(DatabasePath)!);
+        int staged = store.CountStagedFiles();
+        int published = 0;
+        int unreferenced = 0;
+        int missing = 0;
+        int corrupt = 0;
 
-        foreach (var digest in store.EnumeratePublishedDigests())
+        foreach (string digest in store.EnumeratePublishedDigests())
         {
             cancellationToken.ThrowIfCancellationRequested();
             published++;
-            if (!expected.Remove(digest, out var original))
+            if (!expected.Remove(digest, out OriginalObject original))
             {
                 unreferenced++;
                 continue;
