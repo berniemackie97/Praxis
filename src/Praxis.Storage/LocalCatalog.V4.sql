@@ -14,6 +14,4 @@ CREATE TABLE text_derivatives (
         OR (outcome = 'unsupported' AND content IS NULL AND reason_code IS NOT NULL))
 ) STRICT;
 
-CREATE INDEX text_derivatives_by_source ON text_derivatives(source_digest);
-
 PRAGMA user_version = 4;
