@@ -232,7 +232,7 @@ struct PraxisWindow: View {
             TextEditor(text: $model.noteText)
                 .font(.system(.body, design: .monospaced))
                 .disabled(model.savingNote)
-                .border(.separator)
+                .border(Color.secondary.opacity(0.3))
                 .accessibilityLabel("Note content")
             Text("Saving creates a private Markdown original in your approved Inbox. The optional title becomes its heading. Use Command-Return to save.")
                 .font(.footnote).foregroundStyle(.secondary)

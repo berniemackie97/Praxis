@@ -103,6 +103,9 @@ final class Workbench: ObservableObject {
             process.terminationHandler = { [weak self] process in
                 DispatchQueue.main.async {
                     self?.running = false
+                    self?.savingNote = false
+                    self?.requests.removeAll()
+                    self?.buffer.removeAll()
                     if process.terminationStatus != 0 {
                         self?.message = "The worker exited (\(process.terminationStatus)). Check the private catalog."
                     }
