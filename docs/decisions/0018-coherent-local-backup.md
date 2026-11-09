@@ -30,6 +30,8 @@ Committed ingest receipts and revisions are copied exactly. New v3 snapshots inc
 
 Automated tests exercise active WAL snapshot/revision history, stable identities and historical committed receipts, post-backup source mutation, independent sources with shared content, unpublished orphan exclusion, missing/corrupt originals, truncated catalog, incompatible manifest, unexpected entries, quota refusal, existing target refusal, pre-cancellation and inert unfinished receipt history. Cross-platform CI must pass before review.
 
+The opt-in [physical recovery check](../testing/physical-catalog-recovery.md) now supplies an operator-invoked, bounded-memory >2 GiB source, exact backup/restore and post-reconnect verification route. Its presence is **not physical acceptance evidence**; the operator must actually run it and record results. Controlled fault handling on disposable media remains a separate gate.
+
 The following acceptance remains **not verified** by CI and must be recorded against #128 and #130 before claims of real-device recovery:
 
 1. Export a genuinely large (>2 GiB) representative source and restore on an owner-approved filesystem, verifying exact bytes and receipt history.
