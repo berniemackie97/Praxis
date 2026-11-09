@@ -70,8 +70,13 @@ public sealed class LocalQuickCaptureTests : IDisposable
         var second = await capture.CaptureAsync(id, null, "Original thought");
         Assert.Equal(first, second);
         Assert.Equal("Original thought", File.ReadAllText(first.SourcePath));
+        var watcher = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var time = DateTimeOffset.UtcNow;
+        Assert.Equal(0, await watcher.ReconcileAsync(time));
+        Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(1)));
         Assert.Single(catalog.ListLibrary());
         Assert.Equal(1, Assert.Single(catalog.ListLibrary()).Revision);
+        Assert.Single(catalog.SearchText("thought"));
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md"));
     }
 
