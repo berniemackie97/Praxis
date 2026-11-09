@@ -8,9 +8,9 @@ Praxis is a local-first **personal knowledge intelligence and agent platform** t
 
 **Owner decision (November 9, 2026):** The first product release must be an integrated, production-quality, agent-powered system. A functional Inbox, local text index or collection browser alone is a foundational delivery checkpoint (#130), not an MVP release. The cross-stage acceptance gate is **#170**.
 
-A representative owner workflow:
+A representative set of owner workflows (all required at the supported MVP scope):
 
-1. Open Praxis on a Mac; designate a local root and import a versioned corpus of projects, source code, assembly/disassembly exports, technical notes and format documents. Automatic capture/reconciliation preserves originals and exact lineage.
+1. Open Praxis on a Mac; designate a local root and import a mixed personal knowledge corpus: technical projects and notes, an instructional video, and explicitly provided bills/income/transaction records. Automatic capture/reconciliation preserves originals and exact lineage.
 2. Deterministic parsers and approved local agents extract, classify, normalize and **correlate** supported entities, structures, claims and relationships. No document or model hallucination becomes canonical fact; unrecognized formats remain explicit. Reprocessing corrects derived outputs and preserves reviewed owner decisions.
 3. Build quality-evaluated lexical/semantic/structural retrieval, selective evidence expansion, reranking where measured useful, and tool-assisted bounded investigations. Ask a complex domain question; get a specific supported explanation, traceable source/version/span references and transparent disagreement/abstention, not a file list.
 4. Use a **persistent first-party Praxis assistant** to ask questions or request tasks. Inspect scope, plan, tool arguments, model/location, budget, progress, verification and audit; approve/revoke side effects. The model never grants itself permission.
@@ -18,9 +18,19 @@ A representative owner workflow:
 6. Browse a **linked, provenance-aware derived Markdown representation in Obsidian**, and optionally export inspected, versioned, task-specific context packs for coding agents. Root/nested `AGENTS.md` and provider-specific context instructions are **reviewed projections**, not authority granted by imported source text; avoid floods of repetitive context.
 7. Pass audited correctness, retrieval, prompt-injection, resource, backup/recovery, permission, privacy and real macOS workflows with concrete benchmark fixtures and reproducible run evidence. Production-grade is a testable engineering bar; no model can guarantee perfect understanding of arbitrary input.
 
-**Delivery ownership:** #170 integrated acceptance; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+### Cross-domain MVP proof — not technical-only
 
-**First release boundary:** one owner, one local machine, a representative technical corpus, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
+**Technical research** is one vertical slice, not the architecture's defining specialization. Two additional concrete, mandatory MVP experiences:
+
+- **Video / tutorial retrieval (#176/#177):** Praxis captures a supported local instructional video, builds time-aligned transcript and source-aware segments (and visual evidence only when implemented), and answers "Is there a tutorial on X?" with a relevant **inline playable segment in first-party chat**. Show accurate segment boundaries, the source's identity, and a jump to the full original video at the precise timestamp. A random frame, transcript-only link or invented timestamp does not pass.
+- **Financial planning (#176/#178):** From explicitly imported income, bills and transaction exports, Praxis reconciles recurring and variable costs, deterministically calculates month-scoped totals, highlights potential savings with assumptions, and generates an **editable, verifiable monthly budget** linked to the underlying records. Handle duplicates, account transfers, refunds, missing data, permissions and private-content disclosure. A live banking API is *not* required; it remains separately permissioned and subject to provider availability.
+- **Shared evaluation (#179):** Test technical citations, video segment retrieval/playback and finance arithmetic as separate gold-standard workflows against the **same core evidence, permissions, versioning, routing, RAG and agent architecture**, with domain-specific extractors and output widgets only where warranted.
+
+The product must ultimately support many more types and sources—audio, images, email, calendars, social media, structured events—but the MVP proves **general-purpose extensibility by actually delivering these different workloads**, not by promising universal comprehension. Sensitive local financial data is never sent to remote inference without separately scoped explicit consent. Financial calculation is deterministic; probabilistic models may propose interpretations or budget scenarios, not fabricate totals.
+
+**Delivery ownership:** #170 cross-domain integrated acceptance; video and financial feature #176/#177/#178 and evaluation #179; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+
+**First release boundary:** one owner, one local machine, representative supported technical, video and financial corpora, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
 
 ## Core experience
 

@@ -16,6 +16,12 @@ P1 means critical path for this **actual MVP**, even where an issue belongs to M
 
 A model cannot be a security authority. Every provider/adapter is selected by supported integration path, privacy scope, measured quality, budget and permissions. Independent, exact technical evidence and user-visible approvals are required before claiming an answer or action is correct.
 
+## Cross-domain MVP correction
+
+The owner requires that the first intelligent release be **general-purpose**, not only a technical research assistant. L4 remains a technical test slice, while new feature **#176** ensures L6/#170 additionally demonstrates supported video tutorial retrieval with direct in-chat playback and full-source timestamp navigation (#177), as well as reconciled financial data analysis and an editable deterministic monthly budget (#178). Cross-domain evaluation #179 tests all three with grounded citations, ambiguity, source revocation, privacy and numerical accuracy. Real-time bank connections and universal file/video comprehension are *not* implied by this representative, production-quality MVP.
+
+The evidence model must allow selectors suited to each modality: code symbol/span/revision, text paragraph, video start/end/source timebase, and structured financial record/field. Provider-known transaction types are deterministic; AI enrichment remains reviewable and permissioned. This expands the product's required workflows, not the authority of its models or the scope of its accounts.
+
 ## Work item hierarchy
 
 | Level | Purpose | Completion condition |
