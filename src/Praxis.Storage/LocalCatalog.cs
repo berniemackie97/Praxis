@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -12,7 +12,8 @@ public sealed partial class LocalCatalog : IDisposable
         ("items", "item_id, source_id"),
         ("item_versions", "item_id, revision, digest, observed_utc"),
         ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
-        ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code")
+        ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code"),
+        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc")
     ];
 
     private readonly FileStream lockFile;
@@ -89,7 +90,7 @@ public sealed partial class LocalCatalog : IDisposable
             throw new InvalidDataException("An unversioned database already contains user tables.");
         }
 
-        if (version is 1 or 2)
+        if (version is >= 1 and < CurrentSchemaVersion)
         {
             VerifySchema(database, version);
         }
@@ -111,9 +112,16 @@ public sealed partial class LocalCatalog : IDisposable
                 upgrade.ExecuteNonQuery();
             }
 
-            using var next = Command(database, ReadSchema("LocalCatalog.V3.sql"));
-            next.Transaction = transaction;
-            next.ExecuteNonQuery();
+            if (version < 3)
+            {
+                using var processing = Command(database, ReadSchema("LocalCatalog.V3.sql"));
+                processing.Transaction = transaction;
+                processing.ExecuteNonQuery();
+            }
+
+            using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
+            extraction.Transaction = transaction;
+            extraction.ExecuteNonQuery();
             transaction.Commit();
         }
 
@@ -201,7 +209,8 @@ public sealed partial class LocalCatalog : IDisposable
     {
         foreach (var (name, columns) in Tables)
         {
-            if (version < 3 && name == "processing_jobs")
+            if ((version < 3 && name == "processing_jobs") ||
+                (version < 4 && name == "text_derivatives"))
             {
                 continue;
             }
