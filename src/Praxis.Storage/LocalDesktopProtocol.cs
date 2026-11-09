@@ -49,6 +49,11 @@ public sealed class LocalDesktopProtocol(
                         ReadString(root, "query", 256),
                         ReadInteger(root, "limit", 20, 1, 50))
                 },
+                "mediaInspection" => new
+                {
+                    media = await catalog.InspectMediaAsync(
+                        ReadGuid(root, "sourceId"), cancellationToken)
+                },
                 "budgetSummary" => new
                 {
                     budget = await new LocalMonthlyBudgetAnalyzer(catalog).AnalyzeAsync(
