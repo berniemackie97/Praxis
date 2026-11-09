@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -119,13 +119,21 @@ public sealed partial class LocalCatalog : IDisposable
                 processing.ExecuteNonQuery();
             }
 
-            using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
-            extraction.Transaction = transaction;
-            extraction.ExecuteNonQuery();
+            if (version < 4)
+            {
+                using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
+                extraction.Transaction = transaction;
+                extraction.ExecuteNonQuery();
+            }
+
+            using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
+            search.Transaction = transaction;
+            search.ExecuteNonQuery();
             transaction.Commit();
         }
 
         VerifySchema(database, CurrentSchemaVersion);
+        VerifySearchSchema(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
             "wal", StringComparison.OrdinalIgnoreCase))
         {
