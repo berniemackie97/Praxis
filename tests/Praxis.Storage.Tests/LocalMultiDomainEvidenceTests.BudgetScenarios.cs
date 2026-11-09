@@ -27,9 +27,9 @@ public sealed partial class LocalMultiDomainEvidenceTests
             Assert.Equal(1000m, preview.PostedIncome);
             Assert.Equal(300m, preview.PostedSpending);
             Assert.Equal(50m, preview.PlannedBills);
-            Assert.Equal(650m, preview.ActualAfterPlannedBills);
+            Assert.Equal(650m, preview.BaselineNetAfterPlannedBills);
             Assert.Equal(75m, preview.IllustrativeReduction);
-            Assert.Equal(725m, preview.HypotheticalAfterPlannedBills);
+            Assert.Equal(725m, preview.HypotheticalNetAfterPlannedBills);
             Assert.Equal(1, preview.PendingRows);
             Assert.Equal(original.Sha256, preview.SourceSha256);
             var food = Assert.Single(preview.Categories,
@@ -51,7 +51,7 @@ public sealed partial class LocalMultiDomainEvidenceTests
         var repeated = await new LocalBudgetScenarioPlanner(reopened)
             .PreviewAsync(original.SourceId, 2026, 11,
                 [new MonthlyBudgetTarget("Food", 125.00m)]);
-        Assert.Equal(725m, repeated.HypotheticalAfterPlannedBills);
+        Assert.Equal(725m, repeated.HypotheticalNetAfterPlannedBills);
     }
 
     [Fact]
@@ -80,8 +80,8 @@ public sealed partial class LocalMultiDomainEvidenceTests
         }
 
         var baseline = await planner.PreviewAsync(original.SourceId, 2026, 11, []);
-        Assert.Equal(baseline.ActualAfterPlannedBills,
-            baseline.HypotheticalAfterPlannedBills);
+        Assert.Equal(baseline.BaselineNetAfterPlannedBills,
+            baseline.HypotheticalNetAfterPlannedBills);
         Assert.Equal(0m, baseline.IllustrativeReduction);
         Assert.True(catalog.RevokeSource(original.SourceId));
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -108,7 +108,7 @@ public sealed partial class LocalMultiDomainEvidenceTests
                 .GetProperty("scenario");
             Assert.Equal(source.Sha256, scenario.GetProperty("sourceSha256").GetString());
             Assert.Equal(30m, scenario.GetProperty("illustrativeReduction").GetDecimal());
-            Assert.Equal(360m, scenario.GetProperty("hypotheticalAfterPlannedBills").GetDecimal());
+            Assert.Equal(360m, scenario.GetProperty("hypotheticalNetAfterPlannedBills").GetDecimal());
         }
 
         using (var invalid = System.Text.Json.JsonDocument.Parse(
