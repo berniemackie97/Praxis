@@ -13,9 +13,6 @@ internal sealed record TimedCue(
 
 public sealed partial class LocalCatalog
 {
-    private static readonly string[] VideoExtensions =
-        [".mp4", ".mov", ".m4v", ".webm", ".mkv"];
-
     public IReadOnlyList<LocalVideoCueHit> SearchVideoCues(string query, int limit = 20)
     {
         if (limit is < 1 or > 100)
@@ -32,7 +29,7 @@ public sealed partial class LocalCatalog
         }
 
         var results = new List<LocalVideoCueHit>();
-        foreach (var hit in SearchText(query, 100))
+        foreach (var hit in SearchText(query, 40))
         {
             var extension = Path.GetExtension(hit.SourceLocator).ToLowerInvariant();
             if (extension is not (".vtt" or ".srt"))
@@ -100,31 +97,29 @@ public sealed partial class LocalCatalog
 
     private (LocalFileVersion Source, string Locator)? FindPairedVideo(string captionPath)
     {
-        var basis = Path.Combine(Path.GetDirectoryName(captionPath)!,
+        // The sidecar must name the exact preserved video's SHA-256, not only its
+        // filename; a replacement video cannot inherit unrelated old timestamps.
+        var stem = Path.Combine(Path.GetDirectoryName(captionPath)!,
             Path.GetFileNameWithoutExtension(captionPath));
-        var matches = new List<(LocalFileVersion Source, string Locator)>(2);
-
-        foreach (var extension in VideoExtensions)
+        var lastDot = stem.LastIndexOf('.');
+        if (lastDot < 0 || stem.Length - lastDot - 1 != 64)
         {
-            var locator = basis.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
-                ? basis : basis + extension;
-            if (!Path.GetExtension(locator).Equals(extension, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var video = FindLatestFile(locator);
-            if (video?.Status == "active" && !matches.Any(m => m.Source.SourceId == video.SourceId))
-            {
-                matches.Add((video, locator));
-                if (matches.Count > 1)
-                {
-                    return null;
-                }
-            }
+            return null;
         }
 
-        return matches.Count == 1 ? matches[0] : null;
+        var expectedDigest = stem[(lastDot + 1)..];
+        var locator = stem[..lastDot];
+        if (!expectedDigest.All(Uri.IsHexDigit) ||
+            Path.GetExtension(locator).ToLowerInvariant() is not
+                (".mp4" or ".mov" or ".m4v" or ".webm" or ".mkv"))
+        {
+            return null;
+        }
+
+        var video = FindLatestFile(locator);
+        return video?.Status == "active" &&
+            video.Sha256.Equals(expectedDigest, StringComparison.OrdinalIgnoreCase)
+            ? (video, locator) : null;
     }
 }
 
@@ -269,6 +264,10 @@ internal static class LocalTimedCaptionParser
 
             var end = next > offset && text[next - 1] == '\r' ? next - 1 : next;
             lines.Add((offset, text[offset..end]));
+            if (lines.Count > 5_000)
+            {
+                throw new InvalidDataException("The timed-caption file exceeds its line budget.");
+            }
             offset = next == text.Length ? text.Length : next + 1;
         }
 
