@@ -1,41 +1,9 @@
-using System.Globalization;
 using System.Text.Json;
 
 namespace Praxis.Storage;
 
 internal readonly struct DesktopRequestFields(JsonElement root)
 {
-    public IReadOnlyList<MonthlyBudgetTarget> ReadBudgetTargets()
-    {
-        if (!root.TryGetProperty("targets", out var entries) ||
-            entries.ValueKind != JsonValueKind.Array || entries.GetArrayLength() > 50)
-        {
-            throw new ArgumentException("Supply at most 50 category targets.");
-        }
-
-        var targets = new List<MonthlyBudgetTarget>(entries.GetArrayLength());
-        foreach (var entry in entries.EnumerateArray())
-        {
-            if (entry.ValueKind != JsonValueKind.Object)
-            {
-                throw new ArgumentException("Each target must be an object.");
-            }
-
-            var target = new DesktopRequestFields(entry);
-            var category = target.RequireString("category", 80);
-            var amountText = target.RequireString("target", 24);
-            if (!decimal.TryParse(amountText, NumberStyles.AllowDecimalPoint,
-                CultureInfo.InvariantCulture, out var amount))
-            {
-                throw new ArgumentException("Budget targets must use decimal USD amounts.");
-            }
-
-            targets.Add(new MonthlyBudgetTarget(category, amount));
-        }
-
-        return targets;
-    }
-
     public bool RequireBoolean(string property)
     {
         if (!root.TryGetProperty(property, out var value) ||

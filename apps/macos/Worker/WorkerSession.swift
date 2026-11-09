@@ -87,7 +87,7 @@ final class WorkerSession {
     }
 
     func send(
-        _ action: WorkerAction, fields: [String: Any], receive: @escaping (WorkerResponse) -> Void
+        _ action: String, fields: [String: Any], receive: @escaping (WorkerResponse) -> Void
     ) throws {
         guard let process, let input else { throw SessionError.notRunning }
         guard pending.count < Self.maximumPendingRequests else { throw SessionError.busy }
@@ -95,7 +95,7 @@ final class WorkerSession {
         let id = UUID().uuidString
         var request = fields
         request["requestId"] = id
-        request["action"] = action.rawValue
+        request["action"] = action
         guard var frame = try? JSONSerialization.data(withJSONObject: request),
               frame.count < Self.maximumRequestBytes else {
             throw SessionError.requestTooLarge

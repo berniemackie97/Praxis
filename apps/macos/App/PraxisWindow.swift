@@ -57,10 +57,9 @@ struct PraxisWindow: View {
         switch section {
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()
-        case .search: SearchView()
+        case .search: SearchView(model: model.search)
         case .collections: CollectionsView()
         case .configuration: ConfigurationView(dataRoot: dataRoot, inbox: inbox)
-        case .budget: BudgetView()
         }
     }
 
@@ -70,6 +69,5 @@ struct PraxisWindow: View {
         case search = "Search"
         case collections = "Collections"
         case configuration = "Configuration"
-        case budget = "Budget"
     }
 }

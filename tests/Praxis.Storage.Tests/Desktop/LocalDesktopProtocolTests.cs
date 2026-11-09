@@ -410,6 +410,29 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
     }
 
+    [Theory]
+    [InlineData("budgetSummary")]
+    [InlineData("budgetScenario")]
+    public async Task DesktopProtocolDoesNotExposeBudgetCommands(string action)
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(root);
+        var protocol = new LocalDesktopProtocol(catalog);
+        using var result = await Send(protocol, $$"""
+            {"requestId":"retired","action":"{{action}}"}
+            """);
+        Assert.False(result.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("The desktop action is not supported.",
+            result.RootElement.GetProperty("error").GetString());
+        Assert.False(result.RootElement.TryGetProperty("data", out _));
+    }
+
     private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string payload) =>
         JsonDocument.Parse(await protocol.HandleAsync(payload));
 

@@ -13,24 +13,11 @@ final class WorkbenchModel: ObservableObject {
     @Published private(set) var selectedCollectionId = ""
     @Published var selectedMembershipId = ""
 
-    @Published private(set) var hits: [SearchHit] = []
-    @Published private(set) var videoClips: [VideoCue] = []
     @Published private(set) var mediaInspection: MediaInspection?
-    @Published private(set) var budgetReport: MonthlyBudgetReport?
-    @Published private(set) var budgetScenario: BudgetScenario?
-    @Published var budgetTargetText: [String: String] = [:]
-    @Published var budgetYear = Calendar.current.component(.year, from: Date()) {
-        didSet { if oldValue != budgetYear { clearBudgetResults() } }
-    }
-    @Published var budgetMonth = Calendar.current.component(.month, from: Date()) {
-        didSet { if oldValue != budgetMonth { clearBudgetResults() } }
-    }
     @Published private(set) var selected: LibraryItem?
     @Published private(set) var libraryPreview = ""
-    @Published private(set) var searchPreview = ""
     @Published private(set) var message = "Select a private catalog and watched Inbox."
     @Published private(set) var running = false
-    @Published var query = ""
     @Published var page = 0
     @Published var noteTitle = ""
     @Published var noteText = ""
@@ -38,13 +25,17 @@ final class WorkbenchModel: ObservableObject {
     @Published private(set) var exportingOriginal = false
     @Published private(set) var inspectingMedia = false
     private var noteCaptureId: String?
-    private var budgetTargetRevision = 0
 
-    private let worker = WorkerSession()
-    private var searchId = UUID()
-    private var searchPreviewTarget: ItemRevision?
+    let search: SearchWorkbenchModel
+    private let worker: WorkerSession
     private var watchedInbox: URL?
     private var workerDiagnostic: String?
+
+    init() {
+        let worker = WorkerSession()
+        self.worker = worker
+        search = SearchWorkbenchModel(worker: worker)
+    }
 
     func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
         guard !running else { return }
@@ -151,18 +142,6 @@ final class WorkbenchModel: ObservableObject {
                                   "sourceId": source.sourceId])
     }
 
-    func search() {
-        searchId = UUID()
-        hits = []
-        videoClips = []
-        searchPreview = ""
-        searchPreviewTarget = nil
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let scope = RequestScope.search(searchId)
-        send(.search, ["query": query], scope: scope)
-        send(.mediaCues, ["query": query, "limit": 20], scope: scope)
-    }
-
     func inspectSelectedMedia() {
         guard !inspectingMedia, let item = selected,
               item.sourceStatus == "active" else { return }
@@ -178,57 +157,6 @@ final class WorkbenchModel: ObservableObject {
         ], scope: .selectedRevision(ItemRevision(itemId: item.itemId, revision: item.revision)))
     }
 
-    func analyzeSelectedBudget() {
-        guard let item = selected, item.sourceStatus == "active",
-              item.isBudgetSource
-        else {
-            message = "Select an active financial CSV in the Library first."
-            return
-        }
-
-        clearBudgetResults()
-        send(.budgetSummary, [
-            "sourceId": item.sourceId,
-            "year": budgetYear,
-            "month": budgetMonth
-        ], scope: .budget(budgetTargetRevision))
-    }
-
-    private func clearBudgetResults() {
-        budgetTargetRevision += 1
-        budgetReport = nil
-        budgetScenario = nil
-        budgetTargetText.removeAll()
-    }
-
-    func updateBudgetTarget(category: String, text: String) {
-        budgetTargetRevision += 1
-        budgetTargetText[category] = text
-        budgetScenario = nil
-    }
-
-    func previewBudgetScenario() {
-        guard let report = budgetReport,
-              let selected, selected.itemId == report.itemId,
-              selected.revision == report.revision,
-              selected.sha256 == report.sourceSha256,
-              selected.sourceStatus == "active" else {
-            message = "Reanalyze the current active CSV before previewing a budget."
-            return
-        }
-
-        let targets = budgetTargetText
-            .filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map { ["category": $0.key, "target": $0.value] }
-        budgetScenario = nil
-        send(.budgetScenario, [
-            "sourceId": report.sourceId,
-            "year": report.year,
-            "month": report.month,
-            "targets": targets
-        ], scope: .budget(budgetTargetRevision))
-    }
-
     func select(_ item: LibraryItem) {
         clearSelection()
         selected = item
@@ -236,26 +164,16 @@ final class WorkbenchModel: ObservableObject {
 
         libraryPreview = "Loading extracted text…"
         let version = ItemRevision(itemId: item.itemId, revision: item.revision)
-        loadPreview(version, scope: .selectedRevision(version))
+        loadPreview(version)
         refreshMembership(for: item)
         send(.sourceMoves, ["sourceId": item.sourceId], scope: .source(item.sourceId))
         refreshTopics(for: item)
     }
 
-    func previewHit(_ hit: SearchHit) {
-        searchPreview = "Loading extracted text…"
-        let version = ItemRevision(itemId: hit.itemId, revision: hit.revision)
-        searchPreviewTarget = version
-        loadPreview(version, scope: .searchPreview(version))
-    }
-
-    func isPreviewing(_ hit: SearchHit) -> Bool {
-        searchPreviewTarget == ItemRevision(itemId: hit.itemId, revision: hit.revision)
-    }
-
-    private func loadPreview(_ version: ItemRevision, scope: RequestScope) {
-        if !send(.preview, ["itemId": version.itemId, "revision": version.revision], scope: scope) {
-            setPreview("Preview unavailable.", scope: scope)
+    private func loadPreview(_ version: ItemRevision) {
+        if !send(.preview, ["itemId": version.itemId, "revision": version.revision],
+                 scope: .selectedRevision(version)) {
+            libraryPreview = "Preview unavailable."
         }
     }
 
@@ -276,7 +194,6 @@ final class WorkbenchModel: ObservableObject {
         topicProposals = []
         topicOutcome = "pending"
         mediaInspection = nil
-        clearBudgetResults()
     }
 
     func exportOriginal(_ item: LibraryItem, destination: URL) {
@@ -326,10 +243,7 @@ final class WorkbenchModel: ObservableObject {
         selectedCollectionId = ""
         selectedMembershipId = ""
         page = 0
-        hits = []
-        videoClips = []
-        searchPreview = ""
-        searchPreviewTarget = nil
+        search.clearResults()
         clearSelection()
         if let error, let workerDiagnostic, !workerDiagnostic.isEmpty {
             message = "\(error) \(workerDiagnostic)"
@@ -341,11 +255,11 @@ final class WorkbenchModel: ObservableObject {
 
     @discardableResult
     private func send(
-        _ action: WorkerAction, _ fields: [String: Any], scope: RequestScope = .unscoped
+        _ action: WorkbenchAction, _ fields: [String: Any], scope: RequestScope = .unscoped
     ) -> Bool {
         guard running else { return false }
         do {
-            try worker.send(action, fields: fields) { [weak self] response in
+            try worker.send(action.rawValue, fields: fields) { [weak self] response in
                 self?.apply(response, to: action, scope: scope)
             }
             return true
@@ -355,7 +269,7 @@ final class WorkbenchModel: ObservableObject {
         }
     }
 
-    private func apply(_ response: WorkerResponse, to action: WorkerAction, scope: RequestScope) {
+    private func apply(_ response: WorkerResponse, to action: WorkbenchAction, scope: RequestScope) {
         if action == .mediaInspection { inspectingMedia = false }
         guard isCurrent(scope) else { return }
 
@@ -363,7 +277,7 @@ final class WorkbenchModel: ObservableObject {
             if action == .noteCapture { savingNote = false }
             if action == .exportOriginal { exportingOriginal = false }
             if action == .preview {
-                setPreview("Preview unavailable.", scope: scope)
+                libraryPreview = "Preview unavailable."
             }
             message = response.error ?? "The operation failed."
             return
@@ -415,20 +329,12 @@ final class WorkbenchModel: ObservableObject {
                 ? "Review decision saved with its source revision."
                 : "The proposal is unchanged or no longer current."
             if let selected { refreshTopics(for: selected) }
-        case .search:
-            hits = data?.hits ?? []
-        case .mediaCues:
-            videoClips = data?.clips ?? []
         case .mediaInspection:
             applyMediaInspection(data?.media)
-        case .budgetSummary:
-            applyBudgetReport(data?.budget)
-        case .budgetScenario:
-            applyBudgetScenario(data?.scenario)
         case .preview:
             let outcome = data?.reasonCode ?? data?.outcome ?? "pending"
-            setPreview(data?.content ??
-                "No extracted text (\(outcome)). The original remains preserved.", scope: scope)
+            libraryPreview = data?.content ??
+                "No extracted text (\(outcome)). The original remains preserved."
         case .exportOriginal:
             exportingOriginal = false
             if let receipt = data?.exported {
@@ -447,11 +353,7 @@ final class WorkbenchModel: ObservableObject {
         case .revoke:
             if data?.revoked == true, case let .revocation(sourceId) = scope {
                 if selected?.sourceId == sourceId { clearSelection() }
-                searchId = UUID()
-                hits = []
-                videoClips = []
-                searchPreviewTarget = nil
-                searchPreview = ""
+                search.clearResults()
                 message = "Source removed from active retrieval; original bytes retained."
             } else {
                 message = "This source is not active."
@@ -490,34 +392,6 @@ final class WorkbenchModel: ObservableObject {
             : "Original verified, but this media header is unsupported."
     }
 
-    private func applyBudgetReport(_ report: MonthlyBudgetReport?) {
-        if let report, let selected, report.itemId == selected.itemId,
-           report.revision == selected.revision, report.sourceSha256 == selected.sha256 {
-            budgetReport = report
-            message = "Posted amounts are actual. Category targets are hypothetical and do not change transactions."
-        } else {
-            message = "The selected budget evidence is unavailable. Refresh and analyze again."
-        }
-    }
-
-    private func applyBudgetScenario(_ scenario: BudgetScenario?) {
-        if let scenario, let report = budgetReport, scenario.itemId == report.itemId,
-           scenario.revision == report.revision, scenario.sourceSha256 == report.sourceSha256 {
-            budgetScenario = scenario
-            message = "Illustrative comparison calculated locally; no expenses were changed."
-        } else {
-            message = "The budget scenario is unavailable. Reanalyze the current source."
-        }
-    }
-
-    private func setPreview(_ content: String, scope: RequestScope) {
-        if case .searchPreview = scope {
-            searchPreview = content
-        } else {
-            libraryPreview = content
-        }
-    }
-
     private func isCurrent(_ scope: RequestScope) -> Bool {
         switch scope {
         case .unscoped, .revocation:
@@ -529,12 +403,6 @@ final class WorkbenchModel: ObservableObject {
         case let .selectedRevision(version):
             selected?.itemId == version.itemId && selected?.revision == version.revision &&
                 selected?.sourceStatus == "active"
-        case let .search(id):
-            searchId == id
-        case let .searchPreview(version):
-            searchPreviewTarget == version
-        case let .budget(targetRevision):
-            budgetTargetRevision == targetRevision && selected?.sourceStatus == "active"
         }
     }
 
@@ -548,9 +416,6 @@ final class WorkbenchModel: ObservableObject {
         case library(String, Int)
         case source(String)
         case selectedRevision(ItemRevision)
-        case search(UUID)
-        case searchPreview(ItemRevision)
-        case budget(Int)
         case revocation(String)
     }
 }

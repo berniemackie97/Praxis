@@ -14,7 +14,6 @@ struct LibraryItem: Decodable, Identifiable {
     var id: String { itemId }
     var title: String { URL(fileURLWithPath: sourceLocator).lastPathComponent }
     var isVideo: Bool { Self.videoExtensions.contains(fileExtension) }
-    var isBudgetSource: Bool { fileExtension == "csv" }
 
     private static let videoExtensions: Set<String> = ["mp4", "mov", "m4v", "webm", "mkv"]
     private var fileExtension: String {

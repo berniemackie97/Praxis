@@ -42,7 +42,7 @@ struct WorkerSessionSmoke {
 
         func search() async throws -> [SearchHit] {
             var response: WorkerResponse?
-            try session.send(.search, fields: ["query": "PraxisTransportFixture"]) { response = $0 }
+            try session.send("search", fields: ["query": "PraxisTransportFixture"]) { response = $0 }
             try await waitFor("search response") { response != nil }
             guard let response, response.ok, let hits = response.data?.hits else {
                 throw Failure.unexpected(response?.error ?? "Missing search results")
@@ -62,7 +62,7 @@ struct WorkerSessionSmoke {
         }
 
         var denied: WorkerResponse?
-        try session.send(.verify, fields: ["itemId": "invalid-id"]) { denied = $0 }
+        try session.send("verify", fields: ["itemId": "invalid-id"]) { denied = $0 }
         try await waitFor("validation response") { denied != nil }
         guard denied?.ok == false else { throw Failure.unexpected("Invalid item was accepted") }
 
@@ -90,7 +90,7 @@ struct WorkerSessionSmoke {
             }
         )
         var receivedMalformedReply = false
-        try session.send(.library, fields: [:]) { _ in receivedMalformedReply = true }
+        try session.send("library", fields: [:]) { _ in receivedMalformedReply = true }
         try await waitFor("malformed response handling") { exited }
         guard !receivedMalformedReply, exitError == "The worker returned an invalid response." else {
             throw Failure.unexpected("Malformed response did not fail the session")

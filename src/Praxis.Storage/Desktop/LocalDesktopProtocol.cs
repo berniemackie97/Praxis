@@ -58,22 +58,6 @@ public sealed class LocalDesktopProtocol(
                         fields.OptionalInteger("revision", 1, int.MaxValue),
                         cancellationToken)
                 },
-                "budgetSummary" => new
-                {
-                    budget = await new LocalMonthlyBudgetAnalyzer(catalog).AnalyzeAsync(
-                        fields.RequireGuid("sourceId"),
-                        fields.IntegerOrDefault("year", 0, 2000, 2100),
-                        fields.IntegerOrDefault("month", 0, 1, 12),
-                        cancellationToken)
-                },
-                "budgetScenario" => new
-                {
-                    scenario = await new LocalBudgetScenarioPlanner(catalog).PreviewAsync(
-                        fields.RequireGuid("sourceId"),
-                        fields.IntegerOrDefault("year", 0, 2000, 2100),
-                        fields.IntegerOrDefault("month", 0, 1, 12),
-                        fields.ReadBudgetTargets(), cancellationToken)
-                },
                 "collections" => new
                 {
                     collections = catalog.ListCollections(

@@ -1,15 +1,18 @@
 import SwiftUI
 
 struct SearchView: View {
-    @EnvironmentObject private var model: WorkbenchModel
+    @ObservedObject var model: SearchWorkbenchModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 TextField("Search extracted text", text: $model.query)
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit { model.search() }
-                Button("Search") { model.search() }
+                    .onSubmit { model.submit() }
+                Button("Search") { model.submit() }
+            }
+            if let error = model.error {
+                Text(error).font(.callout).foregroundStyle(.secondary)
             }
             if !model.videoClips.isEmpty {
                 DisclosureGroup("Source-linked video caption moments (\(model.videoClips.count))") {
@@ -33,7 +36,7 @@ struct SearchView: View {
             }
             HStack(alignment: .top) {
                 List(model.hits) { hit in
-                    Button { model.previewHit(hit) } label: {
+                    Button { model.select(hit) } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(hit.title).fontWeight(.medium)
                             Text(hit.sourceLocator).font(.caption).foregroundStyle(.secondary)
@@ -47,12 +50,12 @@ struct SearchView: View {
                 }.frame(minWidth: 350)
                 Divider()
                 ScrollView {
-                    if model.searchPreview.isEmpty {
+                    if model.preview.isEmpty {
                         Text("Select a search result to preview its extracted text.")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
-                        Text(model.searchPreview)
+                        Text(model.preview)
                             .font(.system(.body, design: .monospaced))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
