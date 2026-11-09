@@ -72,9 +72,9 @@ public sealed class LocalOriginalExportTests : IDisposable
         using var catalog = LocalCatalog.Open(catalogRoot);
         var initial = await Capture(catalog, "revised.md", [1], "one");
         await Capture(catalog, "revised.md", [2], "two");
-        Assert.Throws<ArgumentException>(() =>
-            catalog.ExportOriginalAsync(Guid.Empty, 1, Path.Combine(exportRoot, "invalid.md"))
-                .GetAwaiter().GetResult());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            catalog.ExportOriginalAsync(Guid.Empty, 1,
+                Path.Combine(exportRoot, "invalid.md")));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.ExportOriginalAsync(initial.ItemId, 1,
@@ -155,7 +155,7 @@ public sealed class LocalOriginalExportTests : IDisposable
 
         var exported = await catalog.ExportOriginalAsync(captured.ItemId, 1, destination);
         Assert.Equal(0, exported.Length);
-        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData([])), exported.Sha256);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Array.Empty<byte>())), exported.Sha256);
         Assert.Empty(File.ReadAllBytes(destination));
         await catalog.VerifyOriginalAsync(captured.ItemId);
     }
