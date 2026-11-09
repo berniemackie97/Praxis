@@ -6,6 +6,15 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
 {
     public const int MaximumTextBytes = 1024 * 1024;
 
+    // An extension establishes a supported text decoding policy, not the file's semantics.
+    internal static readonly string[] SupportedExtensions =
+    [
+        ".txt", ".md", ".markdown",
+        ".cs", ".csx", ".fs", ".fsx",
+        ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx",
+        ".asm", ".s", ".lst"
+    ];
+
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
 
@@ -14,6 +23,12 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         cancellationToken.ThrowIfCancellationRequested();
         var lease = catalog.TryClaimProcessing(LeaseDuration,
             processorKey: LocalCatalog.DefaultProcessorKey);
+        if (lease is null && catalog.RequeueNewlySupportedText(SupportedExtensions))
+        {
+            lease = catalog.TryClaimProcessing(LeaseDuration,
+                processorKey: LocalCatalog.DefaultProcessorKey);
+        }
+
         if (lease is null)
         {
             return false;
@@ -33,7 +48,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         }
 
         var extension = Path.GetExtension(source.Locator).ToLowerInvariant();
-        if (extension is not (".txt" or ".md" or ".markdown"))
+        if (!SupportedExtensions.Contains(extension, StringComparer.Ordinal))
         {
             catalog.CommitTextResult(lease, null,
                 extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
@@ -52,7 +67,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             var original = await store.ReadVerifiedBytesAsync(
                 source.Original, MaximumTextBytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            if (original.AsSpan().StartsWith("%PDF-"u8))
+            if (HasNonTextSignature(original))
             {
                 catalog.CommitTextResult(lease, null, "signature_mismatch");
                 return true;
@@ -92,5 +107,17 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         }
 
         return true;
+    }
+
+    private static bool HasNonTextSignature(ReadOnlySpan<byte> input)
+    {
+        return input.StartsWith("%PDF-"u8) ||
+               input.StartsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+               input.StartsWith([0x50, 0x4b, 0x03, 0x04]) ||
+               input.StartsWith([0x7f, 0x45, 0x4c, 0x46]) ||
+               input.StartsWith([0x1f, 0x8b]) ||
+               input.StartsWith([0xcf, 0xfa, 0xed, 0xfe]) ||
+               input.StartsWith([0xfe, 0xed, 0xfa, 0xcf]) ||
+               input.StartsWith([0xca, 0xfe, 0xba, 0xbe]);
     }
 }

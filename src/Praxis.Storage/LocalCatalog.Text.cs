@@ -124,6 +124,93 @@ public sealed partial class LocalCatalog
         }
     }
 
+
+    // Revise only active, current sources previously classified as unsupported solely
+    // because their file extension had no text decoder. Other outcomes remain immutable.
+    internal bool RequeueNewlySupportedText(IReadOnlyList<string> extensions)
+    {
+        if (extensions.Count == 0)
+        {
+            return false;
+        }
+
+        var suffixMatch = string.Join(" OR ", Enumerable.Range(0, extensions.Count)
+            .Select(index => $"substr(lower(s.locator), -length($extension{index})) = $extension{index}"));
+        lock (connection)
+        {
+            using var transaction = connection.BeginTransaction();
+            using var find = Command(connection, $"""
+                SELECT d.item_id, d.revision
+                FROM text_derivatives d
+                JOIN processing_jobs j ON j.item_id = d.item_id
+                    AND j.revision = d.revision AND j.processor_key = d.processor_key
+                JOIN item_versions v ON v.item_id = d.item_id
+                    AND v.revision = d.revision AND v.digest = d.source_digest
+                JOIN items i ON i.item_id = d.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE d.processor_key = 'source-text-v1'
+                  AND d.outcome = 'unsupported' AND d.reason_code = 'unsupported_format'
+                  AND j.state = 'unsupported' AND s.status = 'active'
+                  AND s.source_kind = 'file'
+                  AND d.revision = (SELECT MAX(latest.revision) FROM item_versions latest
+                                    WHERE latest.item_id = d.item_id)
+                  AND ({suffixMatch})
+                ORDER BY d.created_utc, d.item_id LIMIT 1
+                """);
+            find.Transaction = transaction;
+            for (var index = 0; index < extensions.Count; index++)
+            {
+                find.Parameters.AddWithValue($"$extension{index}", extensions[index]);
+            }
+
+            string item;
+            int revision;
+            using (var reader = find.ExecuteReader())
+            {
+                if (!reader.Read())
+                {
+                    return false;
+                }
+
+                item = reader.GetString(0);
+                revision = reader.GetInt32(1);
+            }
+
+            using var remove = Command(connection, """
+                DELETE FROM text_derivatives
+                WHERE item_id = $item AND revision = $revision
+                  AND processor_key = 'source-text-v1'
+                  AND outcome = 'unsupported' AND reason_code = 'unsupported_format'
+                """);
+            remove.Transaction = transaction;
+            remove.Parameters.AddWithValue("$item", item);
+            remove.Parameters.AddWithValue("$revision", revision);
+            if (remove.ExecuteNonQuery() != 1)
+            {
+                throw new InvalidOperationException("The unsupported derivative changed.");
+            }
+
+            using var requeue = Command(connection, """
+                UPDATE processing_jobs
+                SET state = 'queued', attempt = 0, lease_key = NULL,
+                    lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
+                WHERE item_id = $item AND revision = $revision
+                  AND processor_key = 'source-text-v1' AND state = 'unsupported'
+                """);
+            requeue.Transaction = transaction;
+            requeue.Parameters.AddWithValue("$item", item);
+            requeue.Parameters.AddWithValue("$revision", revision);
+            requeue.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            if (requeue.ExecuteNonQuery() != 1)
+            {
+                throw new InvalidOperationException("The unsupported processing job changed.");
+            }
+
+            transaction.Commit();
+            return true;
+        }
+    }
+
     public TextDerivative? ReadTextDerivative(Guid itemId, int revision)
     {
         if (itemId == Guid.Empty || revision < 1)
