@@ -148,6 +148,35 @@ struct MonthlyBudgetReport: Decodable {
     let evidence: [BudgetEvidence]
 }
 
+struct BudgetScenarioCategory: Decodable, Identifiable {
+    let category: String
+    let observedSpending: Double
+    let hypotheticalTarget: Double
+    let illustrativeReduction: Double
+    let plannedBills: Double
+    let evidenceRows: Int
+    var id: String { category }
+}
+
+struct BudgetScenario: Decodable {
+    let sourceId: String
+    let itemId: String
+    let revision: Int
+    let sourceSha256: String
+    let year: Int
+    let month: Int
+    let currency: String
+    let postedIncome: Double
+    let postedSpending: Double
+    let plannedBills: Double
+    let actualAfterPlannedBills: Double
+    let illustrativeReduction: Double
+    let hypotheticalAfterPlannedBills: Double
+    let pendingRows: Int
+    let evidenceTruncated: Bool
+    let categories: [BudgetScenarioCategory]
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
     let status: IntakeStatus?
@@ -161,6 +190,7 @@ struct ResponseData: Decodable {
     let hits: [SearchHit]?
     let clips: [VideoCue]?
     let budget: MonthlyBudgetReport?
+    let scenario: BudgetScenario?
     let outcome: String?
     let content: String?
     let reasonCode: String?
