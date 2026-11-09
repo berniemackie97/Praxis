@@ -27,7 +27,7 @@ cat > "$destination/Contents/Info.plist" <<'PLIST'
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Praxis</string>
-  <key>CFBundleIdentifier</key><string>dev.praxis.enrichment-preview</string>
+  <key>CFBundleIdentifier</key><string>dev.praxis.renames-preview</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Praxis</string>
   <key>CFBundlePackageType</key><string>APPL</string>
