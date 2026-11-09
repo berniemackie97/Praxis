@@ -86,7 +86,8 @@ public sealed class LocalDesktopProtocol(
                 "topics" => new
                 {
                     proposals = catalog.ListTopicProposals(
-                        ReadGuid(root, "sourceId"), ReadInteger(root, "limit", 40, 1, 100))
+                        ReadGuid(root, "sourceId"), ReadInteger(root, "limit", 40, 1, 100)),
+                    outcome = catalog.TopicProcessingOutcome(ReadGuid(root, "sourceId"))
                 },
                 "topicReview" => new
                 {
