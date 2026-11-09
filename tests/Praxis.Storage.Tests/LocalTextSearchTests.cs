@@ -56,6 +56,19 @@ public sealed class LocalTextSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task UnsupportedOriginalsNeverBecomeSearchableText()
+    {
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var file = await Capture(catalog, "report.pdf", "violet in an unsupported pdf", "pdf");
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.Equal("unsupported", catalog.ReadTextDerivative(file.ItemId, 1)?.Outcome);
+        Assert.Empty(catalog.SearchText("violet"));
+        Assert.Equal(0, catalog.RebuildTextSearchIndex());
+        Assert.Empty(catalog.SearchText("violet"));
+        await catalog.VerifyOriginalAsync(file.ItemId);
+    }
+
+    [Fact]
     public async Task NewRevisionRetractsOldHitsBeforeItsProcessingCompletes()
     {
         using var catalog = LocalCatalog.Open(dataRoot);
