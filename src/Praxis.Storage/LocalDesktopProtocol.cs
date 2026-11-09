@@ -83,6 +83,17 @@ public sealed class LocalDesktopProtocol(
                             ReadOptionalTitle(root), ReadString(root, "text", 8_000),
                             cancellationToken)
                 },
+                "topics" => new
+                {
+                    proposals = catalog.ListTopicProposals(
+                        ReadGuid(root, "sourceId"), ReadInteger(root, "limit", 40, 1, 100))
+                },
+                "topicReview" => new
+                {
+                    reviewed = catalog.ReviewTopicProposal(
+                        ReadGuid(root, "proposalId"),
+                        ReadString(root, "decision", 16), ReadOptionalCorrection(root))
+                },
                 "preview" => Preview(root),
                 "verify" => await VerifyAsync(root, cancellationToken),
                 "retry" => new
@@ -139,6 +150,22 @@ public sealed class LocalDesktopProtocol(
     {
         StopRequested = true;
         return new { stopping = true };
+    }
+
+    private static string? ReadOptionalCorrection(JsonElement root)
+    {
+        if (!root.TryGetProperty("correction", out var value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind != JsonValueKind.String ||
+            value.GetString() is not { } correction || correction.Length > 80)
+        {
+            throw new ArgumentException("The review correction is invalid.");
+        }
+
+        return correction;
     }
 
     private static string? ReadOptionalTitle(JsonElement root)
