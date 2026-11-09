@@ -217,7 +217,8 @@
         107,
         108,
         129,
-        130
+        130,
+        146
       ]
     },
     {
@@ -450,9 +451,7 @@
       129
     ],
     "108": [
-      101,
-      106,
-      107
+      106
     ],
     "109": [
       100,
@@ -519,9 +518,12 @@
       102,
       103,
       106,
-      107,
       108,
-      129
+      129,
+      146
+    ],
+    "146": [
+      106
     ]
   },
   "priorities": {
@@ -583,7 +585,8 @@
     "128": "P1",
     "129": "P1",
     "130": "P1",
-    "136": "P2"
+    "136": "P2",
+    "146": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -614,6 +617,13 @@
     ],
     "36": [
       23
+    ],
+    "108": [
+      101,
+      107
+    ],
+    "130": [
+      107
     ]
   },
   "priority_migrations": {
@@ -671,11 +681,11 @@
         103,
         106,
         129,
-        107,
         108,
+        146,
         130
       ],
-      "exit": "After merged code and actual macOS first-run verification, automatically capture approved intake-folder changes and import mixed files/folders, recover catalog and original bytes after restart, search source-attributed text and inspect originals in first-party Praxis without Obsidian, cloud or remote inference; verify unauthorized access is denied."
+      "exit": "With merged code and actual macOS first-run verification, automatically capture approved files, preserve originals and revisions, inspect/search sources, and edit user-owned collections in first-party Praxis without Obsidian, cloud, external inference or a private HTTP listener; prove denied access and recovery."
     },
     {
       "id": "L1",
@@ -705,11 +715,12 @@
       "id": "L3",
       "name": "Agent interoperability",
       "issues": [
+        107,
         117,
         118,
         119
       ],
-      "exit": "A local agent can retrieve scoped grounded knowledge; write operations require independent permissions and approval, with revocation and prompt-injection tests."
+      "exit": "An independently authorized local integration host and paired agent can retrieve only scoped grounded knowledge; write operations require separate permissions and approval, with revocation and prompt-injection tests."
     }
   ]
 }
