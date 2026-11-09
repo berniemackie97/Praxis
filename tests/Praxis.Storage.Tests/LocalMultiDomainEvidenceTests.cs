@@ -208,6 +208,82 @@ public sealed class LocalMultiDomainEvidenceTests : IDisposable
         Assert.Empty(catalog.SearchVideoCues("Violet"));
     }
 
+
+    [Fact]
+    public async Task PrivateDesktopProtocolReturnsGroundedVideoCuesAndMonthlyBudget()
+    {
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var video = await Capture(catalog, "clip.mp4", "video content", "video");
+        var captions = await Capture(catalog, "clip.mp4." + video.Sha256 + ".vtt",
+            "WEBVTT\\n\\n00:00:03.000 --> 00:00:06.000\\nViolet assembly instruction.\\n",
+            "captions");
+        var finance = await Capture(catalog, "monthly.csv",
+            "date,record_id,kind,amount,currency,category,description,status\\n" +
+            "2026-11-01,pay,income,1100.00,USD,Income,Salary,posted\\n" +
+            "2026-11-02,food,expense,100.00,USD,Groceries,Food,posted\\n",
+            "financial");
+        var worker = new LocalTextProcessor(catalog);
+        Assert.True(await worker.ProcessNextAsync());
+        Assert.True(await worker.ProcessNextAsync());
+        Assert.True(await worker.ProcessNextAsync());
+
+        var protocol = new LocalDesktopProtocol(catalog);
+        using (var clipResult = System.Text.Json.JsonDocument.Parse(await protocol.HandleAsync(
+            """{"requestId":"clip","action":"mediaCues","query":"violet"}""")))
+        {
+            Assert.True(clipResult.RootElement.GetProperty("ok").GetBoolean());
+            var cue = Assert.Single(clipResult.RootElement.GetProperty("data")
+                .GetProperty("clips").EnumerateArray());
+            Assert.Equal(video.SourceId.ToString("D"),
+                cue.GetProperty("videoSourceId").GetString());
+            Assert.Equal(captions.Sha256, cue.GetProperty("captionSha256").GetString());
+            Assert.Equal(3000L, cue.GetProperty("startMilliseconds").GetInt64());
+        }
+
+        using (var reportResult = System.Text.Json.JsonDocument.Parse(
+            await protocol.HandleAsync($"""
+                {"requestId":"money","action":"budgetSummary","sourceId":"{{finance.SourceId:D}}","year":2026,"month":11}
+                """)))
+        {
+            Assert.True(reportResult.RootElement.GetProperty("ok").GetBoolean());
+            var report = reportResult.RootElement.GetProperty("data")
+                .GetProperty("budget");
+            Assert.Equal(finance.Sha256, report.GetProperty("sourceSha256").GetString());
+            Assert.Equal(1100m, report.GetProperty("postedIncome").GetDecimal());
+            Assert.Equal(100m, report.GetProperty("postedSpending").GetDecimal());
+            Assert.Equal(1000m, report.GetProperty("actualBalance").GetDecimal());
+        }
+
+        Assert.True(catalog.RevokeSource(finance.SourceId));
+        using var revoked = System.Text.Json.JsonDocument.Parse(
+            await protocol.HandleAsync($"""
+                {"requestId":"revoked","action":"budgetSummary","sourceId":"{{finance.SourceId:D}}","year":2026,"month":11}
+                """));
+        Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.False(revoked.RootElement.TryGetProperty("data", out _));
+
+        using var denied = System.Text.Json.JsonDocument.Parse(
+            await protocol.HandleAsync("""
+                {"requestId":"wrong","action":"budgetSummary","sourceId":"not-an-id","year":2026,"month":11}
+                """));
+        Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task BudgetCsvHandlesQuotedLineBreaksWithoutChangingPhysicalRowCitations()
+    {
+        var csv = "date,record_id,kind,amount,currency,category,description,status\\r\\n" +
+            "2026-11-01,one,expense,10.00,USD,Home,\"Two-line\\nreceipt\",posted\\r\\n" +
+            "2026-11-02,two,expense,5.00,USD,Home,Second purchase,posted\\r\\n";
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var source = await Capture(catalog, "quoted.csv", csv, "quoted");
+        var report = await new LocalMonthlyBudgetAnalyzer(catalog)
+            .AnalyzeAsync(source.SourceId, 2026, 11);
+        Assert.Equal(15m, report.PostedSpending);
+        Assert.Equal(new[] { 2, 4 }, report.Evidence.Select(e => e.SourceRow).ToArray());
+        Assert.Equal("Two-line\\nreceipt", report.Evidence[0].Description);
+    }
+
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, string contents, string requestKey)
     {
