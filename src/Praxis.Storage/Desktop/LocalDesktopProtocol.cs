@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed class LocalDesktopProtocol(
     LocalCatalog catalog, LocalQuickCapture? quickCapture = null,
-    LocalWatchedIntake? monitor = null)
+    LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
@@ -97,15 +97,7 @@ public sealed class LocalDesktopProtocol(
                     moves = catalog.Sources.ListMovements(
                         fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 20, 1, 100))
                 },
-                "noteCapture" => new
-                {
-                    capture = await (quickCapture ??
-                        throw new InvalidOperationException("Quick capture is not configured."))
-                        .CaptureAsync(fields.RequireGuid("captureId"),
-                            fields.OptionalText("title", 80, "The note title is invalid."),
-                            fields.RequireString("text", 8_000),
-                            cancellationToken)
-                },
+                "noteCapture" => await CaptureNoteAsync(fields, cancellationToken),
                 "topics" => new
                 {
                     proposals = catalog.Topics.List(
@@ -141,12 +133,7 @@ public sealed class LocalDesktopProtocol(
                 },
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
-                "retry" => new
-                {
-                    queued = catalog.Processing.Retry(fields.RequireGuid("itemId"),
-                        fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
-                        LocalProcessors.SourceText)
-                },
+                "retry" => Retry(fields),
                 "revoke" => new
                 {
                     revoked = catalog.Sources.Revoke(fields.RequireGuid("sourceId"))
@@ -190,6 +177,32 @@ public sealed class LocalDesktopProtocol(
     {
         await catalog.Originals.VerifyAsync(fields.RequireGuid("itemId"), cancellationToken);
         return new { verified = true };
+    }
+
+    private async Task<object> CaptureNoteAsync(
+        DesktopRequestFields fields, CancellationToken cancellationToken)
+    {
+        var capture = await (quickCapture ??
+            throw new InvalidOperationException("Quick capture is not configured."))
+            .CaptureAsync(fields.RequireGuid("captureId"),
+                fields.OptionalText("title", 80, "The note title is invalid."),
+                fields.RequireString("text", 8_000),
+                cancellationToken);
+        processing?.Wake();
+        return new { capture };
+    }
+
+    private object Retry(DesktopRequestFields fields)
+    {
+        var queued = catalog.Processing.Retry(fields.RequireGuid("itemId"),
+            fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
+            LocalProcessors.SourceText);
+        if (queued)
+        {
+            processing?.Wake();
+        }
+
+        return new { queued };
     }
 
     private object Stop()

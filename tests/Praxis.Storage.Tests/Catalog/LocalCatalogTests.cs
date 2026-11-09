@@ -23,10 +23,10 @@ public sealed class LocalCatalogTests : IDisposable
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using var catalog = LocalCatalog.Open(root);
-        Assert.Equal(8, catalog.SchemaVersion);
+        Assert.Equal(9, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
         using var reader = Connect(catalog.DatabasePath);
-        Assert.Equal(8L, Scalar(reader, "PRAGMA user_version"));
+        Assert.Equal(9L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
@@ -105,13 +105,13 @@ public sealed class LocalCatalogTests : IDisposable
         var path = Path.Combine(root, "catalog.sqlite");
         using (var connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 9");
+            Execute(connection, "PRAGMA user_version = 10");
         }
 
         Assert.Throws<NotSupportedException>(() => LocalCatalog.Open(root));
         using (var connection = Connect(path))
         {
-            Assert.Equal(9L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(10L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
@@ -148,9 +148,9 @@ public sealed class LocalCatalogTests : IDisposable
 
         using (var upgraded = LocalCatalog.Open(root))
         {
-            Assert.Equal(8, upgraded.SchemaVersion);
+            Assert.Equal(9, upgraded.SchemaVersion);
             using var connection = Connect(upgraded.DatabasePath);
-            Assert.Equal(8L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(9L, Scalar(connection, "PRAGMA user_version"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
             Assert.Equal(1L, Scalar(connection,
@@ -159,7 +159,7 @@ public sealed class LocalCatalogTests : IDisposable
 
         using var reopened = LocalCatalog.Open(root);
         using var verified = Connect(reopened.DatabasePath);
-        Assert.Equal(8L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(9L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM text_derivatives"));

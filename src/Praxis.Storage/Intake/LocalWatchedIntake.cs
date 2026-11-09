@@ -6,14 +6,12 @@ public sealed partial class LocalWatchedIntake
     private const int MaximumDepth = 12;
     private const long MaximumFileBytes = 2L * 1024 * 1024 * 1024;
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
-    private const int ProcessingBudgetPerScan = 64;
     private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
     private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
 
     private readonly LocalCatalog catalog;
     private readonly LocalSourceIntake intake;
-    private readonly LocalTextProcessor processor;
-    private readonly LocalTopicProposer topics;
+    private readonly Action notifyCaptured;
     private readonly string root;
     private readonly TimeSpan quietPeriod;
     private readonly TimeSpan rescanInterval;
@@ -33,7 +31,7 @@ public sealed partial class LocalWatchedIntake
     public LocalWatchedIntake(
         LocalCatalog catalog, string intakeDirectory,
         TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null,
-        Action<string>? status = null)
+        Action<string>? status = null, Action? onCaptured = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);
@@ -56,8 +54,7 @@ public sealed partial class LocalWatchedIntake
 
         this.catalog = catalog;
         intake = new LocalSourceIntake(catalog);
-        processor = new LocalTextProcessor(catalog);
-        topics = new LocalTopicProposer(catalog);
+        notifyCaptured = onCaptured ?? (() => { });
         root = Path.GetFullPath(intakeDirectory);
         report = status ?? (_ => { });
     }
@@ -125,34 +122,17 @@ public sealed partial class LocalWatchedIntake
                 }
             }
 
-            await ProcessPendingAsync(cancellationToken);
+            if (imported != 0)
+            {
+                notifyCaptured();
+            }
+
             RecordSuccessfulScan(now, files.Count, imported);
             return imported;
         }
         finally
         {
             scanLock.Release();
-        }
-    }
-
-    private async Task ProcessPendingAsync(CancellationToken cancellationToken)
-    {
-        for (var index = 0; index < ProcessingBudgetPerScan; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!await processor.ProcessNextAsync(cancellationToken))
-            {
-                break;
-            }
-        }
-
-        for (var index = 0; index < 16; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!topics.ProcessNext())
-            {
-                break;
-            }
         }
     }
 }

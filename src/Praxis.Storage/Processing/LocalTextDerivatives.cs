@@ -156,6 +156,12 @@ public sealed class LocalTextDerivatives
                 throw new InvalidOperationException("The processing result lost its lease.");
             }
 
+            if (content is not null)
+            {
+                LocalProcessingQueue.QueueDependents(connection, transaction,
+                    lease.ItemId, lease.Revision, lease.ProcessorKey, now);
+            }
+
             transaction.Commit();
             return true;
         });

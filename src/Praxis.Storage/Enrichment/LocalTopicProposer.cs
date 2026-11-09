@@ -1,12 +1,35 @@
 namespace Praxis.Storage;
 
-public sealed class LocalTopicProposer(LocalCatalog catalog)
+/// <summary>
+/// Deterministic topic proposals from literal first- to third-level Markdown headings of
+/// verified extracted text. Non-Markdown sources are marked unsupported; no model is used.
+/// </summary>
+public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingHandler
 {
-    public bool ProcessNext()
+    public string ProcessorKey => LocalProcessors.MarkdownHeadings;
+    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
+    public int MaxConcurrency => 1;
+
+    public bool TryReopenWork() => false;
+
+    public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
-        var candidate = catalog.Topics.NextCandidate();
-        return candidate is not null &&
-            catalog.Topics.CommitCandidates(candidate, ExtractHeadings(candidate.Content));
+        cancellationToken.ThrowIfCancellationRequested();
+        var candidate = catalog.Topics.ReadLeasedCandidate(lease);
+        if (candidate is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var extension = Path.GetExtension(candidate.Locator).ToLowerInvariant();
+        if (candidate.SourceKind != "file" || extension is not (".md" or ".markdown"))
+        {
+            catalog.Processing.Finish(lease, ProcessingCompletion.Unsupported);
+            return Task.CompletedTask;
+        }
+
+        catalog.Topics.CommitCandidates(lease, candidate, ExtractHeadings(candidate.Content));
+        return Task.CompletedTask;
     }
 
     private static IReadOnlyList<TopicEvidence> ExtractHeadings(string text)

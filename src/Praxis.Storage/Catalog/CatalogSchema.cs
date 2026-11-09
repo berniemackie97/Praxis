@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 8;
+    internal const int CurrentVersion = 9;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),

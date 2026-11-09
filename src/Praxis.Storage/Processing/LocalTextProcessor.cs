@@ -2,7 +2,11 @@ using System.Text;
 
 namespace Praxis.Storage;
 
-public sealed class LocalTextProcessor(LocalCatalog catalog)
+/// <summary>
+/// Extracts strictly decoded UTF-8 text from verified originals with a supported text
+/// extension. Other inputs receive an explicit unsupported or failed outcome, never guessed text.
+/// </summary>
+public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingHandler
 {
     public const int MaximumTextBytes = 1024 * 1024;
 
@@ -16,43 +20,27 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
     ];
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
-    private bool legacyScanComplete;
 
-    public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
+    public string ProcessorKey => LocalProcessors.SourceText;
+    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(5);
+    public int MaxConcurrency => 2;
+
+    public bool TryReopenWork() => catalog.Text.RequeueNewlySupported(SupportedExtensions);
+
+    public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var lease = catalog.Processing.TryClaim(LeaseDuration,
-            processorKey: LocalProcessors.SourceText);
-        if (lease is null && !legacyScanComplete)
-        {
-            if (catalog.Text.RequeueNewlySupported(SupportedExtensions))
-            {
-                lease = catalog.Processing.TryClaim(LeaseDuration,
-                    processorKey: LocalProcessors.SourceText);
-            }
-            else
-            {
-                legacyScanComplete = true;
-            }
-        }
-
-        if (lease is null)
-        {
-            return false;
-        }
-
         var source = catalog.Text.ReadLeasedSource(lease);
         if (source is null)
         {
-            return true;
+            return;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         if (source.SourceKind != "file")
         {
             catalog.Text.CommitResult(lease, null, "unsupported_source");
-            return true;
+            return;
         }
 
         var extension = Path.GetExtension(source.Locator).ToLowerInvariant();
@@ -60,13 +48,13 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         {
             catalog.Text.CommitResult(lease, null,
                 extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
-            return true;
+            return;
         }
 
         if (source.Original.Length > MaximumTextBytes)
         {
             catalog.Text.CommitResult(lease, null, "text_too_large");
-            return true;
+            return;
         }
 
         try
@@ -77,7 +65,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             if (HasNonTextSignature(original))
             {
                 catalog.Text.CommitResult(lease, null, "signature_mismatch");
-                return true;
+                return;
             }
 
             var offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
@@ -87,7 +75,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
                 c == 0x7f))
             {
                 catalog.Text.CommitResult(lease, null, "binary_content");
-                return true;
+                return;
             }
 
             catalog.Text.CommitResult(lease, text, null);
@@ -112,8 +100,6 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         {
             catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "source_access");
         }
-
-        return true;
     }
 
     private static bool HasNonTextSignature(ReadOnlySpan<byte> input)

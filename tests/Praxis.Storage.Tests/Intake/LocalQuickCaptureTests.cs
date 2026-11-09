@@ -41,7 +41,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
                 File.ReadAllText(receipt.SourcePath));
             Assert.Equal(receipt.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
             Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
-            Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+            Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
             var hit = Assert.Single(catalog.Search.Query("violet compass"));
             Assert.Equal(receipt.Original.SourceId, hit.SourceId);
             Assert.Equal(receipt.Original.ItemId, hit.ItemId);
@@ -70,7 +70,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         var second = await capture.CaptureAsync(id, null, "Original thought");
         Assert.Equal(first, second);
         Assert.Equal("Original thought", File.ReadAllText(first.SourcePath));
-        var watcher = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var watcher = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
         var time = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(time));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(1)));

@@ -6,8 +6,8 @@ namespace Praxis.Worker;
 internal static class DesktopStdioSession
 {
     internal static async Task RunAsync(
-        LocalCatalog catalog, LocalWatchedIntake monitor, string inbox,
-        CancellationToken cancellationToken)
+        LocalCatalog catalog, LocalWatchedIntake monitor, LocalProcessingPipeline processing,
+        string inbox, CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(Console.OpenStandardInput(),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true),
@@ -17,28 +17,25 @@ internal static class DesktopStdioSession
         {
             AutoFlush = true
         };
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var frames = new DesktopRequestReader(reader);
-        var protocol = new LocalDesktopProtocol(catalog, new LocalQuickCapture(catalog, inbox), monitor);
-        var watching = monitor.RunAsync(lifetime.Token);
-        try
+        var protocol = new LocalDesktopProtocol(
+            catalog, new LocalQuickCapture(catalog, inbox), monitor, processing);
+
+        async Task ServeAsync(CancellationToken token)
         {
-            while (!lifetime.IsCancellationRequested && !protocol.StopRequested)
+            while (!token.IsCancellationRequested && !protocol.StopRequested)
             {
-                var request = await frames.ReadAsync(lifetime.Token);
+                var request = await frames.ReadAsync(token);
                 if (request is null)
                 {
-                    break;
+                    return;
                 }
 
-                var response = await protocol.HandleAsync(request, lifetime.Token);
-                await writer.WriteLineAsync(response.AsMemory(), lifetime.Token);
+                var response = await protocol.HandleAsync(request, token);
+                await writer.WriteLineAsync(response.AsMemory(), token);
             }
         }
-        finally
-        {
-            await lifetime.CancelAsync();
-            await watching;
-        }
+
+        await WorkerServices.RunAsync(cancellationToken, ServeAsync, monitor.RunAsync, processing.RunAsync);
     }
 }

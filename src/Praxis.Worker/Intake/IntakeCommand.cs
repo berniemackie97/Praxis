@@ -43,17 +43,21 @@ internal static class IntakeCommand
         }
 
         using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new LocalWatchedIntake(catalog, inbox, status: message =>
-            Console.Error.WriteLine($"[{DateTimeOffset.Now:O}] {message}"));
+        var processing = LocalProcessingPipeline.CreateDefault(catalog, status: Report);
+        var monitor = new LocalWatchedIntake(catalog, inbox,
+            status: Report, onCaptured: processing.Wake);
         if (desktopMode)
         {
-            await DesktopStdioSession.RunAsync(catalog, monitor, inbox, cancellationToken);
+            await DesktopStdioSession.RunAsync(catalog, monitor, processing, inbox, cancellationToken);
         }
         else
         {
-            await monitor.RunAsync(cancellationToken);
+            await WorkerServices.RunAsync(cancellationToken, monitor.RunAsync, processing.RunAsync);
         }
 
         return 0;
     }
+
+    private static void Report(string message) =>
+        Console.Error.WriteLine($"[{DateTimeOffset.Now:O}] {message}");
 }
