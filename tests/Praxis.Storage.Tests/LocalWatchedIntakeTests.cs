@@ -52,7 +52,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         await catalog.VerifyOriginalAsync(unsupported.ItemId);
 
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
-        Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(6)));
+        Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(31)));
         Assert.Equal(2, catalog.ListLibrary().Count);
         Assert.Equal(2L, Count(catalog.DatabasePath, "ingest_requests"));
     }
@@ -82,7 +82,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Empty(catalog.SearchText("violet"));
         Assert.Equal(second.ItemId, Assert.Single(catalog.SearchText("amber")).ItemId);
 
-        Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(6)));
+        Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(31)));
         Assert.Equal(2L, Count(catalog.DatabasePath, "item_versions"));
     }
 
