@@ -48,6 +48,13 @@ struct TopicProposal: Decodable, Identifiable {
     var id: String { proposalId }
 }
 
+struct OriginalExportReceipt: Decodable {
+    let itemId: String
+    let revision: Int
+    let sha256: String
+    let length: Int64
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
     let proposals: [TopicProposal]?
@@ -61,6 +68,7 @@ struct ResponseData: Decodable {
     let content: String?
     let reasonCode: String?
     let verified: Bool?
+    let exported: OriginalExportReceipt?
     let queued: Bool?
     let revoked: Bool?
 }

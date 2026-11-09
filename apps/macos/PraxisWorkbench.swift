@@ -22,6 +22,7 @@ final class Workbench: ObservableObject {
     @Published var noteTitle = ""
     @Published var noteText = ""
     @Published private(set) var savingNote = false
+    @Published private(set) var exportingOriginal = false
     private var noteCaptureId: String?
 
     private var child: Process?
@@ -106,6 +107,7 @@ final class Workbench: ObservableObject {
                 DispatchQueue.main.async {
                     self?.running = false
                     self?.savingNote = false
+                    self?.exportingOriginal = false
                     self?.requests.removeAll()
                     self?.buffer.removeAll()
                     if process.terminationStatus != 0 {
@@ -212,6 +214,18 @@ final class Workbench: ObservableObject {
         send("preview", ["itemId": hit.itemId, "revision": hit.revision])
     }
 
+    func exportOriginal(_ item: LibraryItem, destination: URL) {
+        guard !exportingOriginal, running, item.sourceStatus == "active" else { return }
+        exportingOriginal = send("exportOriginal", [
+            "itemId": item.itemId,
+            "revision": item.revision,
+            "destinationPath": destination.path
+        ])
+        if exportingOriginal {
+            message = "Verifying and exporting the preserved original…"
+        }
+    }
+
     func verify() {
         if let selected { send("verify", ["itemId": selected.itemId]) }
     }
@@ -288,6 +302,7 @@ final class Workbench: ObservableObject {
                   let action = requests.removeValue(forKey: id) else { continue }
             guard reply.ok else {
                 if action == "noteCapture" { savingNote = false }
+                if action == "exportOriginal" { exportingOriginal = false }
                 message = reply.error ?? "The operation failed."
                 continue
             }
@@ -345,6 +360,13 @@ final class Workbench: ObservableObject {
                 if context == "preview:\(previewTarget)" {
                     preview = reply.data?.content ??
                         "No extracted text (\(reply.data?.reasonCode ?? reply.data?.outcome ?? "pending")). The original remains preserved."
+                }
+            case "exportOriginal":
+                exportingOriginal = false
+                if let receipt = reply.data?.exported {
+                    message = "Verified original exported (\(receipt.length) bytes, SHA-256: \(receipt.sha256))."
+                } else {
+                    message = "Export did not return an integrity receipt."
                 }
             case "verify":
                 message = reply.data?.verified == true
