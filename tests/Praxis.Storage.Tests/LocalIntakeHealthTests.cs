@@ -155,6 +155,46 @@ public sealed class LocalIntakeHealthTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task DesktopLibraryRemainsReadableWhenApprovedInboxIsOffline()
+    {
+        using var catalog = LocalCatalog.Open(dataRoot);
+        using var source = new MemoryStream(
+            System.Text.Encoding.UTF8.GetBytes("Preserved offline knowledge"));
+        var captured = await catalog.CaptureFileAsync(
+            Path.Combine(workspace, "unmounted.md"), source, 256, "offline-original");
+        var disconnected = Path.Combine(workspace, "not-mounted");
+        var monitor = new LocalWatchedIntake(catalog, disconnected,
+            TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+        using var cancellation = new CancellationTokenSource();
+        var running = monitor.RunAsync(cancellation.Token);
+        try
+        {
+            await WaitForAsync(() => monitor.Snapshot().State == "offline");
+            var service = new LocalDesktopProtocol(catalog, monitor: monitor);
+            using var status = System.Text.Json.JsonDocument.Parse(
+                await service.HandleAsync(
+                    """{"requestId":"status","action":"intakeStatus"}"""));
+            Assert.Equal("offline", status.RootElement.GetProperty("data")
+                .GetProperty("status").GetProperty("state").GetString());
+
+            using var library = System.Text.Json.JsonDocument.Parse(
+                await service.HandleAsync(
+                    """{"requestId":"library","action":"library"}"""));
+            var item = Assert.Single(library.RootElement.GetProperty("data")
+                .GetProperty("items").EnumerateArray());
+            Assert.Equal(captured.ItemId.ToString("D"),
+                item.GetProperty("itemId").GetString());
+            await catalog.VerifyOriginalAsync(captured.ItemId);
+            Assert.False(Directory.Exists(disconnected));
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
     private static async Task WaitForAsync(Func<bool> predicate)
     {
         var timeout = DateTime.UtcNow.AddSeconds(10);
