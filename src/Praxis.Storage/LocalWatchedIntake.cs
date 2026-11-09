@@ -122,20 +122,24 @@ public sealed partial class LocalWatchedIntake
                 }
             }
 
-            for (var index = 0; index < ProcessingBudgetPerScan; index++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!await processor.ProcessNextAsync(cancellationToken))
-                {
-                    break;
-                }
-            }
-
+            await ProcessPendingAsync(cancellationToken);
             return imported;
         }
         finally
         {
             scanLock.Release();
+        }
+    }
+
+    private async Task ProcessPendingAsync(CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < ProcessingBudgetPerScan; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await processor.ProcessNextAsync(cancellationToken))
+            {
+                return;
+            }
         }
     }
 }
