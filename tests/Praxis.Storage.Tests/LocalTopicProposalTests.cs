@@ -110,7 +110,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.Empty(catalog.ListTopicProposals(empty.SourceId));
         Assert.Empty(catalog.ListTopicProposals(plain.SourceId));
         Assert.Equal("abstained", catalog.TopicProcessingOutcome(empty.SourceId));
-        Assert.Equal("pending", catalog.TopicProcessingOutcome(plain.SourceId));
+        Assert.Equal("unsupported", catalog.TopicProcessingOutcome(plain.SourceId));
         Assert.Equal("abstained", Scalar(
             "SELECT outcome FROM enrichment_runs WHERE item_id = '" + empty.ItemId + "'"));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));

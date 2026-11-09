@@ -12,7 +12,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var query = Command(connection, """
-                SELECT s.status, j.state, d.outcome, r.outcome
+                SELECT s.status, s.source_kind, s.locator, j.state, d.outcome, r.outcome
                 FROM sources s
                 JOIN items i ON i.source_id = s.source_id
                 JOIN item_versions v ON v.item_id = i.item_id
@@ -37,19 +37,26 @@ public sealed partial class LocalCatalog
                 return "unavailable";
             }
 
-            if (!reader.IsDBNull(3))
+            if (!reader.IsDBNull(5))
             {
-                return reader.GetString(3);
+                return reader.GetString(5);
             }
 
-            if (!reader.IsDBNull(2) && reader.GetString(2) == "unsupported")
+            if (!reader.IsDBNull(4) && reader.GetString(4) == "unsupported")
             {
                 return "unsupported";
             }
 
-            if (!reader.IsDBNull(1) && reader.GetString(1) is "failed" or "canceled")
+            if (!reader.IsDBNull(3) && reader.GetString(3) is "failed" or "canceled")
             {
                 return "failed";
+            }
+
+            var extension = Path.GetExtension(reader.GetString(2)).ToLowerInvariant();
+            if (reader.GetString(1) != "file" ||
+                extension is not (".md" or ".markdown"))
+            {
+                return "unsupported";
             }
 
             return "pending";
