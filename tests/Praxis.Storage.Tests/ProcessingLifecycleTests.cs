@@ -149,7 +149,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
 
         await LocalCatalog.RestoreAsync(backup, restored, 10_000_000);
         using var reopened = LocalCatalog.Open(restored);
-        Assert.Equal(3, reopened.SchemaVersion);
+        Assert.Equal(4, reopened.SchemaVersion);
         var job = Assert.Single(reopened.ListProcessingJobs());
         Assert.Equal("canceled", job.State);
         Assert.DoesNotContain(reopened.ListProcessingJobs(), j => j.State == "running");
@@ -159,7 +159,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifiedSchemaTwoSnapshotRestoresIntoSchemaThree()
+    public async Task VerifiedSchemaTwoSnapshotRestoresIntoSchemaFour()
     {
         var backup = Path.Combine(workspace, "legacy-backup");
         var restored = Path.Combine(workspace, "recovered");
@@ -225,7 +225,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(1, (await LocalCatalog.VerifyBackupAsync(backup, 10_000_000)).ObjectCount);
         await LocalCatalog.RestoreAsync(backup, restored, 10_000_000);
         using var catalog = LocalCatalog.Open(restored);
-        Assert.Equal(3, catalog.SchemaVersion);
+        Assert.Equal(4, catalog.SchemaVersion);
         Assert.Equal("queued", Assert.Single(catalog.ListProcessingJobs()).State);
         using var replay = new MemoryStream();
         var accepted = await catalog.CaptureFileAsync(Source("legacy"), replay, 0, "old-receipt");
