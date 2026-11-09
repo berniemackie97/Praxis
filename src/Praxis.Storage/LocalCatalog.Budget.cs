@@ -60,14 +60,15 @@ public sealed partial class LocalCatalog
         return new BudgetSource(sourceId, source.ItemId, source.Revision, source.Digest, content);
     }
 
-    internal void AssertBudgetSourceCurrent(BudgetSource source)
+    internal void AssertBudgetSourceCurrent(
+        Guid sourceId, Guid itemId, int revision, string sha256)
     {
         lock (connection)
         {
-            var current = CurrentBudgetSource(source.SourceId);
-            if (current is null || current.Value.ItemId != source.ItemId ||
-                current.Value.Revision != source.Revision ||
-                current.Value.Digest != source.Sha256)
+            var current = CurrentBudgetSource(sourceId);
+            if (current is null || current.Value.ItemId != itemId ||
+                current.Value.Revision != revision ||
+                current.Value.Digest != sha256)
             {
                 throw new InvalidOperationException("The financial source changed or was revoked.");
             }
