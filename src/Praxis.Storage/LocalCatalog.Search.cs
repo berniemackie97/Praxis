@@ -69,22 +69,37 @@ public sealed partial class LocalCatalog
         }
     }
 
-    public int RebuildTextSearchIndex(int maxDocuments = 100_000)
+    public int RebuildTextSearchIndex(
+        int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
     {
         if (maxDocuments is < 1 or > 100_000)
         {
             throw new ArgumentOutOfRangeException(nameof(maxDocuments));
         }
 
+        if (maxTextBytes is < 1 or > 512L * 1024 * 1024)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTextBytes));
+        }
+
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var count = Command(connection, "SELECT COUNT(*) FROM eligible_text_search");
+            using var count = Command(connection, """
+                SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
+                FROM eligible_text_search
+                """);
             count.Transaction = transaction;
-            var eligible = Convert.ToInt32(count.ExecuteScalar(), CultureInfo.InvariantCulture);
-            if (eligible > maxDocuments)
+            count.CommandTimeout = 30;
+            int eligible;
+            using (var reader = count.ExecuteReader())
             {
-                throw new InvalidOperationException("The rebuild exceeds its document budget.");
+                reader.Read();
+                eligible = reader.GetInt32(0);
+                if (eligible > maxDocuments || reader.GetInt64(1) > maxTextBytes)
+                {
+                    throw new InvalidOperationException("The rebuild exceeds its data budget.");
+                }
             }
 
             using var clear = Command(connection, "DELETE FROM text_search");
