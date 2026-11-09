@@ -43,8 +43,8 @@ final class Workbench: ObservableObject {
             message = "Catalog and watched Inbox must not overlap."
             return
         }
-        guard FileManager.default.fileExists(atPath: source.path) else {
-            message = "The selected Inbox is unavailable. Reconnect it or choose another."
+        if initialize && !FileManager.default.fileExists(atPath: source.path) {
+            message = "Choose an available Inbox for first-time setup."
             return
         }
         do {
@@ -123,7 +123,7 @@ final class Workbench: ObservableObject {
             watchedInboxPath = source.path
             input = stdin.fileHandleForWriting
             running = true
-            message = "Monitoring your approved Inbox. Files are captured automatically."
+            message = "Praxis started. Checking the approved Inbox; preserved sources remain available if it is offline."
             refresh()
         } catch {
             message = "Praxis could not start: \(error.localizedDescription)"
