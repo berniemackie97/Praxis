@@ -317,7 +317,8 @@
         178,
         179,
         181,
-        184
+        184,
+        196
       ]
     }
   ],
@@ -695,7 +696,8 @@
       103,
       115,
       173,
-      184
+      184,
+      196
     ],
     "179": [
       177,
@@ -811,7 +813,8 @@
     "178": "P1",
     "179": "P1",
     "181": "P1",
-    "184": "P1"
+    "184": "P1",
+    "196": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -1109,6 +1112,7 @@
         176,
         177,
         178,
+        196,
         179
       ],
       "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured provider escalation, and reliability/privacy/revocation/cost tests."

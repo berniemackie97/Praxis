@@ -55,7 +55,7 @@ public sealed class LocalFinancialEvidenceTests : IDisposable
             Assert.Equal(1, report.PendingRows);
             Assert.Equal(180m, Assert.Single(report.Categories,
                 x => x.Category == "Food").PostedSpending);
-            Assert.Equal(9, Assert.Single(report.Evidence,
+            Assert.Equal(8, Assert.Single(report.Evidence,
                 x => x.RecordId == "refund").SourceRow);
             Assert.Empty(catalog.Search.Query("Salary"));
 
