@@ -149,7 +149,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
 
         await LocalCatalog.RestoreAsync(backup, restored, 10_000_000);
         using var reopened = LocalCatalog.Open(restored);
-        Assert.Equal(6, reopened.SchemaVersion);
+        Assert.Equal(7, reopened.SchemaVersion);
         var job = Assert.Single(reopened.ListProcessingJobs());
         Assert.Equal("canceled", job.State);
         Assert.DoesNotContain(reopened.ListProcessingJobs(), j => j.State == "running");
@@ -225,7 +225,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(1, (await LocalCatalog.VerifyBackupAsync(backup, 10_000_000)).ObjectCount);
         await LocalCatalog.RestoreAsync(backup, restored, 10_000_000);
         using var catalog = LocalCatalog.Open(restored);
-        Assert.Equal(6, catalog.SchemaVersion);
+        Assert.Equal(7, catalog.SchemaVersion);
         Assert.Equal("queued", Assert.Single(catalog.ListProcessingJobs()).State);
         using var replay = new MemoryStream();
         var accepted = await catalog.CaptureFileAsync(Source("legacy"), replay, 0, "old-receipt");
