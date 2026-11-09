@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Praxis.Inference;
 
 namespace Praxis.Storage;
 
@@ -134,6 +135,9 @@ public sealed class LocalDesktopProtocol(
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
                 "retry" => Retry(fields),
+                "modelProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEnrichment) },
+                "modelProfileSave" => new { profile = SaveModelProfile(fields) },
+                "localModels" => new { models = await ListLocalModelsAsync(fields, cancellationToken) },
                 "revoke" => new
                 {
                     revoked = catalog.Sources.Revoke(fields.RequireGuid("sourceId"))
@@ -147,7 +151,7 @@ public sealed class LocalDesktopProtocol(
         catch (Exception exception) when (exception is ArgumentException
             or JsonException or InvalidOperationException or IOException
             or InvalidDataException or UnauthorizedAccessException
-            or KeyNotFoundException or NotSupportedException)
+            or KeyNotFoundException or NotSupportedException or InferenceException)
         {
             var failure = new { requestId, ok = false, error = exception.Message };
             return JsonSerializer.Serialize(failure, JsonOptions);
@@ -190,6 +194,22 @@ public sealed class LocalDesktopProtocol(
                 cancellationToken);
         processing?.Wake();
         return new { capture };
+    }
+
+    private ModelProfile SaveModelProfile(DesktopRequestFields fields) =>
+        catalog.Models.Save(new ModelProfile(
+            ModelProfile.LocalEnrichment,
+            fields.RequireString("provider", 32),
+            fields.RequireString("endpoint", 256),
+            fields.RequireString("model", 200),
+            fields.IntegerOrDefault("contextTokens", 16_384, 2_048, 262_144),
+            fields.RequireBoolean("enabled")));
+
+    private static async Task<IReadOnlyList<InstalledModel>> ListLocalModelsAsync(
+        DesktopRequestFields fields, CancellationToken cancellationToken)
+    {
+        using var runtime = new OllamaRuntime(fields.RequireString("endpoint", 256), TimeSpan.FromSeconds(10));
+        return await runtime.ListModelsAsync(cancellationToken);
     }
 
     private object Retry(DesktopRequestFields fields)
