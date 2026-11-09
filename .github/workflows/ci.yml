@@ -22,13 +22,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
+          - os: Linux
             runner: praxis-linux
-          - os: macos-15
+          - os: macOS
             runner: praxis-macos
-          - os: windows-2025
+          - os: Windows
             runner: praxis-windows
     steps:
+      - name: Verify worker operating system
+        env:
+          EXPECTED_OS: ${{ matrix.os }}
+          ACTUAL_OS: ${{ runner.os }}
+        run: node -e "if (process.env.EXPECTED_OS !== process.env.ACTUAL_OS) process.exit(1)"
       - name: Refuse external fork code on owner-operated runners
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: exit 1
@@ -53,24 +58,24 @@ jobs:
       - run: node --test integrations/obsidian/test/install-local.test.js
       - run: dotnet publish src/Praxis.Api/Praxis.Api.csproj -c Release --no-build --no-restore -o artifacts/publish
       - run: python3 scripts/release/smoke_api.py
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 scripts/release/smoke_vault_cli.py
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: node --test integrations/obsidian/test/archive-session-cli.test.js
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: node --test integrations/obsidian/test/install-local-cli.test.js
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 scripts/release/dependency_inventory.py --check
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: dotnet format Praxis.slnx --verify-no-changes --no-restore
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 scripts/github/plan.py
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 -m unittest discover -s scripts/github -p test_plan.py -v
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 -m unittest discover -s scripts/research -p 'test_*.py' -v
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
       - run: python3 scripts/research/local_catalog_probe.py
-        if: matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'Linux'
