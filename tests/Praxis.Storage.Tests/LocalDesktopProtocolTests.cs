@@ -180,6 +180,59 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Empty(catalog.ListLibrary());
     }
 
+    [Fact]
+    public async Task ReviewTopicsThroughTrustedSessionWithoutChangingCanonicalSources()
+    {
+        var data = Path.Combine(root, "catalog");
+        Directory.CreateDirectory(data);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(data,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(data);
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+            "# Evidence Topic\nOriginal retained"));
+        var captured = await catalog.CaptureFileAsync(
+            Path.Combine(root, "topic.md"), stream, 4_096, "topic");
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.True(new LocalTopicProposer(catalog).ProcessNext());
+        var protocol = new LocalDesktopProtocol(catalog);
+
+        using var listing = await Send(protocol,
+            $"""{"requestId":"topics","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
+        Assert.True(listing.RootElement.GetProperty("ok").GetBoolean());
+        var proposal = listing.RootElement.GetProperty("data").GetProperty("proposals")[0];
+        var id = proposal.GetProperty("proposalId").GetString()!;
+        Assert.Equal("Evidence Topic", proposal.GetProperty("value").GetString());
+        Assert.Equal(captured.Sha256, proposal.GetProperty("sourceSha256").GetString());
+        Assert.Equal("markdown-heading-v1", proposal.GetProperty("producer").GetString());
+
+        using var approved = await Send(protocol,
+            $"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");
+        Assert.True(approved.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
+        using var correction = await Send(protocol,
+            $"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
+        Assert.True(correction.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
+        Assert.Equal("Verified owner topic",
+            Assert.Single(catalog.ListTopicProposals(captured.SourceId)).Correction);
+
+        using var invalid = await Send(protocol,
+            $"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");
+        Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
+
+        Assert.True(catalog.RevokeSource(captured.SourceId));
+        using var withheld = await Send(protocol,
+            $"""{"requestId":"withheld","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
+        Assert.Equal(0, withheld.RootElement.GetProperty("data")
+            .GetProperty("proposals").GetArrayLength());
+        using var stale = await Send(protocol,
+            $"""{"requestId":"stale","action":"topicReview","proposalId":"{{id}}","decision":"rejected"}""");
+        Assert.False(stale.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
+        await catalog.VerifyOriginalAsync(captured.ItemId);
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]
@@ -187,6 +240,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [InlineData("""{"requestId":"x","action":"search","query":"   "}""")]
     [InlineData("""{"action":"library"}""")]
     [InlineData("""{"requestId":"x","action":"collectionCreate","name":"  "}""")]
+    [InlineData("""{"requestId":"x","action":"topics","sourceId":"bad"}""")]
+    [InlineData("""{"requestId":"x","action":"topicReview","proposalId":"bad","decision":"accepted"}""")]
     [InlineData("""{"requestId":"x","action":"collectionAdd","collectionId":"invalid","sourceId":"invalid"}""")]
     public async Task RejectsUnknownOrMalformedRequests(string payload)
     {
