@@ -146,7 +146,7 @@ public sealed class LocalMonthlyBudgetAnalyzer(LocalCatalog catalog)
                 postedSpending += amount;
             }
 
-            if (kind is "expense" or "refund" or "bill" && status != "pending")
+            if ((kind is "expense" or "refund" or "bill") && status != "pending")
             {
                 categories.TryGetValue(category, out var value);
                 categories[category] = (
