@@ -13,7 +13,8 @@ public sealed partial class LocalCatalog : IDisposable
         ("item_versions", "item_id, revision, digest, observed_utc"),
         ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
         ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code"),
-        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc")
+        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc"),
+        ("search_index_keys", "rowid, item_id, revision, source_id")
     ];
 
     private readonly FileStream lockFile;
@@ -218,7 +219,8 @@ public sealed partial class LocalCatalog : IDisposable
         foreach (var (name, columns) in Tables)
         {
             if ((version < 3 && name == "processing_jobs") ||
-                (version < 4 && name == "text_derivatives"))
+                (version < 4 && name == "text_derivatives") ||
+                (version < 5 && name == "search_index_keys"))
             {
                 continue;
             }
@@ -272,7 +274,7 @@ public sealed partial class LocalCatalog : IDisposable
         }
 
         using var projection = Command(database,
-            "SELECT item_id, revision, source_id, locator, content FROM text_search LIMIT 0");
+            "SELECT locator, content FROM text_search LIMIT 0");
         try
         {
             using var reader = projection.ExecuteReader();
