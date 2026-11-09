@@ -10,8 +10,8 @@ public sealed record MonthlyBudgetScenario(
     Guid SourceId, Guid ItemId, int Revision, string SourceSha256,
     int Year, int Month, string Currency,
     decimal PostedIncome, decimal PostedSpending, decimal PlannedBills,
-    decimal ActualAfterPlannedBills, decimal IllustrativeReduction,
-    decimal HypotheticalAfterPlannedBills, int PendingRows,
+    decimal BaselineNetAfterPlannedBills, decimal IllustrativeReduction,
+    decimal HypotheticalNetAfterPlannedBills, int PendingRows,
     bool EvidenceTruncated,
     IReadOnlyList<MonthlyBudgetScenarioCategory> Categories);
 
