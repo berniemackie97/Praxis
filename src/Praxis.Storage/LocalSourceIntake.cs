@@ -151,8 +151,9 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             FileSystemInfo link = (attributes & FileAttributes.Directory) != 0
                 ? new DirectoryInfo(candidate)
                 : new FileInfo(candidate);
-            current = link.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+            var target = link.ResolveLinkTarget(returnFinalTarget: true)?.FullName
                 ?? throw new InvalidDataException("The selected path contains a broken link.");
+            current = ResolvePath(target);
         }
 
         return current;
