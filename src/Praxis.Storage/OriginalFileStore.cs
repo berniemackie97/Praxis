@@ -153,6 +153,11 @@ internal sealed class OriginalFileStore
 
         var bytes = new byte[(int)original.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);
+        if (input.Length != original.Length)
+        {
+            throw new InvalidDataException("An original object changed during extraction.");
+        }
+
         if (!CryptographicOperations.FixedTimeEquals(
             SHA256.HashData(bytes), Convert.FromHexString(original.Digest)))
         {
