@@ -58,6 +58,11 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Equal(before.ItemId,
             Assert.Single(catalog.ListLibrary(collectionId: group.CollectionId)).ItemId);
         Assert.Equal(1L, Count("source_locator_moves"));
+        var movement = Assert.Single(catalog.ListSourceMovements(before.SourceId));
+        Assert.Equal(oldPath, movement.PreviousPath);
+        Assert.Equal(newPath, movement.CurrentPath);
+        Assert.Equal(before.Sha256, movement.Sha256);
+        Assert.Empty(catalog.ListSourceMovements(Guid.NewGuid()));
         Assert.Equal(1L, Count("item_versions"));
         Assert.Equal(1L, Count("ingest_requests"));
         await catalog.VerifyOriginalAsync(before.ItemId);
@@ -73,6 +78,66 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Empty(catalog.SearchText("violet"));
         Assert.Equal(before.ItemId, Assert.Single(catalog.SearchText("amber")).ItemId);
         Assert.Equal(1L, Count("source_locator_moves"));
+    }
+
+    [Fact]
+    public async Task ReusingMovedFromPathCreatesAnIndependentSourceWithoutReceiptCollision()
+    {
+        var oldPath = Path.Combine(inbox, "original.md");
+        var movedPath = Path.Combine(inbox, "moved.md");
+        File.WriteAllText(oldPath, "same preserved bytes");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var watcher = NewWatcher(catalog);
+        var now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        var original = Assert.Single(catalog.ListLibrary());
+
+        File.Move(oldPath, movedPath);
+        watcher.QueueRename(oldPath, movedPath);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        Assert.Equal(original.SourceId, catalog.FindLatestFile(movedPath)?.SourceId);
+
+        File.WriteAllText(oldPath, "same preserved bytes");
+        await watcher.ReconcileAsync(now.AddSeconds(4));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
+        var recreated = catalog.FindLatestFile(oldPath);
+        Assert.NotNull(recreated);
+        Assert.NotEqual(original.SourceId, recreated.SourceId);
+        Assert.NotEqual(original.ItemId, recreated.ItemId);
+        Assert.Equal(original.Sha256, recreated.Sha256);
+        Assert.Equal(1L, Count("source_locator_moves"));
+        Assert.Equal(2L, Count("ingest_requests"));
+        await catalog.VerifyOriginalAsync(original.ItemId);
+        await catalog.VerifyOriginalAsync(recreated.ItemId);
+    }
+
+    [Fact]
+    public async Task RevokedSourceIdentityCannotTransferAcrossObservedRename()
+    {
+        var oldPath = Path.Combine(inbox, "revoked.md");
+        var movedPath = Path.Combine(inbox, "new-source.md");
+        File.WriteAllText(oldPath, "revoked original");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var watcher = NewWatcher(catalog);
+        var now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        var original = Assert.Single(catalog.ListLibrary());
+        Assert.True(catalog.RevokeSource(original.SourceId));
+
+        File.Move(oldPath, movedPath);
+        watcher.QueueRename(oldPath, movedPath);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        await watcher.ReconcileAsync(now.AddSeconds(5));
+
+        var current = catalog.FindLatestFile(movedPath);
+        Assert.NotNull(current);
+        Assert.NotEqual(original.SourceId, current.SourceId);
+        Assert.Equal(0L, Count("source_locator_moves"));
+        Assert.Equal("revoked", catalog.FindLatestFile(oldPath)?.Status);
+        Assert.Empty(catalog.ListSourceMovements(original.SourceId));
+        await catalog.VerifyOriginalAsync(original.ItemId);
     }
 
     [Fact]
