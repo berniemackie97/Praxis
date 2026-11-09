@@ -202,10 +202,13 @@ public sealed partial class LocalWatchedIntake
     private static bool IsTemporaryName(string path)
     {
         var name = Path.GetFileName(path);
-        return name is ".DS_Store" or ".gitignore" ||
-            name.EndsWith('~') ||
-            new[] { ".tmp", ".part", ".crdownload", ".download", ".swp", ".swx" }
-                .Any(extension => name.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
+        return name == ".DS_Store" || name.EndsWith('~') ||
+            name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".crdownload", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".download", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".swp", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith(".swx", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsStable(LocalObservedFile file)
