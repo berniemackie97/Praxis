@@ -1,13 +1,113 @@
-using System.Globalization;
-
 namespace Praxis.Storage;
+
+public sealed record LocalFileVersion(
+    Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
+
+internal sealed record CurrentFileVersion(
+    Guid ItemId, int Revision, string Digest, long Length, string Locator);
 
 public sealed record LocalSourceMovement(
     Guid SourceId, string PreviousPath, string CurrentPath, string Sha256, DateTimeOffset RecordedUtc);
 
-public sealed partial class LocalCatalog
+/// <summary>
+/// Identity and lifecycle of captured sources: path lookup, observed relocations and revocation.
+/// </summary>
+public sealed class LocalSources
 {
-    public IReadOnlyList<LocalSourceMovement> ListSourceMovements(Guid sourceId, int limit = 20)
+    private readonly CatalogDatabase database;
+
+    internal LocalSources(CatalogDatabase database) => this.database = database;
+
+    public LocalFileVersion? FindLatestFile(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!Path.IsPathFullyQualified(path))
+        {
+            throw new ArgumentException("The source path must be absolute.", nameof(path));
+        }
+
+        return database.Execute(connection =>
+        {
+            using var command = connection.CreateCommand("""
+                SELECT s.source_id, i.item_id, v.revision, v.digest, s.status
+                FROM sources s
+                JOIN items i ON i.source_id = s.source_id
+                JOIN item_versions v ON v.item_id = i.item_id
+                WHERE s.source_kind = 'file' AND s.locator = $path
+                ORDER BY v.revision DESC LIMIT 1
+                """);
+            command.Parameters.AddWithValue("$path", Path.GetFullPath(path));
+            using var reader = command.ExecuteReader();
+            return !reader.Read() ? null : new LocalFileVersion(
+                Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                reader.GetInt32(2), reader.GetString(3), reader.GetString(4));
+        });
+    }
+
+    /// <summary>Latest revision of an active file source, or null when unavailable.</summary>
+    internal CurrentFileVersion? CurrentFile(Guid sourceId) => database.Execute(connection =>
+    {
+        using var query = connection.CreateCommand("""
+            SELECT i.item_id, v.revision, v.digest, o.byte_length, s.locator
+            FROM sources s
+            JOIN items i ON i.source_id = s.source_id
+            JOIN item_versions v ON v.item_id = i.item_id
+            JOIN original_objects o ON o.digest = v.digest
+            WHERE s.source_id = $source AND s.status = 'active' AND s.source_kind = 'file'
+              AND v.revision = (SELECT MAX(latest.revision)
+                                FROM item_versions latest WHERE latest.item_id = v.item_id)
+            LIMIT 1
+            """);
+        query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+        using var reader = query.ExecuteReader();
+        return reader.Read()
+            ? new CurrentFileVersion(Guid.Parse(reader.GetString(0)), reader.GetInt32(1),
+                reader.GetString(2), reader.GetInt64(3), reader.GetString(4))
+            : null;
+    });
+
+    /// <summary>
+    /// Revokes an active source and cancels its unfinished processing in one transaction.
+    /// Originals and history stay immutable; derived reads filter on source status.
+    /// </summary>
+    public bool Revoke(Guid sourceId)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source ID is required.", nameof(sourceId));
+        }
+
+        return database.Execute(connection =>
+        {
+            using var transaction = connection.BeginTransaction();
+            using var source = connection.CreateCommand("""
+                UPDATE sources SET status = 'revoked'
+                WHERE source_id = $source AND status = 'active'
+                """);
+            source.Transaction = transaction;
+            source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            if (source.ExecuteNonQuery() == 0)
+            {
+                return false;
+            }
+
+            using var jobs = connection.CreateCommand("""
+                UPDATE processing_jobs
+                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
+                    lease_until_utc = NULL, updated_utc = $now
+                WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
+                  AND state IN ('queued', 'running', 'failed')
+                """);
+            jobs.Transaction = transaction;
+            jobs.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            jobs.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            jobs.ExecuteNonQuery();
+            transaction.Commit();
+            return true;
+        });
+    }
+
+    public IReadOnlyList<LocalSourceMovement> ListMovements(Guid sourceId, int limit = 20)
     {
         if (sourceId == Guid.Empty)
         {
@@ -19,7 +119,7 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var query = connection.CreateCommand("""
                 SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc
@@ -37,23 +137,23 @@ public sealed partial class LocalCatalog
                 moves.Add(new LocalSourceMovement(
                     Guid.Parse(reader.GetString(0)), reader.GetString(1),
                     reader.GetString(2), reader.GetString(3),
-                    DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture)));
+                    CatalogValues.ParseTimestamp(reader.GetString(4))));
             }
 
             return moves;
-        }
+        });
     }
 
     internal long CountMovesFrom(string previousPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand(
                 "SELECT COUNT(*) FROM source_locator_moves WHERE old_locator = $path");
             command.Parameters.AddWithValue("$path", Path.GetFullPath(previousPath));
             return (long)command.ExecuteScalar()!;
-        }
+        });
     }
 
     internal bool RelocateObservedFile(
@@ -76,7 +176,7 @@ public sealed partial class LocalCatalog
             return false;
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             using var eligible = connection.CreateCommand("""
@@ -123,10 +223,10 @@ public sealed partial class LocalCatalog
             history.Parameters.AddWithValue("$old", old);
             history.Parameters.AddWithValue("$new", current);
             history.Parameters.AddWithValue("$digest", verifiedDigest);
-            history.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+            history.Parameters.AddWithValue("$at", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             history.ExecuteNonQuery();
             transaction.Commit();
             return true;
-        }
+        });
     }
 }

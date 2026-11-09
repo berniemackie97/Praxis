@@ -28,16 +28,16 @@ public sealed class OriginalCaptureTests : IDisposable
         using (var catalog = LocalCatalog.Open(root))
         {
             using var content = new MemoryStream(bytes);
-            captured = await catalog.CaptureFileAsync(SourcePath("large.bin"), content, bytes.Length, Key());
+            captured = await catalog.Originals.CaptureFileAsync(SourcePath("large.bin"), content, bytes.Length, Key());
             Assert.True(content.CanRead);
-            await catalog.VerifyOriginalAsync(captured.ItemId);
+            await catalog.Originals.VerifyAsync(captured.ItemId);
         }
 
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), captured.Sha256);
         Assert.Equal(bytes.Length, captured.Length);
         Assert.Equal(bytes, File.ReadAllBytes(ObjectPath(captured.Sha256)));
         using var reopened = LocalCatalog.Open(root);
-        await reopened.VerifyOriginalAsync(captured.ItemId);
+        await reopened.Originals.VerifyAsync(captured.ItemId);
         using var reader = Connect(reopened.DatabasePath);
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM items"));
@@ -52,14 +52,14 @@ public sealed class OriginalCaptureTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         using var first = new MemoryStream(bytes);
         using var second = new MemoryStream(bytes);
-        var a = await catalog.CaptureFileAsync(SourcePath("first.bin"), first, 100, Key());
-        var b = await catalog.CaptureFileAsync(SourcePath("second.bin"), second, 100, Key());
+        var a = await catalog.Originals.CaptureFileAsync(SourcePath("first.bin"), first, 100, Key());
+        var b = await catalog.Originals.CaptureFileAsync(SourcePath("second.bin"), second, 100, Key());
 
         Assert.NotEqual(a.SourceId, b.SourceId);
         Assert.NotEqual(a.ItemId, b.ItemId);
         Assert.Equal(a.Sha256, b.Sha256);
-        await catalog.VerifyOriginalAsync(a.ItemId);
-        await catalog.VerifyOriginalAsync(b.ItemId);
+        await catalog.Originals.VerifyAsync(a.ItemId);
+        await catalog.Originals.VerifyAsync(b.ItemId);
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(2L, Scalar(db, "SELECT COUNT(*) FROM sources"));
         Assert.Equal(2L, Scalar(db, "SELECT COUNT(*) FROM item_versions"));
@@ -75,7 +75,7 @@ public sealed class OriginalCaptureTests : IDisposable
         var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(async i =>
         {
             using var stream = new MemoryStream(bytes);
-            return await catalog.CaptureFileAsync(SourcePath($"concurrent-{i}.bin"),
+            return await catalog.Originals.CaptureFileAsync(SourcePath($"concurrent-{i}.bin"),
                 stream, bytes.Length, Key());
         }));
 
@@ -84,7 +84,7 @@ public sealed class OriginalCaptureTests : IDisposable
         Assert.Single(results.Select(x => x.Sha256).Distinct());
         foreach (var result in results)
         {
-            await catalog.VerifyOriginalAsync(result.ItemId);
+            await catalog.Originals.VerifyAsync(result.ItemId);
         }
 
         using var db = Connect(catalog.DatabasePath);
@@ -99,12 +99,12 @@ public sealed class OriginalCaptureTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var empty = new MemoryStream();
-        var result = await catalog.CaptureFileAsync(SourcePath("empty.md"), empty, 0, Key());
+        var result = await catalog.Originals.CaptureFileAsync(SourcePath("empty.md"), empty, 0, Key());
 
         Assert.Equal(0, result.Length);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData([])), result.Sha256);
         Assert.Equal(0, new FileInfo(ObjectPath(result.Sha256)).Length);
-        await catalog.VerifyOriginalAsync(result.ItemId);
+        await catalog.Originals.VerifyAsync(result.ItemId);
     }
 
     [Fact]
@@ -113,11 +113,11 @@ public sealed class OriginalCaptureTests : IDisposable
         var bytes = Enumerable.Range(0, 300_000).Select(i => (byte)i).ToArray();
         using var catalog = LocalCatalog.Open(root);
         using var input = new NonSeekableStream(bytes);
-        var result = await catalog.CaptureFileAsync(SourcePath("stream.bin"), input, bytes.Length, Key());
+        var result = await catalog.Originals.CaptureFileAsync(SourcePath("stream.bin"), input, bytes.Length, Key());
 
         Assert.Equal(bytes.Length, result.Length);
         Assert.True(input.LargestRead <= 64 * 1024);
-        await catalog.VerifyOriginalAsync(result.ItemId);
+        await catalog.Originals.VerifyAsync(result.ItemId);
         Assert.Equal(bytes, File.ReadAllBytes(ObjectPath(result.Sha256)));
     }
 
@@ -127,7 +127,7 @@ public sealed class OriginalCaptureTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         using var bytes = new MemoryStream(new byte[80_000]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.CaptureFileAsync(SourcePath("too-large.bin"), bytes, 1024, Key()));
+            catalog.Originals.CaptureFileAsync(SourcePath("too-large.bin"), bytes, 1024, Key()));
 
         Assert.Empty(Directory.GetFiles(Path.Combine(root, "staging")));
         using var db = Connect(catalog.DatabasePath);
@@ -146,7 +146,7 @@ public sealed class OriginalCaptureTests : IDisposable
         canceled.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            catalog.CaptureFileAsync(SourcePath("canceled.bin"), bytes, 100_000, Key(), canceled.Token));
+            catalog.Originals.CaptureFileAsync(SourcePath("canceled.bin"), bytes, 100_000, Key(), canceled.Token));
         Assert.Empty(Directory.GetFiles(Path.Combine(root, "staging")));
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Scalar(db, "SELECT COUNT(*) FROM sources"));
@@ -159,7 +159,7 @@ public sealed class OriginalCaptureTests : IDisposable
         using var failing = new FailingReadStream([1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<IOException>(() =>
-            catalog.CaptureFileAsync(SourcePath("broken.bin"), failing, 100, Key()));
+            catalog.Originals.CaptureFileAsync(SourcePath("broken.bin"), failing, 100, Key()));
         Assert.Empty(Directory.GetFiles(Path.Combine(root, "staging")));
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Scalar(db, "SELECT COUNT(*) FROM sources"));
@@ -172,16 +172,16 @@ public sealed class OriginalCaptureTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var original = new MemoryStream([1, 2, 3]);
-        var first = await catalog.CaptureFileAsync(SourcePath("same.bin"), original, 100, Key());
+        var first = await catalog.Originals.CaptureFileAsync(SourcePath("same.bin"), original, 100, Key());
         using var changed = new MemoryStream([4, 5, 6]);
-        var second = await catalog.CaptureFileAsync(SourcePath("same.bin"), changed, 100, Key());
+        var second = await catalog.Originals.CaptureFileAsync(SourcePath("same.bin"), changed, 100, Key());
 
         Assert.Equal(first.SourceId, second.SourceId);
         Assert.Equal(first.ItemId, second.ItemId);
         Assert.Equal(1, first.Revision);
         Assert.Equal(2, second.Revision);
         Assert.NotEqual(first.Sha256, second.Sha256);
-        await catalog.VerifyOriginalAsync(first.ItemId);
+        await catalog.Originals.VerifyAsync(first.ItemId);
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Scalar(db, "SELECT COUNT(*) FROM sources"));
         Assert.Equal(2L, Scalar(db, "SELECT COUNT(*) FROM item_versions"));
@@ -195,15 +195,15 @@ public sealed class OriginalCaptureTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var input = new MemoryStream([4, 5, 6, 7]);
-        var result = await catalog.CaptureFileAsync(SourcePath("good.bin"), input, 100, Key());
+        var result = await catalog.Originals.CaptureFileAsync(SourcePath("good.bin"), input, 100, Key());
         var path = ObjectPath(result.Sha256);
         File.WriteAllBytes(path, [9, 5, 6, 7]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.VerifyOriginalAsync(result.ItemId));
+            catalog.Originals.VerifyAsync(result.ItemId));
 
         using var duplicate = new MemoryStream([4, 5, 6, 7]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.CaptureFileAsync(SourcePath("new-source.bin"), duplicate, 100, Key()));
+            catalog.Originals.CaptureFileAsync(SourcePath("new-source.bin"), duplicate, 100, Key()));
         Assert.Equal(new byte[] { 9, 5, 6, 7 }, File.ReadAllBytes(path));
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Scalar(db, "SELECT COUNT(*) FROM sources"));
@@ -226,7 +226,7 @@ public sealed class OriginalCaptureTests : IDisposable
             Directory.CreateSymbolicLink(Path.Combine(root, "objects"), external);
             using var input = new MemoryStream([1, 2, 3]);
             await Assert.ThrowsAsync<InvalidDataException>(() =>
-                catalog.CaptureFileAsync(SourcePath("linked.bin"), input, 100, Key()));
+                catalog.Originals.CaptureFileAsync(SourcePath("linked.bin"), input, 100, Key()));
             Assert.Empty(Directory.EnumerateFileSystemEntries(external));
         }
         finally
@@ -241,12 +241,12 @@ public sealed class OriginalCaptureTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var input = new MemoryStream([1, 2]);
-        var result = await catalog.CaptureFileAsync(SourcePath("missing.bin"), input, 100, Key());
+        var result = await catalog.Originals.CaptureFileAsync(SourcePath("missing.bin"), input, 100, Key());
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>
-            catalog.VerifyOriginalAsync(Guid.NewGuid()));
+            catalog.Originals.VerifyAsync(Guid.NewGuid()));
         File.Delete(ObjectPath(result.Sha256));
         await Assert.ThrowsAsync<FileNotFoundException>(() =>
-            catalog.VerifyOriginalAsync(result.ItemId));
+            catalog.Originals.VerifyAsync(result.ItemId));
     }
 
     private static string Key() => Guid.NewGuid().ToString("N");

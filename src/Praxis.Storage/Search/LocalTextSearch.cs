@@ -7,9 +7,17 @@ public sealed record LocalSearchHit(
     Guid SourceId, Guid ItemId, int Revision, string Title,
     string SourceLocator, string OriginalSha256, string Snippet);
 
-public sealed partial class LocalCatalog
+/// <summary>
+/// Rebuildable FTS5 index over the latest verified text of active sources. Query-time joins
+/// re-check canonical visibility, so a stale index row cannot bypass revocation or supersession.
+/// </summary>
+public sealed class LocalTextSearch
 {
-    public IReadOnlyList<LocalSearchHit> SearchText(string query, int limit = 20)
+    private readonly CatalogDatabase database;
+
+    internal LocalTextSearch(CatalogDatabase database) => this.database = database;
+
+    public IReadOnlyList<LocalSearchHit> Query(string query, int limit = 20)
     {
         if (limit is < 1 or > 100)
         {
@@ -17,7 +25,7 @@ public sealed partial class LocalCatalog
         }
 
         var expression = BuildTextQuery(query);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
@@ -66,10 +74,10 @@ public sealed partial class LocalCatalog
             }
 
             return hits;
-        }
+        });
     }
 
-    public int RebuildTextSearchIndex(
+    public int Rebuild(
         int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
     {
         if (maxDocuments is < 1 or > 100_000)
@@ -82,7 +90,7 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(maxTextBytes));
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             using var count = connection.CreateCommand("""
@@ -136,7 +144,7 @@ public sealed partial class LocalCatalog
             populate.ExecuteNonQuery();
             transaction.Commit();
             return eligible;
-        }
+        });
     }
 
     private static string BuildTextQuery(string query)

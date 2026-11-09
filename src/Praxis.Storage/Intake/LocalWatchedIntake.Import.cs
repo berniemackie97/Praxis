@@ -30,7 +30,7 @@ public sealed partial class LocalWatchedIntake
                 return false;
             }
 
-            var latest = catalog.FindLatestFile(file.SourcePath);
+            var latest = catalog.Sources.FindLatestFile(file.SourcePath);
             if (latest?.Status == "revoked")
             {
                 throw new InvalidOperationException(
@@ -123,5 +123,5 @@ public sealed partial class LocalWatchedIntake
 
     private string MakeRequestKey(string path, int previousRevision, string digest) =>
         "watch-" + Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{catalog.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
+            Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{catalog.Sources.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
 }

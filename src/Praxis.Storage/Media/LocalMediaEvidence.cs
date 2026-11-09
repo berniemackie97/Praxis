@@ -1,5 +1,10 @@
 namespace Praxis.Storage;
 
+public sealed record LocalMediaInspection(
+    Guid SourceId, Guid ItemId, int Revision, string SourceSha256, long OriginalBytes,
+    string SourceExtension, string Outcome, string? ContainerFamily,
+    long? DurationMilliseconds, string? ReasonCode, string Producer);
+
 public sealed record LocalVideoCueHit(
     Guid CaptionSourceId, Guid CaptionItemId, int CaptionRevision, string CaptionSha256,
     int CaptionOffset, int CaptionLength, int CueNumber, long StartMilliseconds,
@@ -7,9 +12,80 @@ public sealed record LocalVideoCueHit(
     Guid VideoSourceId, Guid VideoItemId, int VideoRevision, string VideoSha256,
     string VideoLocator);
 
-public sealed partial class LocalCatalog
+/// <summary>
+/// Read-only evidence about captured media: verified header inspection and timecoded caption
+/// cues bound to an exact video digest. Neither grants playback or decodes frames.
+/// </summary>
+public sealed class LocalMediaEvidence
 {
-    public IReadOnlyList<LocalVideoCueHit> SearchVideoCues(string query, int limit = 20)
+    private readonly LocalSources sources;
+    private readonly LocalTextSearch search;
+    private readonly LocalTextDerivatives text;
+    private readonly OriginalFileStore objects;
+
+    internal LocalMediaEvidence(
+        LocalSources sources, LocalTextSearch search, LocalTextDerivatives text, OriginalFileStore objects)
+    {
+        this.sources = sources;
+        this.search = search;
+        this.text = text;
+        this.objects = objects;
+    }
+
+    public Task<LocalMediaInspection> InspectAsync(
+        Guid sourceId, CancellationToken cancellationToken = default) =>
+        InspectAsync(sourceId, expectedRevision: null, cancellationToken);
+
+    internal async Task<LocalMediaInspection> InspectAsync(
+        Guid sourceId, int? expectedRevision, CancellationToken cancellationToken)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("Select a captured media source.", nameof(sourceId));
+        }
+
+        var source = sources.CurrentFile(sourceId)
+            ?? throw new InvalidOperationException("The media source is no longer active.");
+        if (expectedRevision is { } revision && revision != source.Revision)
+        {
+            throw new InvalidOperationException("The selected media revision is no longer current.");
+        }
+
+        var fileExtension = Path.GetExtension(source.Locator).ToLowerInvariant();
+        if (fileExtension is not (".mp4" or ".mov" or ".m4v" or ".webm" or ".mkv"))
+        {
+            throw new ArgumentException("Media inspection requires a selected video original.",
+                nameof(sourceId));
+        }
+
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        byte[] header;
+        try
+        {
+            header = await objects.ReadVerifiedPrefixAsync(new OriginalObject(source.Digest, source.Length),
+                    64 * 1024, 512L * 1024 * 1024, deadline.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException("Media inspection exceeded its time budget.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (sources.CurrentFile(sourceId) != source)
+        {
+            throw new InvalidOperationException("The selected media source changed or was revoked.");
+        }
+
+        var (container, duration) = LocalMediaHeaderParser.Read(header, fileExtension);
+        return new LocalMediaInspection(
+            sourceId, source.ItemId, source.Revision, source.Digest, source.Length,
+            fileExtension, container is null ? "unsupported" : "header_recognized",
+            container, duration, container is null ? "unsupported_signature" : null,
+            LocalProcessors.MediaHeader);
+    }
+
+    public IReadOnlyList<LocalVideoCueHit> SearchCues(string query, int limit = 20)
     {
         if (limit is < 1 or > 100)
         {
@@ -25,7 +101,7 @@ public sealed partial class LocalCatalog
         }
 
         var results = new List<LocalVideoCueHit>();
-        foreach (var hit in SearchText(query, 40))
+        foreach (var hit in search.Query(query, 40))
         {
             var extension = Path.GetExtension(hit.SourceLocator).ToLowerInvariant();
             if (extension is not (".vtt" or ".srt"))
@@ -33,7 +109,7 @@ public sealed partial class LocalCatalog
                 continue;
             }
 
-            var derivative = ReadTextDerivative(hit.ItemId, hit.Revision);
+            var derivative = text.Read(hit.ItemId, hit.Revision);
             if (derivative?.Content is not { } content ||
                 derivative.SourceSha256 != hit.OriginalSha256 ||
                 derivative.SourceId != hit.SourceId)
@@ -65,8 +141,8 @@ public sealed partial class LocalCatalog
                 }
 
                 // Recheck current attribution after reading the derivative and pairing.
-                var current = FindLatestFile(hit.SourceLocator);
-                var currentVideo = FindLatestFile(video.Value.Locator);
+                var current = sources.FindLatestFile(hit.SourceLocator);
+                var currentVideo = sources.FindLatestFile(video.Value.Locator);
                 if (current is null || current.SourceId != hit.SourceId ||
                     current.Revision != hit.Revision || current.Sha256 != hit.OriginalSha256 ||
                     current.Status != "active" ||
@@ -79,7 +155,7 @@ public sealed partial class LocalCatalog
                     hit.SourceId, hit.ItemId, hit.Revision, hit.OriginalSha256,
                     cue.Offset, cue.Length, cue.Number,
                     cue.StartMilliseconds, cue.EndMilliseconds, cue.Text,
-                    "timed-caption-v1", currentVideo.SourceId, currentVideo.ItemId,
+                    LocalProcessors.TimedCaption, currentVideo.SourceId, currentVideo.ItemId,
                     currentVideo.Revision, currentVideo.Sha256, video.Value.Locator));
                 if (results.Count == limit)
                 {
@@ -112,7 +188,7 @@ public sealed partial class LocalCatalog
             return null;
         }
 
-        var video = FindLatestFile(locator);
+        var video = sources.FindLatestFile(locator);
         return video?.Status == "active" &&
             video.Sha256.Equals(expectedDigest, StringComparison.OrdinalIgnoreCase)
             ? (video, locator) : null;

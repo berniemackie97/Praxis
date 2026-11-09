@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 
 namespace Praxis.Storage;
@@ -9,12 +8,54 @@ public sealed record TextDerivative(
 
 internal sealed record LeasedTextSource(string SourceKind, string Locator, OriginalObject Original);
 
-public sealed partial class LocalCatalog
+/// <summary>
+/// Revision- and digest-bound text extracted from immutable originals. A result is committed
+/// atomically with its job's terminal state and is readable only while its source is active.
+/// </summary>
+public sealed class LocalTextDerivatives
 {
-    internal LeasedTextSource? ReadLeasedTextSource(ProcessingLease lease)
+    private readonly CatalogDatabase database;
+
+    internal LocalTextDerivatives(CatalogDatabase database) => this.database = database;
+
+    public TextDerivative? Read(Guid itemId, int revision)
     {
-        ValidateJobIdentity(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        lock (connection)
+        if (itemId == Guid.Empty || revision < 1)
+        {
+            throw new ArgumentException("A valid item and revision are required.");
+        }
+
+        return database.Execute(connection =>
+        {
+            using var command = connection.CreateCommand("""
+                SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
+                FROM text_derivatives d
+                JOIN processing_jobs j ON j.item_id = d.item_id
+                    AND j.revision = d.revision AND j.processor_key = d.processor_key
+                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                    AND v.digest = d.source_digest
+                JOIN items i ON i.item_id = d.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE d.item_id = $item AND d.revision = $revision
+                  AND d.processor_key = $processor AND s.status = 'active'
+                  AND j.state = d.outcome
+                """);
+            ProcessingJobKey.Bind(command, itemId, revision, LocalProcessors.SourceText);
+            using var reader = command.ExecuteReader();
+            return reader.Read()
+                ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,
+                    LocalProcessors.SourceText, reader.GetString(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    CatalogValues.ParseTimestamp(reader.GetString(5)))
+                : null;
+        });
+    }
+
+    internal LeasedTextSource? ReadLeasedSource(ProcessingLease lease)
+    {
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 SELECT s.source_kind, s.locator, v.digest, o.byte_length
@@ -28,21 +69,19 @@ public sealed partial class LocalCatalog
                   AND j.lease_key = $lease AND j.lease_until_utc > $now
                   AND s.status = 'active'
                 """);
-            BindJob(command, lease.ItemId, lease.Revision, lease.ProcessorKey);
-            command.Parameters.AddWithValue("$lease", lease.LeaseKey.ToString("D"));
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            ProcessingJobKey.BindLease(command, lease);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             using var reader = command.ExecuteReader();
             return reader.Read()
                 ? new LeasedTextSource(reader.GetString(0), reader.GetString(1),
                     new OriginalObject(reader.GetString(2), reader.GetInt64(3)))
                 : null;
-        }
+        });
     }
 
-    internal bool CommitTextResult(
-        ProcessingLease lease, string? content, string? reasonCode)
+    internal bool CommitResult(ProcessingLease lease, string? content, string? reasonCode)
     {
-        ValidateJobIdentity(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         if ((content is null) == (reasonCode is null))
         {
             throw new ArgumentException("Provide either extracted text or an unsupported reason.");
@@ -60,8 +99,8 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("Use a bounded unsupported reason code.", nameof(reasonCode));
         }
 
-        var now = Timestamp(DateTimeOffset.UtcNow);
-        lock (connection)
+        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             using var source = connection.CreateCommand("""
@@ -76,8 +115,7 @@ public sealed partial class LocalCatalog
                   AND s.status = 'active'
                 """);
             source.Transaction = transaction;
-            BindJob(source, lease.ItemId, lease.Revision, lease.ProcessorKey);
-            source.Parameters.AddWithValue("$lease", lease.LeaseKey.ToString("D"));
+            ProcessingJobKey.BindLease(source, lease);
             source.Parameters.AddWithValue("$now", now);
             if (source.ExecuteScalar() is not string sourceDigest)
             {
@@ -93,7 +131,7 @@ public sealed partial class LocalCatalog
                         $outcome, $content, $reason, $now)
                 """);
             insert.Transaction = transaction;
-            BindJob(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
+            ProcessingJobKey.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
             insert.Parameters.AddWithValue("$digest", sourceDigest);
             insert.Parameters.AddWithValue("$outcome", outcome);
             insert.Parameters.AddWithValue("$content", (object?)content ?? DBNull.Value);
@@ -110,10 +148,9 @@ public sealed partial class LocalCatalog
                   AND lease_key = $lease AND lease_until_utc > $now
                 """);
             finish.Transaction = transaction;
-            BindJob(finish, lease.ItemId, lease.Revision, lease.ProcessorKey);
+            ProcessingJobKey.BindLease(finish, lease);
             finish.Parameters.AddWithValue("$outcome", outcome);
             finish.Parameters.AddWithValue("$now", now);
-            finish.Parameters.AddWithValue("$lease", lease.LeaseKey.ToString("D"));
             if (finish.ExecuteNonQuery() != 1)
             {
                 throw new InvalidOperationException("The processing result lost its lease.");
@@ -121,13 +158,14 @@ public sealed partial class LocalCatalog
 
             transaction.Commit();
             return true;
-        }
+        });
     }
 
-
-    // Revise only active, current sources previously classified as unsupported solely
-    // because their file extension had no text decoder. Other outcomes remain immutable.
-    internal bool RequeueNewlySupportedText(IReadOnlyList<string> extensions)
+    /// <summary>
+    /// Reopens one active, current source previously classified unsupported only because its
+    /// extension had no decoder. Every other recorded outcome remains immutable.
+    /// </summary>
+    internal bool RequeueNewlySupported(IReadOnlyList<string> extensions)
     {
         if (extensions.Count == 0)
         {
@@ -136,7 +174,7 @@ public sealed partial class LocalCatalog
 
         var suffixMatch = string.Join(" OR ", Enumerable.Range(0, extensions.Count)
             .Select(index => $"substr(lower(s.locator), -length($extension{index})) = $extension{index}"));
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             using var find = connection.CreateCommand($"""
@@ -200,7 +238,7 @@ public sealed partial class LocalCatalog
             requeue.Transaction = transaction;
             requeue.Parameters.AddWithValue("$item", item);
             requeue.Parameters.AddWithValue("$revision", revision);
-            requeue.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            requeue.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             if (requeue.ExecuteNonQuery() != 1)
             {
                 throw new InvalidOperationException("The unsupported processing job changed.");
@@ -208,43 +246,6 @@ public sealed partial class LocalCatalog
 
             transaction.Commit();
             return true;
-        }
-    }
-
-    public TextDerivative? ReadTextDerivative(Guid itemId, int revision)
-    {
-        if (itemId == Guid.Empty || revision < 1)
-        {
-            throw new ArgumentException("A valid item and revision are required.");
-        }
-
-        lock (connection)
-        {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
-                FROM text_derivatives d
-                JOIN processing_jobs j ON j.item_id = d.item_id
-                    AND j.revision = d.revision AND j.processor_key = d.processor_key
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = d.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE d.item_id = $item AND d.revision = $revision
-                  AND d.processor_key = $processor AND s.status = 'active'
-                  AND j.state = d.outcome
-                """);
-            command.Parameters.AddWithValue("$item", itemId.ToString("D"));
-            command.Parameters.AddWithValue("$revision", revision);
-            command.Parameters.AddWithValue("$processor", DefaultProcessorKey);
-            using var reader = command.ExecuteReader();
-            return reader.Read()
-                ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,
-                    DefaultProcessorKey, reader.GetString(1), reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4),
-                    DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind))
-                : null;
-        }
+        });
     }
 }

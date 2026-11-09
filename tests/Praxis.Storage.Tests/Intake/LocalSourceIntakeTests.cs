@@ -37,15 +37,15 @@ public sealed class LocalSourceIntakeTests : IDisposable
         var first = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
         Assert.Equal(2, first.Count);
         Assert.Equal(new[] { note, binary }, first.Select(x => x.SourcePath));
-        Assert.Equal(2, catalog.ListProcessingJobs().Count);
+        Assert.Equal(2, catalog.Processing.List().Count);
         foreach (var item in first)
         {
-            await catalog.VerifyOriginalAsync(item.Original.ItemId);
+            await catalog.Originals.VerifyAsync(item.Original.ItemId);
         }
 
         var replay = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
         Assert.Equal(first, replay);
-        Assert.Equal(2, catalog.ListProcessingJobs().Count);
+        Assert.Equal(2, catalog.Processing.List().Count);
         File.WriteAllText(note, "idea two");
         var changed = await intake.ImportFolderAsync(selected, "batch-two", 10, 3, 100, 1000);
         var before = first.Single(x => x.SourcePath == note).Original;
@@ -53,7 +53,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(2, after.Revision);
-        Assert.Equal(3, catalog.ListProcessingJobs().Count);
+        Assert.Equal(3, catalog.Processing.List().Count);
         Assert.Equal(1, changed.Single(x => x.SourcePath == binary).Original.Revision);
         Assert.Equal(new byte[] { 0, 1, 2, 255 },
             ReadObject(dataRoot, first.Single(x => x.SourcePath == binary).Original.Sha256));
@@ -71,12 +71,12 @@ public sealed class LocalSourceIntakeTests : IDisposable
         {
             first = await new LocalSourceIntake(catalog)
                 .ImportFileAsync(file, 3, "owner-file-one");
-            Assert.Single(catalog.ListProcessingJobs());
+            Assert.Single(catalog.Processing.List());
         }
 
         File.Delete(file);
         using var reopened = LocalCatalog.Open(dataRoot);
-        await reopened.VerifyOriginalAsync(first.ItemId);
+        await reopened.Originals.VerifyAsync(first.ItemId);
         Assert.Equal(new byte[] { 5, 6, 7 }, ReadObject(dataRoot, first.Sha256));
     }
 
@@ -91,10 +91,10 @@ public sealed class LocalSourceIntakeTests : IDisposable
         var intake = new LocalSourceIntake(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 1, 10, 4));
-        Assert.Empty(catalog.ListProcessingJobs());
+        Assert.Empty(catalog.Processing.List());
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 1, 1, 10, 10));
-        Assert.Empty(catalog.ListProcessingJobs());
+        Assert.Empty(catalog.Processing.List());
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Count(db, "ingest_requests"));
     }
@@ -111,7 +111,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
             intake.ImportFolderAsync(dataRoot, "batch", 10, 2, 10, 100));
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 0, 10, 100));
-        Assert.Empty(catalog.ListProcessingJobs());
+        Assert.Empty(catalog.Processing.List());
         await Assert.ThrowsAsync<ArgumentException>(() =>
             intake.ImportFileAsync("relative/file.txt", 10, "request"));
     }
@@ -133,7 +133,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         var intake = new LocalSourceIntake(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 1, 100, 1000));
-        Assert.Empty(catalog.ListProcessingJobs());
+        Assert.Empty(catalog.Processing.List());
         Assert.Equal("private", File.ReadAllText(outside));
     }
 
@@ -150,7 +150,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFileAsync(file, 1, "file-request"));
 
-        Assert.Single(catalog.ListProcessingJobs());
+        Assert.Single(catalog.Processing.List());
         Assert.Equal(new byte[] { 1, 2, 3, 4 }, ReadObject(dataRoot, original.Sha256));
         Assert.Equal(original, await intake.ImportFileAsync(file, 4, "file-request"));
     }
@@ -175,7 +175,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "folder-request", 2, 0, 4, 2));
 
-        Assert.Equal(2, catalog.ListProcessingJobs().Count);
+        Assert.Equal(2, catalog.Processing.List().Count);
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(2L, Count(db, "ingest_requests"));
         Assert.Equal(original, await intake.ImportFolderAsync(
@@ -217,8 +217,8 @@ public sealed class LocalSourceIntakeTests : IDisposable
                 captured.Sha256[..2], captured.Sha256[2..4], captured.Sha256),
                 10, "nested-linked-file"));
 
-        Assert.Single(catalog.ListProcessingJobs());
-        await catalog.VerifyOriginalAsync(captured.ItemId);
+        Assert.Single(catalog.Processing.List());
+        await catalog.Originals.VerifyAsync(captured.ItemId);
     }
 
     [Fact]
@@ -236,7 +236,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
             intake.ImportFileAsync(file, 10, "canceled", canceled.Token));
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Count(db, "ingest_requests"));
-        Assert.Empty(catalog.ListProcessingJobs());
+        Assert.Empty(catalog.Processing.List());
     }
 
     private static byte[] ReadObject(string root, string digest) =>

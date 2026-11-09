@@ -67,7 +67,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         cancellationToken.ThrowIfCancellationRequested();
         await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
             FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var accepted = await catalog.CaptureFileAsync(path, input, maxBytes, requestKey,
+        var accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey,
             cancellationToken);
         if (accepted.Length > maxBytes)
         {
@@ -148,7 +148,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         }
 
         var full = Path.GetFullPath(sourcePath);
-        var dataRoot = CatalogPaths.ResolveExisting(Path.GetDirectoryName(catalog.DatabasePath)!);
+        var dataRoot = CatalogPaths.ResolveExisting(catalog.DataDirectory);
         if (CatalogPaths.Contains(dataRoot, CatalogPaths.ResolveExisting(full)))
         {
             throw new InvalidOperationException("The data store cannot be imported as a source.");

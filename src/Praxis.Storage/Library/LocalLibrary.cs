@@ -1,42 +1,18 @@
 namespace Praxis.Storage;
 
-public sealed record LocalFileVersion(
-    Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
-
 public sealed record LocalLibraryItem(
     Guid SourceId, Guid ItemId, string SourceKind, string SourceLocator,
     string SourceStatus, int Revision, string Sha256, long OriginalBytes,
     string? ProcessingState, string? ExtractionOutcome);
 
-public sealed partial class LocalCatalog
+/// <summary>Read model of the latest revision of each item with its text-processing state.</summary>
+public sealed class LocalLibrary
 {
-    public LocalFileVersion? FindLatestFile(string path)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (!Path.IsPathFullyQualified(path))
-        {
-            throw new ArgumentException("The source path must be absolute.", nameof(path));
-        }
+    private readonly CatalogDatabase database;
 
-        lock (connection)
-        {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_id, i.item_id, v.revision, v.digest, s.status
-                FROM sources s
-                JOIN items i ON i.source_id = s.source_id
-                JOIN item_versions v ON v.item_id = i.item_id
-                WHERE s.source_kind = 'file' AND s.locator = $path
-                ORDER BY v.revision DESC LIMIT 1
-                """);
-            command.Parameters.AddWithValue("$path", Path.GetFullPath(path));
-            using var reader = command.ExecuteReader();
-            return !reader.Read() ? null : new LocalFileVersion(
-                Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
-                reader.GetInt32(2), reader.GetString(3), reader.GetString(4));
-        }
-    }
+    internal LocalLibrary(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<LocalLibraryItem> ListLibrary(
+    public IReadOnlyList<LocalLibraryItem> List(
         int limit = 100, int offset = 0, Guid? collectionId = null)
     {
         if (limit is < 1 or > 200 || offset < 0)
@@ -50,7 +26,7 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("A nonempty collection identifier is required.", nameof(collectionId));
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
@@ -98,6 +74,6 @@ public sealed partial class LocalCatalog
             }
 
             return result;
-        }
+        });
     }
 }

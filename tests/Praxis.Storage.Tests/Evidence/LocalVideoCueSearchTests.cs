@@ -37,7 +37,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         var processor = new LocalTextProcessor(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        var cue = Assert.Single(catalog.SearchVideoCues("violet"));
+        var cue = Assert.Single(catalog.Media.SearchCues("violet"));
         Assert.Equal(5_000L, cue.StartMilliseconds);
         Assert.Equal(8_000L, cue.EndMilliseconds);
         Assert.Equal("Use a violet soldering jig.", cue.CaptionText);
@@ -47,9 +47,9 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         Assert.Equal(media.ItemId, cue.VideoItemId);
         Assert.Equal(media.Sha256, cue.VideoSha256);
         Assert.Equal(caption.Substring(cue.CaptionOffset, cue.CaptionLength), cue.CaptionText);
-        Assert.Empty(catalog.SearchVideoCues("violet unplug"));
-        Assert.Single(catalog.SearchText("violet"));
-        await catalog.VerifyOriginalAsync(media.ItemId);
+        Assert.Empty(catalog.Media.SearchCues("violet unplug"));
+        Assert.Single(catalog.Search.Query("violet"));
+        await catalog.Originals.VerifyAsync(media.ItemId);
     }
 
     [Fact]
@@ -63,23 +63,23 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         var processor = new LocalTextProcessor(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        Assert.Single(catalog.SearchVideoCues("Violet"));
+        Assert.Single(catalog.Media.SearchCues("Violet"));
 
         var replacement = await Capture(catalog, "tutorial.mp4", "video-v2", "video-v2");
         Assert.Equal(2, replacement.Revision);
-        Assert.Empty(catalog.SearchVideoCues("Violet"));
+        Assert.Empty(catalog.Media.SearchCues("Violet"));
 
         var newCues = await Capture(catalog,
             "tutorial.mp4." + replacement.Sha256 + ".vtt", caption, "new-captions");
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.Equal(newCues.SourceId,
-            Assert.Single(catalog.SearchVideoCues("Violet")).CaptionSourceId);
+            Assert.Single(catalog.Media.SearchCues("Violet")).CaptionSourceId);
 
-        Assert.True(catalog.RevokeSource(replacement.SourceId));
-        Assert.Empty(catalog.SearchVideoCues("Violet"));
-        Assert.True(catalog.RevokeSource(cues.SourceId));
-        await catalog.VerifyOriginalAsync(video.ItemId);
+        Assert.True(catalog.Sources.Revoke(replacement.SourceId));
+        Assert.Empty(catalog.Media.SearchCues("Violet"));
+        Assert.True(catalog.Sources.Revoke(cues.SourceId));
+        await catalog.Originals.VerifyAsync(video.ItemId);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        Assert.Empty(catalog.SearchVideoCues("Violet"));
+        Assert.Empty(catalog.Media.SearchCues("Violet"));
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     {
         var bytes = Encoding.UTF8.GetBytes(contents);
         using var source = new MemoryStream(bytes);
-        return await catalog.CaptureFileAsync(
+        return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, "incoming", filename), source,
             bytes.Length + 1, requestKey);
     }

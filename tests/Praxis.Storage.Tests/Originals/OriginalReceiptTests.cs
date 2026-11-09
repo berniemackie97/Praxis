@@ -27,13 +27,13 @@ public sealed class OriginalReceiptTests : IDisposable
         using (var catalog = LocalCatalog.Open(root))
         {
             using var initial = new MemoryStream([1, 2, 3]);
-            first = await catalog.CaptureFileAsync(Source("note.md"), initial, 10, key);
+            first = await catalog.Originals.CaptureFileAsync(Source("note.md"), initial, 10, key);
             Assert.Equal(1, first.Revision);
         }
 
         using var reopened = LocalCatalog.Open(root);
         using var neverRead = new ThrowOnReadStream();
-        var retry = await reopened.CaptureFileAsync(Source("note.md"), neverRead, 10, key);
+        var retry = await reopened.Originals.CaptureFileAsync(Source("note.md"), neverRead, 10, key);
         Assert.Equal(first, retry);
         Assert.False(neverRead.WasRead);
         using var db = Connect(reopened.DatabasePath);
@@ -47,9 +47,9 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var initial = new MemoryStream([10, 20]);
-        var first = await catalog.CaptureFileAsync(Source("versioned.md"), initial, 10, "first");
+        var first = await catalog.Originals.CaptureFileAsync(Source("versioned.md"), initial, 10, "first");
         using var changed = new MemoryStream([30, 40]);
-        var next = await catalog.CaptureFileAsync(Source("versioned.md"), changed, 10, "second");
+        var next = await catalog.Originals.CaptureFileAsync(Source("versioned.md"), changed, 10, "second");
 
         Assert.Equal(first.SourceId, next.SourceId);
         Assert.Equal(first.ItemId, next.ItemId);
@@ -58,10 +58,10 @@ public sealed class OriginalReceiptTests : IDisposable
         Assert.NotEqual(first.Sha256, next.Sha256);
 
         using var retryInput = new ThrowOnReadStream();
-        var replay = await catalog.CaptureFileAsync(Source("versioned.md"), retryInput, 10, "first");
+        var replay = await catalog.Originals.CaptureFileAsync(Source("versioned.md"), retryInput, 10, "first");
         Assert.Equal(first, replay);
         Assert.False(retryInput.WasRead);
-        await catalog.VerifyOriginalAsync(first.ItemId);
+        await catalog.Originals.VerifyAsync(first.ItemId);
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(2L, Count(db, "item_versions"));
         Assert.Equal(2L, Count(db, "ingest_requests"));
@@ -73,9 +73,9 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var firstInput = new MemoryStream([1, 2, 3]);
-        var first = await catalog.CaptureFileAsync(Source("same.md"), firstInput, 10, "a");
+        var first = await catalog.Originals.CaptureFileAsync(Source("same.md"), firstInput, 10, "a");
         using var secondInput = new MemoryStream([1, 2, 3]);
-        var second = await catalog.CaptureFileAsync(Source("same.md"), secondInput, 10, "b");
+        var second = await catalog.Originals.CaptureFileAsync(Source("same.md"), secondInput, 10, "b");
         Assert.Equal(first, second);
 
         using var db = Connect(catalog.DatabasePath);
@@ -88,11 +88,11 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var a = new MemoryStream([1]);
-        var first = await catalog.CaptureFileAsync(Source("history.md"), a, 10, "a");
+        var first = await catalog.Originals.CaptureFileAsync(Source("history.md"), a, 10, "a");
         using var b = new MemoryStream([2]);
-        await catalog.CaptureFileAsync(Source("history.md"), b, 10, "b");
+        await catalog.Originals.CaptureFileAsync(Source("history.md"), b, 10, "b");
         using var again = new MemoryStream([1]);
-        var third = await catalog.CaptureFileAsync(Source("history.md"), again, 10, "c");
+        var third = await catalog.Originals.CaptureFileAsync(Source("history.md"), again, 10, "c");
 
         Assert.Equal(first.ItemId, third.ItemId);
         Assert.Equal(first.Sha256, third.Sha256);
@@ -109,9 +109,9 @@ public sealed class OriginalReceiptTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         using var oversized = new MemoryStream(new byte[8]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.CaptureFileAsync(Source("retry.md"), oversized, 4, "attempt"));
+            catalog.Originals.CaptureFileAsync(Source("retry.md"), oversized, 4, "attempt"));
         using var retry = new MemoryStream([1, 2, 3]);
-        var captured = await catalog.CaptureFileAsync(Source("retry.md"), retry, 4, "attempt");
+        var captured = await catalog.Originals.CaptureFileAsync(Source("retry.md"), retry, 4, "attempt");
         Assert.Equal(1, captured.Revision);
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(1L, Count(db, "ingest_requests"));
@@ -122,10 +122,10 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var input = new MemoryStream([1]);
-        await catalog.CaptureFileAsync(Source("one.md"), input, 10, "bound-key");
+        await catalog.Originals.CaptureFileAsync(Source("one.md"), input, 10, "bound-key");
         using var other = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            catalog.CaptureFileAsync(Source("two.md"), other, 10, "bound-key"));
+            catalog.Originals.CaptureFileAsync(Source("two.md"), other, 10, "bound-key"));
         Assert.False(other.WasRead);
     }
 
@@ -136,7 +136,7 @@ public sealed class OriginalReceiptTests : IDisposable
         var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(async _ =>
         {
             using var input = new MemoryStream(new byte[100_000]);
-            return await catalog.CaptureFileAsync(Source("parallel.bin"), input, 100_000, "shared-key");
+            return await catalog.Originals.CaptureFileAsync(Source("parallel.bin"), input, 100_000, "shared-key");
         }));
         Assert.All(results, x => Assert.Equal(results[0], x));
         using var db = Connect(catalog.DatabasePath);
@@ -153,7 +153,7 @@ public sealed class OriginalReceiptTests : IDisposable
         async Task<CapturedOriginal> Capture(byte value)
         {
             using var input = new GatedReadStream(Enumerable.Repeat(value, 80_000).ToArray(), gate);
-            return await catalog.CaptureFileAsync(Source("parallel.md"), input, 80_000, "key");
+            return await catalog.Originals.CaptureFileAsync(Source("parallel.md"), input, 80_000, "key");
         }
 
         var tasks = new[] { Capture(1), Capture(2) };
@@ -178,7 +178,7 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var input = new MemoryStream([3]);
-        await catalog.CaptureFileAsync(Source("removed.md"), input, 10, "first");
+        await catalog.Originals.CaptureFileAsync(Source("removed.md"), input, 10, "first");
         using (var db = Connect(catalog.DatabasePath))
         {
             using var command = db.CreateCommand();
@@ -188,10 +188,10 @@ public sealed class OriginalReceiptTests : IDisposable
 
         using var fresh = new MemoryStream([4]);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            catalog.CaptureFileAsync(Source("removed.md"), fresh, 10, "next"));
+            catalog.Originals.CaptureFileAsync(Source("removed.md"), fresh, 10, "next"));
         using var replay = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            catalog.CaptureFileAsync(Source("removed.md"), replay, 10, "first"));
+            catalog.Originals.CaptureFileAsync(Source("removed.md"), replay, 10, "first"));
         Assert.False(replay.WasRead);
     }
 
@@ -203,10 +203,10 @@ public sealed class OriginalReceiptTests : IDisposable
         canceled.Cancel();
         using var input = new MemoryStream([1, 2, 3]);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            catalog.CaptureFileAsync(Source("canceled.md"), input, 10, "canceled", canceled.Token));
+            catalog.Originals.CaptureFileAsync(Source("canceled.md"), input, 10, "canceled", canceled.Token));
         using var oversized = new MemoryStream(new byte[5]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.CaptureFileAsync(Source("oversized.md"), oversized, 1, "oversized"));
+            catalog.Originals.CaptureFileAsync(Source("oversized.md"), oversized, 1, "oversized"));
         using var db = Connect(catalog.DatabasePath);
         Assert.Equal(0L, Count(db, "sources"));
         Assert.Equal(0L, Count(db, "ingest_requests"));
@@ -217,15 +217,15 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         using var firstInput = new MemoryStream([1]);
-        var first = await catalog.CaptureFileAsync(Source("history.md"), firstInput, 10, "first");
+        var first = await catalog.Originals.CaptureFileAsync(Source("history.md"), firstInput, 10, "first");
         using var secondInput = new MemoryStream([2]);
-        await catalog.CaptureFileAsync(Source("history.md"), secondInput, 10, "second");
+        await catalog.Originals.CaptureFileAsync(Source("history.md"), secondInput, 10, "second");
 
         File.WriteAllBytes(Path.Combine(root, "objects", first.Sha256[..2],
             first.Sha256[2..4], first.Sha256), [9]);
         using var replay = new ThrowOnReadStream();
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.CaptureFileAsync(Source("history.md"), replay, 10, "first"));
+            catalog.Originals.CaptureFileAsync(Source("history.md"), replay, 10, "first"));
     }
 
     private string Source(string file) => Path.Combine(root, "submitted", file);

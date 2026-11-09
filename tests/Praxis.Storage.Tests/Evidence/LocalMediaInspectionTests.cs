@@ -33,7 +33,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using (var catalog = LocalCatalog.Open(dataRoot))
         {
             original = await Capture(catalog, "tutorial.mp4", contents, "video");
-            var inspected = await catalog.InspectMediaAsync(original.SourceId);
+            var inspected = await catalog.Media.InspectAsync(original.SourceId);
             Assert.Equal("header_recognized", inspected.Outcome);
             Assert.Equal("iso-bmff", inspected.ContainerFamily);
             Assert.Equal(12_000L, inspected.DurationMilliseconds);
@@ -44,11 +44,11 @@ public sealed class LocalMediaInspectionTests : IDisposable
             Assert.Equal(original.Revision, inspected.Revision);
             Assert.Equal(original.Sha256, inspected.SourceSha256);
             Assert.Null(inspected.ReasonCode);
-            await catalog.VerifyOriginalAsync(original.ItemId);
+            await catalog.Originals.VerifyAsync(original.ItemId);
         }
 
         using var reopened = LocalCatalog.Open(dataRoot);
-        var repeated = await reopened.InspectMediaAsync(original.SourceId);
+        var repeated = await reopened.Media.InspectAsync(original.SourceId);
         Assert.Equal(original.Sha256, repeated.SourceSha256);
         Assert.Equal(12_000L, repeated.DurationMilliseconds);
     }
@@ -59,7 +59,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         var fakeVideo = await Capture(catalog, "fake.mp4",
             Encoding.UTF8.GetBytes("not an mp4 video"), "fake");
-        var unsupported = await catalog.InspectMediaAsync(fakeVideo.SourceId);
+        var unsupported = await catalog.Media.InspectAsync(fakeVideo.SourceId);
         Assert.Equal("unsupported", unsupported.Outcome);
         Assert.Null(unsupported.ContainerFamily);
         Assert.Null(unsupported.DurationMilliseconds);
@@ -69,7 +69,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         var ebml = await Capture(catalog, "source.webm",
             [0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84,
                 0x77, 0x65, 0x62, 0x6d], "ebml");
-        var recognized = await catalog.InspectMediaAsync(ebml.SourceId);
+        var recognized = await catalog.Media.InspectAsync(ebml.SourceId);
         Assert.Equal("header_recognized", recognized.Outcome);
         Assert.Equal("ebml", recognized.ContainerFamily);
         Assert.Null(recognized.DurationMilliseconds);
@@ -77,15 +77,15 @@ public sealed class LocalMediaInspectionTests : IDisposable
         var invalidEbml = await Capture(catalog, "false.webm",
             [0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x00], "false-ebml");
         Assert.Equal("unsupported",
-            (await catalog.InspectMediaAsync(invalidEbml.SourceId)).Outcome);
+            (await catalog.Media.InspectAsync(invalidEbml.SourceId)).Outcome);
 
         var mismatched = await Capture(catalog, "forged.webm", FastStartMovie(), "mismatch");
-        Assert.Equal("unsupported", (await catalog.InspectMediaAsync(
+        Assert.Equal("unsupported", (await catalog.Media.InspectAsync(
             mismatched.SourceId)).Outcome);
 
         var text = await Capture(catalog, "not-video.txt", FastStartMovie(), "text");
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await catalog.InspectMediaAsync(text.SourceId));
+            await catalog.Media.InspectAsync(text.SourceId));
     }
 
     [Fact]
@@ -93,27 +93,27 @@ public sealed class LocalMediaInspectionTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(dataRoot);
         var original = await Capture(catalog, "changed.mp4", FastStartMovie(), "original");
-        var first = await catalog.InspectMediaAsync(original.SourceId);
+        var first = await catalog.Media.InspectAsync(original.SourceId);
         var changed = await Capture(catalog, "changed.mp4",
             Encoding.ASCII.GetBytes("no longer valid media"), "changed");
         Assert.Equal(original.ItemId, changed.ItemId);
         Assert.Equal(original.Revision + 1, changed.Revision);
-        var latest = await catalog.InspectMediaAsync(original.SourceId);
+        var latest = await catalog.Media.InspectAsync(original.SourceId);
         Assert.Equal(changed.Sha256, latest.SourceSha256);
         Assert.Equal(changed.Revision, latest.Revision);
         Assert.Equal("unsupported", latest.Outcome);
         Assert.NotEqual(first.SourceSha256, latest.SourceSha256);
 
-        Assert.True(catalog.RevokeSource(original.SourceId));
+        Assert.True(catalog.Sources.Revoke(original.SourceId));
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await catalog.InspectMediaAsync(original.SourceId));
+            await catalog.Media.InspectAsync(original.SourceId));
 
         var corrupt = await Capture(catalog, "damaged.mp4", FastStartMovie(), "corrupt");
         var objectPath = Path.Combine(dataRoot, "objects", corrupt.Sha256[..2],
             corrupt.Sha256[2..4], corrupt.Sha256);
         File.WriteAllBytes(objectPath, Encoding.ASCII.GetBytes("tampered"));
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await catalog.InspectMediaAsync(corrupt.SourceId));
+            await catalog.Media.InspectAsync(corrupt.SourceId));
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
             Assert.False(badId.RootElement.GetProperty("ok").GetBoolean());
         }
 
-        Assert.True(catalog.RevokeSource(video.SourceId));
+        Assert.True(catalog.Sources.Revoke(video.SourceId));
         using var denied = JsonDocument.Parse(await protocol.HandleAsync($$"""
             {"requestId":"revoked","action":"mediaInspection","sourceId":"{{video.SourceId:D}}"}
             """));
@@ -187,7 +187,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            catalog.InspectMediaAsync(video.SourceId, cancelled.Token));
+            catalog.Media.InspectAsync(video.SourceId, cancelled.Token));
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
                 new OriginalObject(video.Sha256, bytes.Length), 64,
                 bytes.Length - 1, CancellationToken.None));
 
-        var first = await catalog.InspectMediaAsync(video.SourceId);
+        var first = await catalog.Media.InspectAsync(video.SourceId);
         Assert.Equal("header_recognized", first.Outcome);
         Assert.Equal(12_000L, first.DurationMilliseconds);
 
@@ -212,7 +212,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         bytes[66_000] ^= 0xff;
         File.WriteAllBytes(objectPath, bytes);
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await catalog.InspectMediaAsync(video.SourceId));
+            await catalog.Media.InspectAsync(video.SourceId));
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         LocalCatalog catalog, string filename, byte[] content, string requestKey)
     {
         using var source = new MemoryStream(content);
-        return await catalog.CaptureFileAsync(
+        return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, "incoming", filename), source,
             content.Length + 1, requestKey);
     }

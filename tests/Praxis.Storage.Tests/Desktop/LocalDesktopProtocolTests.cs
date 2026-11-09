@@ -36,7 +36,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal(2, library.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
 
-        var text = Assert.Single(catalog.ListLibrary(), item =>
+        var text = Assert.Single(catalog.Library.List(), item =>
             item.SourceLocator.EndsWith("memory.md", StringComparison.Ordinal));
         using var search = await Send(protocol,
             """{"requestId":"two","action":"search","query":"violet"}""");
@@ -54,15 +54,15 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             .GetProperty("verified").GetBoolean());
 
         using var unsupported = await Send(protocol,
-            $$"""{"requestId":"five","action":"preview","itemId":"{{Assert.Single(catalog.ListLibrary(), item => item.SourceLocator.EndsWith("unknown.bin", StringComparison.Ordinal)).ItemId:D}}","revision":1}""");
+            $$"""{"requestId":"five","action":"preview","itemId":"{{Assert.Single(catalog.Library.List(), item => item.SourceLocator.EndsWith("unknown.bin", StringComparison.Ordinal)).ItemId:D}}","revision":1}""");
         Assert.Equal("unsupported", unsupported.RootElement.GetProperty("data")
             .GetProperty("outcome").GetString());
 
         using var removed = await Send(protocol,
             $$"""{"requestId":"six","action":"revoke","sourceId":"{{text.SourceId:D}}"}""");
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("revoked").GetBoolean());
-        Assert.Empty(catalog.SearchText("violet"));
-        await catalog.VerifyOriginalAsync(text.ItemId);
+        Assert.Empty(catalog.Search.Query("violet"));
+        await catalog.Originals.VerifyAsync(text.ItemId);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         using var catalog = LocalCatalog.Open(root);
         using var original = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
-        var saved = await catalog.CaptureFileAsync(
+        var saved = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "source.txt"), original, 100, "source");
         var protocol = new LocalDesktopProtocol(catalog);
 
@@ -114,7 +114,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             $$"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(0, empty.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
-        await catalog.VerifyOriginalAsync(saved.ItemId);
+        await catalog.Originals.VerifyAsync(saved.ItemId);
     }
 
     [Fact]
@@ -146,15 +146,15 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var filename = saved.RootElement.GetProperty("data")
             .GetProperty("capture").GetProperty("sourcePath").GetString();
         Assert.Equal("# Inbox Thought\n\nA violet first thought.", File.ReadAllText(filename!));
-        Assert.Equal(itemId, Assert.Single(catalog.ListLibrary()).ItemId.ToString("D"));
+        Assert.Equal(itemId, Assert.Single(catalog.Library.List()).ItemId.ToString("D"));
 
         using var retried = await Send(service, payload);
         Assert.Equal(itemId, retried.RootElement.GetProperty("data")
             .GetProperty("capture").GetProperty("original")
             .GetProperty("itemId").GetString());
-        Assert.Single(catalog.ListLibrary());
+        Assert.Single(catalog.Library.List());
         Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.Equal(originalDigest, Assert.Single(catalog.SearchText("violet")).OriginalSha256);
+        Assert.Equal(originalDigest, Assert.Single(catalog.Search.Query("violet")).OriginalSha256);
 
         using var mismatch = await Send(service,
             $$"""{"requestId":"mismatch","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"Another body"}""");
@@ -177,7 +177,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var response = await Send(protocol,
             $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Empty(catalog.ListLibrary());
+        Assert.Empty(catalog.Library.List());
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var catalog = LocalCatalog.Open(data);
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
             "# Evidence Topic\nOriginal retained"));
-        var captured = await catalog.CaptureFileAsync(
+        var captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "topic.md"), stream, 4_096, "topic");
         Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
         Assert.True(new LocalTopicProposer(catalog).ProcessNext());
@@ -218,13 +218,13 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             $$"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
         Assert.True(correction.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         Assert.Equal("Verified owner topic",
-            Assert.Single(catalog.ListTopicProposals(captured.SourceId)).Correction);
+            Assert.Single(catalog.Topics.List(captured.SourceId)).Correction);
 
         using var invalid = await Send(protocol,
             $$"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
 
-        Assert.True(catalog.RevokeSource(captured.SourceId));
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
         using var withheld = await Send(protocol,
             $$"""{"requestId":"withheld","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
         Assert.Equal(0, withheld.RootElement.GetProperty("data")
@@ -232,7 +232,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var stale = await Send(protocol,
             $$"""{"requestId":"stale","action":"topicReview","proposalId":"{{id}}","decision":"rejected"}""");
         Assert.False(stale.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
-        await catalog.VerifyOriginalAsync(captured.ItemId);
+        await catalog.Originals.VerifyAsync(captured.ItemId);
     }
 
     [Fact]
@@ -251,7 +251,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         using var catalog = LocalCatalog.Open(data);
         using var input = new MemoryStream(new byte[] { 0, 255, 17, 42, 99 });
-        var captured = await catalog.CaptureFileAsync(
+        var captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "missing", "binary.bin"), input, 100, "original");
         var protocol = new LocalDesktopProtocol(catalog);
         var destination = Path.Combine(exports, "recovered.bin");
@@ -275,7 +275,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.False(repeated.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
 
-        Assert.True(catalog.RevokeSource(captured.SourceId));
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
         var revokedRequest = JsonSerializer.Serialize(new
         {
             requestId = "denied",
@@ -357,7 +357,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(time);
         await monitor.ReconcileAsync(time.AddSeconds(1));
-        var source = Assert.Single(catalog.ListLibrary());
+        var source = Assert.Single(catalog.Library.List());
 
         File.Move(previous, current);
         monitor.QueueRename(previous, current);
@@ -372,7 +372,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal(current, move.GetProperty("currentPath").GetString());
         Assert.Equal(source.Sha256, move.GetProperty("sha256").GetString());
 
-        Assert.True(catalog.RevokeSource(source.SourceId));
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
         using var revoked = await Send(protocol,
             $$"""{"requestId":"revoked","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.Equal(0, revoked.RootElement.GetProperty("data")
@@ -381,7 +381,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var invalid = await Send(protocol,
             """{"requestId":"invalid","action":"sourceMoves","sourceId":"bad"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
-        await catalog.VerifyOriginalAsync(source.ItemId);
+        await catalog.Originals.VerifyAsync(source.ItemId);
     }
 
     [Theory]

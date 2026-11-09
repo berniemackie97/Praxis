@@ -37,7 +37,7 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
-        var hit = Assert.Single(catalog.SearchText("violet garden"));
+        var hit = Assert.Single(catalog.Search.Query("violet garden"));
         Assert.Equal(first.ItemId, hit.ItemId);
         Assert.Equal(first.SourceId, hit.SourceId);
         Assert.Equal(first.Revision, hit.Revision);
@@ -46,13 +46,13 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.EndsWith("journal.md", hit.SourceLocator, StringComparison.Ordinal);
         Assert.Contains("⟦violet⟧", hit.Snippet, StringComparison.OrdinalIgnoreCase);
         Assert.True(hit.Snippet.Length <= 480);
-        Assert.Contains("⟦journal⟧", Assert.Single(catalog.SearchText("journal")).Snippet,
+        Assert.Contains("⟦journal⟧", Assert.Single(catalog.Search.Query("journal")).Snippet,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(catalog.SearchText("absent"));
-        Assert.Empty(catalog.SearchText("kitchen violet"));
+        Assert.Empty(catalog.Search.Query("absent"));
+        Assert.Empty(catalog.Search.Query("kitchen violet"));
 
-        Assert.Equal(2, catalog.RebuildTextSearchIndex());
-        Assert.Equal(first.ItemId, Assert.Single(catalog.SearchText("violet")).ItemId);
+        Assert.Equal(2, catalog.Search.Rebuild());
+        Assert.Equal(first.ItemId, Assert.Single(catalog.Search.Query("violet")).ItemId);
     }
 
     [Fact]
@@ -61,11 +61,11 @@ public sealed class LocalTextSearchTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         var file = await Capture(catalog, "report.pdf", "violet in an unsupported pdf", "pdf");
         Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.Equal("unsupported", catalog.ReadTextDerivative(file.ItemId, 1)?.Outcome);
-        Assert.Empty(catalog.SearchText("violet"));
-        Assert.Equal(0, catalog.RebuildTextSearchIndex());
-        Assert.Empty(catalog.SearchText("violet"));
-        await catalog.VerifyOriginalAsync(file.ItemId);
+        Assert.Equal("unsupported", catalog.Text.Read(file.ItemId, 1)?.Outcome);
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Equal(0, catalog.Search.Rebuild());
+        Assert.Empty(catalog.Search.Query("violet"));
+        await catalog.Originals.VerifyAsync(file.ItemId);
     }
 
     [Fact]
@@ -75,22 +75,22 @@ public sealed class LocalTextSearchTests : IDisposable
         var initial = await Capture(catalog, "versioned.txt", "violet first", "one");
         var worker = new LocalTextProcessor(catalog);
         Assert.True(await worker.ProcessNextAsync());
-        Assert.Single(catalog.SearchText("violet"));
+        Assert.Single(catalog.Search.Query("violet"));
 
         var second = await Capture(catalog, "versioned.txt", "amber second", "two");
         Assert.Equal(initial.ItemId, second.ItemId);
         Assert.Equal(2, second.Revision);
-        Assert.Empty(catalog.SearchText("violet"));
-        Assert.Empty(catalog.SearchText("amber"));
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Empty(catalog.Search.Query("amber"));
 
         Assert.True(await worker.ProcessNextAsync());
-        Assert.Empty(catalog.SearchText("violet"));
-        var hit = Assert.Single(catalog.SearchText("amber"));
+        Assert.Empty(catalog.Search.Query("violet"));
+        var hit = Assert.Single(catalog.Search.Query("amber"));
         Assert.Equal(2, hit.Revision);
         Assert.Equal(second.Sha256, hit.OriginalSha256);
-        Assert.Equal("violet first", catalog.ReadTextDerivative(initial.ItemId, 1)?.Content);
-        Assert.Equal(1, catalog.RebuildTextSearchIndex());
-        Assert.Single(catalog.SearchText("amber"));
+        Assert.Equal("violet first", catalog.Text.Read(initial.ItemId, 1)?.Content);
+        Assert.Equal(1, catalog.Search.Rebuild());
+        Assert.Single(catalog.Search.Query("amber"));
     }
 
     [Fact]
@@ -102,15 +102,15 @@ public sealed class LocalTextSearchTests : IDisposable
         var worker = new LocalTextProcessor(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
-        Assert.Equal(2, catalog.SearchText("violet").Count);
+        Assert.Equal(2, catalog.Search.Query("violet").Count);
 
-        Assert.True(catalog.RevokeSource(first.SourceId));
-        var hit = Assert.Single(catalog.SearchText("violet"));
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        var hit = Assert.Single(catalog.Search.Query("violet"));
         Assert.Equal(second.SourceId, hit.SourceId);
-        Assert.Equal(1, catalog.RebuildTextSearchIndex());
-        Assert.Equal(second.SourceId, Assert.Single(catalog.SearchText("violet")).SourceId);
-        await catalog.VerifyOriginalAsync(first.ItemId);
-        await catalog.VerifyOriginalAsync(second.ItemId);
+        Assert.Equal(1, catalog.Search.Rebuild());
+        Assert.Equal(second.SourceId, Assert.Single(catalog.Search.Query("violet")).SourceId);
+        await catalog.Originals.VerifyAsync(first.ItemId);
+        await catalog.Originals.VerifyAsync(second.ItemId);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public sealed class LocalTextSearchTests : IDisposable
         {
             captured = await Capture(catalog, "rebuild.txt", "violet survives", "one");
             Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-            Assert.Single(catalog.SearchText("violet"));
+            Assert.Single(catalog.Search.Query("violet"));
         }
 
         using (var database = OpenDatabase())
@@ -132,12 +132,12 @@ public sealed class LocalTextSearchTests : IDisposable
         }
 
         using var reopened = LocalCatalog.Open(dataRoot);
-        Assert.Empty(reopened.SearchText("violet"));
-        Assert.Equal(1, reopened.RebuildTextSearchIndex());
-        var found = Assert.Single(reopened.SearchText("violet"));
+        Assert.Empty(reopened.Search.Query("violet"));
+        Assert.Equal(1, reopened.Search.Rebuild());
+        var found = Assert.Single(reopened.Search.Query("violet"));
         Assert.Equal(captured.ItemId, found.ItemId);
-        Assert.Equal(1, reopened.RebuildTextSearchIndex());
-        Assert.Equal(captured.ItemId, Assert.Single(reopened.SearchText("violet")).ItemId);
+        Assert.Equal(1, reopened.Search.Rebuild());
+        Assert.Equal(captured.ItemId, Assert.Single(reopened.Search.Query("violet")).ItemId);
     }
 
     [Fact]
@@ -150,25 +150,25 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.SearchText("violet", 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.SearchText("violet", 101));
-        Assert.Throws<ArgumentException>(() => catalog.SearchText(new string('a', 257)));
-        Assert.Throws<ArgumentException>(() => catalog.SearchText("&&&"));
-        Assert.Throws<ArgumentException>(() => catalog.SearchText("violet\0"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Search.Query("violet", 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Search.Query("violet", 101));
+        Assert.Throws<ArgumentException>(() => catalog.Search.Query(new string('a', 257)));
+        Assert.Throws<ArgumentException>(() => catalog.Search.Query("&&&"));
+        Assert.Throws<ArgumentException>(() => catalog.Search.Query("violet\0"));
         Assert.Throws<ArgumentException>(() =>
-            catalog.SearchText(string.Join(" ", Enumerable.Repeat("violet", 17))));
-        Assert.Throws<ArgumentException>(() => catalog.SearchText(new string('z', 65)));
+            catalog.Search.Query(string.Join(" ", Enumerable.Repeat("violet", 17))));
+        Assert.Throws<ArgumentException>(() => catalog.Search.Query(new string('z', 65)));
 
-        Assert.Throws<InvalidOperationException>(() => catalog.RebuildTextSearchIndex(1));
-        Assert.Throws<InvalidOperationException>(() => catalog.RebuildTextSearchIndex(
+        Assert.Throws<InvalidOperationException>(() => catalog.Search.Rebuild(1));
+        Assert.Throws<InvalidOperationException>(() => catalog.Search.Rebuild(
             maxDocuments: 2, maxTextBytes: 4));
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.RebuildTextSearchIndex(
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Search.Rebuild(
             maxTextBytes: 0));
-        Assert.Empty(catalog.SearchText("violet OR nonexistent"));
-        Assert.Equal(2, catalog.SearchText("violet").Count);
-        Assert.Single(catalog.SearchText("violet", 1));
-        Assert.Equal(2, catalog.RebuildTextSearchIndex(2));
-        Assert.Equal(2, catalog.SearchText("violet").Count);
+        Assert.Empty(catalog.Search.Query("violet OR nonexistent"));
+        Assert.Equal(2, catalog.Search.Query("violet").Count);
+        Assert.Single(catalog.Search.Query("violet", 1));
+        Assert.Equal(2, catalog.Search.Rebuild(2));
+        Assert.Equal(2, catalog.Search.Query("violet").Count);
     }
 
     [Fact]
@@ -184,17 +184,17 @@ public sealed class LocalTextSearchTests : IDisposable
             var worker = new LocalTextProcessor(catalog);
             Assert.True(await worker.ProcessNextAsync());
             Assert.True(await worker.ProcessNextAsync());
-            Assert.True(catalog.RevokeSource(revoked.SourceId));
-            await catalog.BackupAsync(backup, 30_000_000);
+            Assert.True(catalog.Sources.Revoke(revoked.SourceId));
+            await catalog.Recovery.BackupAsync(backup, 30_000_000);
         }
 
-        await LocalCatalog.RestoreAsync(backup, destination, 30_000_000);
+        await LocalCatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
         using var recovered = LocalCatalog.Open(destination);
         Assert.Equal(8, recovered.SchemaVersion);
-        Assert.Equal(retained.ItemId, Assert.Single(recovered.SearchText("violet")).ItemId);
-        Assert.Equal(1, recovered.RebuildTextSearchIndex());
-        Assert.Equal(retained.SourceId, Assert.Single(recovered.SearchText("violet")).SourceId);
-        await recovered.VerifyOriginalAsync(retained.ItemId);
+        Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);
+        Assert.Equal(1, recovered.Search.Rebuild());
+        Assert.Equal(retained.SourceId, Assert.Single(recovered.Search.Query("violet")).SourceId);
+        await recovered.Originals.VerifyAsync(retained.ItemId);
     }
 
     [Fact]
@@ -243,16 +243,16 @@ public sealed class LocalTextSearchTests : IDisposable
 
         using var upgraded = LocalCatalog.Open(dataRoot);
         Assert.Equal(8, upgraded.SchemaVersion);
-        var hit = Assert.Single(upgraded.SearchText("violet"));
+        var hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
-        Assert.Equal(1, upgraded.RebuildTextSearchIndex());
+        Assert.Equal(1, upgraded.Search.Rebuild());
     }
 
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string name, string body, string requestKey)
     {
         using var data = new MemoryStream(Encoding.UTF8.GetBytes(body));
-        return await catalog.CaptureFileAsync(
+        return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, name), data, data.Length, requestKey);
     }
 

@@ -4,9 +4,9 @@ public sealed class LocalTopicProposer(LocalCatalog catalog)
 {
     public bool ProcessNext()
     {
-        var candidate = catalog.NextTopicCandidate();
+        var candidate = catalog.Topics.NextCandidate();
         return candidate is not null &&
-            catalog.CommitTopicCandidates(candidate, ExtractHeadings(candidate.Content));
+            catalog.Topics.CommitCandidates(candidate, ExtractHeadings(candidate.Content));
     }
 
     private static IReadOnlyList<TopicEvidence> ExtractHeadings(string text)

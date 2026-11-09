@@ -22,14 +22,14 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var lease = catalog.TryClaimProcessing(LeaseDuration,
-            processorKey: LocalCatalog.DefaultProcessorKey);
+        var lease = catalog.Processing.TryClaim(LeaseDuration,
+            processorKey: LocalProcessors.SourceText);
         if (lease is null && !legacyScanComplete)
         {
-            if (catalog.RequeueNewlySupportedText(SupportedExtensions))
+            if (catalog.Text.RequeueNewlySupported(SupportedExtensions))
             {
-                lease = catalog.TryClaimProcessing(LeaseDuration,
-                    processorKey: LocalCatalog.DefaultProcessorKey);
+                lease = catalog.Processing.TryClaim(LeaseDuration,
+                    processorKey: LocalProcessors.SourceText);
             }
             else
             {
@@ -42,7 +42,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             return false;
         }
 
-        var source = catalog.ReadLeasedTextSource(lease);
+        var source = catalog.Text.ReadLeasedSource(lease);
         if (source is null)
         {
             return true;
@@ -51,33 +51,32 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         cancellationToken.ThrowIfCancellationRequested();
         if (source.SourceKind != "file")
         {
-            catalog.CommitTextResult(lease, null, "unsupported_source");
+            catalog.Text.CommitResult(lease, null, "unsupported_source");
             return true;
         }
 
         var extension = Path.GetExtension(source.Locator).ToLowerInvariant();
         if (!SupportedExtensions.Contains(extension, StringComparer.Ordinal))
         {
-            catalog.CommitTextResult(lease, null,
+            catalog.Text.CommitResult(lease, null,
                 extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
             return true;
         }
 
         if (source.Original.Length > MaximumTextBytes)
         {
-            catalog.CommitTextResult(lease, null, "text_too_large");
+            catalog.Text.CommitResult(lease, null, "text_too_large");
             return true;
         }
 
         try
         {
-            var store = new OriginalFileStore(Path.GetDirectoryName(catalog.DatabasePath)!);
-            var original = await store.ReadVerifiedBytesAsync(
+            var original = await catalog.Originals.ReadVerifiedBytesAsync(
                 source.Original, MaximumTextBytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (HasNonTextSignature(original))
             {
-                catalog.CommitTextResult(lease, null, "signature_mismatch");
+                catalog.Text.CommitResult(lease, null, "signature_mismatch");
                 return true;
             }
 
@@ -87,31 +86,31 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
             if (text.Any(c => (c < 0x20 && c is not ('\n' or '\r' or '\t')) ||
                 c == 0x7f))
             {
-                catalog.CommitTextResult(lease, null, "binary_content");
+                catalog.Text.CommitResult(lease, null, "binary_content");
                 return true;
             }
 
-            catalog.CommitTextResult(lease, text, null);
+            catalog.Text.CommitResult(lease, text, null);
         }
         catch (DecoderFallbackException)
         {
-            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "invalid_utf8");
+            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "invalid_utf8");
         }
         catch (InvalidDataException)
         {
-            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "corrupt_original");
+            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
         }
         catch (EndOfStreamException)
         {
-            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "corrupt_original");
+            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
         }
         catch (IOException)
         {
-            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "source_io");
+            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "source_io");
         }
         catch (UnauthorizedAccessException)
         {
-            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "source_access");
+            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "source_access");
         }
 
         return true;

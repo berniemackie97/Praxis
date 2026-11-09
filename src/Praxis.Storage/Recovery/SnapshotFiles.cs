@@ -4,9 +4,24 @@ using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage;
 
-public sealed partial class LocalCatalog
+internal sealed record LocalSnapshotObject(string Digest, long Length);
+
+internal sealed record LocalSnapshotManifest(
+    int FormatVersion, int CatalogVersion, string CatalogSha256,
+    long CatalogLength, List<LocalSnapshotObject> Objects);
+
+/// <summary>Snapshot layout, manifest and private-file primitives shared by backup and restore.</summary>
+internal static class SnapshotFiles
 {
-    private static List<LocalSnapshotObject> ReadSnapshotObjects(string catalogPath, int catalogVersion)
+    internal const int FormatVersion = 1;
+    internal const long MaximumManifestBytes = 32 * 1024 * 1024;
+    internal const int MaximumObjects = 100_000;
+    internal static readonly UnixFileMode PrivateDirectory =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+    internal static readonly UnixFileMode PrivateFile =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+    internal static List<LocalSnapshotObject> ReadSnapshotObjects(string catalogPath, int catalogVersion)
     {
         using var snapshot = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -41,7 +56,7 @@ public sealed partial class LocalCatalog
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            if (originals.Count == MaximumSnapshotObjects)
+            if (originals.Count == MaximumObjects)
             {
                 throw new InvalidDataException("The snapshot exceeds the supported object count.");
             }
@@ -59,7 +74,7 @@ public sealed partial class LocalCatalog
         return originals;
     }
 
-    private static LocalSnapshotManifest ReadSnapshotManifest(string backup)
+    internal static LocalSnapshotManifest ReadSnapshotManifest(string backup)
     {
         var path = Path.Combine(backup, "manifest.json");
         var length = new FileInfo(path).Length;
@@ -81,7 +96,7 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static string ValidateExistingBackup(string backupDirectory)
+    internal static string ValidateExistingBackup(string backupDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupDirectory);
         if (!Path.IsPathFullyQualified(backupDirectory))
@@ -117,7 +132,7 @@ public sealed partial class LocalCatalog
         return root;
     }
 
-    private static string ValidateNewDestination(string path, string disallowedRoot)
+    internal static string ValidateNewDestination(string path, string disallowedRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!Path.IsPathFullyQualified(path))
@@ -145,7 +160,7 @@ public sealed partial class LocalCatalog
         return destination;
     }
 
-    private static string CreateStagingDirectory(string destination)
+    internal static string CreateStagingDirectory(string destination)
     {
         var parent = Path.GetDirectoryName(destination)!;
         var name = Path.GetFileName(destination);
@@ -163,7 +178,7 @@ public sealed partial class LocalCatalog
         return staging;
     }
 
-    private static string CheckPrivateDirectory(string path)
+    internal static string CheckPrivateDirectory(string path)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0 ||
             !Directory.Exists(path))
@@ -180,7 +195,7 @@ public sealed partial class LocalCatalog
         return path;
     }
 
-    private static void RestrictFile(string path)
+    internal static void RestrictFile(string path)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -188,7 +203,7 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static FileStream OpenNewPrivateFile(string path)
+    internal static FileStream OpenNewPrivateFile(string path)
     {
         var options = new FileStreamOptions
         {
@@ -205,7 +220,7 @@ public sealed partial class LocalCatalog
         return new FileStream(path, options);
     }
 
-    private static async Task CopyCheckedFileAsync(
+    internal static async Task CopyCheckedFileAsync(
         string source, string target, long length, string digest,
         CancellationToken cancellationToken)
     {
@@ -248,7 +263,7 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static async Task<(long Length, string Digest)> HashFileAsync(
+    internal static async Task<(long Length, string Digest)> HashFileAsync(
         string path, CancellationToken cancellationToken, long? expectedLength = null)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
@@ -274,10 +289,10 @@ public sealed partial class LocalCatalog
         return (length, Convert.ToHexStringLower(digest));
     }
 
-    private static bool IsSnapshotSchemaVersion(int version) =>
+    internal static bool IsSnapshotSchemaVersion(int version) =>
         version is >= 2 and <= CatalogSchema.CurrentVersion;
 
-    private static void EnsureCatalogFitsBudget(SqliteConnection database, long maxBytes)
+    internal static void EnsureCatalogFitsBudget(SqliteConnection database, long maxBytes)
     {
         using var count = database.CreateCommand("PRAGMA page_count");
         using var size = database.CreateCommand("PRAGMA page_size");
@@ -289,7 +304,7 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static long EnforceBudget(
+    internal static long EnforceBudget(
         long catalogLength, IReadOnlyList<LocalSnapshotObject> objects, long maxBytes)
     {
         if (catalogLength > maxBytes)
@@ -311,11 +326,56 @@ public sealed partial class LocalCatalog
         return maxBytes - remaining;
     }
 
-    private static void ValidateBudget(long maxBytes)
+    internal static void ValidateBudget(long maxBytes)
     {
         if (maxBytes <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(maxBytes));
         }
+    }
+
+    internal static async Task<LocalSnapshotReport> VerifyContentsAsync(
+        string directory, LocalSnapshotManifest manifest, long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        if (manifest.FormatVersion != FormatVersion ||
+            !IsSnapshotSchemaVersion(manifest.CatalogVersion) ||
+            manifest.Objects is null ||
+            manifest.Objects.Count > MaximumObjects ||
+            !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)
+        {
+            throw new InvalidDataException("The snapshot manifest is incompatible.");
+        }
+
+        var total = EnforceBudget(manifest.CatalogLength, manifest.Objects, maxBytes);
+        var catalogPath = Path.Combine(directory, "catalog.sqlite");
+        var (_, hash) = await HashFileAsync(catalogPath, cancellationToken, manifest.CatalogLength);
+        if (hash != manifest.CatalogSha256)
+        {
+            throw new InvalidDataException("The snapshot catalog failed integrity verification.");
+        }
+
+        var objects = ReadSnapshotObjects(catalogPath, manifest.CatalogVersion);
+        if (!objects.SequenceEqual(manifest.Objects))
+        {
+            throw new InvalidDataException("The manifest does not match the catalog objects.");
+        }
+
+        var store = new OriginalFileStore(directory);
+        var published = store.EnumeratePublishedDigests().ToHashSet(StringComparer.Ordinal);
+        if (published.Count != objects.Count ||
+            objects.Any(item => !published.Contains(item.Digest)))
+        {
+            throw new InvalidDataException("The snapshot object inventory is incomplete or unexpected.");
+        }
+
+        foreach (var item in objects)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await store.VerifyAsync(
+                new OriginalObject(item.Digest, item.Length), cancellationToken);
+        }
+
+        return new LocalSnapshotReport(objects.Count, total, hash);
     }
 }

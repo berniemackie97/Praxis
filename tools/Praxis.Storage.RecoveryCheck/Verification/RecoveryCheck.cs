@@ -40,18 +40,18 @@ internal static class RecoveryCheck
         using (var live = LocalCatalog.Open(livePath))
         {
             await using var source = new GeneratedContentStream(LargeBytes);
-            large = await live.CaptureFileAsync(
+            large = await live.Originals.CaptureFileAsync(
                 Path.Combine(workspace, "large.bin"), source, LargeBytes,
                 LargeRequestKey, cancellationToken);
             using var smallStream = new MemoryStream([1, 2, 3, 4]);
-            small = await live.CaptureFileAsync(
+            small = await live.Originals.CaptureFileAsync(
                 Path.Combine(workspace, "small.bin"), smallStream, 4,
                 "physical-small-v1", cancellationToken);
-            snapshot = await live.BackupAsync(
+            snapshot = await live.Recovery.BackupAsync(
                 Path.Combine(workspace, "backup"), Budget, cancellationToken);
 
             using var changed = new MemoryStream([8, 9]);
-            var newer = await live.CaptureFileAsync(
+            var newer = await live.Originals.CaptureFileAsync(
                 Path.Combine(workspace, "small.bin"), changed, 2,
                 "physical-small-v2", cancellationToken);
             Require(newer.Revision == 2 && newer.ItemId == small.ItemId,
@@ -63,7 +63,7 @@ internal static class RecoveryCheck
             large.Sha256, small.ItemId, snapshot.CatalogSha256,
             snapshot.ObjectCount, snapshot.TotalBytes, DateTimeOffset.UtcNow);
 
-        await LocalCatalog.RestoreAsync(
+        await LocalCatalogSnapshots.RestoreAsync(
             Path.Combine(workspace, "backup"),
             Path.Combine(workspace, "restored"), Budget, cancellationToken);
         await VerifyWorkspaceAsync(workspace, evidence, cancellationToken);
@@ -97,7 +97,7 @@ internal static class RecoveryCheck
                 evidence.SourceId != Guid.Empty && evidence.ItemId != Guid.Empty &&
                 evidence.SmallItemId != Guid.Empty && evidence.BackupObjectCount == 2,
             "The physical check evidence does not describe the expected test.");
-        var backup = await LocalCatalog.VerifyBackupAsync(
+        var backup = await LocalCatalogSnapshots.VerifyAsync(
             Path.Combine(workspace, "backup"), Budget, cancellationToken);
         Require(backup.ObjectCount == evidence.BackupObjectCount &&
                 backup.TotalBytes == evidence.BackupTotalBytes &&
@@ -106,10 +106,10 @@ internal static class RecoveryCheck
 
         using var restored = LocalCatalog.Open(Path.Combine(workspace, "restored"));
         Require(restored.SchemaVersion == 5, "The restored catalog has an unexpected schema.");
-        await restored.VerifyOriginalAsync(evidence.ItemId, cancellationToken);
-        await restored.VerifyOriginalAsync(evidence.SmallItemId, cancellationToken);
+        await restored.Originals.VerifyAsync(evidence.ItemId, cancellationToken);
+        await restored.Originals.VerifyAsync(evidence.SmallItemId, cancellationToken);
 
-        var receipt = await restored.CaptureFileAsync(
+        var receipt = await restored.Originals.CaptureFileAsync(
             Path.Combine(workspace, "large.bin"), Stream.Null, 0,
             LargeRequestKey, cancellationToken);
         Require(receipt.SourceId == evidence.SourceId &&
