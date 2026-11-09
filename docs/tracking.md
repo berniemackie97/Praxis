@@ -2,11 +2,19 @@
 
 GitHub [Praxis Roadmap Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board; [#1](https://github.com/berniemackie97/Praxis/issues/1) is the program index. The [declarative roadmap](../scripts/github/roadmap.json) maps existing issues to stages, parent features and critical dependencies.
 
-## Execution focus: standalone local Praxis
+## Execution focus: foundational local Praxis → integrated intelligent MVP
 
 The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The current local-first path has merged implementation for catalog/receipts #99/#122/#124/#126, processing #101/#102/#103, search #106, local caller decision #129 and initial macOS workbench #108. PRs #144/#145/#147/#148 added watched intake, workbench, collections and quick-note capture; #113/#146 remain open for acceptance. #105/#128/#137 retain environment/recovery/CI caveats, and #107 is a separate integration-security gate rather than a prerequisite for trusted in-process desktop use. Integrated release proof **#130 remains open**. Voice #109/#110, browser #104/#111/#112 and MCP #117–#119 remain distinct follow-on outcomes. The subsequent intelligence portfolio includes deep technical structure/evidence #149–#154, bounded investigations #150/#155/#156, typed connector history #151/#157–#159/#162, tool approval proposals #160 and optional offline conversational voice #161. These capabilities do not block the L0 release gate #130; neither source search nor a general-purpose chatbot proves technical comprehension. Obsidian #5 is optional and does not block initial direct capture.
 
 Limit work-in-progress to one cohesive implementation slice awaiting merge per active workstream, except independent decision spikes. Each issue is audited against current code before taking it, and every PR reports exact test evidence, unresolved integration gaps and its linked parent issue. Do not close a parent feature because a single child test passes. No remote processing or agent permission is inferred from user-local ingestion.
+
+## Scope and priority correction — November 9, 2026
+
+The owner requires **agent-assisted knowledge synthesis and task execution in the MVP**, not as a loosely specified later phase. #130 is relabeled as the local foundational acceptance gate; #170 is the actual cross-stage product release gate. Preserve both. The MVP includes evidence-linked technical interpretation (#149/#150), reviewed knowledge #115/#116, evaluated adaptive retrieval/model escalation (#29/#31/#172), first-party chat/tasks (#33/#32/#34/#173), permissioned context projections (#143), and safe Obsidian Markdown knowledge views (#57/#171). Scope hardware and corpus, not reliability or safety standards.
+
+P1 means critical path for this **actual MVP**, even where an issue belongs to M3/M5. Lanes L0 and L4 feed the integrated release lane L6; unrelated bank/social connectors, remote sync and voice conversation remain separately gated. Promoting a planned issue to MVP does **not** mark its code complete or waive acceptance.
+
+A model cannot be a security authority. Every provider/adapter is selected by supported integration path, privacy scope, measured quality, budget and permissions. Independent, exact technical evidence and user-visible approvals are required before claiming an answer or action is correct.
 
 ## Work item hierarchy
 
