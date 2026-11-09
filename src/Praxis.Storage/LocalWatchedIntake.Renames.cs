@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace Praxis.Storage;
@@ -6,9 +5,9 @@ namespace Praxis.Storage;
 public sealed partial class LocalWatchedIntake
 {
     private const int MaximumPendingRenames = 128;
-    private readonly ConcurrentQueue<PendingRename> renameEvents = new();
-    private int queuedRenames;
-    private int droppedRenameEvents;
+    private readonly Queue<PendingRename> renameEvents = new();
+    private readonly object renameGate = new();
+    private bool droppedRenameEvents;
 
     private sealed record PendingRename(
         string Previous, string Current, DateTimeOffset OccurredUtc);
@@ -21,23 +20,28 @@ public sealed partial class LocalWatchedIntake
             return;
         }
 
-        if (Interlocked.Increment(ref queuedRenames) > MaximumPendingRenames)
+        lock (renameGate)
         {
-            Interlocked.Decrement(ref queuedRenames);
-            Interlocked.Exchange(ref droppedRenameEvents, 1);
-            Signal();
-            return;
+            if (renameEvents.Count == MaximumPendingRenames)
+            {
+                droppedRenameEvents = true;
+            }
+            else
+            {
+                renameEvents.Enqueue(new PendingRename(
+                    previousPath, currentPath, DateTimeOffset.UtcNow));
+            }
         }
 
-        renameEvents.Enqueue(new PendingRename(previousPath, currentPath, DateTimeOffset.UtcNow));
         Signal();
     }
 
     private void ClearPendingRenames()
     {
-        while (renameEvents.TryDequeue(out _))
+        lock (renameGate)
         {
-            Interlocked.Decrement(ref queuedRenames);
+            renameEvents.Clear();
+            droppedRenameEvents = false;
         }
     }
 
@@ -59,17 +63,38 @@ public sealed partial class LocalWatchedIntake
     private async Task ReconcileRenamesAsync(
         IReadOnlyList<LocalObservedFile> files, CancellationToken cancellationToken)
     {
-        if (Interlocked.Exchange(ref droppedRenameEvents, 0) != 0)
+        bool overflow;
+        lock (renameGate)
         {
-            ClearPendingRenames();
+            overflow = droppedRenameEvents;
+            if (overflow)
+            {
+                renameEvents.Clear();
+                droppedRenameEvents = false;
+            }
+        }
+
+        if (overflow)
+        {
             report("Rename notification backlog exceeded its bound; scanned paths will be captured independently.");
             return;
         }
 
         var byPath = files.ToDictionary(f => f.SourcePath, StringComparer.Ordinal);
         var remaining = HashBudgetPerScan;
-        while (renameEvents.TryPeek(out var entry))
+        while (true)
         {
+            PendingRename entry;
+            lock (renameGate)
+            {
+                if (renameEvents.Count == 0)
+                {
+                    break;
+                }
+
+                entry = renameEvents.Peek();
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             if (entry.OccurredUtc < DateTimeOffset.UtcNow - TimeSpan.FromMinutes(1))
             {
@@ -118,30 +143,21 @@ public sealed partial class LocalWatchedIntake
                         JsonSerializer.Serialize(entry.Current));
                 }
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is IOException or
+                UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
             {
-                // Normal capture reconciliation will retry the destination without reassigning identity.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // The destination remains subject to the normal permission/error path.
-            }
-            catch (InvalidDataException)
-            {
-                // Linked, unstable or rejected targets must not inherit source identity.
-            }
-            catch (InvalidOperationException)
-            {
-                // An occupied or revoked source cannot be moved automatically.
+                report("Observed file move could not preserve identity: " +
+                    JsonSerializer.Serialize(entry.Current) + ": " +
+                    JsonSerializer.Serialize(exception.Message));
             }
         }
     }
 
     private void DequeueRename()
     {
-        if (renameEvents.TryDequeue(out _))
+        lock (renameGate)
         {
-            Interlocked.Decrement(ref queuedRenames);
+            renameEvents.Dequeue();
         }
     }
 }
