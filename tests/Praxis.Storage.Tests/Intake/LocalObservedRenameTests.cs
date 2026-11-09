@@ -38,45 +38,45 @@ public sealed class LocalObservedRenameTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        var before = Assert.Single(catalog.ListLibrary());
-        var group = catalog.CreateCollection("Research");
-        Assert.True(catalog.AddSourceToCollection(group.CollectionId, before.SourceId));
+        var before = Assert.Single(catalog.Library.List());
+        var group = catalog.Collections.Create("Research");
+        Assert.True(catalog.Collections.AddSource(group.CollectionId, before.SourceId));
 
         File.Move(oldPath, newPath);
         watcher.QueueRename(oldPath, newPath);
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        var after = Assert.Single(catalog.ListLibrary());
+        var after = Assert.Single(catalog.Library.List());
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(before.Sha256, after.Sha256);
         Assert.Equal(1, after.Revision);
         Assert.Equal(newPath, after.SourceLocator);
-        Assert.Null(catalog.FindLatestFile(oldPath));
-        Assert.Equal(before.SourceId, catalog.FindLatestFile(newPath)?.SourceId);
-        Assert.Equal(before.ItemId, Assert.Single(catalog.SearchText("violet")).ItemId);
+        Assert.Null(catalog.Sources.FindLatestFile(oldPath));
+        Assert.Equal(before.SourceId, catalog.Sources.FindLatestFile(newPath)?.SourceId);
+        Assert.Equal(before.ItemId, Assert.Single(catalog.Search.Query("violet")).ItemId);
         Assert.Equal(before.ItemId,
-            Assert.Single(catalog.ListLibrary(collectionId: group.CollectionId)).ItemId);
+            Assert.Single(catalog.Library.List(collectionId: group.CollectionId)).ItemId);
         Assert.Equal(1L, Count("source_locator_moves"));
-        var movement = Assert.Single(catalog.ListSourceMovements(before.SourceId));
+        var movement = Assert.Single(catalog.Sources.ListMovements(before.SourceId));
         Assert.Equal(oldPath, movement.PreviousPath);
         Assert.Equal(newPath, movement.CurrentPath);
         Assert.Equal(before.Sha256, movement.Sha256);
-        Assert.Empty(catalog.ListSourceMovements(Guid.NewGuid()));
+        Assert.Empty(catalog.Sources.ListMovements(Guid.NewGuid()));
         Assert.Equal(1L, Count("item_versions"));
         Assert.Equal(1L, Count("ingest_requests"));
-        await catalog.VerifyOriginalAsync(before.ItemId);
+        await catalog.Originals.VerifyAsync(before.ItemId);
 
         File.WriteAllText(newPath, "# Project\namber revision");
         File.SetLastWriteTimeUtc(newPath, DateTime.UtcNow.AddSeconds(10));
         await watcher.ReconcileAsync(time.AddSeconds(6));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(8)));
-        var revised = Assert.Single(catalog.ListLibrary());
+        var revised = Assert.Single(catalog.Library.List());
         Assert.Equal(before.SourceId, revised.SourceId);
         Assert.Equal(before.ItemId, revised.ItemId);
         Assert.Equal(2, revised.Revision);
-        Assert.Empty(catalog.SearchText("violet"));
-        Assert.Equal(before.ItemId, Assert.Single(catalog.SearchText("amber")).ItemId);
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Equal(before.ItemId, Assert.Single(catalog.Search.Query("amber")).ItemId);
         Assert.Equal(1L, Count("source_locator_moves"));
     }
 
@@ -91,25 +91,25 @@ public sealed class LocalObservedRenameTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        var original = Assert.Single(catalog.ListLibrary());
+        var original = Assert.Single(catalog.Library.List());
 
         File.Move(oldPath, movedPath);
         watcher.QueueRename(oldPath, movedPath);
         await watcher.ReconcileAsync(now.AddSeconds(3));
-        Assert.Equal(original.SourceId, catalog.FindLatestFile(movedPath)?.SourceId);
+        Assert.Equal(original.SourceId, catalog.Sources.FindLatestFile(movedPath)?.SourceId);
 
         File.WriteAllText(oldPath, "same preserved bytes");
         await watcher.ReconcileAsync(now.AddSeconds(4));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
-        var recreated = catalog.FindLatestFile(oldPath);
+        var recreated = catalog.Sources.FindLatestFile(oldPath);
         Assert.NotNull(recreated);
         Assert.NotEqual(original.SourceId, recreated.SourceId);
         Assert.NotEqual(original.ItemId, recreated.ItemId);
         Assert.Equal(original.Sha256, recreated.Sha256);
         Assert.Equal(1L, Count("source_locator_moves"));
         Assert.Equal(2L, Count("ingest_requests"));
-        await catalog.VerifyOriginalAsync(original.ItemId);
-        await catalog.VerifyOriginalAsync(recreated.ItemId);
+        await catalog.Originals.VerifyAsync(original.ItemId);
+        await catalog.Originals.VerifyAsync(recreated.ItemId);
     }
 
     [Fact]
@@ -123,21 +123,21 @@ public sealed class LocalObservedRenameTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        var original = Assert.Single(catalog.ListLibrary());
-        Assert.True(catalog.RevokeSource(original.SourceId));
+        var original = Assert.Single(catalog.Library.List());
+        Assert.True(catalog.Sources.Revoke(original.SourceId));
 
         File.Move(oldPath, movedPath);
         watcher.QueueRename(oldPath, movedPath);
         await watcher.ReconcileAsync(now.AddSeconds(3));
         await watcher.ReconcileAsync(now.AddSeconds(5));
 
-        var current = catalog.FindLatestFile(movedPath);
+        var current = catalog.Sources.FindLatestFile(movedPath);
         Assert.NotNull(current);
         Assert.NotEqual(original.SourceId, current.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
-        Assert.Equal("revoked", catalog.FindLatestFile(oldPath)?.Status);
-        Assert.Empty(catalog.ListSourceMovements(original.SourceId));
-        await catalog.VerifyOriginalAsync(original.ItemId);
+        Assert.Equal("revoked", catalog.Sources.FindLatestFile(oldPath)?.Status);
+        Assert.Empty(catalog.Sources.ListMovements(original.SourceId));
+        await catalog.Originals.VerifyAsync(original.ItemId);
     }
 
     [Fact]
@@ -151,12 +151,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        var captured = Assert.Single(catalog.ListLibrary());
+        var captured = Assert.Single(catalog.Library.List());
 
         File.Copy(first, second);
         await watcher.ReconcileAsync(time.AddSeconds(3));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        var both = catalog.ListLibrary();
+        var both = catalog.Library.List();
         Assert.Equal(2, both.Count);
         Assert.NotEqual(both[0].SourceId, both[1].SourceId);
         Assert.Equal(captured.Sha256, both[0].Sha256);
@@ -175,12 +175,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        var original = Assert.Single(catalog.ListLibrary());
+        var original = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         await watcher.ReconcileAsync(time.AddSeconds(3));
         await watcher.ReconcileAsync(time.AddSeconds(5));
-        var resulting = catalog.ListLibrary();
+        var resulting = catalog.Library.List();
         Assert.Equal(2, resulting.Count);
         Assert.Contains(resulting, item => item.SourceId == original.SourceId &&
             item.SourceLocator == first);
@@ -202,7 +202,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(now);
         await monitor.ReconcileAsync(now.AddSeconds(2));
-        var before = Assert.Single(catalog.ListLibrary());
+        var before = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         for (var index = 0; index < 129; index++)
@@ -212,13 +212,13 @@ public sealed class LocalObservedRenameTests : IDisposable
 
         await monitor.ReconcileAsync(now.AddSeconds(3));
         Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(5)));
-        var after = catalog.FindLatestFile(next);
+        var after = catalog.Sources.FindLatestFile(next);
         Assert.NotNull(after);
         Assert.NotEqual(before.SourceId, after.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
         Assert.Contains(reports, value => value.Contains(
             "Rename notification backlog exceeded", StringComparison.Ordinal));
-        await catalog.VerifyOriginalAsync(before.ItemId);
+        await catalog.Originals.VerifyAsync(before.ItemId);
     }
 
     [Fact]
@@ -232,13 +232,13 @@ public sealed class LocalObservedRenameTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        var original = Assert.Single(catalog.ListLibrary());
+        var original = Assert.Single(catalog.Library.List());
 
         File.Copy(first, second);
         watcher.QueueRename(first, second);
         await watcher.ReconcileAsync(now.AddSeconds(3));
         await watcher.ReconcileAsync(now.AddSeconds(5));
-        Assert.NotEqual(original.SourceId, catalog.FindLatestFile(second)?.SourceId);
+        Assert.NotEqual(original.SourceId, catalog.Sources.FindLatestFile(second)?.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 
@@ -253,7 +253,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        var prior = Assert.Single(catalog.ListLibrary());
+        var prior = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         File.WriteAllText(next, "# Changed\namber");
@@ -261,12 +261,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         await watcher.ReconcileAsync(time.AddSeconds(3));
         await watcher.ReconcileAsync(time.AddSeconds(5));
 
-        var current = catalog.FindLatestFile(next);
+        var current = catalog.Sources.FindLatestFile(next);
         Assert.NotNull(current);
         Assert.NotEqual(prior.SourceId, current.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
-        Assert.Equal(prior.ItemId, Assert.Single(catalog.SearchText("violet")).ItemId);
-        Assert.Equal(current.ItemId, Assert.Single(catalog.SearchText("amber")).ItemId);
+        Assert.Equal(prior.ItemId, Assert.Single(catalog.Search.Query("violet")).ItemId);
+        Assert.Equal(current.ItemId, Assert.Single(catalog.Search.Query("amber")).ItemId);
     }
 
     [Fact]
@@ -281,7 +281,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        var sources = catalog.ListLibrary();
+        var sources = catalog.Library.List();
         var old = Assert.Single(sources, item => item.SourceLocator == first);
         var occupied = Assert.Single(sources, item => item.SourceLocator == second);
 
@@ -289,9 +289,9 @@ public sealed class LocalObservedRenameTests : IDisposable
         watcher.QueueRename(first, second);
         await watcher.ReconcileAsync(time.AddSeconds(3));
         await watcher.ReconcileAsync(time.AddSeconds(5));
-        Assert.Equal(old.SourceId, catalog.FindLatestFile(first)?.SourceId);
-        Assert.Equal(occupied.SourceId, catalog.FindLatestFile(second)?.SourceId);
-        Assert.Equal(2, catalog.FindLatestFile(second)?.Revision);
+        Assert.Equal(old.SourceId, catalog.Sources.FindLatestFile(first)?.SourceId);
+        Assert.Equal(occupied.SourceId, catalog.Sources.FindLatestFile(second)?.SourceId);
+        Assert.Equal(2, catalog.Sources.FindLatestFile(second)?.Revision);
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 
@@ -311,7 +311,7 @@ public sealed class LocalObservedRenameTests : IDisposable
             var time = DateTimeOffset.UtcNow;
             await watcher.ReconcileAsync(time);
             await watcher.ReconcileAsync(time.AddSeconds(2));
-            var captured = Assert.Single(catalog.ListLibrary());
+            var captured = Assert.Single(catalog.Library.List());
             sourceId = captured.SourceId;
             itemId = captured.ItemId;
 
@@ -319,17 +319,17 @@ public sealed class LocalObservedRenameTests : IDisposable
             watcher.QueueRename(oldPath, newPath);
             await watcher.ReconcileAsync(time.AddSeconds(3));
             Assert.Equal(1L, Count("source_locator_moves"));
-            await catalog.BackupAsync(backup, 8_000_000);
+            await catalog.Recovery.BackupAsync(backup, 8_000_000);
         }
 
-        await LocalCatalog.RestoreAsync(backup, restoredRoot, 8_000_000);
+        await LocalCatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
         using var restored = LocalCatalog.Open(restoredRoot);
         Assert.Equal(8, restored.SchemaVersion);
-        var recovered = Assert.Single(restored.ListLibrary());
+        var recovered = Assert.Single(restored.Library.List());
         Assert.Equal(sourceId, recovered.SourceId);
         Assert.Equal(itemId, recovered.ItemId);
         Assert.Equal(newPath, recovered.SourceLocator);
-        await restored.VerifyOriginalAsync(itemId);
+        await restored.Originals.VerifyAsync(itemId);
         Assert.Equal(1L, Count("source_locator_moves", restored.DatabasePath));
     }
 

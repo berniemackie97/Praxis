@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage;
@@ -17,18 +16,24 @@ public sealed record ProcessingJob(
 public sealed record ProcessingLease(
     Guid ItemId, int Revision, string ProcessorKey, Guid LeaseKey, DateTimeOffset LeaseUntil);
 
-public sealed partial class LocalCatalog
+/// <summary>
+/// Durable, leased processing jobs keyed by immutable item revision and processor.
+/// Leases fence stale workers; attempt budgets bound retries; only active sources are claimable.
+/// </summary>
+public sealed class LocalProcessingQueue
 {
-    public const string DefaultProcessorKey = "source-text-v1";
+    private readonly CatalogDatabase database;
 
-    public IReadOnlyList<ProcessingJob> ListProcessingJobs(int limit = 100)
+    internal LocalProcessingQueue(CatalogDatabase database) => this.database = database;
+
+    public IReadOnlyList<ProcessingJob> List(int limit = 100)
     {
         if (limit is < 1 or > 500)
         {
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var query = connection.CreateCommand("""
                 SELECT item_id, revision, processor_key, state, attempt, total_attempts,
@@ -45,20 +50,19 @@ public sealed partial class LocalCatalog
                 jobs.Add(new ProcessingJob(
                     Guid.Parse(reader.GetString(0)), reader.GetInt32(1), reader.GetString(2),
                     reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5),
-                    reader.IsDBNull(6) ? null : DateTimeOffset.Parse(reader.GetString(6),
-                        CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    reader.IsDBNull(6) ? null : CatalogValues.ParseTimestamp(reader.GetString(6)),
                     reader.IsDBNull(7) ? null : reader.GetString(7)));
             }
 
             return jobs;
-        }
+        });
     }
 
-    public bool QueueProcessing(Guid itemId, int revision, string processorKey)
+    public bool Queue(Guid itemId, int revision, string processorKey)
     {
-        ValidateJobIdentity(itemId, revision, processorKey);
-        var now = Timestamp(DateTimeOffset.UtcNow);
-        lock (connection)
+        ProcessingJobKey.Validate(itemId, revision, processorKey);
+        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 INSERT INTO processing_jobs
@@ -71,15 +75,13 @@ public sealed partial class LocalCatalog
                 WHERE v.item_id = $item AND v.revision = $revision AND s.status = 'active'
                 ON CONFLICT(item_id, revision, processor_key) DO NOTHING
                 """);
-            command.Parameters.AddWithValue("$processor", processorKey);
-            command.Parameters.AddWithValue("$item", itemId.ToString("D"));
-            command.Parameters.AddWithValue("$revision", revision);
+            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             command.Parameters.AddWithValue("$now", now);
             return command.ExecuteNonQuery() != 0;
-        }
+        });
     }
 
-    public ProcessingLease? TryClaimProcessing(
+    public ProcessingLease? TryClaim(
         TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null,
         string? processorKey = null)
     {
@@ -96,16 +98,16 @@ public sealed partial class LocalCatalog
 
         if (processorKey is not null)
         {
-            ValidateProcessorKey(processorKey);
+            ProcessingJobKey.ValidateProcessor(processorKey);
         }
 
         var time = nowUtc ?? DateTimeOffset.UtcNow;
-        var now = Timestamp(time);
+        var now = CatalogValues.Timestamp(time);
         var leaseUntil = time.ToUniversalTime().Add(leaseDuration);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
-            ExpireAttemptLimitedJobs(now, maxAttempts, processorKey, transaction);
+            ExpireAttemptLimitedJobs(connection, transaction, now, maxAttempts, processorKey);
             using var select = connection.CreateCommand("""
                 SELECT j.item_id, j.revision, j.processor_key
                 FROM processing_jobs j
@@ -139,7 +141,7 @@ public sealed partial class LocalCatalog
                 processor = reader.GetString(2);
             }
 
-            var leaseKey = Guid.NewGuid();
+            var lease = new ProcessingLease(itemId, revision, processor, Guid.NewGuid(), leaseUntil);
             using var claim = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'running', attempt = attempt + 1,
@@ -148,28 +150,25 @@ public sealed partial class LocalCatalog
                 WHERE item_id = $item AND revision = $revision AND processor_key = $processor
                 """);
             claim.Transaction = transaction;
-            claim.Parameters.AddWithValue("$lease", leaseKey.ToString("D"));
-            claim.Parameters.AddWithValue("$until", Timestamp(leaseUntil));
+            ProcessingJobKey.BindLease(claim, lease);
+            claim.Parameters.AddWithValue("$until", CatalogValues.Timestamp(leaseUntil));
             claim.Parameters.AddWithValue("$now", now);
-            claim.Parameters.AddWithValue("$item", itemId.ToString("D"));
-            claim.Parameters.AddWithValue("$revision", revision);
-            claim.Parameters.AddWithValue("$processor", processor);
             if (claim.ExecuteNonQuery() != 1)
             {
                 throw new InvalidOperationException("The processing claim could not be committed.");
             }
 
             transaction.Commit();
-            return new ProcessingLease(itemId, revision, processor, leaseKey, leaseUntil);
-        }
+            return (ProcessingLease?)lease;
+        });
     }
 
-    public bool FinishProcessing(
+    public bool Finish(
         ProcessingLease lease, ProcessingCompletion completion,
         string? failureCode = null, DateTimeOffset? nowUtc = null)
     {
         ArgumentNullException.ThrowIfNull(lease);
-        ValidateJobIdentity(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         if (lease.LeaseKey == Guid.Empty)
         {
             throw new ArgumentException("A processing lease key is required.", nameof(lease));
@@ -195,8 +194,8 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("Only failed processing accepts a failure code.", nameof(failureCode));
         }
 
-        var now = Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
-        lock (connection)
+        var now = CatalogValues.Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
@@ -212,16 +211,15 @@ public sealed partial class LocalCatalog
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$failure", (object?)failureCode ?? DBNull.Value);
             command.Parameters.AddWithValue("$now", now);
-            BindJob(command, lease.ItemId, lease.Revision, lease.ProcessorKey);
-            command.Parameters.AddWithValue("$lease", lease.LeaseKey.ToString("D"));
+            ProcessingJobKey.BindLease(command, lease);
             return command.ExecuteNonQuery() == 1;
-        }
+        });
     }
 
-    public bool RetryProcessing(Guid itemId, int revision, string processorKey)
+    public bool Retry(Guid itemId, int revision, string processorKey)
     {
-        ValidateJobIdentity(itemId, revision, processorKey);
-        lock (connection)
+        ProcessingJobKey.Validate(itemId, revision, processorKey);
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
@@ -233,16 +231,16 @@ public sealed partial class LocalCatalog
                       SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
                       WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
                 """);
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
-            BindJob(command, itemId, revision, processorKey);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
-        }
+        });
     }
 
-    public bool CancelProcessing(Guid itemId, int revision, string processorKey)
+    public bool Cancel(Guid itemId, int revision, string processorKey)
     {
-        ValidateJobIdentity(itemId, revision, processorKey);
-        lock (connection)
+        ProcessingJobKey.Validate(itemId, revision, processorKey);
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
@@ -251,51 +249,32 @@ public sealed partial class LocalCatalog
                 WHERE item_id = $item AND revision = $revision AND processor_key = $processor
                   AND state IN ('queued', 'running', 'failed')
                 """);
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
-            BindJob(command, itemId, revision, processorKey);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
-        }
+        });
     }
 
-    public bool RevokeSource(Guid sourceId)
+    /// <summary>Schedules a newly committed revision inside the caller's capture transaction.</summary>
+    internal static void QueueVersion(
+        SqliteConnection connection, SqliteTransaction transaction,
+        Guid itemId, int revision, string processor, string utc)
     {
-        if (sourceId == Guid.Empty)
-        {
-            throw new ArgumentException("A source ID is required.", nameof(sourceId));
-        }
-
-        lock (connection)
-        {
-            using var transaction = connection.BeginTransaction();
-            using var source = connection.CreateCommand("""
-                UPDATE sources SET status = 'revoked'
-                WHERE source_id = $source AND status = 'active'
-                """);
-            source.Transaction = transaction;
-            source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            if (source.ExecuteNonQuery() == 0)
-            {
-                return false;
-            }
-
-            using var jobs = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
-                    lease_until_utc = NULL, updated_utc = $now
-                WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
-                  AND state IN ('queued', 'running', 'failed')
-                """);
-            jobs.Transaction = transaction;
-            jobs.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            jobs.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
-            jobs.ExecuteNonQuery();
-            transaction.Commit();
-            return true;
-        }
+        using var command = connection.CreateCommand("""
+            INSERT INTO processing_jobs
+                (item_id, revision, processor_key, state, attempt, total_attempts,
+                 created_utc, updated_utc)
+            VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
+            """);
+        command.Transaction = transaction;
+        ProcessingJobKey.Bind(command, itemId, revision, processor);
+        command.Parameters.AddWithValue("$now", utc);
+        command.ExecuteNonQuery();
     }
 
-    private void ExpireAttemptLimitedJobs(
-        string now, int maxAttempts, string? processorKey, SqliteTransaction transaction)
+    private static void ExpireAttemptLimitedJobs(
+        SqliteConnection connection, SqliteTransaction transaction,
+        string now, int maxAttempts, string? processorKey)
     {
         using var command = connection.CreateCommand("""
             UPDATE processing_jobs
@@ -310,50 +289,4 @@ public sealed partial class LocalCatalog
         command.Parameters.AddWithValue("$now", now);
         command.ExecuteNonQuery();
     }
-
-    private void QueueProcessingVersion(
-        Guid itemId, int revision, string processor, string utc,
-        SqliteTransaction transaction)
-    {
-        using var command = connection.CreateCommand("""
-            INSERT INTO processing_jobs
-                (item_id, revision, processor_key, state, attempt, total_attempts,
-                 created_utc, updated_utc)
-            VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
-            """);
-        command.Transaction = transaction;
-        BindJob(command, itemId, revision, processor);
-        command.Parameters.AddWithValue("$now", utc);
-        command.ExecuteNonQuery();
-    }
-
-    private static void BindJob(SqliteCommand command, Guid itemId, int revision, string processor)
-    {
-        command.Parameters.AddWithValue("$item", itemId.ToString("D"));
-        command.Parameters.AddWithValue("$revision", revision);
-        command.Parameters.AddWithValue("$processor", processor);
-    }
-
-    private static void ValidateJobIdentity(Guid itemId, int revision, string processor)
-    {
-        if (itemId == Guid.Empty || revision < 1)
-        {
-            throw new ArgumentException("A valid item and revision are required.");
-        }
-
-        ValidateProcessorKey(processor);
-    }
-
-    private static void ValidateProcessorKey(string processor)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(processor);
-        if (processor.Length > 64 || processor.Any(c =>
-            c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))
-        {
-            throw new ArgumentException("Processor keys must be bounded lowercase identifiers.", nameof(processor));
-        }
-    }
-
-    private static string Timestamp(DateTimeOffset time) =>
-        time.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 }

@@ -2,23 +2,55 @@ using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage;
 
-public sealed partial class LocalCatalog : IDisposable
+/// <summary>
+/// Owner-local catalog session. Owns the exclusive directory lock and database connection,
+/// and composes the responsibility-specific stores that operate on them.
+/// </summary>
+public sealed class LocalCatalog : IDisposable
 {
     private readonly FileStream lockFile;
-    private readonly SqliteConnection connection;
+    private readonly CatalogDatabase database;
 
     public string DatabasePath { get; }
+    public string DataDirectory { get; }
     public int SchemaVersion => CatalogSchema.CurrentVersion;
 
-    private LocalCatalog(string databasePath, FileStream lockFile, SqliteConnection connection)
+    public LocalSources Sources { get; }
+    public LocalOriginals Originals { get; }
+    public LocalLibrary Library { get; }
+    public LocalProcessingQueue Processing { get; }
+    public LocalTextDerivatives Text { get; }
+    public LocalTextSearch Search { get; }
+    public LocalTopicProposals Topics { get; }
+    public LocalCollections Collections { get; }
+    public LocalMediaEvidence Media { get; }
+    public LocalCatalogRecovery Recovery { get; }
+
+    private LocalCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
     {
-        DatabasePath = databasePath;
+        DataDirectory = dataDirectory;
+        DatabasePath = Path.Combine(dataDirectory, CatalogDirectory.DatabaseFile);
         this.lockFile = lockFile;
-        this.connection = connection;
+        database = new CatalogDatabase(connection);
+        var objects = new OriginalFileStore(dataDirectory);
+
+        Sources = new LocalSources(database);
+        Processing = new LocalProcessingQueue(database);
+        Originals = new LocalOriginals(database, objects, dataDirectory);
+        Library = new LocalLibrary(database);
+        Text = new LocalTextDerivatives(database);
+        Search = new LocalTextSearch(database);
+        Topics = new LocalTopicProposals(database);
+        Collections = new LocalCollections(database);
+        Media = new LocalMediaEvidence(Sources, Search, Text, objects);
+        Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
     }
 
     public static LocalCatalog Open(string dataDirectory) =>
         Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
+
+    internal static LocalCatalog OpenReadOnly(string dataDirectory) =>
+        Open(dataDirectory, SqliteOpenMode.ReadOnly);
 
     private static LocalCatalog Open(string dataDirectory, SqliteOpenMode mode)
     {
@@ -29,14 +61,14 @@ public sealed partial class LocalCatalog : IDisposable
         }
 
         var root = Path.GetFullPath(dataDirectory);
-        ValidateRoot(root);
-        var databasePath = Path.Combine(root, "catalog.sqlite");
+        CatalogDirectory.Validate(root);
+        var databasePath = Path.Combine(root, CatalogDirectory.DatabaseFile);
         if (mode == SqliteOpenMode.ReadOnly && !File.Exists(databasePath))
         {
             throw new FileNotFoundException("The source catalog does not exist.", databasePath);
         }
 
-        var lockPath = Path.Combine(root, "catalog.lock");
+        var lockPath = Path.Combine(root, CatalogDirectory.LockFile);
         var lockOptions = new FileStreamOptions
         {
             Mode = FileMode.OpenOrCreate,
@@ -49,19 +81,19 @@ public sealed partial class LocalCatalog : IDisposable
         }
 
         var fileLock = new FileStream(lockPath, lockOptions);
-        SqliteConnection? database = null;
+        SqliteConnection? connection = null;
         try
         {
-            database = new SqliteConnection(new SqliteConnectionStringBuilder
+            connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
                 Mode = mode,
                 Pooling = false
             }.ToString());
-            database.Open();
+            connection.Open();
             if (mode != SqliteOpenMode.ReadOnly)
             {
-                CatalogSchema.Prepare(database);
+                CatalogSchema.Prepare(connection);
                 if (!OperatingSystem.IsWindows())
                 {
                     File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -69,69 +101,19 @@ public sealed partial class LocalCatalog : IDisposable
                 }
             }
 
-            return new LocalCatalog(databasePath, fileLock, database);
+            return new LocalCatalog(root, fileLock, connection);
         }
         catch
         {
-            database?.Dispose();
+            connection?.Dispose();
             fileLock.Dispose();
             throw;
         }
     }
 
-    private static void ValidateRoot(string root)
-    {
-        if (!Directory.Exists(root))
-        {
-            throw new DirectoryNotFoundException(root);
-        }
-
-        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("The catalog directory cannot be a symbolic link.");
-        }
-
-        if (!OperatingSystem.IsWindows())
-        {
-            const UnixFileMode publicAccess = UnixFileMode.GroupRead | UnixFileMode.GroupWrite |
-                UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite |
-                UnixFileMode.OtherExecute;
-            if ((File.GetUnixFileMode(root) & publicAccess) != 0)
-            {
-                throw new UnauthorizedAccessException("The catalog directory must be private to its owner.");
-            }
-        }
-
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "catalog.sqlite", "catalog.sqlite-wal", "catalog.sqlite-shm", "catalog.lock",
-            "objects", "staging", "derived"
-        };
-        foreach (var entry in Directory.EnumerateFileSystemEntries(root))
-        {
-            var name = Path.GetFileName(entry);
-            if (!allowed.Contains(name) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidDataException("The catalog directory contains an unexpected or linked entry.");
-            }
-
-            if (name is "objects" or "staging" or "derived")
-            {
-                if (!Directory.Exists(entry))
-                {
-                    throw new InvalidDataException("A reserved catalog directory name is occupied by a file.");
-                }
-            }
-            else if (!File.Exists(entry))
-            {
-                throw new InvalidDataException("A reserved catalog file name is occupied by a directory.");
-            }
-        }
-    }
-
     public void Dispose()
     {
-        connection.Dispose();
+        database.Dispose();
         lockFile.Dispose();
     }
 }

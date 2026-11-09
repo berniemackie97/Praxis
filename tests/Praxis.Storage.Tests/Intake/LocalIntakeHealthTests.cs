@@ -40,13 +40,13 @@ public sealed class LocalIntakeHealthTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await monitor.ReconcileAsync(now));
         Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(1)));
-        var captured = Assert.Single(catalog.ListLibrary());
+        var captured = Assert.Single(catalog.Library.List());
         Assert.Equal("watching", monitor.Snapshot().State);
         Assert.Equal(1, monitor.Snapshot().ObservedFiles);
         Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
         Assert.Equal(now.AddSeconds(1), monitor.Snapshot().LastSuccessfulScanUtc);
 
-        Assert.True(catalog.RevokeSource(captured.SourceId));
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
         File.WriteAllText(path, "# Changed\nA revoked revision");
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(30));
         Assert.Equal(0, await monitor.ReconcileAsync(now.AddSeconds(2)));
@@ -58,7 +58,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         Assert.Equal(path, broken.FileErrors[0].SourcePath);
         Assert.Contains("Revoked", broken.FileErrors[0].Message);
         Assert.Equal(1, broken.ImportedSinceStart);
-        await catalog.VerifyOriginalAsync(captured.ItemId);
+        await catalog.Originals.VerifyAsync(captured.ItemId);
 
         File.Delete(path);
         await monitor.ReconcileAsync(now.AddSeconds(4));
@@ -67,7 +67,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         Assert.Equal(0, resumed.ErrorCount);
         Assert.Empty(resumed.FileErrors);
         Assert.Equal(0, resumed.ObservedFiles);
-        Assert.Single(catalog.ListLibrary());
+        Assert.Single(catalog.Library.List());
     }
 
     [Fact]
@@ -84,30 +84,30 @@ public sealed class LocalIntakeHealthTests : IDisposable
             var first = Path.Combine(inbox, "paused.md");
             File.WriteAllText(first, "Written while paused");
             await Task.Delay(350);
-            Assert.Empty(catalog.ListLibrary());
+            Assert.Empty(catalog.Library.List());
             Assert.Equal("paused", monitor.Snapshot().State);
 
             Assert.False(monitor.SetPaused(false).Paused);
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed" &&
+                catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
                 monitor.Snapshot().State == "watching" &&
                 monitor.Snapshot().ImportedSinceStart == 1);
             Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
-            Assert.Single(catalog.SearchText("Written"));
+            Assert.Single(catalog.Search.Query("Written"));
 
             monitor.SetPaused(true);
             File.WriteAllText(first, "Completely different revision");
             File.SetLastWriteTimeUtc(first, DateTime.UtcNow.AddMinutes(1));
             await Task.Delay(350);
-            Assert.Equal(1, Assert.Single(catalog.ListLibrary()).Revision);
+            Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
 
             monitor.SetPaused(false);
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.Revision == 2 &&
+                catalog.Library.List().FirstOrDefault()?.Revision == 2 &&
                 monitor.Snapshot().ImportedSinceStart == 2);
-            Assert.Empty(catalog.SearchText("Written"));
-            Assert.Single(catalog.SearchText("Completely"));
-            await catalog.VerifyOriginalAsync(Assert.Single(catalog.ListLibrary()).ItemId);
+            Assert.Empty(catalog.Search.Query("Written"));
+            Assert.Single(catalog.Search.Query("Completely"));
+            await catalog.Originals.VerifyAsync(Assert.Single(catalog.Library.List()).ItemId);
         }
         finally
         {
@@ -136,18 +136,18 @@ public sealed class LocalIntakeHealthTests : IDisposable
             Directory.CreateDirectory(removable);
             File.WriteAllText(Path.Combine(removable, "reconnected.md"), "# Reconnected");
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed" &&
+                catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
                 monitor.Snapshot().State == "watching" &&
                 monitor.Snapshot().ImportedSinceStart == 1);
-            var saved = Assert.Single(catalog.ListLibrary());
+            var saved = Assert.Single(catalog.Library.List());
             Assert.NotNull(monitor.Snapshot().LastSuccessfulScanUtc);
-            Assert.Single(catalog.SearchText("Reconnected"));
+            Assert.Single(catalog.Search.Query("Reconnected"));
 
             Directory.Delete(removable, recursive: true);
             await WaitForAsync(() => monitor.Snapshot().State == "offline");
-            await catalog.VerifyOriginalAsync(saved.ItemId);
-            Assert.Single(catalog.ListLibrary());
-            Assert.Single(catalog.SearchText("Reconnected"));
+            await catalog.Originals.VerifyAsync(saved.ItemId);
+            Assert.Single(catalog.Library.List());
+            Assert.Single(catalog.Search.Query("Reconnected"));
         }
         finally
         {
@@ -162,7 +162,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         using var source = new MemoryStream(
             System.Text.Encoding.UTF8.GetBytes("Preserved offline knowledge"));
-        var captured = await catalog.CaptureFileAsync(
+        var captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, "unmounted.md"), source, 256, "offline-original");
         var disconnected = Path.Combine(workspace, "not-mounted");
         var monitor = new LocalWatchedIntake(catalog, disconnected,
@@ -186,7 +186,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
                 .GetProperty("items").EnumerateArray());
             Assert.Equal(captured.ItemId.ToString("D"),
                 item.GetProperty("itemId").GetString());
-            await catalog.VerifyOriginalAsync(captured.ItemId);
+            await catalog.Originals.VerifyAsync(captured.ItemId);
             Assert.False(Directory.Exists(disconnected));
         }
         finally

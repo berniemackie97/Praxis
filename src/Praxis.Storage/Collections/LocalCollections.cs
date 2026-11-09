@@ -6,13 +6,18 @@ namespace Praxis.Storage;
 public sealed record LocalSourceCollection(
     Guid CollectionId, string Name, int ActiveSourceCount);
 
-public sealed partial class LocalCatalog
+/// <summary>Owner-authored named collections with explicit many-to-many source membership.</summary>
+public sealed class LocalCollections
 {
-    public LocalSourceCollection CreateCollection(string name)
+    private readonly CatalogDatabase database;
+
+    internal LocalCollections(CatalogDatabase database) => this.database = database;
+
+    public LocalSourceCollection Create(string name)
     {
         var (display, key) = NormalizeCollectionName(name);
         var id = Guid.NewGuid();
-        lock (connection)
+        database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 INSERT INTO source_collections (collection_id, name, name_key, created_utc)
@@ -21,7 +26,7 @@ public sealed partial class LocalCatalog
             command.Parameters.AddWithValue("$id", id.ToString("D"));
             command.Parameters.AddWithValue("$name", display);
             command.Parameters.AddWithValue("$key", key);
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             try
             {
                 command.ExecuteNonQuery();
@@ -30,16 +35,16 @@ public sealed partial class LocalCatalog
             {
                 throw new InvalidOperationException("A collection with this name already exists.", exception);
             }
-        }
+        });
 
         return new LocalSourceCollection(id, display, 0);
     }
 
-    public bool RenameCollection(Guid collectionId, string name)
+    public bool Rename(Guid collectionId, string name)
     {
         ValidateCollectionId(collectionId);
         var (display, key) = NormalizeCollectionName(name);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 UPDATE source_collections SET name = $name, name_key = $key
@@ -56,28 +61,28 @@ public sealed partial class LocalCatalog
             {
                 throw new InvalidOperationException("A collection with this name already exists.", exception);
             }
-        }
+        });
     }
 
-    public bool ArchiveCollection(Guid collectionId)
+    public bool Archive(Guid collectionId)
     {
         ValidateCollectionId(collectionId);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 UPDATE source_collections SET archived_utc = $now
                 WHERE collection_id = $id AND archived_utc IS NULL
                 """);
             command.Parameters.AddWithValue("$id", collectionId.ToString("D"));
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             return command.ExecuteNonQuery() != 0;
-        }
+        });
     }
 
-    public IReadOnlyList<LocalSourceCollection> ListCollections(int limit = 100, int offset = 0)
+    public IReadOnlyList<LocalSourceCollection> List(int limit = 100, int offset = 0)
     {
         ValidateCollectionPage(limit, offset);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 SELECT c.collection_id, c.name, (
@@ -102,10 +107,10 @@ public sealed partial class LocalCatalog
             }
 
             return rows;
-        }
+        });
     }
 
-    public IReadOnlyList<Guid> ListSourceCollectionIds(Guid sourceId, int limit = 100)
+    public IReadOnlyList<Guid> ListForSource(Guid sourceId, int limit = 100)
     {
         ValidateCollectionId(sourceId);
         if (limit is < 1 or > 200)
@@ -113,7 +118,7 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 SELECT c.collection_id
@@ -135,14 +140,14 @@ public sealed partial class LocalCatalog
             }
 
             return rows;
-        }
+        });
     }
 
-    public bool AddSourceToCollection(Guid collectionId, Guid sourceId)
+    public bool AddSource(Guid collectionId, Guid sourceId)
     {
         ValidateCollectionId(collectionId);
         ValidateCollectionId(sourceId);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 INSERT INTO source_collection_memberships
@@ -156,16 +161,16 @@ public sealed partial class LocalCatalog
                 """);
             command.Parameters.AddWithValue("$collection", collectionId.ToString("D"));
             command.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            command.Parameters.AddWithValue("$now", Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             return command.ExecuteNonQuery() != 0;
-        }
+        });
     }
 
-    public bool RemoveSourceFromCollection(Guid collectionId, Guid sourceId)
+    public bool RemoveSource(Guid collectionId, Guid sourceId)
     {
         ValidateCollectionId(collectionId);
         ValidateCollectionId(sourceId);
-        lock (connection)
+        return database.Execute(connection =>
         {
             using var command = connection.CreateCommand("""
                 DELETE FROM source_collection_memberships
@@ -178,7 +183,7 @@ public sealed partial class LocalCatalog
             command.Parameters.AddWithValue("$collection", collectionId.ToString("D"));
             command.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             return command.ExecuteNonQuery() != 0;
-        }
+        });
     }
 
     private static void ValidateCollectionId(Guid id)

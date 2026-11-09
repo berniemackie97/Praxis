@@ -37,64 +37,64 @@ public sealed class LocalDesktopProtocol(
             {
                 "library" => new
                 {
-                    items = catalog.ListLibrary(fields.IntegerOrDefault("limit", 100, 1, 200),
+                    items = catalog.Library.List(fields.IntegerOrDefault("limit", 100, 1, 200),
                         fields.IntegerOrDefault("offset", 0, 0, 1_000_000),
                         fields.OptionalGuid("collectionId"))
                 },
                 "search" => new
                 {
-                    hits = catalog.SearchText(fields.RequireString("query", 256), 30)
+                    hits = catalog.Search.Query(fields.RequireString("query", 256), 30)
                 },
                 "mediaCues" => new
                 {
-                    clips = catalog.SearchVideoCues(
+                    clips = catalog.Media.SearchCues(
                         fields.RequireString("query", 256),
                         fields.IntegerOrDefault("limit", 20, 1, 50))
                 },
                 "mediaInspection" => new
                 {
-                    media = await catalog.InspectMediaAsync(
+                    media = await catalog.Media.InspectAsync(
                         fields.RequireGuid("sourceId"),
                         fields.OptionalInteger("revision", 1, int.MaxValue),
                         cancellationToken)
                 },
                 "collections" => new
                 {
-                    collections = catalog.ListCollections(
+                    collections = catalog.Collections.List(
                         fields.IntegerOrDefault("limit", 100, 1, 200),
                         fields.IntegerOrDefault("offset", 0, 0, 1_000_000))
                 },
                 "collectionCreate" => new
                 {
-                    collection = catalog.CreateCollection(fields.RequireString("name", 80))
+                    collection = catalog.Collections.Create(fields.RequireString("name", 80))
                 },
                 "collectionRename" => new
                 {
-                    changed = catalog.RenameCollection(fields.RequireGuid("collectionId"),
+                    changed = catalog.Collections.Rename(fields.RequireGuid("collectionId"),
                         fields.RequireString("name", 80))
                 },
                 "collectionArchive" => new
                 {
-                    changed = catalog.ArchiveCollection(fields.RequireGuid("collectionId"))
+                    changed = catalog.Collections.Archive(fields.RequireGuid("collectionId"))
                 },
                 "collectionAdd" => new
                 {
-                    changed = catalog.AddSourceToCollection(
+                    changed = catalog.Collections.AddSource(
                         fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
                 },
                 "collectionRemove" => new
                 {
-                    changed = catalog.RemoveSourceFromCollection(
+                    changed = catalog.Collections.RemoveSource(
                         fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
                 },
                 "sourceCollections" => new
                 {
-                    collectionIds = catalog.ListSourceCollectionIds(
+                    collectionIds = catalog.Collections.ListForSource(
                         fields.RequireGuid("sourceId"))
                 },
                 "sourceMoves" => new
                 {
-                    moves = catalog.ListSourceMovements(
+                    moves = catalog.Sources.ListMovements(
                         fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 20, 1, 100))
                 },
                 "noteCapture" => new
@@ -108,20 +108,20 @@ public sealed class LocalDesktopProtocol(
                 },
                 "topics" => new
                 {
-                    proposals = catalog.ListTopicProposals(
+                    proposals = catalog.Topics.List(
                         fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 40, 1, 100)),
-                    outcome = catalog.TopicProcessingOutcome(fields.RequireGuid("sourceId"))
+                    outcome = catalog.Topics.Outcome(fields.RequireGuid("sourceId"))
                 },
                 "topicReview" => new
                 {
-                    reviewed = catalog.ReviewTopicProposal(
+                    reviewed = catalog.Topics.Review(
                         fields.RequireGuid("proposalId"),
                         fields.RequireString("decision", 16),
                         fields.OptionalText("correction", 80, "The review correction is invalid."))
                 },
                 "exportOriginal" => new
                 {
-                    exported = await catalog.ExportOriginalAsync(
+                    exported = await catalog.Originals.ExportAsync(
                         fields.RequireGuid("itemId"),
                         fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
                         fields.RequireString("destinationPath", 4_096),
@@ -143,13 +143,13 @@ public sealed class LocalDesktopProtocol(
                 "verify" => await VerifyAsync(fields, cancellationToken),
                 "retry" => new
                 {
-                    queued = catalog.RetryProcessing(fields.RequireGuid("itemId"),
+                    queued = catalog.Processing.Retry(fields.RequireGuid("itemId"),
                         fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
-                        LocalCatalog.DefaultProcessorKey)
+                        LocalProcessors.SourceText)
                 },
                 "revoke" => new
                 {
-                    revoked = catalog.RevokeSource(fields.RequireGuid("sourceId"))
+                    revoked = catalog.Sources.Revoke(fields.RequireGuid("sourceId"))
                 },
                 "stop" => Stop(),
                 _ => throw new ArgumentException("The desktop action is not supported.")
@@ -174,7 +174,7 @@ public sealed class LocalDesktopProtocol(
     {
         var itemId = fields.RequireGuid("itemId");
         var revision = fields.IntegerOrDefault("revision", 1, 1, int.MaxValue);
-        var derivative = catalog.ReadTextDerivative(itemId, revision);
+        var derivative = catalog.Text.Read(itemId, revision);
         return derivative is null
             ? new { outcome = "unavailable", content = (string?)null, reasonCode = (string?)null }
             : new
@@ -188,7 +188,7 @@ public sealed class LocalDesktopProtocol(
 
     private async Task<object> VerifyAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
     {
-        await catalog.VerifyOriginalAsync(fields.RequireGuid("itemId"), cancellationToken);
+        await catalog.Originals.VerifyAsync(fields.RequireGuid("itemId"), cancellationToken);
         return new { verified = true };
     }
 

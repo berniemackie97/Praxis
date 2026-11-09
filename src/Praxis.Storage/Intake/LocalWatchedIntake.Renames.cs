@@ -136,7 +136,7 @@ public sealed partial class LocalWatchedIntake
                     continue;
                 }
 
-                if (catalog.RelocateObservedFile(entry.Previous, entry.Current, digest))
+                if (catalog.Sources.RelocateObservedFile(entry.Previous, entry.Current, digest))
                 {
                     report("Preserved file source identity after observed rename: " +
                         JsonSerializer.Serialize(entry.Previous) + " -> " +

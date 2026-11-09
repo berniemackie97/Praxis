@@ -31,42 +31,42 @@ public sealed class LocalCollectionsTests : IDisposable
         {
             var first = await Capture(catalog, "first.md", "violet", "one");
             var second = await Capture(catalog, "second.md", "violet", "two");
-            var collection = catalog.CreateCollection(" Project Notes ");
+            var collection = catalog.Collections.Create(" Project Notes ");
             collectionId = collection.CollectionId;
             firstSource = first.SourceId;
             secondSource = second.SourceId;
             firstItem = first.ItemId;
 
             Assert.Equal("Project Notes", collection.Name);
-            Assert.True(catalog.AddSourceToCollection(collectionId, firstSource));
-            Assert.True(catalog.AddSourceToCollection(collectionId, secondSource));
-            Assert.False(catalog.AddSourceToCollection(collectionId, firstSource));
-            Assert.Equal(2, catalog.ListLibrary(collectionId: collectionId).Count);
-            Assert.Single(catalog.ListSourceCollectionIds(firstSource));
+            Assert.True(catalog.Collections.AddSource(collectionId, firstSource));
+            Assert.True(catalog.Collections.AddSource(collectionId, secondSource));
+            Assert.False(catalog.Collections.AddSource(collectionId, firstSource));
+            Assert.Equal(2, catalog.Library.List(collectionId: collectionId).Count);
+            Assert.Single(catalog.Collections.ListForSource(firstSource));
 
             var revised = await Capture(catalog, "first.md", "amber", "revised");
             Assert.Equal(first.ItemId, revised.ItemId);
             Assert.Equal(first.SourceId, revised.SourceId);
             Assert.Equal(2, revised.Revision);
-            Assert.Equal(2, catalog.ListLibrary(collectionId: collectionId).Count);
-            Assert.Contains(catalog.ListLibrary(collectionId: collectionId),
+            Assert.Equal(2, catalog.Library.List(collectionId: collectionId).Count);
+            Assert.Contains(catalog.Library.List(collectionId: collectionId),
                 item => item.ItemId == firstItem && item.Revision == 2);
         }
 
         using (var reopened = LocalCatalog.Open(dataRoot))
         {
-            var collection = Assert.Single(reopened.ListCollections());
+            var collection = Assert.Single(reopened.Collections.List());
             Assert.Equal(collectionId, collection.CollectionId);
             Assert.Equal(2, collection.ActiveSourceCount);
-            Assert.Equal(2, reopened.ListLibrary(collectionId: collectionId).Count);
-            Assert.Equal(new[] { collectionId }, reopened.ListSourceCollectionIds(firstSource));
-            Assert.True(reopened.RemoveSourceFromCollection(collectionId, secondSource));
-            Assert.False(reopened.RemoveSourceFromCollection(collectionId, secondSource));
-            Assert.Single(reopened.ListLibrary(collectionId: collectionId));
+            Assert.Equal(2, reopened.Library.List(collectionId: collectionId).Count);
+            Assert.Equal(new[] { collectionId }, reopened.Collections.ListForSource(firstSource));
+            Assert.True(reopened.Collections.RemoveSource(collectionId, secondSource));
+            Assert.False(reopened.Collections.RemoveSource(collectionId, secondSource));
+            Assert.Single(reopened.Library.List(collectionId: collectionId));
         }
 
         using var restoredSession = LocalCatalog.Open(dataRoot);
-        Assert.Single(restoredSession.ListLibrary(collectionId: collectionId));
+        Assert.Single(restoredSession.Library.List(collectionId: collectionId));
     }
 
     [Fact]
@@ -75,22 +75,22 @@ public sealed class LocalCollectionsTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         var first = await Capture(catalog, "first.md", "shared", "one");
         var second = await Capture(catalog, "second.md", "shared", "two");
-        var collection = catalog.CreateCollection("Team");
-        Assert.True(catalog.AddSourceToCollection(collection.CollectionId, first.SourceId));
-        Assert.True(catalog.AddSourceToCollection(collection.CollectionId, second.SourceId));
-        Assert.True(catalog.RevokeSource(first.SourceId));
-        Assert.False(catalog.AddSourceToCollection(collection.CollectionId, first.SourceId));
-        Assert.Empty(catalog.ListSourceCollectionIds(first.SourceId));
+        var collection = catalog.Collections.Create("Team");
+        Assert.True(catalog.Collections.AddSource(collection.CollectionId, first.SourceId));
+        Assert.True(catalog.Collections.AddSource(collection.CollectionId, second.SourceId));
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.False(catalog.Collections.AddSource(collection.CollectionId, first.SourceId));
+        Assert.Empty(catalog.Collections.ListForSource(first.SourceId));
         Assert.Equal(second.SourceId,
-            Assert.Single(catalog.ListLibrary(collectionId: collection.CollectionId)).SourceId);
-        Assert.Equal(1, Assert.Single(catalog.ListCollections()).ActiveSourceCount);
-        await catalog.VerifyOriginalAsync(first.ItemId);
+            Assert.Single(catalog.Library.List(collectionId: collection.CollectionId)).SourceId);
+        Assert.Equal(1, Assert.Single(catalog.Collections.List()).ActiveSourceCount);
+        await catalog.Originals.VerifyAsync(first.ItemId);
 
-        Assert.True(catalog.ArchiveCollection(collection.CollectionId));
-        Assert.False(catalog.ArchiveCollection(collection.CollectionId));
-        Assert.Empty(catalog.ListCollections());
-        Assert.Empty(catalog.ListLibrary(collectionId: collection.CollectionId));
-        Assert.False(catalog.AddSourceToCollection(collection.CollectionId, second.SourceId));
+        Assert.True(catalog.Collections.Archive(collection.CollectionId));
+        Assert.False(catalog.Collections.Archive(collection.CollectionId));
+        Assert.Empty(catalog.Collections.List());
+        Assert.Empty(catalog.Library.List(collectionId: collection.CollectionId));
+        Assert.False(catalog.Collections.AddSource(collection.CollectionId, second.SourceId));
     }
 
     [Fact]
@@ -102,22 +102,22 @@ public sealed class LocalCollectionsTests : IDisposable
         using (var catalog = LocalCatalog.Open(dataRoot))
         {
             var item = await Capture(catalog, "book.md", "reviewable", "book");
-            var collection = catalog.CreateCollection("Research");
+            var collection = catalog.Collections.Create("Research");
             collectionId = collection.CollectionId;
             sourceId = item.SourceId;
             itemId = item.ItemId;
-            Assert.True(catalog.AddSourceToCollection(collectionId, sourceId));
-            await catalog.BackupAsync(backup, 8_000_000);
+            Assert.True(catalog.Collections.AddSource(collectionId, sourceId));
+            await catalog.Recovery.BackupAsync(backup, 8_000_000);
         }
 
-        await LocalCatalog.RestoreAsync(backup, destination, 8_000_000);
+        await LocalCatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
         using var reopened = LocalCatalog.Open(destination);
         Assert.Equal(8, reopened.SchemaVersion);
-        Assert.Equal(collectionId, Assert.Single(reopened.ListCollections()).CollectionId);
+        Assert.Equal(collectionId, Assert.Single(reopened.Collections.List()).CollectionId);
         Assert.Equal(itemId,
-            Assert.Single(reopened.ListLibrary(collectionId: collectionId)).ItemId);
-        Assert.Equal(new[] { collectionId }, reopened.ListSourceCollectionIds(sourceId));
-        await reopened.VerifyOriginalAsync(itemId);
+            Assert.Single(reopened.Library.List(collectionId: collectionId)).ItemId);
+        Assert.Equal(new[] { collectionId }, reopened.Collections.ListForSource(sourceId));
+        await reopened.Originals.VerifyAsync(itemId);
     }
 
     [Fact]
@@ -150,44 +150,44 @@ public sealed class LocalCollectionsTests : IDisposable
 
         using var catalog = LocalCatalog.Open(dataRoot);
         Assert.Equal(8, catalog.SchemaVersion);
-        Assert.Empty(catalog.ListCollections());
-        Assert.Equal("Migrated", catalog.CreateCollection("Migrated").Name);
-        Assert.Empty(catalog.SearchText("missing"));
+        Assert.Empty(catalog.Collections.List());
+        Assert.Equal("Migrated", catalog.Collections.Create("Migrated").Name);
+        Assert.Empty(catalog.Search.Query("missing"));
     }
 
     [Fact]
     public async Task CollectionNamesMembershipAndPageBoundsAreEnforced()
     {
         using var catalog = LocalCatalog.Open(dataRoot);
-        Assert.Throws<ArgumentException>(() => catalog.CreateCollection("  "));
-        Assert.Throws<ArgumentException>(() => catalog.CreateCollection("Bad\nName"));
-        Assert.Throws<ArgumentException>(() => catalog.CreateCollection(new string('x', 81)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.ListCollections(201));
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.ListCollections(offset: -1));
-        Assert.Throws<ArgumentException>(() => catalog.AddSourceToCollection(Guid.Empty, Guid.NewGuid()));
+        Assert.Throws<ArgumentException>(() => catalog.Collections.Create("  "));
+        Assert.Throws<ArgumentException>(() => catalog.Collections.Create("Bad\nName"));
+        Assert.Throws<ArgumentException>(() => catalog.Collections.Create(new string('x', 81)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Collections.List(201));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Collections.List(offset: -1));
+        Assert.Throws<ArgumentException>(() => catalog.Collections.AddSource(Guid.Empty, Guid.NewGuid()));
 
-        var first = catalog.CreateCollection("Research");
-        Assert.Throws<InvalidOperationException>(() => catalog.CreateCollection(" research "));
-        var second = catalog.CreateCollection("Projects");
+        var first = catalog.Collections.Create("Research");
+        Assert.Throws<InvalidOperationException>(() => catalog.Collections.Create(" research "));
+        var second = catalog.Collections.Create("Projects");
         Assert.Throws<InvalidOperationException>(() =>
-            catalog.RenameCollection(second.CollectionId, "RESEARCH"));
-        Assert.True(catalog.RenameCollection(second.CollectionId, "Project Notes"));
+            catalog.Collections.Rename(second.CollectionId, "RESEARCH"));
+        Assert.True(catalog.Collections.Rename(second.CollectionId, "Project Notes"));
         Assert.Equal(new[] { "Project Notes", "Research" },
-            catalog.ListCollections().Select(c => c.Name).ToArray());
-        Assert.Single(catalog.ListCollections(1, 1));
+            catalog.Collections.List().Select(c => c.Name).ToArray());
+        Assert.Single(catalog.Collections.List(1, 1));
 
         var source = await Capture(catalog, "data.txt", "content", "one");
-        Assert.False(catalog.AddSourceToCollection(first.CollectionId, Guid.NewGuid()));
-        Assert.True(catalog.AddSourceToCollection(first.CollectionId, source.SourceId));
-        Assert.True(catalog.RemoveSourceFromCollection(first.CollectionId, source.SourceId));
-        Assert.Empty(catalog.ListSourceCollectionIds(source.SourceId));
+        Assert.False(catalog.Collections.AddSource(first.CollectionId, Guid.NewGuid()));
+        Assert.True(catalog.Collections.AddSource(first.CollectionId, source.SourceId));
+        Assert.True(catalog.Collections.RemoveSource(first.CollectionId, source.SourceId));
+        Assert.Empty(catalog.Collections.ListForSource(source.SourceId));
     }
 
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string name, string value, string requestKey)
     {
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(value));
-        return await catalog.CaptureFileAsync(
+        return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, name), stream, 1024, requestKey);
     }
 

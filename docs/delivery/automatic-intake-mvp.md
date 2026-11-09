@@ -41,7 +41,7 @@ If an explicitly selected external intake folder is temporarily unavailable at s
 
 With that **single running process**, copy Markdown, text, and arbitrary other files into `$HOME/PraxisInbox`. The worker writes local capture and error status to its console; no terminal command is needed for each import. Use Ctrl-C to stop cleanly. Running the worker is not yet an installer, login item, tray application, or first-party GUI.
 
-For current search and library inspection, `LocalCatalog.SearchText` and `LocalCatalog.ListLibrary` are owner-local library APIs. The polished Inbox/Library/Search and reviewable organization UI is **not shipped** by this slice (#108). There is intentionally no unauthenticated private-data HTTP endpoint.
+For current search and library inspection, `LocalCatalog.Search.Query` and `LocalCatalog.Library.List` are owner-local library APIs. The polished Inbox/Library/Search and reviewable organization UI is **not shipped** by this slice (#108). There is intentionally no unauthenticated private-data HTTP endpoint.
 
 ## Acceptance to complete #101 / #105 / #130
 

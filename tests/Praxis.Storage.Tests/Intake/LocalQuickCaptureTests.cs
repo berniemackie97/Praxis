@@ -39,24 +39,24 @@ public sealed class LocalQuickCaptureTests : IDisposable
                 receipt.SourcePath);
             Assert.Equal("# Project Ideas\n\nThe violet compass.",
                 File.ReadAllText(receipt.SourcePath));
-            Assert.Equal(receipt.Original.ItemId, Assert.Single(catalog.ListLibrary()).ItemId);
-            Assert.Equal("file", Assert.Single(catalog.ListLibrary()).SourceKind);
+            Assert.Equal(receipt.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
+            Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
             Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-            var hit = Assert.Single(catalog.SearchText("violet compass"));
+            var hit = Assert.Single(catalog.Search.Query("violet compass"));
             Assert.Equal(receipt.Original.SourceId, hit.SourceId);
             Assert.Equal(receipt.Original.ItemId, hit.ItemId);
             Assert.Equal(receipt.Original.Sha256, hit.OriginalSha256);
-            await catalog.VerifyOriginalAsync(receipt.Original.ItemId);
+            await catalog.Originals.VerifyAsync(receipt.Original.ItemId);
             Assert.Empty(Directory.EnumerateFiles(inbox, "*.part", SearchOption.TopDirectoryOnly));
         }
 
         using var reopened = LocalCatalog.Open(dataRoot);
-        var item = Assert.Single(reopened.ListLibrary());
+        var item = Assert.Single(reopened.Library.List());
         Assert.Equal(receipt.Original.ItemId, item.ItemId);
-        Assert.Single(reopened.SearchText("violet"));
+        Assert.Single(reopened.Search.Query("violet"));
         Assert.Equal(receipt.Original, (await new LocalQuickCapture(reopened, inbox)
             .CaptureAsync(id, "Project Ideas", "The violet compass.")).Original);
-        await reopened.VerifyOriginalAsync(item.ItemId);
+        await reopened.Originals.VerifyAsync(item.ItemId);
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
     }
 
@@ -74,9 +74,9 @@ public sealed class LocalQuickCaptureTests : IDisposable
         var time = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(time));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(1)));
-        Assert.Single(catalog.ListLibrary());
-        Assert.Equal(1, Assert.Single(catalog.ListLibrary()).Revision);
-        Assert.Single(catalog.SearchText("thought"));
+        Assert.Single(catalog.Library.List());
+        Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
+        Assert.Single(catalog.Search.Query("thought"));
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md"));
     }
 
@@ -93,8 +93,8 @@ public sealed class LocalQuickCaptureTests : IDisposable
             capture.CaptureAsync(id, "Different Title", "This text is preserved."));
         Assert.Equal("# Research\n\nThis text is preserved.", File.ReadAllText(original.SourcePath));
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md"));
-        Assert.Single(catalog.ListLibrary());
-        await catalog.VerifyOriginalAsync(original.Original.ItemId);
+        Assert.Single(catalog.Library.List());
+        await catalog.Originals.VerifyAsync(original.Original.ItemId);
     }
 
     [Fact]
@@ -107,8 +107,8 @@ public sealed class LocalQuickCaptureTests : IDisposable
         var result = await new LocalQuickCapture(catalog, inbox)
             .CaptureAsync(id, "Recover", "Offline thought");
         Assert.Equal(target, result.SourcePath);
-        Assert.Equal(result.Original.ItemId, Assert.Single(catalog.ListLibrary()).ItemId);
-        await catalog.VerifyOriginalAsync(result.Original.ItemId);
+        Assert.Equal(result.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
+        await catalog.Originals.VerifyAsync(result.Original.ItemId);
     }
 
     [Fact]
@@ -122,8 +122,8 @@ public sealed class LocalQuickCaptureTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             capture.CaptureAsync(id, "Topic", "Keep these bytes."));
         Assert.Equal("external revision", File.ReadAllText(saved.SourcePath));
-        Assert.Equal(1, Assert.Single(catalog.ListLibrary()).Revision);
-        await catalog.VerifyOriginalAsync(saved.Original.ItemId);
+        Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
+        await catalog.Originals.VerifyAsync(saved.Original.ItemId);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         await Assert.ThrowsAsync<EncoderFallbackException>(() =>
             capture.CaptureAsync(id, "Notes", "invalid \uD800"));
         Assert.Empty(Directory.EnumerateFiles(inbox));
-        Assert.Empty(catalog.ListLibrary());
+        Assert.Empty(catalog.Library.List());
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new LocalQuickCapture(catalog, dataRoot)
                 .CaptureAsync(Guid.NewGuid(), "Private", "Cannot write into the catalog."));
-        Assert.Empty(catalog.ListLibrary());
+        Assert.Empty(catalog.Library.List());
 
         if (OperatingSystem.IsWindows())
         {
@@ -181,7 +181,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new LocalQuickCapture(catalog, inbox)
                 .CaptureAsync(Guid.NewGuid(), "Cancelled", "text", cts.Token));
-        Assert.Empty(catalog.ListLibrary());
+        Assert.Empty(catalog.Library.List());
         Assert.Empty(Directory.EnumerateFiles(inbox));
     }
 
@@ -193,8 +193,8 @@ public sealed class LocalQuickCaptureTests : IDisposable
         var saved = await new LocalQuickCapture(catalog, inbox)
             .CaptureAsync(Guid.NewGuid(), "Reference", url);
         Assert.Equal("# Reference\n\n" + url, File.ReadAllText(saved.SourcePath));
-        Assert.Equal("file", Assert.Single(catalog.ListLibrary()).SourceKind);
-        await catalog.VerifyOriginalAsync(saved.Original.ItemId);
+        Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
+        await catalog.Originals.VerifyAsync(saved.Original.ItemId);
     }
 
     public void Dispose()
