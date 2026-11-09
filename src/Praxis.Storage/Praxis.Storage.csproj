@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <InternalsVisibleTo Include="Praxis.Storage.Tests" />
     <EmbeddedResource Include="LocalCatalog.sql" />
     <EmbeddedResource Include="LocalCatalog.V2.sql" />
     <EmbeddedResource Include="LocalCatalog.V3.sql" />
