@@ -8,6 +8,7 @@ final class Workbench: ObservableObject {
     @Published private(set) var collections: [SourceCollection] = []
     @Published private(set) var topicProposals: [TopicProposal] = []
     @Published private(set) var topicOutcome = "pending"
+    @Published private(set) var intakeStatus: IntakeStatus?
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published var selectedCollectionId = ""
     @Published var selectedMembershipId = ""
@@ -107,6 +108,7 @@ final class Workbench: ObservableObject {
             process.terminationHandler = { [weak self] process in
                 DispatchQueue.main.async {
                     self?.running = false
+                    self?.intakeStatus = nil
                     self?.savingNote = false
                     self?.exportingOriginal = false
                     self?.requests.removeAll()
@@ -134,9 +136,18 @@ final class Workbench: ObservableObject {
         if !selectedCollectionId.isEmpty {
             fields["collectionId"] = selectedCollectionId
         }
+        send("intakeStatus", [:])
         send("library", fields)
         send("collections", ["limit": 100])
         if let selected { send("topics", ["sourceId": selected.sourceId]) }
+    }
+
+    func pauseIntake(_ paused: Bool) {
+        send("intakePause", ["paused": paused])
+    }
+
+    func retryIntakeScan() {
+        send("intakeRescan", [:])
     }
 
     func saveNote() {
@@ -314,6 +325,15 @@ final class Workbench: ObservableObject {
                 continue
             }
             switch action {
+            case "intakeStatus", "intakePause", "intakeRescan":
+                if let status = reply.data?.status { intakeStatus = status }
+                if action == "intakePause" {
+                    message = intakeStatus?.paused == true
+                        ? "New source capture paused; already queued processing may finish."
+                        : "Intake resumed. Changed sources will be reconciled."
+                } else if action == "intakeRescan" {
+                    message = "Intake scan requested. Reconnect an offline Inbox before retrying."
+                }
             case "noteCapture":
                 savingNote = false
                 noteCaptureId = nil

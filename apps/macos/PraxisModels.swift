@@ -55,8 +55,26 @@ struct OriginalExportReceipt: Decodable {
     let length: Int64
 }
 
+struct IntakeFileError: Decodable, Identifiable {
+    let sourcePath: String
+    let message: String
+    var id: String { sourcePath }
+}
+
+struct IntakeStatus: Decodable {
+    let state: String
+    let paused: Bool
+    let lastSuccessfulScanUtc: String?
+    let observedFiles: Int
+    let importedSinceStart: Int
+    let errorCount: Int
+    let fileErrors: [IntakeFileError]
+    let problem: String?
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
+    let status: IntakeStatus?
     let proposals: [TopicProposal]?
     let reviewed: Bool?
     let collections: [SourceCollection]?
