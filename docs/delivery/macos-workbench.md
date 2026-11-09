@@ -14,18 +14,18 @@ The first macOS delivery surface does not settle #36's future Windows/Linux/mobi
 
 From the repository root:
 
-\`\`\`sh
+```sh
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
 dotnet test Praxis.slnx -c Release --no-build --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 bash scripts/macos/build-desktop.sh
 open .artifacts/Praxis.app
-\`\`\`
+```
 
-The packaging script refuses to overwrite an existing app bundle. To rebuild, remove only the previous development bundle under \`.artifacts/\`—never the private data directory. The resulting app is unsigned and intended for local development, not distribution.
+The packaging script refuses to overwrite an existing app bundle. To rebuild, remove only the previous development bundle under `.artifacts/`—never the private data directory. The resulting app is unsigned and intended for local development, not distribution.
 
-First-run path selection is explicit. Choose a parent folder for a new private \`PraxisData\` child, and a separate existing directory to watch. They cannot overlap. The catalog must be private to the OS owner. Praxis never creates a replacement if a previously configured desktop catalog disappears: reconnect or restore the real one. Paths, but not source contents or agent secrets, are kept in owner app settings.
+First-run path selection is explicit. Choose a parent folder for a new private `PraxisData` child, and a separate existing directory to watch. They cannot overlap. The catalog must be private to the OS owner. Praxis never creates a replacement if a previously configured desktop catalog disappears: reconnect or restore the real one. Paths, but not source contents or agent secrets, are kept in owner app settings.
 
 After launching, drop Markdown, UTF-8 text, and an unsupported binary into the selected Inbox without issuing an import command. Verify that the Library shows separate source identities, version, byte length, SHA-256 and supported/unsupported extraction outcomes. Search a known term; inspect a source-backed preview; verify the stored original. Modify the text and check revision behavior after reconciliation. Exit and relaunch to check durable identity and search.
 
@@ -33,7 +33,7 @@ A watched root that disconnects after launch is handled by the worker's existing
 
 ## Protocol boundaries
 
-A request is newline-delimited JSON containing a \`requestId\`, an allowlisted \`action\`, and bounded action-specific fields. The actions are \`library\`, \`search\`, \`preview\`, \`verify\`, \`retry\`, \`revoke\` and \`stop\`. The desktop handler limits request JSON to 16 KiB, pages to 200 records, search results to 30 and preview content to 12,000 characters. Underlying search and catalog APIs retain their own input validation and source-revocation checks.
+A request is newline-delimited JSON containing a `requestId`, an allowlisted `action`, and bounded action-specific fields. The actions are `library`, `search`, `preview`, `verify`, `retry`, `revoke` and `stop`. The desktop handler limits request JSON to 16 KiB, pages to 200 records, search results to 30 and preview content to 12,000 characters. Underlying search and catalog APIs retain their own input validation and source-revocation checks.
 
 The bridge is **not** an external integration protocol. Do not expose it through an unauthenticated socket or HTTP listener; independently authorized external callers still require the controls in ADR 0021 and #107/#117. It does not accept arbitrary paths, file execution or arbitrary SQL as desktop actions.
 
