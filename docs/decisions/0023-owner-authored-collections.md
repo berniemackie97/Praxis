@@ -8,7 +8,7 @@ The running watcher captures originals by durable source identity, not by a perm
 
 ## Decision
 
-SQLite schema v6 adds two STRICT tables: \`source_collections\` holds an owner-created UUID, display name, normalized unique key, creation time and optional archive time; \`source_collection_memberships\` records distinct owner-controlled collection/source UUID pairs with a creation timestamp and foreign-key fences. A source belongs to many collections and vice versa. Each assignment persists through a source revision because it references \`source_id\`, not item revision, path or SHA-256.
+SQLite schema v6 adds two STRICT tables: `source_collections` holds an owner-created UUID, display name, normalized unique key, creation time and optional archive time; `source_collection_memberships` records distinct owner-controlled collection/source UUID pairs with a creation timestamp and foreign-key fences. A source belongs to many collections and vice versa. Each assignment persists through a source revision because it references `source_id`, not item revision, path or SHA-256.
 
 List queries expose only active sources under non-archived collections. Revocation does not wipe membership history or content-addressed originals; source-active SQL predicates prevent a revoked source from being surfaced through counts, source membership lookup and collection-filtered library results. Archiving a collection hides it from ordinary navigation without deleting its user-authored history. Names are validated and uniqueness keyed by Unicode-normalized, invariant-uppercase trimmed text; no generated names are silently applied as owner choices.
 
