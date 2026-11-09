@@ -33,7 +33,7 @@
     {
       "stage": "M5",
       "title": "M5 — Authorized intelligence",
-      "description": "Integrated local-first knowledge intelligence: reviewable technical facts/relationships, hybrid retrieval, source-cited investigated answers, scoped task execution, evaluated local inference and authorized provider routing. Intelligent MVP owner-run release gate #170."
+      "description": "Source-grounded, owner-approved multimodal personal intelligence: technical claims and relationships, timecoded media evidence, typed financial budgeting, hybrid retrieval and citations, constrained task execution, local-first inference and authorized provider routing. Integrated MVP owner-run release gate #170."
     },
     {
       "stage": "M6",
@@ -306,6 +306,24 @@
         158,
         159,
         162
+      ]
+    },
+    {
+      "issue": 180,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        181,
+        182
+      ]
+    },
+    {
+      "issue": 183,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        184,
+        185
       ]
     }
   ],
@@ -627,19 +645,21 @@
       108
     ],
     "170": [
-      130,
       29,
       31,
       32,
       33,
       115,
       116,
+      130,
       143,
       149,
       150,
       171,
       172,
-      173
+      173,
+      180,
+      183
     ],
     "171": [
       22,
@@ -662,6 +682,29 @@
       150,
       160,
       143
+    ],
+    "181": [
+      103,
+      106,
+      114
+    ],
+    "182": [
+      181,
+      33,
+      32,
+      166
+    ],
+    "184": [
+      102,
+      103,
+      129
+    ],
+    "185": [
+      184,
+      31,
+      33,
+      32,
+      173
     ]
   },
   "priorities": {
@@ -722,7 +765,7 @@
     "111": "P2",
     "112": "P2",
     "113": "P1",
-    "114": "P2",
+    "114": "P1",
     "115": "P1",
     "116": "P1",
     "117": "P1",
@@ -755,7 +798,13 @@
     "170": "P1",
     "171": "P1",
     "172": "P1",
-    "173": "P1"
+    "173": "P1",
+    "180": "P1",
+    "181": "P1",
+    "182": "P1",
+    "183": "P1",
+    "184": "P1",
+    "185": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -766,7 +815,10 @@
     "126": "knowledge",
     "128": "knowledge",
     "129": "security",
-    "136": "knowledge"
+    "136": "knowledge",
+    "181": "retrieval",
+    "182": "clients",
+    "184": "knowledge"
   },
   "decision_queue": [
     13,
@@ -877,6 +929,10 @@
       "to": "P1"
     },
     "105": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "114": {
       "from": "P2",
       "to": "P1"
     },
@@ -998,7 +1054,7 @@
     },
     {
       "id": "L4",
-      "name": "Core MVP: deep technical extraction, relationship evidence and bounded investigations",
+      "name": "Core MVP: source-grounded cross-domain knowledge and investigations",
       "issues": [
         149,
         152,
@@ -1006,9 +1062,13 @@
         154,
         150,
         155,
-        156
+        156,
+        180,
+        181,
+        183,
+        184
       ],
-      "exit": "Given an authorized, revisioned technical corpus, Praxis extracts supported code/disassembly structure, reconciles evidence and contradictions, and answers multi-source mechanism questions with verified citations or an explicit abstention. Re-run evaluates local models, failures, cost and revoked sources."
+      "exit": "Given an authorized representative collection spanning technical artifacts, captioned video and structured monthly finance records, Praxis builds versioned evidence and reviewable relationships, retrieves supported textual/temporal/typed facts and produces bounded source-cited multi-step investigations or abstentions. No invented media timestamps, amounts or automatic model permission."
     },
     {
       "id": "L5",
@@ -1040,9 +1100,11 @@
         170,
         171,
         172,
-        173
+        173,
+        182,
+        185
       ],
-      "exit": "Owner-run end-to-end proof: local intake and agent-assisted technical extraction, evidence-linked relationships, evaluated hybrid/structural RAG, source-cited answers/abstention, scoped planned task execution, Obsidian derived knowledge views, root/nested reviewed agent context projections, and measured local-first inference with explicit authorized cloud escalation; pass resilience, privacy and cost-control gates."
+      "exit": "Owner-run end-to-end proof spanning three domain workflows: technical cross-file research, a playable timecoded video tutorial excerpt with full-source navigation, and an evidence-backed monthly income/bills/spending budget with reviewable reductions. Demonstrate first-party persistent chat, scoped task execution, source spans and financial rows, Obsidian views, reviewed agent context, measured local-first inference and authorized optional escalation; pass resilience, privacy and cost controls."
     }
   ]
 }
