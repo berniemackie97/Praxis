@@ -67,11 +67,17 @@ public sealed class LocalMediaInspectionTests : IDisposable
         Assert.Equal(fakeVideo.Sha256, unsupported.SourceSha256);
 
         var ebml = await Capture(catalog, "source.webm",
-            [0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x00], "ebml");
+            [0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84,
+                0x77, 0x65, 0x62, 0x6d], "ebml");
         var recognized = await catalog.InspectMediaAsync(ebml.SourceId);
         Assert.Equal("header_recognized", recognized.Outcome);
         Assert.Equal("ebml", recognized.ContainerFamily);
         Assert.Null(recognized.DurationMilliseconds);
+
+        var invalidEbml = await Capture(catalog, "false.webm",
+            [0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x00], "false-ebml");
+        Assert.Equal("unsupported",
+            (await catalog.InspectMediaAsync(invalidEbml.SourceId)).Outcome);
 
         var mismatched = await Capture(catalog, "forged.webm", FastStartMovie(), "mismatch");
         Assert.Equal("unsupported", (await catalog.InspectMediaAsync(
@@ -184,6 +190,12 @@ public sealed class LocalMediaInspectionTests : IDisposable
         var wrongTimescale = (byte[])header.Clone();
         BinaryPrimitives.WriteUInt32BigEndian(wrongTimescale.AsSpan(44, 4), 0);
         Assert.Null(LocalMediaHeaderParser.Read(wrongTimescale, ".mp4").DurationMilliseconds);
+
+        var unknownDuration = (byte[])header.Clone();
+        BinaryPrimitives.WriteUInt32BigEndian(unknownDuration.AsSpan(48, 4),
+            uint.MaxValue);
+        Assert.Null(LocalMediaHeaderParser.Read(unknownDuration, ".mp4")
+            .DurationMilliseconds);
 
         var unsupported = (byte[])header.Clone();
         unsupported[4] = 0xff;
