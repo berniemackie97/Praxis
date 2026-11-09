@@ -30,6 +30,7 @@ final class Workbench: ObservableObject {
     private var buffer = Data()
     private var requests: [String: String] = [:]
     private var previewTarget = ""
+    private var watchedInboxPath = ""
 
     func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
         guard !running else { return }
@@ -117,6 +118,7 @@ final class Workbench: ObservableObject {
             }
             try process.run()
             child = process
+            watchedInboxPath = source.path
             input = stdin.fileHandleForWriting
             running = true
             message = "Monitoring your approved Inbox. Files are captured automatically."
@@ -127,7 +129,7 @@ final class Workbench: ObservableObject {
     }
 
     func refresh() {
-        guard running else { return }
+        guard running, !exportingOriginal else { return }
         var fields: [String: Any] = ["limit": 100, "offset": page * 100]
         if !selectedCollectionId.isEmpty {
             fields["collectionId"] = selectedCollectionId
@@ -216,10 +218,15 @@ final class Workbench: ObservableObject {
 
     func exportOriginal(_ item: LibraryItem, destination: URL) {
         guard !exportingOriginal, running, item.sourceStatus == "active" else { return }
+        let path = destination.standardizedFileURL.resolvingSymlinksInPath().path
+        if path.hasPrefix(watchedInboxPath + "/") {
+            message = "Choose a destination outside the watched Inbox to avoid capturing an exported duplicate."
+            return
+        }
         exportingOriginal = send("exportOriginal", [
             "itemId": item.itemId,
             "revision": item.revision,
-            "destinationPath": destination.path
+            "destinationPath": path
         ])
         if exportingOriginal {
             message = "Verifying and exporting the preserved original…"
@@ -368,6 +375,7 @@ final class Workbench: ObservableObject {
                 } else {
                     message = "Export did not return an integrity receipt."
                 }
+                refresh()
             case "verify":
                 message = reply.data?.verified == true
                     ? "Original integrity verified against stored SHA-256." : "Verification incomplete."
