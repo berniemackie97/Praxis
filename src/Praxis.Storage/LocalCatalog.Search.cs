@@ -21,14 +21,14 @@ public sealed partial class LocalCatalog
         {
             using var command = Command(connection, """
                 SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
-                       snippet(text_search, 4, '⟦', '⟧', '…', 24)
+                       snippet(text_search, 1, '⟦', '⟧', '…', 24)
                 FROM text_search
+                JOIN search_index_keys k ON k.rowid = text_search.rowid
                 JOIN item_versions v
-                    ON v.item_id = text_search.item_id
-                    AND v.revision = CAST(text_search.revision AS INTEGER)
+                    ON v.item_id = k.item_id AND v.revision = k.revision
                 JOIN items i ON i.item_id = v.item_id
                 JOIN sources s
-                    ON s.source_id = i.source_id AND s.source_id = text_search.source_id
+                    ON s.source_id = i.source_id AND s.source_id = k.source_id
                 JOIN text_derivatives d
                     ON d.item_id = v.item_id AND d.revision = v.revision
                     AND d.source_digest = v.digest AND d.outcome = 'completed'
@@ -109,10 +109,27 @@ public sealed partial class LocalCatalog
             clear.CommandTimeout = 30;
             clear.ExecuteNonQuery();
 
-            using var populate = Command(connection, """
-                INSERT INTO text_search (item_id, revision, source_id, locator, content)
-                SELECT item_id, revision, source_id, locator, content
+            using var removeKeys = Command(connection, "DELETE FROM search_index_keys");
+            removeKeys.Transaction = transaction;
+            removeKeys.CommandTimeout = 30;
+            removeKeys.ExecuteNonQuery();
+
+            using var insertKeys = Command(connection, """
+                INSERT INTO search_index_keys (item_id, revision, source_id)
+                SELECT item_id, revision, source_id
                 FROM eligible_text_search ORDER BY item_id, revision
+                """);
+            insertKeys.Transaction = transaction;
+            insertKeys.CommandTimeout = 30;
+            insertKeys.ExecuteNonQuery();
+
+            using var populate = Command(connection, """
+                INSERT INTO text_search (rowid, locator, content)
+                SELECT k.rowid, e.locator, e.content
+                FROM eligible_text_search e
+                JOIN search_index_keys k
+                    ON k.item_id = e.item_id AND k.revision = e.revision
+                ORDER BY e.item_id, e.revision
                 """);
             populate.Transaction = transaction;
             populate.CommandTimeout = 30;
