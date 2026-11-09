@@ -4,7 +4,7 @@ This is the executable negative-test contract for [ADR 0021](../decisions/0021-o
 
 ## Baseline — executable now
 
-The audited `Praxis.Api/Program.cs` exposes only `GET /health/live`. It has no private-data routes, caller identity, extension pairing or MCP interface.
+The audited `Praxis.Api/Program.cs` exposes only the `/health/live` mapping, without private-data routes, caller identity, extension pairing or MCP interface. The baseline test invokes that mapping using `GET`; it does not imply the route has a configured GET-only method constraint.
 
 ```bash
 dotnet restore Praxis.slnx --locked-mode
