@@ -243,6 +243,11 @@ final class Workbench: ObservableObject {
         budgetTargetText.removeAll()
     }
 
+    func updateBudgetTarget(category: String, text: String) {
+        budgetTargetText[category] = text
+        budgetScenario = nil
+    }
+
     func previewBudgetScenario() {
         guard let report = budgetReport,
               let selected, selected.itemId == report.itemId,
@@ -472,7 +477,13 @@ final class Workbench: ObservableObject {
                 guard let selected,
                       context == "budgetSummary:\(selected.sourceId):\(budgetYear):\(budgetMonth)",
                       selected.sourceStatus == "active" else { continue }
-                budgetReport = reply.data?.budget
+                if let report = reply.data?.budget,
+                   report.revision == selected.revision &&
+                   report.sourceSha256 == selected.sha256 {
+                    budgetReport = report
+                } else {
+                    budgetReport = nil
+                }
                 budgetScenario = nil
                 budgetTargetText.removeAll()
                 message = budgetReport == nil
