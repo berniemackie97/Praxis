@@ -4,9 +4,11 @@ using Praxis.Inference;
 namespace Praxis.Storage;
 
 /// <summary>
-/// Converts a model's structured answer for one segment into proposal candidates, keeping only
-/// items whose quote is found in that segment and, for entities, whose name appears in it.
-/// Everything else is counted as rejected; the model's output is never trusted as fact.
+/// Converts a model's structured answer for one segment into proposal candidates. An item is
+/// kept only when its quote is found in the segment; an entity's name must also appear in the
+/// segment; a relation must join two entities accepted from the same answer, use a known
+/// predicate and quote both names. Evidence that reads like an instruction is flagged.
+/// Everything else is counted as rejected; model output is never trusted as fact.
 /// </summary>
 internal static class SemanticResponseReader
 {
@@ -28,56 +30,52 @@ internal static class SemanticResponseReader
         {
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
-                !root.TryGetProperty("topics", out var topics) || topics.ValueKind != JsonValueKind.Array ||
-                !root.TryGetProperty("entities", out var entities) || entities.ValueKind != JsonValueKind.Array)
+                !TryArray(root, "topics", out var topics) || !TryArray(root, "entities", out var entities))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse,
                     "The model response does not match the extraction schema.");
             }
 
-            var accepted = new List<ProposalCandidate>();
-            var rejected = 0;
-            foreach (var topic in topics.EnumerateArray().Take(SemanticExtractionPrompt.MaximumTopics))
+            var reader = new Reading(segmentText, segmentStart);
+            foreach (var topic in Limit(topics, SemanticExtractionPrompt.MaximumTopics, reader))
             {
-                Add(topic, "topic", null);
+                reader.AddNamed(topic, "topic", null);
             }
 
-            foreach (var entity in entities.EnumerateArray().Take(SemanticExtractionPrompt.MaximumEntities))
+            foreach (var entity in Limit(entities, SemanticExtractionPrompt.MaximumEntities, reader))
             {
-                var type = String(entity, "type");
-                if (type is null || !LocalProposals.EntityTypes.Contains(type))
+                var type = Text(entity, "type");
+                if (type is null || !KnowledgeVocabulary.EntityTypes.Contains(type))
                 {
-                    rejected++;
+                    reader.Rejected++;
                     continue;
                 }
 
-                Add(entity, "entity", type);
+                reader.AddNamed(entity, "entity", type);
             }
 
-            rejected += Math.Max(0, topics.GetArrayLength() - SemanticExtractionPrompt.MaximumTopics) +
-                Math.Max(0, entities.GetArrayLength() - SemanticExtractionPrompt.MaximumEntities);
-            return (accepted, rejected);
-
-            void Add(JsonElement item, string kind, string? entityType)
+            if (TryArray(root, "relations", out var relations))
             {
-                var name = Normalize(String(item, "name"));
-                var quote = String(item, "quote");
-                var span = quote is null ? null : EvidenceLocator.Find(segmentText, quote);
-                if (name is null || span is not { } found ||
-                    found.Length > LocalProposals.MaximumEvidenceLength ||
-                    (kind == "entity" && !segmentText.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                foreach (var relation in Limit(relations, SemanticExtractionPrompt.MaximumRelations, reader))
                 {
-                    rejected++;
-                    return;
+                    reader.AddRelation(relation);
                 }
-
-                accepted.Add(new ProposalCandidate(kind, entityType, name,
-                    segmentStart + found.Offset, found.Length));
             }
+
+            return (reader.Accepted, reader.Rejected);
         }
     }
 
-    private static string? String(JsonElement item, string property) =>
+    private static IEnumerable<JsonElement> Limit(JsonElement array, int maximum, Reading reader)
+    {
+        reader.Rejected += Math.Max(0, array.GetArrayLength() - maximum);
+        return array.EnumerateArray().Take(maximum);
+    }
+
+    private static bool TryArray(JsonElement root, string property, out JsonElement array) =>
+        root.TryGetProperty(property, out array) && array.ValueKind == JsonValueKind.Array;
+
+    private static string? Text(JsonElement item, string property) =>
         item.ValueKind == JsonValueKind.Object && item.TryGetProperty(property, out var value) &&
         value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
@@ -89,8 +87,74 @@ internal static class SemanticResponseReader
         }
 
         var collapsed = string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        return collapsed.Length is >= 1 and <= LocalProposals.MaximumValueLength &&
+        return collapsed.Length is >= 1 and <= KnowledgeVocabulary.MaximumNameLength &&
             collapsed.Any(char.IsLetterOrDigit) && !collapsed.Any(char.IsControl)
             ? collapsed : null;
+    }
+
+    private sealed class Reading(string segmentText, int segmentStart)
+    {
+        private readonly Dictionary<string, string> entityNames = new(StringComparer.Ordinal);
+
+        public List<ProposalCandidate> Accepted { get; } = [];
+        public int Rejected { get; set; }
+
+        public void AddNamed(JsonElement item, string kind, string? entityType)
+        {
+            var name = Normalize(Text(item, "name"));
+            var span = Locate(Text(item, "quote"));
+            if (name is null || span is not { } found ||
+                (kind == "entity" && !segmentText.Contains(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                Rejected++;
+                return;
+            }
+
+            if (kind == "entity" && KnowledgeVocabulary.NameKey(name) is { } key)
+            {
+                entityNames.TryAdd(key, name);
+            }
+
+            Accepted.Add(new ProposalCandidate(kind, entityType, name,
+                segmentStart + found.Offset, found.Length, Flags: Flag(found)));
+        }
+
+        public void AddRelation(JsonElement item)
+        {
+            var predicate = Text(item, "predicate");
+            var subject = Resolve(Text(item, "subject"));
+            var obj = Resolve(Text(item, "object"));
+            var span = Locate(Text(item, "quote"));
+            if (predicate is null || !KnowledgeVocabulary.Predicates.Contains(predicate) ||
+                subject is null || obj is null || span is not { } found ||
+                KnowledgeVocabulary.NameKey(subject) == KnowledgeVocabulary.NameKey(obj))
+            {
+                Rejected++;
+                return;
+            }
+
+            var evidence = segmentText.AsSpan(found.Offset, found.Length);
+            if (!evidence.Contains(subject, StringComparison.OrdinalIgnoreCase) ||
+                !evidence.Contains(obj, StringComparison.OrdinalIgnoreCase))
+            {
+                Rejected++;
+                return;
+            }
+
+            Accepted.Add(new ProposalCandidate("relation", null, predicate,
+                segmentStart + found.Offset, found.Length, subject, obj, Flag(found)));
+        }
+
+        /// <summary>A relation end must be an entity accepted from this same answer.</summary>
+        private string? Resolve(string? name) =>
+            KnowledgeVocabulary.NameKey(Normalize(name)) is { } key &&
+            entityNames.TryGetValue(key, out var accepted) ? accepted : null;
+
+        private (int Offset, int Length)? Locate(string? quote) =>
+            quote is not null && EvidenceLocator.Find(segmentText, quote) is { } found &&
+            found.Length <= LocalProposals.MaximumEvidenceLength ? found : null;
+
+        private string? Flag((int Offset, int Length) span) =>
+            InstructionLikeText.Matches(segmentText, span.Offset, span.Length) ? InstructionLikeText.Flag : null;
     }
 }

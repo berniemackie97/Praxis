@@ -51,6 +51,50 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
     }
 
     [Fact]
+    public void VersionTwelveSemanticResultsStayVisibleUntilVersionTwoReplacesThem()
+    {
+        var item = Guid.NewGuid();
+        var source = Guid.NewGuid();
+        var digest = new string('a', 64);
+        using (var connection = CreateCatalog(throughVersion: 12))
+        {
+            Seed(connection, item, source, Guid.NewGuid(), version: 12);
+            Execute(connection, $"""
+                INSERT INTO processing_jobs
+                    (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v1', 'completed', 1, 1, '{At}', '{At}');
+                INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v1', '{digest}', 'generated', '{At}');
+                INSERT INTO enrichment_proposals
+                    (proposal_id, item_id, revision, processor_key, source_digest, kind, entity_type, value,
+                     evidence, evidence_offset, evidence_length, status, created_utc)
+                VALUES ('{Guid.NewGuid()}', '{item}', 1, 'semantic-extract-v1', '{digest}', 'entity',
+                        'concept', 'Architecture', 'Architecture', 2, 12, 'pending', '{At}');
+                """);
+        }
+
+        using (var catalog = LocalCatalog.Open(root))
+        {
+            Assert.Contains(catalog.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
+            var jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
+            Assert.Equal("queued", jobs.Single(job => job.ProcessorKey == LocalProcessors.SemanticExtraction).State);
+            Assert.Equal("completed", jobs.Single(job => job.ProcessorKey == "semantic-extract-v1").State);
+        }
+
+        using (var connection = Connect())
+        {
+            Execute(connection, $"""
+                INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v2', '{digest}', 'abstained', '{At}');
+                """);
+        }
+
+        using var replaced = LocalCatalog.Open(root);
+        Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
+        Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == LocalProcessors.MarkdownHeadings);
+    }
+
+    [Fact]
     public void OrphanedReferencesAreRejectedBeforeAnyUpgrade()
     {
         using (var connection = CreateCatalog(throughVersion: 11))
@@ -70,8 +114,10 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
             "SELECT COUNT(*) FROM pragma_table_info('enrichment_proposals') WHERE name = 'entity_type'"));
     }
 
-    private static void Seed(SqliteConnection connection, Guid item, Guid source, Guid proposal)
+    private static void Seed(SqliteConnection connection, Guid item, Guid source, Guid proposal, int version = 11)
     {
+        var lengthColumn = version >= 12 ? ", evidence_length" : "";
+        var lengthValue = version >= 12 ? ", 12" : "";
         var digest = new string('a', 64);
         Execute(connection, $"""
             INSERT INTO sources (source_id, source_kind, locator, created_utc)
@@ -92,9 +138,9 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
             VALUES ('{item}', 1, 'markdown-heading-v1', '{digest}', 'generated', '{At}');
             INSERT INTO enrichment_proposals
                 (proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence,
-                 evidence_offset, status, correction, created_utc, reviewed_utc)
+                 evidence_offset, status, correction, created_utc, reviewed_utc{lengthColumn})
             VALUES ('{proposal}', '{item}', 1, 'markdown-heading-v1', '{digest}', 'topic', 'Architecture',
-                    'Architecture', 2, 'corrected', 'Architecture overview', '{At}', '{At}');
+                    'Architecture', 2, 'corrected', 'Architecture overview', '{At}', '{At}'{lengthValue});
             """);
     }
 

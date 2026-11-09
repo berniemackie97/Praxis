@@ -137,6 +137,33 @@ public sealed class LocalDesktopProtocol(
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
                 "retry" => Retry(fields),
+                "entities" => new
+                {
+                    entities = catalog.Knowledge.ListEntities(
+                        fields.OptionalText("entityType", 32, "The entity type is invalid."),
+                        fields.OptionalText("search", 120, "The entity search is invalid."),
+                        fields.IntegerOrDefault("limit", 100, 1, 500))
+                },
+                "entity" => new { entity = catalog.Knowledge.GetEntity(fields.RequireGuid("entityId")) },
+                "entityRename" => new
+                {
+                    changed = catalog.Knowledge.Rename(fields.RequireGuid("entityId"), fields.RequireString("name", 120))
+                },
+                "entitySetType" => new
+                {
+                    changed = catalog.Knowledge.SetType(fields.RequireGuid("entityId"), fields.RequireString("entityType", 32))
+                },
+                "entityMerge" => new
+                {
+                    changed = catalog.Knowledge.Merge(fields.RequireGuid("entityId"), fields.RequireGuid("targetEntityId"))
+                },
+                "entityReject" => new { changed = catalog.Knowledge.Reject(fields.RequireGuid("entityId")) },
+                "entityRestore" => new { changed = catalog.Knowledge.Restore(fields.RequireGuid("entityId")) },
+                "entityRelate" => new
+                {
+                    relationId = catalog.Knowledge.Relate(fields.RequireGuid("entityId"),
+                        fields.RequireString("predicate", 32), fields.RequireGuid("targetEntityId"))
+                },
                 "modelProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEnrichment) },
                 "modelProfileSave" => new { profile = SaveModelProfile(fields) },
                 "localModels" => new { models = await ListLocalModelsAsync(fields, cancellationToken) },

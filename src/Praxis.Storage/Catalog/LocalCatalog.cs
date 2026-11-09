@@ -23,6 +23,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalTextSegments Segments { get; }
     public LocalTextSearch Search { get; }
     public LocalProposals Proposals { get; }
+    public LocalKnowledge Knowledge { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
@@ -44,6 +45,7 @@ public sealed class LocalCatalog : IDisposable
         Segments = new LocalTextSegments(database);
         Search = new LocalTextSearch(database);
         Proposals = new LocalProposals(database);
+        Knowledge = new LocalKnowledge(database);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
