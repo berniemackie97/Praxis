@@ -158,10 +158,8 @@ public sealed class LocalDesktopProtocol(
             or InvalidDataException or UnauthorizedAccessException
             or KeyNotFoundException or NotSupportedException)
         {
-            return JsonSerializer.Serialize(new
-            {
-                requestId, ok = false, error = exception.Message
-            }, JsonOptions);
+            var failure = new { requestId, ok = false, error = exception.Message };
+            return JsonSerializer.Serialize(failure, JsonOptions);
         }
     }
 
