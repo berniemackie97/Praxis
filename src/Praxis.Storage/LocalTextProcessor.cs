@@ -7,12 +7,12 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
     public const int MaximumTextBytes = 1024 * 1024;
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private static readonly TimeSpan ProcessingLease = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
 
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var lease = catalog.TryClaimProcessing(ProcessingLease,
+        var lease = catalog.TryClaimProcessing(LeaseDuration,
             processorKey: LocalCatalog.DefaultProcessorKey);
         if (lease is null)
         {
