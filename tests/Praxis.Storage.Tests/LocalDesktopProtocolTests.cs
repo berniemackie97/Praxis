@@ -65,12 +65,66 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         await catalog.VerifyOriginalAsync(text.ItemId);
     }
 
+    [Fact]
+    public async Task DesktopCanOrganizeAndFilterCapturedSourcesWithoutChangingOriginals()
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(root);
+        using var original = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
+        var saved = await catalog.CaptureFileAsync(
+            Path.Combine(root, "source.txt"), original, 100, "source");
+        var protocol = new LocalDesktopProtocol(catalog);
+
+        using var created = await Send(protocol,
+            """{"requestId":"one","action":"collectionCreate","name":"Project"}""");
+        Assert.True(created.RootElement.GetProperty("ok").GetBoolean());
+        var collectionId = created.RootElement.GetProperty("data")
+            .GetProperty("collection").GetProperty("collectionId").GetString()!;
+        using var added = await Send(protocol,
+            $"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+        Assert.True(added.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
+        using var filtered = await Send(protocol,
+            $"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
+        Assert.Equal(saved.ItemId.ToString("D"), filtered.RootElement
+            .GetProperty("data").GetProperty("items")[0].GetProperty("itemId").GetString());
+
+        using var memberships = await Send(protocol,
+            $"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
+        Assert.Equal(collectionId, memberships.RootElement.GetProperty("data")
+            .GetProperty("collectionIds")[0].GetString());
+
+        using var renamed = await Send(protocol,
+            $"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
+        Assert.True(renamed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
+        using var listed = await Send(protocol,
+            """{"requestId":"six","action":"collections"}""");
+        Assert.Equal("Archived Research", listed.RootElement.GetProperty("data")
+            .GetProperty("collections")[0].GetProperty("name").GetString());
+
+        using var removed = await Send(protocol,
+            $"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+        Assert.True(removed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
+        using var empty = await Send(protocol,
+            $"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
+        Assert.Equal(0, empty.RootElement.GetProperty("data")
+            .GetProperty("items").GetArrayLength());
+        await catalog.VerifyOriginalAsync(saved.ItemId);
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]
     [InlineData("""{"requestId":"x","action":"preview","itemId":"invalid"}""")]
     [InlineData("""{"requestId":"x","action":"search","query":"   "}""")]
     [InlineData("""{"action":"library"}""")]
+    [InlineData("""{"requestId":"x","action":"collectionCreate","name":"  "}""")]
+    [InlineData("""{"requestId":"x","action":"collectionAdd","collectionId":"invalid","sourceId":"invalid"}""")]
     public async Task RejectsUnknownOrMalformedRequests(string payload)
     {
         Directory.CreateDirectory(root);

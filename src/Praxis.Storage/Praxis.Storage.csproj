@@ -6,5 +6,6 @@
     <EmbeddedResource Include="LocalCatalog.V3.sql" />
     <EmbeddedResource Include="LocalCatalog.V4.sql" />
     <EmbeddedResource Include="LocalCatalog.V5.sql" />
+    <EmbeddedResource Include="LocalCatalog.V6.sql" />
   </ItemGroup>
 </Project>

@@ -15,7 +15,7 @@ dotnet publish "$root/src/Praxis.Worker/Praxis.Worker.csproj" \
   --no-restore
 
 swiftc -parse-as-library -O \
-  "$root/apps/macos/PraxisApp.swift" \
+  "$root/apps/macos/"*.swift \
   -framework SwiftUI -framework AppKit \
   -o "$destination/Contents/MacOS/Praxis"
 
@@ -27,7 +27,7 @@ cat > "$destination/Contents/Info.plist" <<'PLIST'
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Praxis</string>
-  <key>CFBundleIdentifier</key><string>dev.praxis.local</string>
+  <key>CFBundleIdentifier</key><string>dev.praxis.collections-preview</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Praxis</string>
   <key>CFBundlePackageType</key><string>APPL</string>

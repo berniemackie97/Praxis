@@ -36,12 +36,18 @@ public sealed partial class LocalCatalog
         }
     }
 
-    public IReadOnlyList<LocalLibraryItem> ListLibrary(int limit = 100, int offset = 0)
+    public IReadOnlyList<LocalLibraryItem> ListLibrary(
+        int limit = 100, int offset = 0, Guid? collectionId = null)
     {
         if (limit is < 1 or > 200 || offset < 0)
         {
             throw new ArgumentOutOfRangeException(
                 limit is < 1 or > 200 ? nameof(limit) : nameof(offset));
+        }
+
+        if (collectionId == Guid.Empty)
+        {
+            throw new ArgumentException("A nonempty collection identifier is required.", nameof(collectionId));
         }
 
         lock (connection)
@@ -64,11 +70,21 @@ public sealed partial class LocalCatalog
                     SELECT MAX(latest.revision) FROM item_versions latest
                     WHERE latest.item_id = i.item_id
                 )
+                  AND ($collection IS NULL OR (s.status = 'active' AND EXISTS (
+                      SELECT 1 FROM source_collection_memberships membership
+                      JOIN source_collections c
+                        ON c.collection_id = membership.collection_id
+                      WHERE membership.source_id = s.source_id
+                        AND membership.collection_id = $collection
+                        AND c.archived_utc IS NULL
+                  )))
                 ORDER BY s.created_utc DESC, i.item_id
                 LIMIT $limit OFFSET $offset
                 """);
             command.Parameters.AddWithValue("$limit", limit);
             command.Parameters.AddWithValue("$offset", offset);
+            command.Parameters.AddWithValue("$collection",
+                collectionId.HasValue ? (object)collectionId.Value.ToString("D") : DBNull.Value);
             using var reader = command.ExecuteReader();
             var result = new List<LocalLibraryItem>();
             while (reader.Read())

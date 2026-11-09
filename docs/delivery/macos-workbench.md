@@ -25,6 +25,8 @@ open .artifacts/Praxis.app
 
 The packaging script refuses to overwrite an existing app bundle. To rebuild, remove only the previous development bundle under `.artifacts/`—never the private data directory. The resulting app is unsigned and intended for local development, not distribution.
 
+The collections-preview development app uses a separate macOS preferences identifier from the previous Praxis prototype, so it cannot inherit the earlier app's stored catalog path by accident. This is an isolated testing identity, not a production signing or update decision.
+
 First-run path selection is explicit. Choose a parent folder for a new private `PraxisData` child, and a separate existing directory to watch. They cannot overlap. The catalog must be private to the OS owner. Praxis never creates a replacement if a previously configured desktop catalog disappears: reconnect or restore the real one. Paths, but not source contents or agent secrets, are kept in owner app settings. Pick non-cloud-synchronized folders if you do not want iCloud or third-party sync software to replicate the files independently of Praxis.
 
 After launching, drop Markdown, UTF-8 text, and an unsupported binary into the selected Inbox without issuing an import command. Verify that the Library shows separate source identities, version, byte length, SHA-256 and supported/unsupported extraction outcomes. Search a known term; inspect a source-backed preview; verify the stored original. Modify the text and check revision behavior after reconciliation. Exit and relaunch to check durable identity and search.
@@ -47,3 +49,14 @@ The bridge is **not** an external integration protocol. Do not expose it through
 - Actual macOS compile/UI/accessibility/negative-path smoke, three-platform automated verification, physical catalog recovery and release acceptance (#128/#130/#137).
 
 Keep #101, #105, #108 and #130 open until their complete criteria are genuinely verified. The initial application is a usable direction, not a complete or verified Second Brain release.
+
+
+## P1/L0 explicit collections checkpoint (#146)
+
+A schema-v6 migration adds owner-authored named collections and many-to-many source membership to the same private SQLite catalog. Collections do **not** reorganize watched files, mutate immutable originals, or assert inferred facts. This draft workbench integrates create/rename/archive controls, source membership editing, collection-filtered library browsing, and active source counts through the existing private child-process protocol. Existing source IDs and manual collection assignments persist when files are revised; revocation and archive suppress collection-filtered retrieval without erasing historical records or shared originals.
+
+Collection names must be one to eighty printable characters and are uniquely normalized for stable local comparison. Operations use parameterized SQL, explicit source/collection IDs, bounded read pages, and active-source checks; no arbitrary SQL or direct file-path mutation becomes an application action. The new migration requires a compatible updated app: do not open a schema-v6 catalog with older Praxis builds. Do **not** select your valuable existing catalog for the unverified preview. Use a new disposable private catalog and watched Inbox. Before any deliberate migration of real data, create and verify a coherent catalog-plus-originals backup with the existing snapshot operation; older Praxis binaries refuse schema v6.
+
+Before calling this feature verified, execute the full .NET suite, local SQLite upgrade/downgrade-rejection and backup/restore tests, macOS Swift compilation, and a real UI flow: create a collection; assign two independently captured sources; update one source; restart; rename the collection; remove a membership; archive it; verify old original digests; and confirm revoked sources do not appear in collection-filtered views. A queued CI run is not passing evidence.
+
+This is the deterministic first-use organization layer, not autonomous knowledge enrichment. Future #115 suggestions will be derived, explicitly marked proposed/accepted/rejected/corrected with source, digest, revision and processor provenance. #116 will add reviewable relationships/dynamic collections on top of these owner-owned identities. External agent retrieval or mutation still requires separately approved, source-scoped grants (#117–#119), and no model invocation is triggered by adding a file or collection.

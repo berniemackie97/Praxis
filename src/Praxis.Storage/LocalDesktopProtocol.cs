@@ -33,11 +33,46 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog)
                 "library" => new
                 {
                     items = catalog.ListLibrary(ReadInteger(root, "limit", 100, 1, 200),
-                        ReadInteger(root, "offset", 0, 0, 1_000_000))
+                        ReadInteger(root, "offset", 0, 0, 1_000_000),
+                        ReadOptionalGuid(root, "collectionId"))
                 },
                 "search" => new
                 {
                     hits = catalog.SearchText(ReadString(root, "query", 256), 30)
+                },
+                "collections" => new
+                {
+                    collections = catalog.ListCollections(
+                        ReadInteger(root, "limit", 100, 1, 200),
+                        ReadInteger(root, "offset", 0, 0, 1_000_000))
+                },
+                "collectionCreate" => new
+                {
+                    collection = catalog.CreateCollection(ReadString(root, "name", 80))
+                },
+                "collectionRename" => new
+                {
+                    changed = catalog.RenameCollection(ReadGuid(root, "collectionId"),
+                        ReadString(root, "name", 80))
+                },
+                "collectionArchive" => new
+                {
+                    changed = catalog.ArchiveCollection(ReadGuid(root, "collectionId"))
+                },
+                "collectionAdd" => new
+                {
+                    changed = catalog.AddSourceToCollection(
+                        ReadGuid(root, "collectionId"), ReadGuid(root, "sourceId"))
+                },
+                "collectionRemove" => new
+                {
+                    changed = catalog.RemoveSourceFromCollection(
+                        ReadGuid(root, "collectionId"), ReadGuid(root, "sourceId"))
+                },
+                "sourceCollections" => new
+                {
+                    collectionIds = catalog.ListSourceCollectionIds(
+                        ReadGuid(root, "sourceId"))
                 },
                 "preview" => Preview(root),
                 "verify" => await VerifyAsync(root, cancellationToken),
@@ -96,6 +131,9 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog)
         StopRequested = true;
         return new { stopping = true };
     }
+
+    private static Guid? ReadOptionalGuid(JsonElement root, string property) =>
+        root.TryGetProperty(property, out _) ? ReadGuid(root, property) : null;
 
     private static Guid ReadGuid(JsonElement root, string property)
     {
