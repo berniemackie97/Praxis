@@ -118,7 +118,7 @@ public sealed class LocalProcessingQueue
                   AND j.attempt < $maximum
                   AND (j.state = 'queued' OR
                        (j.state = 'running' AND j.lease_until_utc <= $now))
-                ORDER BY j.created_utc, j.item_id, j.revision, j.processor_key
+                ORDER BY j.priority DESC, j.created_utc, j.item_id, j.revision, j.processor_key
                 LIMIT 1
                 """);
             select.Transaction = transaction;
@@ -230,6 +230,65 @@ public sealed class LocalProcessingQueue
         });
     }
 
+    /// <summary>
+    /// Extends a held lease for a long-running job. Returns null when the lease was lost or the
+    /// source revoked. When a newer revision has been captured the job is canceled instead, so
+    /// expensive work on superseded content stops at the next renewal.
+    /// </summary>
+    public ProcessingLease? Renew(
+        ProcessingLease lease, TimeSpan extension, DateTimeOffset? nowUtc = null)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        if (extension < TimeSpan.FromSeconds(1) || extension > TimeSpan.FromHours(1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(extension));
+        }
+
+        var time = nowUtc ?? DateTimeOffset.UtcNow;
+        var now = CatalogValues.Timestamp(time);
+        var until = time.ToUniversalTime().Add(extension);
+        return database.Execute(connection =>
+        {
+            using var transaction = connection.BeginTransaction();
+            using var superseded = connection.CreateCommand("""
+                UPDATE processing_jobs
+                SET state = 'canceled', lease_key = NULL, lease_until_utc = NULL,
+                    failure_code = NULL, updated_utc = $now
+                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
+                  AND EXISTS (SELECT 1 FROM item_versions newer
+                              WHERE newer.item_id = processing_jobs.item_id
+                                AND newer.revision > processing_jobs.revision)
+                """);
+            superseded.Transaction = transaction;
+            ProcessingJobKey.BindLease(superseded, lease);
+            superseded.Parameters.AddWithValue("$now", now);
+            if (superseded.ExecuteNonQuery() == 1)
+            {
+                transaction.Commit();
+                return null;
+            }
+
+            using var extend = connection.CreateCommand("""
+                UPDATE processing_jobs
+                SET lease_until_utc = $until, updated_utc = $now
+                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
+                  AND EXISTS (
+                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                """);
+            extend.Transaction = transaction;
+            ProcessingJobKey.BindLease(extend, lease);
+            extend.Parameters.AddWithValue("$until", CatalogValues.Timestamp(until));
+            extend.Parameters.AddWithValue("$now", now);
+            var renewed = extend.ExecuteNonQuery() == 1;
+            transaction.Commit();
+            return renewed ? lease with { LeaseUntil = until } : null;
+        });
+    }
+
     public bool Retry(Guid itemId, int revision, string processorKey)
     {
         ProcessingJobKey.Validate(itemId, revision, processorKey);
@@ -284,6 +343,41 @@ public sealed class LocalProcessingQueue
         ProcessingJobKey.Bind(command, itemId, revision, processor);
         command.Parameters.AddWithValue("$now", utc);
         command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Completes a leased job inside the caller's result transaction, only while the lease is
+    /// held, the source is active and the revision still carries <paramref name="digest"/>;
+    /// then schedules dependents. Returns false, writing nothing, when any fence fails.
+    /// </summary>
+    internal static bool TryCompleteLeased(
+        SqliteConnection connection, SqliteTransaction transaction,
+        ProcessingLease lease, string digest, string utc)
+    {
+        using var finish = connection.CreateCommand("""
+            UPDATE processing_jobs
+            SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
+                failure_code = NULL, updated_utc = $now
+            WHERE item_id = $item AND revision = $revision
+              AND processor_key = $processor AND state = 'running'
+              AND lease_key = $lease AND lease_until_utc > $now
+              AND EXISTS (
+                  SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                  JOIN item_versions v ON v.item_id = i.item_id
+                  WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                    AND v.revision = processing_jobs.revision AND v.digest = $digest)
+            """);
+        finish.Transaction = transaction;
+        ProcessingJobKey.BindLease(finish, lease);
+        finish.Parameters.AddWithValue("$digest", digest);
+        finish.Parameters.AddWithValue("$now", utc);
+        if (finish.ExecuteNonQuery() != 1)
+        {
+            return false;
+        }
+
+        QueueDependents(connection, transaction, lease.ItemId, lease.Revision, lease.ProcessorKey, utc);
+        return true;
     }
 
     /// <summary>

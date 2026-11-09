@@ -5,8 +5,6 @@ public sealed record LocalTopicProposal(
     string Producer, string Value, string Evidence, int EvidenceOffset,
     string Status, string? Correction);
 
-internal sealed record TopicCandidate(
-    Guid ItemId, int Revision, string Digest, string Content, string SourceKind, string Locator);
 internal sealed record TopicEvidence(string Value, int Offset);
 
 /// <summary>
@@ -20,49 +18,13 @@ public sealed class LocalTopicProposals
     internal LocalTopicProposals(CatalogDatabase database) => this.database = database;
 
     /// <summary>
-    /// Verified extracted text for a leased heading job, or null when the lease is no longer
-    /// held, the source was revoked or the text derivative does not match the revision.
-    /// </summary>
-    internal TopicCandidate? ReadLeasedCandidate(ProcessingLease lease)
-    {
-        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        return database.Execute(connection =>
-        {
-            using var query = connection.CreateCommand("""
-                SELECT d.source_digest, d.content, s.source_kind, s.locator
-                FROM processing_jobs j
-                JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
-                    AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
-                JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
-                    AND t.processor_key = d.processor_key AND t.state = 'completed'
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
-            ProcessingJobKey.BindLease(query, lease);
-            query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            using var reader = query.ExecuteReader();
-            return reader.Read()
-                ? new TopicCandidate(lease.ItemId, lease.Revision, reader.GetString(0),
-                    reader.GetString(1), reader.GetString(2), reader.GetString(3))
-                : null;
-        });
-    }
-
-    /// <summary>
     /// Records the producer run, its proposals and the job's completion in one transaction,
     /// only while the lease is still held and the source is active.
     /// </summary>
     internal bool CommitCandidates(
-        ProcessingLease lease, TopicCandidate candidate, IReadOnlyList<TopicEvidence> evidence)
+        ProcessingLease lease, LeasedText candidate, IReadOnlyList<TopicEvidence> evidence)
     {
-        if (candidate.ItemId != lease.ItemId || candidate.Revision != lease.Revision ||
-            evidence.Count > 8 || evidence.Any(e => e.Offset < 0 ||
+        if (evidence.Count > 8 || evidence.Any(e => e.Offset < 0 ||
             e.Value.Length is < 3 or > 80 ||
             e.Offset > candidate.Content.Length - e.Value.Length ||
             !candidate.Content.AsSpan(e.Offset, e.Value.Length).SequenceEqual(e.Value.AsSpan())))
@@ -74,24 +36,7 @@ public sealed class LocalTopicProposals
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
-            using var finish = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
-                    failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = $processor AND state = 'running'
-                  AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (
-                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                      JOIN item_versions v ON v.item_id = i.item_id
-                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
-                        AND v.revision = processing_jobs.revision AND v.digest = $digest)
-                """);
-            finish.Transaction = transaction;
-            ProcessingJobKey.BindLease(finish, lease);
-            finish.Parameters.AddWithValue("$digest", candidate.Digest);
-            finish.Parameters.AddWithValue("$now", now);
-            if (finish.ExecuteNonQuery() != 1)
+            if (!LocalProcessingQueue.TryCompleteLeased(connection, transaction, lease, candidate.Digest, now))
             {
                 return false;
             }
@@ -128,8 +73,6 @@ public sealed class LocalTopicProposals
                 proposal.ExecuteNonQuery();
             }
 
-            LocalProcessingQueue.QueueDependents(connection, transaction,
-                lease.ItemId, lease.Revision, lease.ProcessorKey, now);
             transaction.Commit();
             return true;
         });

@@ -15,7 +15,7 @@ public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingH
     public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var candidate = catalog.Topics.ReadLeasedCandidate(lease);
+        var candidate = catalog.Text.ReadLeasedInput(lease);
         if (candidate is null)
         {
             return Task.CompletedTask;

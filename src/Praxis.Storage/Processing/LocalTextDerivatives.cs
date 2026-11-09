@@ -8,6 +8,9 @@ public sealed record TextDerivative(
 
 internal sealed record LeasedTextSource(string SourceKind, string Locator, OriginalObject Original);
 
+/// <summary>Verified extracted text handed to a downstream processor holding a lease.</summary>
+internal sealed record LeasedText(string Digest, string Content, string SourceKind, string Locator);
+
 /// <summary>
 /// Revision- and digest-bound text extracted from immutable originals. A result is committed
 /// atomically with its job's terminal state and is readable only while its source is active.
@@ -75,6 +78,41 @@ public sealed class LocalTextDerivatives
             return reader.Read()
                 ? new LeasedTextSource(reader.GetString(0), reader.GetString(1),
                     new OriginalObject(reader.GetString(2), reader.GetInt64(3)))
+                : null;
+        });
+    }
+
+    /// <summary>
+    /// Completed, digest-matched text of the leased job's revision for a downstream processor,
+    /// or null when the lease is no longer held or the source was revoked.
+    /// </summary>
+    internal LeasedText? ReadLeasedInput(ProcessingLease lease)
+    {
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        return database.Execute(connection =>
+        {
+            using var query = connection.CreateCommand("""
+                SELECT d.source_digest, d.content, s.source_kind, s.locator
+                FROM processing_jobs j
+                JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
+                    AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
+                JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
+                    AND t.processor_key = d.processor_key AND t.state = 'completed'
+                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                    AND v.digest = d.source_digest
+                JOIN items i ON i.item_id = j.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE j.item_id = $item AND j.revision = $revision
+                  AND j.processor_key = $processor AND j.state = 'running'
+                  AND j.lease_key = $lease AND j.lease_until_utc > $now
+                  AND s.status = 'active'
+                """);
+            ProcessingJobKey.BindLease(query, lease);
+            query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            using var reader = query.ExecuteReader();
+            return reader.Read()
+                ? new LeasedText(reader.GetString(0), reader.GetString(1),
+                    reader.GetString(2), reader.GetString(3))
                 : null;
         });
     }
