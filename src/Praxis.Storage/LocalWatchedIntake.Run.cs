@@ -39,9 +39,11 @@ public sealed partial class LocalWatchedIntake
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                var completedScan = false;
                 try
                 {
                     await ReconcileAsync(DateTimeOffset.UtcNow, cancellationToken);
+                    completedScan = true;
                 }
                 catch (IOException exception)
                 {
@@ -54,6 +56,11 @@ public sealed partial class LocalWatchedIntake
                 catch (InvalidDataException exception)
                 {
                     report("Intake scan rejected unsafe input: " + JsonSerializer.Serialize(exception.Message));
+                }
+
+                if (!completedScan)
+                {
+                    await ProcessPendingAsync(cancellationToken);
                 }
 
                 await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
