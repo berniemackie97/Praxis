@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Storage;
 using Xunit;
@@ -55,7 +54,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(6)));
         Assert.Equal(2, catalog.ListLibrary().Count);
-        Assert.Equal(2, Count(catalog.DatabasePath, "ingest_requests"));
+        Assert.Equal(2L, Count(catalog.DatabasePath, "ingest_requests"));
     }
 
     [Fact]
@@ -72,8 +71,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Single(catalog.SearchText("violet"));
 
         File.WriteAllText(path, "amber revision");
-        File.SetLastWriteTimeUtc(path, first.Revision > 0
-            ? DateTime.UtcNow.AddSeconds(5) : DateTime.UtcNow);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(5)));
         var second = Assert.Single(catalog.ListLibrary());
@@ -85,7 +83,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(second.ItemId, Assert.Single(catalog.SearchText("amber")).ItemId);
 
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddMinutes(6)));
-        Assert.Equal(2, Count(catalog.DatabasePath, "item_versions"));
+        Assert.Equal(2L, Count(catalog.DatabasePath, "item_versions"));
     }
 
     [Fact]
@@ -150,7 +148,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             var after = Assert.Single(reopened.ListLibrary());
             Assert.Equal(before, after);
             Assert.Single(reopened.SearchText("violet"));
-            Assert.Equal(1, Count(reopened.DatabasePath, "ingest_requests"));
+            Assert.Equal(1L, Count(reopened.DatabasePath, "ingest_requests"));
             await reopened.VerifyOriginalAsync(after.ItemId);
         }
     }
@@ -187,7 +185,8 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             await Task.Delay(200);
             File.WriteAllText(Path.Combine(inbox, "live.txt"), "violet observation");
             var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (catalog.ListLibrary().Count == 0 && DateTime.UtcNow < deadline)
+            while (catalog.ListLibrary().FirstOrDefault()?.ProcessingState != "completed" &&
+                DateTime.UtcNow < deadline)
             {
                 await Task.Delay(100);
             }
