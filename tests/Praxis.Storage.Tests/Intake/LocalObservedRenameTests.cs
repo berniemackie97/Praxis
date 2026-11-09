@@ -324,7 +324,7 @@ public sealed class LocalObservedRenameTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
         using var restored = LocalCatalog.Open(restoredRoot);
-        Assert.Equal(9, restored.SchemaVersion);
+        Assert.Equal(10, restored.SchemaVersion);
         var recovered = Assert.Single(restored.Library.List());
         Assert.Equal(sourceId, recovered.SourceId);
         Assert.Equal(itemId, recovered.ItemId);
@@ -358,7 +358,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(dataRoot);
-        Assert.Equal(9, upgraded.SchemaVersion);
+        Assert.Equal(10, upgraded.SchemaVersion);
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 

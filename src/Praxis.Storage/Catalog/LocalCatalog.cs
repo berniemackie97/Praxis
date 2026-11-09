@@ -20,6 +20,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalLibrary Library { get; }
     public LocalProcessingQueue Processing { get; }
     public LocalTextDerivatives Text { get; }
+    public LocalTextSegments Segments { get; }
     public LocalTextSearch Search { get; }
     public LocalTopicProposals Topics { get; }
     public LocalCollections Collections { get; }
@@ -39,6 +40,7 @@ public sealed class LocalCatalog : IDisposable
         Originals = new LocalOriginals(database, objects, dataDirectory);
         Library = new LocalLibrary(database);
         Text = new LocalTextDerivatives(database);
+        Segments = new LocalTextSegments(database);
         Search = new LocalTextSearch(database);
         Topics = new LocalTopicProposals(database);
         Collections = new LocalCollections(database);

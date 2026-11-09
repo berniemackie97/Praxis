@@ -100,7 +100,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         var lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromMinutes(1), processorKey: LocalProcessors.MarkdownHeadings));
-        var candidate = Assert.IsType<TopicCandidate>(catalog.Topics.ReadLeasedCandidate(lease));
+        var candidate = Assert.IsType<LeasedText>(catalog.Text.ReadLeasedInput(lease));
 
         Assert.True(catalog.Sources.Revoke(source.SourceId));
 
@@ -165,7 +165,7 @@ public sealed class LocalTopicProposalTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using var restored = LocalCatalog.Open(target);
-        Assert.Equal(9, restored.SchemaVersion);
+        Assert.Equal(10, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Topics.List(first.SourceId)).Status);
         Assert.Equal("pending",
@@ -210,7 +210,7 @@ public sealed class LocalTopicProposalTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(root);
-        Assert.Equal(9, upgraded.SchemaVersion);
+        Assert.Equal(10, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
         Assert.Empty(upgraded.Topics.List(Guid.NewGuid()));

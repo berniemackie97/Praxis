@@ -52,10 +52,12 @@ public sealed class LocalProcessingPipeline
         report = status ?? (_ => { });
     }
 
-    /// <summary>The deterministic local processors: text extraction and heading proposals.</summary>
+    /// <summary>The deterministic local processors: extraction, heading proposals, segmentation.</summary>
     public static LocalProcessingPipeline CreateDefault(
         LocalCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null) =>
-        new(catalog, [new LocalTextProcessor(catalog), new LocalTopicProposer(catalog)], idlePoll, status);
+        new(catalog,
+            [new LocalTextProcessor(catalog), new LocalTopicProposer(catalog), new LocalTextSegmenter(catalog)],
+            idlePoll, status);
 
     /// <summary>Signals that new work may be available; coalesces repeated signals.</summary>
     public void Wake()
