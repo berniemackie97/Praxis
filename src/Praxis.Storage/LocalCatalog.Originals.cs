@@ -161,6 +161,7 @@ public sealed partial class LocalCatalog
             version.Parameters.AddWithValue("$digest", original.Digest);
             version.Parameters.AddWithValue("$recorded", recordedUtc);
             version.ExecuteNonQuery();
+            QueueProcessingVersion(itemId, revision, DefaultProcessorKey, recordedUtc, transaction);
         }
 
         using var receipt = Command(connection, """

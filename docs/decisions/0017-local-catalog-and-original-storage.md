@@ -135,6 +135,10 @@ This is not the complete durable background ingestion workflow (#102). Pending/f
 
 [ADR 0018](0018-coherent-local-backup.md) and [PR #134](https://github.com/berniemackie97/Praxis/pull/134) implement and test the owner-local SQLite-plus-original snapshot boundary proposed by #128. They do **not** establish real removable-drive interruption, encrypted/off-device recovery, automatic retention or first-party owner UX. Until PR review/CI and physical acceptance are recorded, this is an implementation proposal, not completion of #100/#128.
 
+## Durable processing follow-up
+
+[ADR 0019](0019-durable-processing-lifecycle.md) and [PR #135](https://github.com/berniemackie97/Praxis/pull/135) propose the additive catalog v3 job lifecycle. Processing jobs are distinct from immutable `ingest_requests` receipts: old captured revisions remain recoverable, and source revocation can fence unfinished derivative work without deleting original bytes. The S2a contract includes an explicit bounded local file/folder intake helper, but does not provide a file chooser, automatic worker, extractor, index, first-party Inbox or network authorization.
+
 ## Consequences and next slice
 
 S1c #126 establishes committed-request replay, source versioning and non-destructive recovery inspection. The next bounded work under [#100](https://github.com/berniemackie97/Praxis/issues/100) must specify reference-aware retention, validated restart handling and a coordinated catalog-plus-original export/restore. These operations need failure injection and safe staged/orphan lifecycle rules before any automatic deletion; physical multi-GiB data and external-volume unplug are separate acceptance gates. **Do not** introduce a generic repository framework, ORM plus parallel SQL implementation, vector store or multi-user auth abstraction just to satisfy the spike.

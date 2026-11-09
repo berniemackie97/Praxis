@@ -56,7 +56,7 @@ public sealed partial class LocalCatalog
         }
 
         RestrictFile(catalogPath);
-        var objects = ReadSnapshotObjects(catalogPath);
+        var objects = ReadSnapshotObjects(catalogPath, CurrentSchemaVersion);
         var (catalogLength, catalogDigest) =
             await HashFileAsync(catalogPath, cancellationToken);
         var totalBytes = EnforceBudget(catalogLength, objects, maxBytes);
@@ -145,7 +145,7 @@ public sealed partial class LocalCatalog
         CancellationToken cancellationToken)
     {
         if (manifest.FormatVersion != SnapshotFormatVersion ||
-            manifest.CatalogVersion != CurrentSchemaVersion ||
+            manifest.CatalogVersion is not (2 or CurrentSchemaVersion) ||
             manifest.Objects is null ||
             manifest.Objects.Count > MaximumSnapshotObjects ||
             !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)
@@ -160,7 +160,7 @@ public sealed partial class LocalCatalog
             throw new InvalidDataException("The snapshot catalog failed integrity verification.");
         }
 
-        var objects = ReadSnapshotObjects(Path.Combine(directory, "catalog.sqlite"));
+        var objects = ReadSnapshotObjects(Path.Combine(directory, "catalog.sqlite"), manifest.CatalogVersion);
         if (!objects.SequenceEqual(manifest.Objects))
         {
             throw new InvalidDataException("The manifest does not match the catalog objects.");
