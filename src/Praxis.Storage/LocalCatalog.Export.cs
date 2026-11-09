@@ -21,19 +21,21 @@ public sealed partial class LocalCatalog
 
         var destination = Path.GetFullPath(destinationPath);
         var catalogRoot = Path.GetDirectoryName(DatabasePath)!;
-        var relative = Path.GetRelativePath(catalogRoot, destination);
+        var folder = Path.GetDirectoryName(destination)!;
+        if (!Directory.Exists(folder))
+        {
+            throw new DirectoryNotFoundException(folder);
+        }
+
+        var resolvedCatalog = ResolveExistingDirectory(catalogRoot);
+        var resolvedExportFolder = ResolveExistingDirectory(folder);
+        var relative = Path.GetRelativePath(resolvedCatalog,
+            Path.Combine(resolvedExportFolder, Path.GetFileName(destination)));
         if (relative is "." or ".." ||
             (!relative.StartsWith(".." + Path.DirectorySeparatorChar,
                 StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
         {
             throw new InvalidOperationException("An export cannot be written inside the private catalog.");
-        }
-
-        var folder = Path.GetDirectoryName(destination)!;
-        if (!Directory.Exists(folder) ||
-            (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("The chosen export directory is unavailable or linked.");
         }
 
         if (File.Exists(destination) || Directory.Exists(destination))
@@ -89,6 +91,39 @@ public sealed partial class LocalCatalog
         {
             File.Delete(pending);
         }
+    }
+
+    private static string ResolveExistingDirectory(string path)
+    {
+        var parents = new Stack<string>();
+        var current = new DirectoryInfo(path);
+        while (current.Parent is { } parent)
+        {
+            parents.Push(current.Name);
+            current = parent;
+        }
+
+        var resolved = current.FullName;
+        while (parents.TryPop(out var name))
+        {
+            var entry = new DirectoryInfo(Path.Combine(resolved, name));
+            if (!entry.Exists)
+            {
+                throw new DirectoryNotFoundException(entry.FullName);
+            }
+
+            if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                resolved = (entry.ResolveLinkTarget(true) as DirectoryInfo)?.FullName
+                    ?? throw new InvalidDataException("An export directory link is not a directory.");
+            }
+            else
+            {
+                resolved = entry.FullName;
+            }
+        }
+
+        return resolved;
     }
 
     private OriginalObject? CurrentExportableOriginal(Guid itemId, int revision)
