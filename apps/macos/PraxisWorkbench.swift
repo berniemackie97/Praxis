@@ -17,6 +17,10 @@ final class Workbench: ObservableObject {
     @Published private(set) var running = false
     @Published var query = ""
     @Published var page = 0
+    @Published var noteTitle = ""
+    @Published var noteText = ""
+    @Published private(set) var savingNote = false
+    private var noteCaptureId: String?
 
     private var child: Process?
     private var input: FileHandle?
@@ -125,6 +129,25 @@ final class Workbench: ObservableObject {
         send("collections", ["limit": 100])
     }
 
+    func saveNote() {
+        guard !savingNote,
+              !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let id = noteCaptureId ?? UUID().uuidString.lowercased()
+        noteCaptureId = id
+        savingNote = send("noteCapture", [
+            "captureId": id,
+            "title": noteTitle,
+            "text": noteText
+        ])
+    }
+
+    func discardNote() {
+        guard !savingNote else { return }
+        noteCaptureId = nil
+        noteTitle = ""
+        noteText = ""
+    }
+
     func createCollection(_ name: String) {
         send("collectionCreate", ["name": name])
     }
@@ -194,11 +217,12 @@ final class Workbench: ObservableObject {
         input = nil
     }
 
-    private func send(_ action: String, _ fields: [String: Any]) {
-        guard let input, running else { return }
+    @discardableResult
+    private func send(_ action: String, _ fields: [String: Any]) -> Bool {
+        guard let input, running else { return false }
         guard requests.count < 64 else {
             message = "The worker is busy. Retry after pending requests complete."
-            return
+            return false
         }
         let id = UUID().uuidString
         var request = fields
@@ -207,7 +231,7 @@ final class Workbench: ObservableObject {
         guard let encoded = try? JSONSerialization.data(withJSONObject: request),
               encoded.count < 16_000 else {
             message = "The request exceeds the private protocol limit."
-            return
+            return false
         }
         do {
             if action == "preview", let itemId = fields["itemId"] as? String,
@@ -222,9 +246,11 @@ final class Workbench: ObservableObject {
                 requests[id] = action
             }
             try input.write(contentsOf: encoded + Data([0x0A]))
+            return true
         } catch {
             requests.removeValue(forKey: id)
             message = "The worker is no longer accepting requests."
+            return false
         }
     }
 
@@ -243,10 +269,20 @@ final class Workbench: ObservableObject {
                   let id = reply.requestId,
                   let action = requests.removeValue(forKey: id) else { continue }
             guard reply.ok else {
+                if action == "noteCapture" { savingNote = false }
                 message = reply.error ?? "The operation failed."
                 continue
             }
             switch action {
+            case "noteCapture":
+                savingNote = false
+                noteCaptureId = nil
+                noteTitle = ""
+                noteText = ""
+                message = "Note saved to the private Inbox and queued for search indexing."
+                page = 0
+                selectedCollectionId = ""
+                refresh()
             case let context where context.hasPrefix("library:"):
                 guard context == "library:\(selectedCollectionId):\(page)" else { continue }
                 items = reply.data?.items ?? []
