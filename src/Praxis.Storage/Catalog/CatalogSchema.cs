@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 10;
+    internal const int CurrentVersion = 11;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -22,7 +22,8 @@ internal static class CatalogSchema
         (7, "enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc"),
         (8, "source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc"),
         (10, "processing_jobs", "priority"),
-        (10, "text_segments", "item_id, revision, processor_key, ordinal, start_offset, length, heading_path")
+        (10, "text_segments", "item_id, revision, processor_key, ordinal, start_offset, length, heading_path"),
+        (11, "model_profiles", "role, provider, endpoint, model, context_tokens, enabled, updated_utc")
     ];
 
     internal static void Prepare(SqliteConnection database)

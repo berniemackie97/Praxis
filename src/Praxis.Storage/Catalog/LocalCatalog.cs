@@ -26,6 +26,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
+    public LocalModelProfiles Models { get; }
 
     private LocalCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
     {
@@ -46,6 +47,7 @@ public sealed class LocalCatalog : IDisposable
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
+        Models = new LocalModelProfiles(database);
     }
 
     public static LocalCatalog Open(string dataDirectory) =>
