@@ -44,7 +44,7 @@ public sealed partial class LocalCatalog
         ProcessingLease lease, string? content, string? reasonCode)
     {
         ValidateJobIdentity(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        if (content is null == (reasonCode is null))
+        if ((content is null) == (reasonCode is null))
         {
             throw new ArgumentException("Provide either extracted text or an unsupported reason.");
         }
