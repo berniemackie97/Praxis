@@ -133,3 +133,8 @@ The owner's deferred integrated smoke (#130) must validate the UI, error feedbac
 The L0 application now includes a draft operator-visible health path for its single approved watched Inbox: watching/offline/degraded/paused states, last completed scan, per-session capture counts and bounded file-specific errors, plus user-triggered pause, resume and retry scan. It reuses the existing watcher, catalog and private worker protocol; no second importer, untrusted local API, source reset or inference service is introduced.
 
 The owner acceptance exercise must demonstrate a missing Inbox before launch, reconnection and catch-up, an intentionally unreadable or invalid file, restoration of healthy status after correction, pause while files change, resumption and capture, preserved originals and active search while the Inbox is offline, and non-destructive retry. These tests have not yet run on hardware; #105/#130 are not complete.
+
+
+## L0 event-confirmed source relocation — #105
+
+The first-party watched-Inbox worker has a draft conservative rename path. Only an observed file rename followed by verified stable SHA-256, active source and unoccupied destination can update the canonical locator. It keeps the source and item identities, revisions, original digests, manual collections and reviewed derivatives intact, while saving the old/new locator in schema-v8 history. Independent copies and unobserved moves do not merge. The owner Library inspector can display the recorded move evidence. This is not proof of physical removable-volume identity, which remains #128/#130 acceptance.
