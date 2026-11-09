@@ -21,7 +21,7 @@ public sealed partial class LocalCatalog
         {
             using var command = Command(connection, """
                 SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
-                       snippet(text_search, 1, '⟦', '⟧', '…', 24)
+                       snippet(text_search, -1, '⟦', '⟧', '…', 24)
                 FROM text_search
                 JOIN search_index_keys k ON k.rowid = text_search.rowid
                 JOIN item_versions v
