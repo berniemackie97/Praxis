@@ -80,7 +80,8 @@ public sealed partial class LocalCatalog
     }
 
     public ProcessingLease? TryClaimProcessing(
-        TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null)
+        TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null,
+        string? processorKey = null)
     {
         if (leaseDuration < TimeSpan.FromSeconds(1) ||
             leaseDuration > TimeSpan.FromHours(1))
@@ -93,19 +94,26 @@ public sealed partial class LocalCatalog
             throw new ArgumentOutOfRangeException(nameof(maxAttempts));
         }
 
+        if (processorKey is not null)
+        {
+            ValidateProcessorKey(processorKey);
+        }
+
         var time = nowUtc ?? DateTimeOffset.UtcNow;
         var now = Timestamp(time);
         var leaseUntil = time.ToUniversalTime().Add(leaseDuration);
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            ExpireAttemptLimitedJobs(now, maxAttempts, transaction);
+            ExpireAttemptLimitedJobs(now, maxAttempts, processorKey, transaction);
             using var select = Command(connection, """
                 SELECT j.item_id, j.revision, j.processor_key
                 FROM processing_jobs j
                 JOIN items i ON i.item_id = j.item_id
                 JOIN sources s ON s.source_id = i.source_id
-                WHERE s.status = 'active' AND j.attempt < $maximum
+                WHERE s.status = 'active'
+                  AND ($processor IS NULL OR j.processor_key = $processor)
+                  AND j.attempt < $maximum
                   AND (j.state = 'queued' OR
                        (j.state = 'running' AND j.lease_until_utc <= $now))
                 ORDER BY j.created_utc, j.item_id, j.revision, j.processor_key
@@ -113,6 +121,7 @@ public sealed partial class LocalCatalog
                 """);
             select.Transaction = transaction;
             select.Parameters.AddWithValue("$maximum", maxAttempts);
+            select.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);
             select.Parameters.AddWithValue("$now", now);
             Guid itemId;
             int revision;
@@ -286,17 +295,18 @@ public sealed partial class LocalCatalog
     }
 
     private void ExpireAttemptLimitedJobs(
-        string now, int maxAttempts, SqliteTransaction transaction)
+        string now, int maxAttempts, string? processorKey, SqliteTransaction transaction)
     {
         using var command = Command(connection, """
             UPDATE processing_jobs
             SET state = 'failed', failure_code = 'attempt_limit',
                 lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
-            WHERE attempt >= $maximum AND
-                (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
+            WHERE attempt >= $maximum AND ($processor IS NULL OR processor_key = $processor)
+                AND (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
             """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$maximum", maxAttempts);
+        command.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", now);
         command.ExecuteNonQuery();
     }
@@ -331,6 +341,11 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("A valid item and revision are required.");
         }
 
+        ValidateProcessorKey(processor);
+    }
+
+    private static void ValidateProcessorKey(string processor)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(processor);
         if (processor.Length > 64 || processor.Any(c =>
             c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))

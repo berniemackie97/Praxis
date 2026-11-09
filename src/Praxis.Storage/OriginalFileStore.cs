@@ -129,6 +129,44 @@ internal sealed class OriginalFileStore
             original.Digest, original.Length, cancellationToken);
     }
 
+    internal async Task<byte[]> ReadVerifiedBytesAsync(
+        OriginalObject original, int maxBytes, CancellationToken cancellationToken)
+    {
+        ValidateDigest(original.Digest);
+        if (original.Length < 0 || original.Length > maxBytes)
+        {
+            throw new InvalidDataException("The original exceeds the extraction byte budget.");
+        }
+
+        var path = ExistingObjectPath(original.Digest);
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidDataException("An original object path is a symbolic link.");
+        }
+
+        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (input.Length != original.Length)
+        {
+            throw new InvalidDataException("An original object has a conflicting length.");
+        }
+
+        var bytes = new byte[(int)original.Length];
+        await input.ReadExactlyAsync(bytes, cancellationToken);
+        if (input.Length != original.Length)
+        {
+            throw new InvalidDataException("An original object changed during extraction.");
+        }
+
+        if (!CryptographicOperations.FixedTimeEquals(
+            SHA256.HashData(bytes), Convert.FromHexString(original.Digest)))
+        {
+            throw new InvalidDataException("An original object failed integrity verification.");
+        }
+
+        return bytes;
+    }
+
     public async Task CopyVerifiedAsync(
         OriginalObject original, OriginalFileStore destination,
         CancellationToken cancellationToken)
