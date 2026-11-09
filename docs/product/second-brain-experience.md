@@ -2,7 +2,7 @@
 
 **Status:** Product intent and acceptance direction. This document is not a list of shipped features.
 
-Praxis is a local-first personal knowledge system that works **without Obsidian, a cloud account, or an AI provider**. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Obsidian remains an optional editor/source adapter.
+Praxis is a local-first **personal knowledge intelligence and agent platform** that works **without Obsidian, a cloud account, or an AI provider**. The product is not complete when it merely browses or searches files: it must progressively interpret supported knowledge, connect corroborating evidence across sources, investigate questions, and produce actionable, cited conclusions without inventing facts. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Obsidian remains an optional editor/source adapter.
 
 ## Core experience
 
@@ -90,6 +90,32 @@ Work items: #117–#119, with #32 protecting write actions.
 ## Search, organization and trustworthy answers
 
 First ship local, rebuildable lexical search with titles, paths, excerpts and source citations (#106). Hybrid/semantic retrieval follows with relevance evaluation and unauthorized-result tests (#28/#29/#60). Derived tags, entities and relationship candidates are reviewable (#97/#115/#116), not hidden source rewrites. Grounded research/chat (#33/#61) must cite exact inputs and abstain when evidence is missing. Authorized workflows (#32/#34/#62) never inherit permissions from model output or external source text.
+
+## Deep knowledge intelligence: defining product outcome
+
+The owner may import entire development projects, assembly/disassembly exports, decompiled routines, technical notes, format documentation and experiments. Praxis should extract supported code and format structures, identify versioned symbols and dependencies, cross-reference research, and distinguish observed facts from unresolved hypotheses or conflicting descriptions.
+
+A representative acceptance question is **"How does the Conquer 5517 client process Dmap.dat?"** or **"How do I parse Conquer C3 files?"** Praxis must correlate the relevant source and disassembly evidence, identify what the corpus establishes, supply an explanation or implementable algorithm with exact citations, and explicitly abstain where evidence does not suffice. Neither vector retrieval nor plausible model prose is proof of correctness.
+
+Pipeline: (1) immutable accepted originals and typed provenance; (2) bounded format-aware deterministic extraction; (3) versioned technical facts, symbols and evidence relationships; (4) optional model-generated candidates with review and contradiction handling; (5) bounded, authorized investigation tools; (6) grounded synthesis and evaluated answers. Reprocessing preserves owner corrections and invalidates stale derivatives. Unsupported binary formats are not automatically understood.
+
+Work items: deep technical feature #149 with contract #152, extraction #153 and claim/reconciliation #154; bounded investigation feature #150 with runs #155 and evaluation #156. Existing #29/#31/#33/#97/#115/#116 retain retrieval, model choice, answering and human organization ownership.
+
+## Typed, permissioned, incremental connectors
+
+A connector is an independently authorized source adapter, not an ambient privilege. Known provider semantics must enter Praxis as typed, versioned events: provider/account, source/event ID, event type, schema version, occurred/observed times, consent/scope, revision/receipt and content reference. A bank transaction already labeled `transaction.posted` need not consume an LLM request to rediscover its type. Events may later produce cross-domain relationships only with verifiable evidence.
+
+Recover missed events using bounded reconciliation, replay-safe IDs, revision history, rate-limit backoff, deletion/revocation semantics and inspectable progress. Start with scoped GitHub changes #158 and authorized local development/agent sessions #159; investigate bank and social provider availability/cost through #162 before implementation. Email/calendar remain tracked in #35. Do not scrape banking credentials, infer service permissions or bulk-monitor a user account without explicit opt-in.
+
+Work items: #151 typed history feature, #157 event contract, #158/#159 first source experiences and #162 sensitive-provider research; #30/#32/#34/#35 own provider priorities, grants, durable work and outward-facing consent.
+
+## Agentic capabilities and voice
+
+Praxis has its own chat/assistant user experience (#33), not merely file browsing or MCP exposure to third-party agents. Agentic investigations require a bounded plan, evidence retrieval, hypothesis checks, current authorization at every step, token/tool/time budgets, source-cited results and visible uncertainty. A model may propose new tools and request approval (#160); it may not create executable authority or install/run its own unreviewed code.
+
+Prefer deterministic processing and a measured local inference backend (for example an already-installed Qwen model via Ollama) for routine tasks; optional stronger remote reasoning is explicitly user-approved per source and operation, with disclosure of destination and usage. Claude/Codex subscriptions are not presumed to grant unrestricted API access. No remote model is an automatic fallback. Preserve a no-model ingest and local search path.
+
+Beyond note dictation (#109/#110), later first-party push-to-talk interaction (#161) can use free offline STT/TTS with clear microphone control and text fallback; spoken instructions cannot silently approve sensitive actions. The product must remain useful without audio hardware or any paid inference/voice service.
 
 ## Required first local demonstration
 
