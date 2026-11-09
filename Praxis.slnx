@@ -5,6 +5,7 @@
     <Project Path="src/Praxis.Storage/Praxis.Storage.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Praxis.Storage.RecoveryCheck/Praxis.Storage.RecoveryCheck.csproj" />
     <Project Path="tools/Praxis.VaultCli/Praxis.VaultCli.csproj" />
   </Folder>
   <Folder Name="/tests/">
