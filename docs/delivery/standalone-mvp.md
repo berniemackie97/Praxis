@@ -112,3 +112,10 @@ The first local deliverable intentionally stops short of autonomous technical re
 - **Security gate:** model output never grants authority. Provider accounts, local session histories and command execution require distinct, narrow, revocable consent. Sensitive financial and social account access remains a research decision, not a scheduled or implemented connector.
 
 Do not create a graph database, broad tool runtime, uncontrolled session monitor, provider marketplace or autonomous background agent before a measured vertical slice justifies it. The owner can use L0 entirely offline with no AI provider; L4/L5 only exit when proven against real authorized cases.
+
+ 
+## Reviewable enrichment checkpoint (#115)
+
+The initial schema-v7 deterministic proposal worker follows verified text extraction. It creates only literal Markdown-heading candidates with exact source/revision/digest/evidence references; a heading-free eligible Markdown file records abstention. The owner can accept, reject or correct a proposal in the trusted app. Decisions and history survive restart/backup, while changed or revoked sources make older candidates unavailable for active review. This does **not** automatically assign a collection, call a model or authorize an agent. See [ADR 0024](../decisions/0024-reviewable-enrichment.md).
+
+This establishes the authoritative proposal lifecycle required by later local-model enrichment and knowledge relationships, without moving those L2/L4 gates into the L0 release definition. Native first-run verification and physical recovery remain open under #130 and #128.

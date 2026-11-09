@@ -117,3 +117,8 @@ First-use collections are persisted in the same source catalog (schema v6) and r
 ## Direct thoughts and paste capture
 
 The first-party Quick note workflow (under [#113](https://github.com/berniemackie97/Praxis/issues/113)) saves an explicit authored Markdown note into the selected Inbox with exact-byte original preservation, idempotent receipt and automatic downstream indexing. This draft does not monitor or transmit clipboard contents, fetch pasted URLs or invoke any model. See [the owner-local workbench guide](docs/delivery/macos-workbench.md). Native GUI/build verification remains open.
+
+ 
+## Reviewable enrichment (development)
+
+Under #115, the proposal foundation stores source/revision/digest-bound literal Markdown-heading candidates and append-only owner review events in catalog schema v7. These are **not machine-understood topics or automatically accepted tags**. No model provider is required, and no external tool or agent receives new permissions. See [ADR 0024](docs/decisions/0024-reviewable-enrichment.md) and the [macOS workbench guide](docs/delivery/macos-workbench.md). Native acceptance and end-to-end release gates remain open.
