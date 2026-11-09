@@ -125,6 +125,7 @@ public sealed partial class LocalWatchedIntake
             }
 
             await ProcessPendingAsync(cancellationToken);
+            RecordSuccessfulScan(now, files.Count, imported);
             return imported;
         }
         finally
