@@ -23,7 +23,7 @@
     {
       "stage": "M3",
       "title": "M3 — Obsidian device integration",
-      "description": "Desktop/mobile Obsidian interoperability. Exit: real-device offline/reconnect, vault export/restore and conflict UX validated."
+      "description": "Obsidian interoperability and separately authorized projections of Praxis knowledge, grounded relationships and sources into a navigable owner-controlled vault; no second canonical store. Independent mobile parity remains separately verified."
     },
     {
       "stage": "M4",
@@ -33,7 +33,7 @@
     {
       "stage": "M5",
       "title": "M5 — Authorized intelligence",
-      "description": "Grounded technical knowledge interpretation, evidence-aware agentic investigation, local-first model choice, scoped connector event ingestion and authorized automation. Exit: source-cited cross-artifact answers, revocation, evaluation and permission tests."
+      "description": "Integrated local-first knowledge intelligence: reviewable technical facts/relationships, hybrid retrieval, source-cited investigated answers, scoped task execution, evaluated local inference and authorized provider routing. Intelligent MVP owner-run release gate #170."
     },
     {
       "stage": "M6",
@@ -134,7 +134,8 @@
         22,
         25,
         92,
-        94
+        94,
+        171
       ]
     },
     {
@@ -185,7 +186,9 @@
       "area": "intelligence",
       "children": [
         31,
-        33
+        33,
+        170,
+        172
       ]
     },
     {
@@ -196,7 +199,8 @@
         32,
         34,
         35,
-        160
+        160,
+        173
       ]
     },
     {
@@ -270,7 +274,8 @@
       "children": [
         117,
         118,
-        119
+        119,
+        143
       ]
     },
     {
@@ -559,6 +564,12 @@
       146,
       166
     ],
+    "143": [
+      115,
+      116,
+      117,
+      118
+    ],
     "146": [
       106
     ],
@@ -614,6 +625,43 @@
     "166": [
       126,
       108
+    ],
+    "170": [
+      130,
+      29,
+      31,
+      32,
+      33,
+      115,
+      116,
+      143,
+      149,
+      150,
+      171,
+      172,
+      173
+    ],
+    "171": [
+      22,
+      25,
+      116,
+      143,
+      149
+    ],
+    "172": [
+      29,
+      31,
+      33,
+      143,
+      149
+    ],
+    "173": [
+      32,
+      33,
+      34,
+      150,
+      160,
+      143
     ]
   },
   "priorities": {
@@ -633,21 +681,32 @@
     "15": "P0",
     "16": "P0",
     "17": "P0",
+    "22": "P1",
+    "25": "P1",
     "26": "P1",
     "27": "P1",
+    "29": "P1",
+    "31": "P1",
+    "32": "P1",
+    "33": "P1",
+    "34": "P1",
     "37": "P1",
     "40": "P0",
     "41": "P0",
     "50": "P0",
     "53": "P0",
     "55": "P0",
+    "57": "P1",
     "59": "P1",
     "60": "P1",
+    "61": "P1",
+    "62": "P1",
     "64": "P1",
     "65": "P1",
     "92": "P1",
     "94": "P1",
     "96": "P1",
+    "98": "P1",
     "99": "P1",
     "100": "P1",
     "101": "P1",
@@ -664,10 +723,10 @@
     "112": "P2",
     "113": "P1",
     "114": "P2",
-    "115": "P2",
-    "116": "P2",
-    "117": "P2",
-    "118": "P2",
+    "115": "P1",
+    "116": "P1",
+    "117": "P1",
+    "118": "P1",
     "119": "P2",
     "122": "P1",
     "124": "P1",
@@ -676,22 +735,27 @@
     "129": "P1",
     "130": "P1",
     "136": "P2",
+    "143": "P1",
     "146": "P1",
     "149": "P1",
-    "150": "P2",
+    "150": "P1",
     "151": "P2",
     "152": "P1",
-    "153": "P2",
-    "154": "P2",
-    "155": "P2",
-    "156": "P2",
+    "153": "P1",
+    "154": "P1",
+    "155": "P1",
+    "156": "P1",
     "157": "P2",
     "158": "P2",
     "159": "P3",
-    "160": "P3",
+    "160": "P1",
     "161": "P3",
     "162": "P3",
-    "166": "P1"
+    "166": "P1",
+    "170": "P1",
+    "171": "P1",
+    "172": "P1",
+    "173": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -711,7 +775,8 @@
     50,
     117,
     152,
-    162
+    162,
+    172
   ],
   "dependency_removals": {
     "26": [
@@ -743,6 +808,14 @@
       "from": "P3",
       "to": "P1"
     },
+    "22": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "25": {
+      "from": "P2",
+      "to": "P1"
+    },
     "26": {
       "from": "P2",
       "to": "P1"
@@ -751,8 +824,32 @@
       "from": "P2",
       "to": "P1"
     },
+    "29": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "31": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "32": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "33": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "34": {
+      "from": "P2",
+      "to": "P1"
+    },
     "37": {
       "from": "P3",
+      "to": "P1"
+    },
+    "57": {
+      "from": "P2",
       "to": "P1"
     },
     "59": {
@@ -763,11 +860,79 @@
       "from": "P2",
       "to": "P1"
     },
+    "61": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "62": {
+      "from": "P2",
+      "to": "P1"
+    },
     "64": {
       "from": "P3",
       "to": "P1"
     },
+    "98": {
+      "from": "P2",
+      "to": "P1"
+    },
     "105": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "115": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "116": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "117": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "118": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "143": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "150": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "153": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "154": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "155": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "156": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "170": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "171": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "172": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "173": {
       "from": "P2",
       "to": "P1"
     }
@@ -775,7 +940,7 @@
   "delivery_lanes": [
     {
       "id": "L0",
-      "name": "Standalone local knowledge MVP",
+      "name": "Local knowledge foundation (prerequisite, not complete MVP)",
       "issues": [
         99,
         122,
@@ -795,7 +960,7 @@
         166,
         130
       ],
-      "exit": "On the owner's Mac, start Praxis, monitor the approved Inbox with visible healthy/offline/degraded/paused states and recovery actions, capture folders and typed notes, preserve and verify original bytes and export them on request, inspect/search and organize the catalog without Obsidian, remote inference or private HTTP; demonstrate failure recovery, integrity and denied access."
+      "exit": "On the owner's Mac, launch a trusted local Praxis workbench, automatically capture approved inputs, preserve exact originals, inspect/search supported data, organize collections, restore and verify after interruption, and deny unauthorized access. Passing this gate does not establish the complete agent-powered Praxis MVP (#170)."
     },
     {
       "id": "L1",
@@ -833,7 +998,7 @@
     },
     {
       "id": "L4",
-      "name": "Deep technical knowledge and evidence-grounded investigations",
+      "name": "Core MVP: deep technical extraction, relationship evidence and bounded investigations",
       "issues": [
         149,
         152,
@@ -847,7 +1012,7 @@
     },
     {
       "id": "L5",
-      "name": "Typed connected history, scoped tools and conversational voice",
+      "name": "Extended connector history and optional interaction capabilities",
       "issues": [
         151,
         157,
@@ -858,6 +1023,26 @@
         161
       ],
       "exit": "One explicitly authorized typed connector demonstrates incremental history, replay, revocation and provenance without unnecessary AI classification; proposed agent tools require independently enforced approval. Conversational offline voice remains a separately verified user interaction, not a mandatory connector feature."
+    },
+    {
+      "id": "L6",
+      "name": "Integrated intelligent Second Brain MVP acceptance",
+      "issues": [
+        31,
+        32,
+        33,
+        34,
+        57,
+        61,
+        62,
+        98,
+        143,
+        170,
+        171,
+        172,
+        173
+      ],
+      "exit": "Owner-run end-to-end proof: local intake and agent-assisted technical extraction, evidence-linked relationships, evaluated hybrid/structural RAG, source-cited answers/abstention, scoped planned task execution, Obsidian derived knowledge views, root/nested reviewed agent context projections, and measured local-first inference with explicit authorized cloud escalation; pass resilience, privacy and cost-control gates."
     }
   ]
 }

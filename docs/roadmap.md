@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-Praxis is delivered through verifiable capability gates, not arbitrary dates. **Milestone numbers classify outcomes, not execution order.** A small local Praxis application now takes delivery priority over unfinished remote sync and optional Obsidian integration. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
+Praxis is delivered through verifiable capability gates, not arbitrary dates. **Milestone numbers classify outcomes, not execution order.** A dependable local Praxis application is the immediate foundation; **the actual MVP is an integrated agent-powered, source-grounded Second Brain (#170)**, including Obsidian-accessible derived knowledge, governed tools and cost-aware inference. Remote multi-device sync and unrelated account connectors remain separate. GitHub [master roadmap #1](https://github.com/berniemackie97/Praxis/issues/1) indexes decisions and dependencies. The private [Praxis Roadmap Project](https://github.com/users/berniemackie97/projects/3) tracks execution.
 
 ## Milestone portfolio
 
@@ -43,7 +43,7 @@ Merged PRs #144/#145/#147/#148 implement automatic intake, initial macOS workben
 
 The **product success test** after L0 goes beyond document retrieval: ask a challenging question spanning disassembly, source code and notes; Praxis must reconstruct the supported answer with attributable evidence, highlight contradictions and gaps, and avoid claiming unsupported binary comprehension. This is planned in L4, not a new L0 release blocker.
 
-### First useful milestone (local)
+### Local foundation checkpoint — not the finished MVP
 
 After #130 verification, an owner can open Praxis directly, explicitly add files/folders with mixed supported and unsupported formats, see provenance and processing errors, search supported extracted content, inspect source originals, retry after a restart, rebuild the index and verify restoration. Obsidian, cloud storage, an external AI model and a second device are **not requirements** for this local milestone.
 
@@ -51,6 +51,20 @@ After #130 verification, an owner can open Praxis directly, explicitly add files
 
 Finish the threat/host/key/recovery decisions (#13/#15/#50) and versioned conflict protocol (#17) before remotely reachable private sync (#18/#19). Do not advertise device or encryption support until matching test evidence exists. The M3 desktop archive/restore work remains available as an optional adapter, with unverified editor/mobile acceptance tracked in #22/#23/#25.
 
+
+## True Praxis product MVP — integrated intelligent release gate (#170)
+
+The owner's MVP is **not** satisfied by #130's capture, file browsing and keyword search. #130 is an enabling L0 acceptance checkpoint. The actual first release requires:
+
+- **Interpret and relate:** #149/#152–#154 plus #115/#116 extract supported project/source/ASM/format knowledge, version, provenance, contradictions and reviewable claims.
+- **Reason and answer:** #29/#33/#150/#155/#156/#172 prove evaluated hybrid/structural retrieval, bounded agentic investigation, exact claim-level citations, uncertainty, no-answer and revocation cases on a real authorized corpus.
+- **Efficient agents:** #143 provides task-scoped, hierarchically organized, versioned context packs and owner-reviewed root/nested `AGENTS.md` or tool-specific projections. Generated instructions never bypass consent or read unapproved data.
+- **Local-first inference and escalation:** #31/#172 benchmark Ollama on actual local hardware, choose a measured retrieval+reasoning pipeline, and independently authorize supported Claude/Codex/Gemini/Grok/DeepSeek providers where available; enforce token/context/cost budgets, caching/invalidation, fallback policy and explicit disclosure.
+- **Ask and do:** #33/#32/#34/#160/#173 support first-party persistent chat, planned bounded actions, tool discovery proposals, independent approval, progress, cancellation and auditable verification.
+- **Obsidian companion:** #57/#171 publish owner-approved, linked and provenance-grounded Markdown views into a selected vault without destructive conflicts or a competing canonical store.
+- **Real release gate:** #170 demonstrates these as one product on the owner's Mac with representative technical questions and one approved task; failure, injection, data recovery, revocation and cost/latency evidence are mandatory.
+
+This is an **end-to-end vertical slice at production quality**, not a requirement to support all possible files, models, connected services or devices on day one. Foundational L0 remains the next blocking engineering gate, but the roadmap must not claim MVP completion there.
 
 ## Quality gates
 

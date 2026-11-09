@@ -1,14 +1,22 @@
-# Standalone Praxis delivery plan
+# Local Praxis foundation and intelligent MVP delivery
 
-**Status:** Reviewed product direction and delivery plan. The standalone app remains unshipped; implementation and privacy decisions require their own verified acceptance.
+**Status:** Foundation implementation and broader product intent; merged individual slices do not establish end-to-end hardware/release acceptance. **#130 is a local foundation checkpoint. #170 is the real agent-powered intelligent Second Brain MVP release gate.**
 
 ## Correction to execution strategy
 
 The M0–M7 repository milestones remain **capability gates**, not mandatory chronological implementation order. Previously, a first usable app was effectively blocked on two-device sync and Obsidian integration. That is incompatible with the user's confirmed requirement: Praxis must be independently useful as a local Second Brain.
 
-Create a **local-owner vertical slice across M4 and M6** now. Preserve M0/M1 content integrity and architecture constraints. Build remote synchronization (M2), Obsidian acceptance (M3), full model assistance (M5) and operational scale-up (M7) as separately gated deliverables. Existing completed Obsidian archives remain useful recovery/interoperability evidence, not the entry point.
+Create a **local-owner foundational vertical slice across M4 and M6** now, followed by the integrated intelligence, Obsidian and governed task-release gate #170. Preserve M0/M1 content integrity and architecture constraints. Build remote synchronization (M2) and unrelated multi-device parity separately. **Obsidian knowledge visibility and verified local-first agent/model assistance are mandatory for #170**, with the full M3/M5 portfolio and later hosted operations still independently gated. Existing completed Obsidian archives remain useful recovery/interoperability evidence, not the entry point.
 
 Project priority is independent from milestone number. Owner-local processing must remain fully local until processing policy is approved. Any non-loopback service, public endpoint, remote inference, credentialed connector, or multi-owner access is blocked on #13/#15/#50 and its own controls. A local prototype is **not** evidence of encryption, data confidentiality against malware, or production deployment readiness.
+
+## Two distinct gates — do not conflate them
+
+**L0 / #130:** Launch, capture, preserve, index, inspect, organize and recover local knowledge reliably. It must function offline without an LLM or Obsidian. This is essential engineering foundation but **not** a complete MVP.
+
+**Intelligent MVP / #170:** Take one substantial, owner-approved corpus from raw source to reviewed technical claims/relationships, retrieve and investigate complex questions with grounded answers, run a bounded owner-approved task, expose knowledge safely in Obsidian and use measured local-first inference with opt-in external escalation. The deliverables are #149/#150, #29/#31/#33/#172, #143, #32/#34/#160/#173, and #57/#171. Reuse the same canonical storage, consent policy and user experience.
+
+Design validation on actual source/domain questions, not superficial generated summaries. Never declare production readiness without performance, grounding, redaction, revocation, no-answer, agent injection, failure/restart and owner hardware evidence.
 
 ## Dependency-aware implementation slices
 
