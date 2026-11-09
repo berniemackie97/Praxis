@@ -470,7 +470,8 @@
       107
     ],
     "113": [
-      108
+      101,
+      106
     ],
     "114": [
       103
@@ -519,6 +520,7 @@
       103,
       106,
       108,
+      113,
       129,
       146
     ],
@@ -622,6 +624,9 @@
       101,
       107
     ],
+    "113": [
+      108
+    ],
     "130": [
       107
     ]
@@ -683,22 +688,22 @@
         129,
         108,
         146,
+        113,
         130
       ],
-      "exit": "With merged code and actual macOS first-run verification, automatically capture approved files, preserve originals and revisions, inspect/search sources, and edit user-owned collections in first-party Praxis without Obsidian, cloud, external inference or a private HTTP listener; prove denied access and recovery."
+      "exit": "On the owner's Mac, open Praxis, automatically capture approved folder changes, explicitly save typed/pasted Markdown notes through the trusted UI, preserve originals and revisions, inspect/search and organize the sources in collections without Obsidian, remote inference or private HTTP; demonstrate failures, recovery and denied access."
     },
     {
       "id": "L1",
       "name": "Fast capture surfaces",
       "issues": [
-        113,
         109,
         110,
         104,
         112,
         111
       ],
-      "exit": "Quick entry, deliberate voice recording/transcription and explicit browser capture all use the same recoverable local intake contract with consent and no duplicate writes."
+      "exit": "Intentional voice recording/transcription, explicit browser and URL capture use the same recoverable local source, original and review contracts; external websites are accessed only after consent and security checks."
     },
     {
       "id": "L2",
