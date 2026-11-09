@@ -27,6 +27,7 @@ final class WorkbenchModel: ObservableObject {
     private var noteCaptureId: String?
 
     let search: SearchWorkbenchModel
+    let budget: BudgetWorkbenchModel
     private let worker: WorkerSession
     private var watchedInbox: URL?
     private var workerDiagnostic: String?
@@ -35,6 +36,7 @@ final class WorkbenchModel: ObservableObject {
         let worker = WorkerSession()
         self.worker = worker
         search = SearchWorkbenchModel(worker: worker)
+        budget = BudgetWorkbenchModel(worker: worker)
     }
 
     func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
@@ -160,6 +162,7 @@ final class WorkbenchModel: ObservableObject {
     func select(_ item: LibraryItem) {
         clearSelection()
         selected = item
+        budget.select(item)
         guard item.sourceStatus == "active" else { return }
 
         libraryPreview = "Loading extracted text…"
@@ -194,6 +197,7 @@ final class WorkbenchModel: ObservableObject {
         topicProposals = []
         topicOutcome = "pending"
         mediaInspection = nil
+        budget.select(nil)
     }
 
     func exportOriginal(_ item: LibraryItem, destination: URL) {
@@ -245,6 +249,7 @@ final class WorkbenchModel: ObservableObject {
         page = 0
         search.clearResults()
         clearSelection()
+        budget.reset()
         if let error, let workerDiagnostic, !workerDiagnostic.isEmpty {
             message = "\(error) \(workerDiagnostic)"
         } else {
@@ -374,6 +379,7 @@ final class WorkbenchModel: ObservableObject {
             select(updated)
         } else {
             self.selected = updated
+            budget.select(updated)
         }
     }
 

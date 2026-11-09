@@ -13,6 +13,8 @@ struct WorkerResponseData: Decodable {
     let hits: [SearchHit]?
     let clips: [VideoCue]?
     let media: MediaInspection?
+    let budget: MonthlyBudgetReport?
+    let scenario: BudgetScenario?
     let outcome: String?
     let content: String?
     let reasonCode: String?
