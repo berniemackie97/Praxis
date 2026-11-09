@@ -2,8 +2,48 @@ using System.Globalization;
 
 namespace Praxis.Storage;
 
+public sealed record LocalSourceMovement(
+    Guid SourceId, string PreviousPath, string CurrentPath, string Sha256, DateTimeOffset RecordedUtc);
+
 public sealed partial class LocalCatalog
 {
+    public IReadOnlyList<LocalSourceMovement> ListSourceMovements(Guid sourceId, int limit = 20)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (limit is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        lock (connection)
+        {
+            using var query = Command(connection, """
+                SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc
+                FROM source_locator_moves m
+                JOIN sources s ON s.source_id = m.source_id
+                WHERE s.status = 'active' AND s.source_id = $source
+                ORDER BY m.recorded_utc DESC, m.move_id DESC LIMIT $limit
+                """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$limit", limit);
+            using var reader = query.ExecuteReader();
+            var moves = new List<LocalSourceMovement>();
+            while (reader.Read())
+            {
+                moves.Add(new LocalSourceMovement(
+                    Guid.Parse(reader.GetString(0)), reader.GetString(1),
+                    reader.GetString(2), reader.GetString(3),
+                    DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture)));
+            }
+
+            return moves;
+        }
+    }
+
     internal bool RelocateObservedFile(
         string previousPath, string currentPath, string verifiedDigest)
     {
