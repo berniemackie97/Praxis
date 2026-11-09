@@ -241,7 +241,7 @@ public sealed class LocalMultiDomainEvidenceTests : IDisposable
         }
 
         using (var reportResult = System.Text.Json.JsonDocument.Parse(
-            await protocol.HandleAsync($"""
+            await protocol.HandleAsync($$"""
                 {"requestId":"money","action":"budgetSummary","sourceId":"{{finance.SourceId:D}}","year":2026,"month":11}
                 """)))
         {
@@ -256,7 +256,7 @@ public sealed class LocalMultiDomainEvidenceTests : IDisposable
 
         Assert.True(catalog.RevokeSource(finance.SourceId));
         using var revoked = System.Text.Json.JsonDocument.Parse(
-            await protocol.HandleAsync($"""
+            await protocol.HandleAsync($$"""
                 {"requestId":"revoked","action":"budgetSummary","sourceId":"{{finance.SourceId:D}}","year":2026,"month":11}
                 """));
         Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
