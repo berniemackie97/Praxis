@@ -9,6 +9,7 @@ public sealed record LocalIntakeStatus(
 
 public sealed partial class LocalWatchedIntake
 {
+    private const string OfflineProblem = "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
     private readonly object statusGate = new();
     private LocalIntakeStatus currentStatus = new(
         "starting", false, null, 0, 0, 0, [], null);

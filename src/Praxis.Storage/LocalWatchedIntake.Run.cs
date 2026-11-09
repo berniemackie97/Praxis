@@ -26,7 +26,7 @@ public sealed partial class LocalWatchedIntake
 
                 if (!Directory.Exists(root))
                 {
-                    SetState("offline", "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.");
+                    SetState("offline", OfflineProblem);
                     if (watcher is not null)
                     {
                         watcher.Dispose();
@@ -75,8 +75,9 @@ public sealed partial class LocalWatchedIntake
                 }
                 catch (IOException exception)
                 {
-                    SetState(Directory.Exists(root) ? "degraded" : "offline",
-                        "Intake scan will retry: " + exception.Message);
+                    var offline = !Directory.Exists(root);
+                    SetState(offline ? "offline" : "degraded",
+                        offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
                     report("Intake scan will retry: " + JsonSerializer.Serialize(exception.Message));
                 }
                 catch (UnauthorizedAccessException exception)
