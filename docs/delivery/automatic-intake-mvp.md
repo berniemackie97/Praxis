@@ -37,6 +37,8 @@ dotnet run --project src/Praxis.Worker -c Release -- \
 
 If the data directory already exists, do not blindly change its permissions or replace its contents. Praxis validates private root permissions before opening. The root and watched directory must be **separate**; do not point the watched directory at the catalog, a backup, or an ancestor containing them. Use only disks and directories you intend to trust.
 
+If an explicitly selected external intake folder is temporarily unavailable at startup or disconnects later, the worker **waits without creating a substitute folder or revoking source data**. It continues draining previously committed processing jobs and reattaches its watcher after the path returns. The operator must ensure the reattached path is the intended trusted volume, not an unrelated directory mounted at the same location.
+
 With that **single running process**, copy Markdown, text, and arbitrary other files into `$HOME/PraxisInbox`. The worker writes local capture and error status to its console; no terminal command is needed for each import. Use Ctrl-C to stop cleanly. Running the worker is not yet an installer, login item, tray application, or first-party GUI.
 
 For current search and library inspection, `LocalCatalog.SearchText` and `LocalCatalog.ListLibrary` are owner-local library APIs. The polished Inbox/Library/Search and reviewable organization UI is **not shipped** by this slice (#108). There is intentionally no unauthenticated private-data HTTP endpoint.
