@@ -35,6 +35,7 @@ public sealed partial class LocalWatchedIntake
                             throw new InvalidDataException("The watched directory cannot be linked.");
                         }
 
+                        Interlocked.Exchange(ref watcherFaulted, 0);
                         watcher = CreateWatcher();
                         report("Watching the approved directory: " + JsonSerializer.Serialize(root));
                     }
@@ -45,6 +46,10 @@ public sealed partial class LocalWatchedIntake
                     catch (UnauthorizedAccessException exception)
                     {
                         report("Watcher setup denied: " + JsonSerializer.Serialize(exception.Message));
+                    }
+                    catch (InvalidDataException exception)
+                    {
+                        report("Watcher setup rejected: " + JsonSerializer.Serialize(exception.Message));
                     }
                 }
 
