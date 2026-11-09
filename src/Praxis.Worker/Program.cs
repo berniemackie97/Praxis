@@ -12,8 +12,7 @@ var dataRoot = Path.GetFullPath(args[1]);
 var inbox = Path.GetFullPath(args[3]);
 if (!Directory.Exists(inbox))
 {
-    Console.Error.WriteLine("The approved intake directory must already exist.");
-    return 2;
+    Console.WriteLine("The approved intake path is currently offline; it will not be created.");
 }
 
 if (!Directory.Exists(dataRoot))
