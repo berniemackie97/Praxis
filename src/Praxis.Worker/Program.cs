@@ -66,7 +66,7 @@ try
             new UTF8Encoding(false)) { AutoFlush = true };
         while (!cancellation.IsCancellationRequested && !protocol.StopRequested)
         {
-            var line = await reader.ReadLineAsync(cancellation.Token);
+            var line = await ReadBoundedRequestAsync(reader, cancellation.Token);
             if (line is null)
             {
                 break;
@@ -94,4 +94,29 @@ catch (Exception exception) when (exception is IOException or UnauthorizedAccess
 {
     Console.Error.WriteLine("Praxis intake cannot start: " + exception.Message);
     return 1;
+}
+
+
+static async Task<string?> ReadBoundedRequestAsync(
+    TextReader reader, CancellationToken cancellationToken)
+{
+    const int maximumCharacters = 16_384;
+    var content = new StringBuilder();
+    var character = new char[1];
+    while (await reader.ReadAsync(character.AsMemory(), cancellationToken) != 0)
+    {
+        if (character[0] == '\n')
+        {
+            return content.ToString().TrimEnd('\r');
+        }
+
+        if (content.Length == maximumCharacters)
+        {
+            throw new InvalidDataException("The desktop request exceeds its size limit.");
+        }
+
+        content.Append(character[0]);
+    }
+
+    return content.Length == 0 ? null : content.ToString();
 }
