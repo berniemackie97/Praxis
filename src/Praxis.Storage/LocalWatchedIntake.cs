@@ -13,6 +13,7 @@ public sealed partial class LocalWatchedIntake
     private readonly LocalCatalog catalog;
     private readonly LocalSourceIntake intake;
     private readonly LocalTextProcessor processor;
+    private readonly LocalTopicProposer topics;
     private readonly string root;
     private readonly TimeSpan quietPeriod;
     private readonly TimeSpan rescanInterval;
@@ -56,6 +57,7 @@ public sealed partial class LocalWatchedIntake
         this.catalog = catalog;
         intake = new LocalSourceIntake(catalog);
         processor = new LocalTextProcessor(catalog);
+        topics = new LocalTopicProposer(catalog);
         root = Path.GetFullPath(intakeDirectory);
         report = status ?? (_ => { });
     }
@@ -138,7 +140,16 @@ public sealed partial class LocalWatchedIntake
             cancellationToken.ThrowIfCancellationRequested();
             if (!await processor.ProcessNextAsync(cancellationToken))
             {
-                return;
+                break;
+            }
+        }
+
+        for (var index = 0; index < 16; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!topics.ProcessNext())
+            {
+                break;
             }
         }
     }

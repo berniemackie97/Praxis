@@ -33,8 +33,25 @@ struct SourceCollection: Decodable, Identifiable {
     var id: String { collectionId }
 }
 
+struct TopicProposal: Decodable, Identifiable {
+    let proposalId: String
+    let sourceId: String
+    let itemId: String
+    let revision: Int
+    let sourceSha256: String
+    let producer: String
+    let value: String
+    let evidence: String
+    let evidenceOffset: Int
+    let status: String
+    let correction: String?
+    var id: String { proposalId }
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
+    let proposals: [TopicProposal]?
+    let reviewed: Bool?
     let collections: [SourceCollection]?
     let collection: SourceCollection?
     let collectionIds: [String]?

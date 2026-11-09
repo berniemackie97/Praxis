@@ -6,6 +6,8 @@ import Foundation
 final class Workbench: ObservableObject {
     @Published private(set) var items: [LibraryItem] = []
     @Published private(set) var collections: [SourceCollection] = []
+    @Published private(set) var topicProposals: [TopicProposal] = []
+    @Published private(set) var topicOutcome = "pending"
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published var selectedCollectionId = ""
     @Published var selectedMembershipId = ""
@@ -130,6 +132,7 @@ final class Workbench: ObservableObject {
         }
         send("library", fields)
         send("collections", ["limit": 100])
+        if let selected { send("topics", ["sourceId": selected.sourceId]) }
     }
 
     func saveNote() {
@@ -163,6 +166,13 @@ final class Workbench: ObservableObject {
         send("collectionArchive", ["collectionId": id])
     }
 
+    func reviewTopic(_ proposal: TopicProposal, decision: String, correction: String? = nil) {
+        var payload: [String: Any] = ["proposalId": proposal.proposalId,
+                                      "decision": decision]
+        if let correction { payload["correction"] = correction }
+        send("topicReview", payload)
+    }
+
     func addMembership() {
         guard let source = selected, !selectedMembershipId.isEmpty else { return }
         send("collectionAdd", ["collectionId": selectedMembershipId,
@@ -189,8 +199,11 @@ final class Workbench: ObservableObject {
         preview = "Loading extracted text…"
         previewTarget = "\(item.itemId):\(item.revision)"
         assignedCollectionIds = []
+        topicProposals = []
+        topicOutcome = "pending"
         send("preview", ["itemId": item.itemId, "revision": item.revision])
         send("sourceCollections", ["sourceId": item.sourceId])
+        send("topics", ["sourceId": item.sourceId])
     }
 
     func previewHit(_ hit: SearchHit) {
@@ -240,6 +253,8 @@ final class Workbench: ObservableObject {
             if action == "preview", let itemId = fields["itemId"] as? String,
                let revision = fields["revision"] as? Int {
                 requests[id] = "preview:\(itemId):\(revision)"
+            } else if action == "topics", let sourceId = fields["sourceId"] as? String {
+                requests[id] = "topics:\(sourceId)"
             } else if action == "sourceCollections",
                       let sourceId = fields["sourceId"] as? String {
                 requests[id] = "sourceCollections:\(sourceId)"
@@ -315,6 +330,16 @@ final class Workbench: ObservableObject {
                 if let selected, context == "sourceCollections:\(selected.sourceId)" {
                     assignedCollectionIds = reply.data?.collectionIds ?? []
                 }
+            case let context where context.hasPrefix("topics:"):
+                if let selected, context == "topics:\(selected.sourceId)" {
+                    topicProposals = reply.data?.proposals ?? []
+                    topicOutcome = reply.data?.outcome ?? "unavailable"
+                }
+            case "topicReview":
+                message = reply.data?.reviewed == true
+                    ? "Review decision saved with its source revision."
+                    : "The proposal is unchanged or no longer current."
+                if let selected { send("topics", ["sourceId": selected.sourceId]) }
             case "search": hits = reply.data?.hits ?? []
             case let context where context.hasPrefix("preview:"):
                 if context == "preview:\(previewTarget)" {
