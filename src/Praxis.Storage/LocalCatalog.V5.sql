@@ -1,7 +1,16 @@
+CREATE TABLE search_index_keys (
+    rowid INTEGER PRIMARY KEY,
+    item_id TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    source_id TEXT NOT NULL REFERENCES sources(source_id) ON DELETE RESTRICT,
+    UNIQUE (item_id, revision),
+    FOREIGN KEY (item_id, revision)
+        REFERENCES item_versions(item_id, revision) ON DELETE RESTRICT
+) STRICT;
+
+CREATE INDEX search_index_keys_source ON search_index_keys(source_id);
+
 CREATE VIRTUAL TABLE text_search USING fts5(
-    item_id UNINDEXED,
-    revision UNINDEXED,
-    source_id UNINDEXED,
     locator,
     content,
     tokenize = 'unicode61'
@@ -28,26 +37,44 @@ WHERE d.processor_key = 'source-text-v1'
 
 CREATE TRIGGER text_search_new_version AFTER INSERT ON item_versions
 BEGIN
-    DELETE FROM text_search WHERE item_id = NEW.item_id;
+    DELETE FROM text_search WHERE rowid IN (
+        SELECT rowid FROM search_index_keys WHERE item_id = NEW.item_id
+    );
+    DELETE FROM search_index_keys WHERE item_id = NEW.item_id;
 END;
 
 CREATE TRIGGER text_search_source_revoked AFTER UPDATE OF status ON sources
 WHEN NEW.status != 'active'
 BEGIN
-    DELETE FROM text_search WHERE source_id = NEW.source_id;
+    DELETE FROM text_search WHERE rowid IN (
+        SELECT rowid FROM search_index_keys WHERE source_id = NEW.source_id
+    );
+    DELETE FROM search_index_keys WHERE source_id = NEW.source_id;
 END;
 
 CREATE TRIGGER text_search_job_completed AFTER UPDATE OF state ON processing_jobs
 WHEN NEW.state = 'completed' AND NEW.processor_key = 'source-text-v1'
 BEGIN
-    INSERT INTO text_search (item_id, revision, source_id, locator, content)
-    SELECT item_id, revision, source_id, locator, content
+    INSERT INTO search_index_keys (item_id, revision, source_id)
+    SELECT item_id, revision, source_id
     FROM eligible_text_search
     WHERE item_id = NEW.item_id AND revision = NEW.revision;
+
+    INSERT INTO text_search (rowid, locator, content)
+    SELECT k.rowid, e.locator, e.content
+    FROM eligible_text_search e
+    JOIN search_index_keys k ON k.item_id = e.item_id AND k.revision = e.revision
+    WHERE e.item_id = NEW.item_id AND e.revision = NEW.revision;
 END;
 
-INSERT INTO text_search (item_id, revision, source_id, locator, content)
-SELECT item_id, revision, source_id, locator, content
+INSERT INTO search_index_keys (item_id, revision, source_id)
+SELECT item_id, revision, source_id
 FROM eligible_text_search ORDER BY item_id, revision;
+
+INSERT INTO text_search (rowid, locator, content)
+SELECT k.rowid, e.locator, e.content
+FROM eligible_text_search e
+JOIN search_index_keys k ON k.item_id = e.item_id AND k.revision = e.revision
+ORDER BY e.item_id, e.revision;
 
 PRAGMA user_version = 5;
