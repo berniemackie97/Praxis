@@ -3,6 +3,7 @@
     <Project Path="src/Praxis.Api/Praxis.Api.csproj" />
     <Project Path="src/Praxis.Knowledge/Praxis.Knowledge.csproj" />
     <Project Path="src/Praxis.Storage/Praxis.Storage.csproj" />
+    <Project Path="src/Praxis.Worker/Praxis.Worker.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Praxis.Storage.RecoveryCheck/Praxis.Storage.RecoveryCheck.csproj" />

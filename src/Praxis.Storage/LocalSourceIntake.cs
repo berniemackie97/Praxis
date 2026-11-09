@@ -4,9 +4,50 @@ using System.Text;
 namespace Praxis.Storage;
 
 public sealed record LocalImportedFile(string SourcePath, CapturedOriginal Original);
+public sealed record LocalObservedFile(string SourcePath, long Length, DateTime LastWriteUtc);
 
 public sealed class LocalSourceIntake(LocalCatalog catalog)
 {
+    public IReadOnlyList<LocalObservedFile> InspectFolder(
+        string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (maxFiles is < 1 or > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxFiles));
+        }
+
+        if (maxDepth is < 0 or > 16)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDepth));
+        }
+
+        if (maxTotalBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
+        }
+
+        var root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
+        var paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        var files = new List<LocalObservedFile>(paths.Count);
+        var remaining = maxTotalBytes;
+        foreach (var path in paths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var info = new FileInfo(path);
+            var length = info.Length;
+            if (length > remaining)
+            {
+                throw new InvalidDataException("The selected folder exceeds its inspection byte budget.");
+            }
+
+            remaining -= length;
+            files.Add(new LocalObservedFile(path, length, info.LastWriteTimeUtc));
+        }
+
+        return files;
+    }
+
     public async Task<CapturedOriginal> ImportFileAsync(
         string sourcePath, long maxBytes, string requestKey,
         CancellationToken cancellationToken = default)
