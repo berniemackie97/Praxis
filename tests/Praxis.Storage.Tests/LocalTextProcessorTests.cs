@@ -342,6 +342,10 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Theory]
     [InlineData("forged.cs", new byte[] { 0x50, 0x4b, 0x03, 0x04, 0x41 })]
     [InlineData("forged.asm", new byte[] { 0x7f, 0x45, 0x4c, 0x46, 0x41 })]
+    [InlineData("picture.cs", new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a })]
+    [InlineData("compressed.cs", new byte[] { 0x1f, 0x8b, 0x08, 0x00 })]
+    [InlineData("mach.cs", new byte[] { 0xcf, 0xfa, 0xed, 0xfe, 0x00 })]
+    [InlineData("universal.cs", new byte[] { 0xca, 0xfe, 0xba, 0xbe, 0x00 })]
     [InlineData("broken.cpp", new byte[] { 0xff, 0xfe, 0x41 })]
     public async Task CodeFileExtensionsDoNotOverrideBinaryOrMalformedContent(
         string name, byte[] bytes)
