@@ -80,7 +80,8 @@ public sealed partial class LocalCatalog
     }
 
     public ProcessingLease? TryClaimProcessing(
-        TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null)
+        TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null,
+        string? processorKey = null)
     {
         if (leaseDuration < TimeSpan.FromSeconds(1) ||
             leaseDuration > TimeSpan.FromHours(1))
@@ -91,6 +92,11 @@ public sealed partial class LocalCatalog
         if (maxAttempts is < 1 or > 16)
         {
             throw new ArgumentOutOfRangeException(nameof(maxAttempts));
+        }
+
+        if (processorKey is not null)
+        {
+            ValidateProcessorKey(processorKey);
         }
 
         var time = nowUtc ?? DateTimeOffset.UtcNow;
@@ -105,7 +111,9 @@ public sealed partial class LocalCatalog
                 FROM processing_jobs j
                 JOIN items i ON i.item_id = j.item_id
                 JOIN sources s ON s.source_id = i.source_id
-                WHERE s.status = 'active' AND j.attempt < $maximum
+                WHERE s.status = 'active'
+                  AND ($processor IS NULL OR j.processor_key = $processor)
+                  AND j.attempt < $maximum
                   AND (j.state = 'queued' OR
                        (j.state = 'running' AND j.lease_until_utc <= $now))
                 ORDER BY j.created_utc, j.item_id, j.revision, j.processor_key
@@ -113,6 +121,7 @@ public sealed partial class LocalCatalog
                 """);
             select.Transaction = transaction;
             select.Parameters.AddWithValue("$maximum", maxAttempts);
+            select.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);
             select.Parameters.AddWithValue("$now", now);
             Guid itemId;
             int revision;
@@ -331,6 +340,11 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("A valid item and revision are required.");
         }
 
+        ValidateProcessorKey(processor);
+    }
+
+    private static void ValidateProcessorKey(string processor)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(processor);
         if (processor.Length > 64 || processor.Any(c =>
             c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))
