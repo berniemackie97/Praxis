@@ -183,6 +183,35 @@ public sealed class LocalSourceIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task LinkedAncestorCannotRedirectSelectionIntoPrivateStore()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var input = Path.Combine(workspace, "original.bin");
+        File.WriteAllBytes(input, [1, 2, 3]);
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var intake = new LocalSourceIntake(catalog);
+        var captured = await intake.ImportFileAsync(input, 3, "seed");
+
+        var alias = Path.Combine(workspace, "store-alias");
+        Directory.CreateSymbolicLink(alias, dataRoot);
+        var insideStore = Path.Combine(alias, "objects");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            intake.ImportFolderAsync(insideStore, "linked-batch", 10, 4, 10, 100));
+
+        var insideFile = Path.Combine(insideStore,
+            captured.Sha256[..2], captured.Sha256[2..4], captured.Sha256);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            intake.ImportFileAsync(insideFile, 10, "linked-file"));
+
+        Assert.Single(catalog.ListProcessingJobs());
+        await catalog.VerifyOriginalAsync(captured.ItemId);
+    }
+
+    [Fact]
     public async Task CancellationAndOversizeSingleFileNeverWriteAReceipt()
     {
         var file = Path.Combine(workspace, "file.bin");
