@@ -78,6 +78,10 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
         {
             catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "corrupt_original");
         }
+        catch (EndOfStreamException)
+        {
+            catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "corrupt_original");
+        }
         catch (IOException)
         {
             catalog.FinishProcessing(lease, ProcessingCompletion.Failed, "source_io");
