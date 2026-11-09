@@ -119,3 +119,10 @@ Do not create a graph database, broad tool runtime, uncontrolled session monitor
 The initial schema-v7 deterministic proposal worker follows verified text extraction. It creates only literal Markdown-heading candidates with exact source/revision/digest/evidence references; a heading-free eligible Markdown file records abstention. The owner can accept, reject or correct a proposal in the trusted app. Decisions and history survive restart/backup, while changed or revoked sources make older candidates unavailable for active review. This does **not** automatically assign a collection, call a model or authorize an agent. See [ADR 0024](../decisions/0024-reviewable-enrichment.md).
 
 This establishes the authoritative proposal lifecycle required by later local-model enrichment and knowledge relationships, without moving those L2/L4 gates into the L0 release definition. Native first-run verification and physical recovery remain open under #130 and #128.
+
+
+## L0 source-original retrieval gate — #166
+
+The first-party Library now has a draft explicit export path for preserved originals. It retrieves the current active source version from the canonical object store, streams and hashes exact bytes, and performs owner-selected atomic no-overwrite publication. Unsupported file formats, and items whose physical watched source path has gone offline, retain their original bytes as long as the canonical source remains active. This removes the need to browse Praxis's private SHA-256 storage manually. A revoked or superseded source cannot be exported as a current active source. The app uses the already established private child-process boundary; no external agent tools or network endpoints are added.
+
+The owner's deferred integrated smoke (#130) must validate the UI, error feedback, exact binary fidelity, denied destinations, physical-recovery behavior and current-version fences. The software PR is not itself a signed or verified MVP release.

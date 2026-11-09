@@ -183,6 +183,10 @@ struct PraxisWindow: View {
                     Text("State: \(item.sourceStatus) / \(item.processingState ?? "pending") / \(item.extractionOutcome ?? "unknown")")
                         .font(.caption)
                     HStack {
+                        Button(model.exportingOriginal ? "Exporting…" : "Export original…") {
+                            chooseExportDestination(for: item)
+                        }
+                        .disabled(model.exportingOriginal || item.sourceStatus != "active")
                         Button("Verify original") { model.verify() }
                         Button("Retry extraction") { model.retry() }
                         Button("Revoke…", role: .destructive) { confirmRevoke = true }
@@ -400,6 +404,17 @@ struct PraxisWindow: View {
                 .foregroundStyle(.secondary)
             Spacer()
         }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func chooseExportDestination(for item: LibraryItem) {
+        let picker = NSSavePanel()
+        picker.nameFieldStringValue = item.title
+        picker.canCreateDirectories = true
+        picker.prompt = "Export original"
+        picker.message = "Praxis verifies the preserved original before saving. Existing files will not be overwritten. Files saved to a synced folder may be uploaded by that service."
+        guard picker.runModal() == .OK, let destination = picker.url else { return }
+        model.exportOriginal(item,
+            destination: destination.standardizedFileURL.resolvingSymlinksInPath())
     }
 
     private func chooseFolder() -> URL? {

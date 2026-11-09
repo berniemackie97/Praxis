@@ -122,3 +122,8 @@ The first-party Quick note workflow (under [#113](https://github.com/berniemacki
 ## Reviewable enrichment (development)
 
 Under #115, the proposal foundation stores source/revision/digest-bound literal Markdown-heading candidates and append-only owner review events in catalog schema v7. These are **not machine-understood topics or automatically accepted tags**. No model provider is required, and no external tool or agent receives new permissions. See [ADR 0024](docs/decisions/0024-reviewable-enrichment.md) and the [macOS workbench guide](docs/delivery/macos-workbench.md). Native acceptance and end-to-end release gates remain open.
+
+
+## Exporting preserved originals (L0 development)
+
+The first-party Library now has a draft owner-selected **Export original…** action for the exact active source version, backed by the content-addressed original store rather than the watched source file. It verifies SHA-256 while streaming to a new, non-overwriting destination. Supported and unsupported formats use the same path, and owner approval is required for each destination. This does not create a remote sharing API, an agent grant or a full catalog backup. See the [workbench smoke guide](docs/delivery/macos-workbench.md) and tracked [#166](https://github.com/berniemackie97/Praxis/issues/166). The new feature is not yet locally compiled/accepted.

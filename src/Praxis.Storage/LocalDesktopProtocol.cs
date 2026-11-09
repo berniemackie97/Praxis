@@ -95,6 +95,14 @@ public sealed class LocalDesktopProtocol(
                         ReadGuid(root, "proposalId"),
                         ReadString(root, "decision", 16), ReadOptionalCorrection(root))
                 },
+                "exportOriginal" => new
+                {
+                    exported = await catalog.ExportOriginalAsync(
+                        ReadGuid(root, "itemId"),
+                        ReadInteger(root, "revision", 1, 1, int.MaxValue),
+                        ReadString(root, "destinationPath", 4_096),
+                        cancellationToken)
+                },
                 "preview" => Preview(root),
                 "verify" => await VerifyAsync(root, cancellationToken),
                 "retry" => new

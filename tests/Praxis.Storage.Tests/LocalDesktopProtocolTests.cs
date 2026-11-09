@@ -235,6 +235,57 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         await catalog.VerifyOriginalAsync(captured.ItemId);
     }
 
+    [Fact]
+    public async Task PrivateDesktopExportsVerifiedBinaryWithoutExposingCatalogPaths()
+    {
+        var data = Path.Combine(root, "data");
+        var exports = Path.Combine(root, "exports");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(exports);
+        if (!OperatingSystem.IsWindows())
+        {
+            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(data, mode);
+            File.SetUnixFileMode(exports, mode);
+        }
+
+        using var catalog = LocalCatalog.Open(data);
+        using var input = new MemoryStream(new byte[] { 0, 255, 17, 42, 99 });
+        var captured = await catalog.CaptureFileAsync(
+            Path.Combine(root, "missing", "binary.bin"), input, 100, "original");
+        var protocol = new LocalDesktopProtocol(catalog);
+        var destination = Path.Combine(exports, "recovered.bin");
+        var request = JsonSerializer.Serialize(new
+        {
+            requestId = "export",
+            action = "exportOriginal",
+            itemId = captured.ItemId,
+            revision = captured.Revision,
+            destinationPath = destination
+        });
+
+        using var response = await Send(protocol, request);
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        var receipt = response.RootElement.GetProperty("data").GetProperty("exported");
+        Assert.Equal(captured.Sha256, receipt.GetProperty("sha256").GetString());
+        Assert.Equal(captured.Length, receipt.GetProperty("length").GetInt64());
+        Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
+
+        using var repeated = await Send(protocol, request);
+        Assert.False(repeated.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
+
+        Assert.True(catalog.RevokeSource(captured.SourceId));
+        using var revoked = await Send(protocol,
+            JsonSerializer.Serialize(new {
+                requestId = "denied", action = "exportOriginal",
+                itemId = captured.ItemId, revision = 1,
+                destinationPath = Path.Combine(exports, "blocked.bin")
+            }));
+        Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.False(File.Exists(Path.Combine(exports, "blocked.bin")));
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]
@@ -244,6 +295,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [InlineData("""{"requestId":"x","action":"collectionCreate","name":"  "}""")]
     [InlineData("""{"requestId":"x","action":"topics","sourceId":"bad"}""")]
     [InlineData("""{"requestId":"x","action":"topicReview","proposalId":"bad","decision":"accepted"}""")]
+    [InlineData("""{"requestId":"x","action":"exportOriginal","itemId":"bad","revision":1,"destinationPath":"/tmp/file"}""")]
     [InlineData("""{"requestId":"x","action":"collectionAdd","collectionId":"invalid","sourceId":"invalid"}""")]
     public async Task RejectsUnknownOrMalformedRequests(string payload)
     {
