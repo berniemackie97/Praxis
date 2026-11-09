@@ -25,7 +25,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         File.WriteAllText(Path.Combine(inbox, "memory.md"), "# project violet memory");
         File.WriteAllBytes(Path.Combine(inbox, "unknown.bin"), [0, 255, 17]);
         using var catalog = LocalCatalog.Open(data);
-        var watcher = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var watcher = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow.AddSeconds(1));
         var protocol = new LocalDesktopProtocol(catalog);
@@ -153,7 +153,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             .GetProperty("capture").GetProperty("original")
             .GetProperty("itemId").GetString());
         Assert.Single(catalog.Library.List());
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal(originalDigest, Assert.Single(catalog.Search.Query("violet")).OriginalSha256);
 
         using var mismatch = await Send(service,
@@ -196,8 +196,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             "# Evidence Topic\nOriginal retained"));
         var captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "topic.md"), stream, 4_096, "topic");
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.True(new LocalTopicProposer(catalog).ProcessNext());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
         var protocol = new LocalDesktopProtocol(catalog);
 
         using var listing = await Send(protocol,
@@ -300,9 +300,9 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using var catalog = LocalCatalog.Open(root);
-        var intake = new LocalWatchedIntake(catalog,
+        var intake = new IntakeHarness(catalog,
             Path.Combine(root, "not-started"), TimeSpan.Zero);
-        var service = new LocalDesktopProtocol(catalog, monitor: intake);
+        var service = new LocalDesktopProtocol(catalog, monitor: intake.Monitor, processing: intake.Processing);
 
         using var initial = await Send(service,
             """{"requestId":"initial","action":"intakeStatus"}""");
@@ -353,17 +353,17 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var current = Path.Combine(inbox, "renamed.md");
         File.WriteAllText(previous, "# Rename evidence");
         using var catalog = LocalCatalog.Open(data);
-        var monitor = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var monitor = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
         var time = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(time);
         await monitor.ReconcileAsync(time.AddSeconds(1));
         var source = Assert.Single(catalog.Library.List());
 
         File.Move(previous, current);
-        monitor.QueueRename(previous, current);
+        monitor.Monitor.QueueRename(previous, current);
         await monitor.ReconcileAsync(time.AddSeconds(2));
 
-        var protocol = new LocalDesktopProtocol(catalog, monitor: monitor);
+        var protocol = new LocalDesktopProtocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
         using var listed = await Send(protocol,
             $$"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.True(listed.RootElement.GetProperty("ok").GetBoolean());

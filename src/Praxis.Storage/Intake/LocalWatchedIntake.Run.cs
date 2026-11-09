@@ -18,7 +18,6 @@ public sealed partial class LocalWatchedIntake
                 if (IsPaused)
                 {
                     SetState("paused", "New file capture is paused by the owner.");
-                    await ProcessPendingAsync(cancellationToken);
                     await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
                     Interlocked.Exchange(ref wakePending, 0);
                     continue;
@@ -93,11 +92,7 @@ public sealed partial class LocalWatchedIntake
                     report("Intake scan rejected input: " + JsonSerializer.Serialize(exception.Message));
                 }
 
-                if (!completedScan)
-                {
-                    await ProcessPendingAsync(cancellationToken);
-                }
-                else if (watcher is null && Directory.Exists(root))
+                if (completedScan && watcher is null && Directory.Exists(root))
                 {
                     SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
                 }

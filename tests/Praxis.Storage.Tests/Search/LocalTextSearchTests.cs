@@ -33,7 +33,7 @@ public sealed class LocalTextSearchTests : IDisposable
             "# Journal\nThe midnight violet garden is blooming.", "journal");
         await Capture(catalog, "unrelated.md",
             "# Dinner\nThe kitchen is quiet.", "unrelated");
-        var worker = new LocalTextProcessor(catalog);
+        var worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
@@ -60,7 +60,7 @@ public sealed class LocalTextSearchTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(dataRoot);
         var file = await Capture(catalog, "report.pdf", "violet in an unsupported pdf", "pdf");
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal("unsupported", catalog.Text.Read(file.ItemId, 1)?.Outcome);
         Assert.Empty(catalog.Search.Query("violet"));
         Assert.Equal(0, catalog.Search.Rebuild());
@@ -73,7 +73,7 @@ public sealed class LocalTextSearchTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(dataRoot);
         var initial = await Capture(catalog, "versioned.txt", "violet first", "one");
-        var worker = new LocalTextProcessor(catalog);
+        var worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.Single(catalog.Search.Query("violet"));
 
@@ -99,7 +99,7 @@ public sealed class LocalTextSearchTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         var first = await Capture(catalog, "first.txt", "shared violet content", "one");
         var second = await Capture(catalog, "second.txt", "shared violet content", "two");
-        var worker = new LocalTextProcessor(catalog);
+        var worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
         Assert.Equal(2, catalog.Search.Query("violet").Count);
@@ -120,7 +120,7 @@ public sealed class LocalTextSearchTests : IDisposable
         using (var catalog = LocalCatalog.Open(dataRoot))
         {
             captured = await Capture(catalog, "rebuild.txt", "violet survives", "one");
-            Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+            Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
             Assert.Single(catalog.Search.Query("violet"));
         }
 
@@ -146,7 +146,7 @@ public sealed class LocalTextSearchTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         await Capture(catalog, "first.txt", "violet bloom", "one");
         await Capture(catalog, "second.txt", "violet flower", "two");
-        var worker = new LocalTextProcessor(catalog);
+        var worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
@@ -181,7 +181,7 @@ public sealed class LocalTextSearchTests : IDisposable
         {
             retained = await Capture(catalog, "retained.md", "# violet diary", "retained");
             var revoked = await Capture(catalog, "revoked.md", "# violet secret", "revoked");
-            var worker = new LocalTextProcessor(catalog);
+            var worker = ProcessingDriver.Text(catalog);
             Assert.True(await worker.ProcessNextAsync());
             Assert.True(await worker.ProcessNextAsync());
             Assert.True(catalog.Sources.Revoke(revoked.SourceId));
@@ -190,7 +190,7 @@ public sealed class LocalTextSearchTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
         using var recovered = LocalCatalog.Open(destination);
-        Assert.Equal(8, recovered.SchemaVersion);
+        Assert.Equal(9, recovered.SchemaVersion);
         Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);
         Assert.Equal(1, recovered.Search.Rebuild());
         Assert.Equal(retained.SourceId, Assert.Single(recovered.Search.Query("violet")).SourceId);
@@ -242,7 +242,7 @@ public sealed class LocalTextSearchTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(dataRoot);
-        Assert.Equal(8, upgraded.SchemaVersion);
+        Assert.Equal(9, upgraded.SchemaVersion);
         var hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
         Assert.Equal(1, upgraded.Search.Rebuild());

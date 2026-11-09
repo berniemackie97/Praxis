@@ -29,8 +29,8 @@ public sealed class LocalTopicProposalTests : IDisposable
         const string content = "# Architecture\nSystem overview\n## Runtime\n~~~csharp\n# Not a heading\n~~~\n";
         using var catalog = LocalCatalog.Open(root);
         var captured = await Capture(catalog, "topic.md", content, "one");
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        var proposer = new LocalTopicProposer(catalog);
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        var proposer = ProcessingDriver.Topics(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
         Assert.Equal("generated", catalog.Topics.Outcome(captured.SourceId));
@@ -65,8 +65,8 @@ public sealed class LocalTopicProposalTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         var first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.True(new LocalTopicProposer(catalog).ProcessNext());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
         var old = Assert.Single(catalog.Topics.List(first.SourceId));
         Assert.True(catalog.Topics.Review(old.ProposalId, "accepted"));
 
@@ -76,8 +76,8 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.Empty(catalog.Topics.List(first.SourceId));
         Assert.Equal("pending", catalog.Topics.Outcome(first.SourceId));
         Assert.False(catalog.Topics.Review(old.ProposalId, "rejected"));
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.True(new LocalTopicProposer(catalog).ProcessNext());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
         var current = Assert.Single(catalog.Topics.List(first.SourceId));
         Assert.Equal("Updated", current.Value);
         Assert.NotEqual(old.ProposalId, current.ProposalId);
@@ -93,6 +93,26 @@ public sealed class LocalTopicProposalTests : IDisposable
     }
 
     [Fact]
+    public async Task RevocationBetweenReadAndCommitPublishesNoProposals()
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var source = await Capture(catalog, "fenced.md", "# Fenced topic\n", "fenced");
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        var lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.MarkdownHeadings));
+        var candidate = Assert.IsType<TopicCandidate>(catalog.Topics.ReadLeasedCandidate(lease));
+
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+
+        Assert.False(catalog.Topics.CommitCandidates(
+            lease, candidate, [new TopicEvidence("Fenced topic", 2)]));
+        Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_runs"));
+        Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));
+        Assert.Equal("canceled", Scalar(
+            "SELECT state FROM processing_jobs WHERE processor_key = 'markdown-heading-v1'"));
+    }
+
+    [Fact]
     public async Task UnsupportedTextAndEmptyMarkdownAbstainWithoutInventingTopics()
     {
         using var catalog = LocalCatalog.Open(root);
@@ -100,11 +120,14 @@ public sealed class LocalTopicProposalTests : IDisposable
             "No heading.\n~~~\n# Fake heading\n~~~\n", "one");
         var plain = await Capture(catalog, "plain.txt", "# Document", "two");
         await Capture(catalog, "document.pdf", "# Fiction", "three");
-        var processor = new LocalTextProcessor(catalog);
+        var processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        var proposer = new LocalTopicProposer(catalog);
+        // Heading jobs exist only for completed extractions: the Markdown and the text file,
+        // not the unsupported PDF.
+        var proposer = ProcessingDriver.Topics(catalog);
+        Assert.True(proposer.ProcessNext());
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
         Assert.Empty(catalog.Topics.List(empty.SourceId));
@@ -127,10 +150,10 @@ public sealed class LocalTopicProposalTests : IDisposable
         {
             first = await Capture(catalog, "one.md", "# Shared Topic\nBody", "one");
             second = await Capture(catalog, "two.md", "# Shared Topic\nBody", "two");
-            var processor = new LocalTextProcessor(catalog);
+            var processor = ProcessingDriver.Text(catalog);
             Assert.True(await processor.ProcessNextAsync());
             Assert.True(await processor.ProcessNextAsync());
-            var proposer = new LocalTopicProposer(catalog);
+            var proposer = ProcessingDriver.Topics(catalog);
             Assert.True(proposer.ProcessNext());
             Assert.True(proposer.ProcessNext());
             var firstProposal = Assert.Single(catalog.Topics.List(first.SourceId));
@@ -142,12 +165,12 @@ public sealed class LocalTopicProposalTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using var restored = LocalCatalog.Open(target);
-        Assert.Equal(8, restored.SchemaVersion);
+        Assert.Equal(9, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Topics.List(first.SourceId)).Status);
         Assert.Equal("pending",
             Assert.Single(restored.Topics.List(second.SourceId)).Status);
-        Assert.False(new LocalTopicProposer(restored).ProcessNext());
+        Assert.False(ProcessingDriver.Topics(restored).ProcessNext());
         await restored.Originals.VerifyAsync(first.ItemId);
         await restored.Originals.VerifyAsync(second.ItemId);
     }
@@ -187,9 +210,9 @@ public sealed class LocalTopicProposalTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(root);
-        Assert.Equal(8, upgraded.SchemaVersion);
+        Assert.Equal(9, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
-        Assert.False(new LocalTopicProposer(upgraded).ProcessNext());
+        Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
         Assert.Empty(upgraded.Topics.List(Guid.NewGuid()));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_runs"));
     }
@@ -221,8 +244,8 @@ public sealed class LocalTopicProposalTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         var item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
-        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
-        Assert.True(new LocalTopicProposer(catalog).ProcessNext());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
         var candidate = Assert.Single(catalog.Topics.List(item.SourceId));
         Assert.Throws<ArgumentException>(() =>
             catalog.Topics.Review(candidate.ProposalId, "approved"));

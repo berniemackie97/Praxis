@@ -197,6 +197,7 @@ public sealed class LocalProcessingQueue
         var now = CatalogValues.Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
+            using var transaction = connection.BeginTransaction();
             using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = $state, lease_key = NULL, lease_until_utc = NULL,
@@ -208,11 +209,24 @@ public sealed class LocalProcessingQueue
                       SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
                       WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
                 """);
+            command.Transaction = transaction;
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$failure", (object?)failureCode ?? DBNull.Value);
             command.Parameters.AddWithValue("$now", now);
             ProcessingJobKey.BindLease(command, lease);
-            return command.ExecuteNonQuery() == 1;
+            if (command.ExecuteNonQuery() != 1)
+            {
+                return false;
+            }
+
+            if (completion == ProcessingCompletion.Completed)
+            {
+                QueueDependents(connection, transaction,
+                    lease.ItemId, lease.Revision, lease.ProcessorKey, now);
+            }
+
+            transaction.Commit();
+            return true;
         });
     }
 
@@ -270,6 +284,30 @@ public sealed class LocalProcessingQueue
         ProcessingJobKey.Bind(command, itemId, revision, processor);
         command.Parameters.AddWithValue("$now", utc);
         command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Schedules the processors that consume a just-completed stage, inside the transaction
+    /// that records the completion. Existing jobs for the same revision are left untouched.
+    /// </summary>
+    internal static void QueueDependents(
+        SqliteConnection connection, SqliteTransaction transaction,
+        Guid itemId, int revision, string completedProcessor, string utc)
+    {
+        foreach (var dependent in LocalProcessors.DependentsOf(completedProcessor))
+        {
+            using var command = connection.CreateCommand("""
+                INSERT INTO processing_jobs
+                    (item_id, revision, processor_key, state, attempt, total_attempts,
+                     created_utc, updated_utc)
+                VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
+                ON CONFLICT(item_id, revision, processor_key) DO NOTHING
+                """);
+            command.Transaction = transaction;
+            ProcessingJobKey.Bind(command, itemId, revision, dependent);
+            command.Parameters.AddWithValue("$now", utc);
+            command.ExecuteNonQuery();
+        }
     }
 
     private static void ExpireAttemptLimitedJobs(
