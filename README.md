@@ -4,15 +4,15 @@ Praxis is a local-first, independent Second Brain for capturing, preserving, fin
 
 ## Current state
 
-The repository contains a .NET 10 HTTP service with process liveness checks and a separate `Praxis.Knowledge` library for portable Markdown note identities, immutable revision histories and validated local archive import/export.
+The repository has an owner-local SQLite catalog, verified original-file preservation, revision-aware processing, bounded Markdown/text extraction, local FTS5 search and an automatically reconciling watched-folder worker. The worker is merged, and its source/test baseline was locally verified on macOS; the full watched-folder hardware acceptance is still open. The .NET API exposes liveness only and does not expose private knowledge over HTTP.
 
-Authenticated synchronization, end-to-end resilient source ingestion, search, a first-party Praxis application and agent execution are **not implemented**. The merged owner-local SQLite catalog and verified original-file publication are low-level storage foundations, not a usable source Inbox or network-accessible knowledge service. Local archives and staged originals do not send data to any service.
+The [macOS workbench development slice](docs/delivery/macos-workbench.md) adds a first-party SwiftUI window that supervises that same worker through a private child-process pipe, with Inbox/Library/Search inspection and explicit source actions. **This new UI is unverified and not yet released.** Source-backed URL capture, reviewable organization and enrichment, external agent grants, mobile clients and integrated first-run acceptance remain open. No cloud account or model provider is required for the local intake path.
 
 ## Product direction and delivery status
 
 The [product experience](docs/product/second-brain-experience.md) defines the intended sources, original-versus-derived model, user-facing flows, microphone/browser capture and agent access. The [standalone local MVP plan](docs/delivery/standalone-mvp.md) defines a dependency-aware sequence of first useful slices and their acceptance criteria.
 
-**Implemented today:** portable note/attachment identities, local ZIP capture/verify/restore and optional Obsidian desktop integration; an owner-local SQLite catalog schema ([PR #123](https://github.com/berniemackie97/Praxis/pull/123)); and bounded streamed original-file publication with first-version source/item records ([PR #125](https://github.com/berniemackie97/Praxis/pull/125)). **Still missing:** replay-safe reimports and version transitions (#126), coherent whole-catalog/object recovery (#128), the durable Inbox and extraction pipeline, first-party Praxis UI, full-text search, dictation, browser extension, source enrichment, MCP, remote sync and production hosting. These distinctions are release gates, not progress inferred from planned code. No cloud AI provider is required by the intended local MVP.
+**Implemented on `main`:** portable note/attachment archives, optional Obsidian desktop interoperability, durable local catalog/originals, revision/receipt processing, bounded text derivatives, source-aware text search and a supervised automatic intake worker (merged PRs #123, #125, #132, #134, #135, #138, #140 and #144). **In this draft UI slice:** a macOS first-party application backed by the existing worker. **Still open:** real UI acceptance (#108/#130), safe rename attribution (#105), physical recovery (#128), PDF/media processing (#103/#114), URL capture (#104), reviewed organization (#115/#116), scoped agents/MCP (#117–#119), remote sync and production release. Existing code and passing library tests are not proof of end-to-end release readiness.
 
 ## Development
 
