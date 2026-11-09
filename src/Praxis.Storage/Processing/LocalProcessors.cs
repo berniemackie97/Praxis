@@ -1,10 +1,23 @@
 namespace Praxis.Storage;
 
-/// <summary>Versioned identities of the deterministic processors that produce catalog evidence.</summary>
+/// <summary>
+/// Versioned identities of the processors that produce catalog evidence, and the stage graph
+/// that schedules a processor once the evidence it consumes has been committed.
+/// </summary>
 public static class LocalProcessors
 {
     public const string SourceText = "source-text-v1";
     public const string MarkdownHeadings = "markdown-heading-v1";
     public const string MediaHeader = "media-header-v1";
     public const string TimedCaption = "timed-caption-v1";
+
+    private static readonly IReadOnlyDictionary<string, string[]> Dependents =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            [SourceText] = [MarkdownHeadings]
+        };
+
+    /// <summary>Processors that consume the completed output of <paramref name="processorKey"/>.</summary>
+    public static IReadOnlyList<string> DependentsOf(string processorKey) =>
+        Dependents.TryGetValue(processorKey, out var dependents) ? dependents : [];
 }

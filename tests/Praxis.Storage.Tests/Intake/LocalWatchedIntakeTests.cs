@@ -242,7 +242,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         var removable = Path.Combine(workspace, "offline");
         using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new LocalWatchedIntake(catalog, removable,
+        var monitor = new IntakeHarness(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using var cancellation = new CancellationTokenSource();
         var running = monitor.RunAsync(cancellation.Token);
@@ -273,7 +273,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             .ImportFileAsync(outside, 100, "offline-queued");
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
 
-        var monitor = new LocalWatchedIntake(
+        var monitor = new IntakeHarness(
             catalog, Path.Combine(workspace, "not-mounted"),
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using var cancellation = new CancellationTokenSource();
@@ -302,7 +302,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.True(condition(), "The local intake worker did not converge.");
     }
 
-    private LocalWatchedIntake NewMonitor(
+    private IntakeHarness NewMonitor(
         LocalCatalog catalog, TimeSpan? quietPeriod = null, TimeSpan? scanInterval = null) =>
         new(catalog, inbox, quietPeriod ?? TimeSpan.FromSeconds(1),
             scanInterval ?? TimeSpan.FromSeconds(10));

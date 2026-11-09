@@ -34,7 +34,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         var media = await Capture(catalog, "tutorial.mp4", "video fixture", "media");
         var sidecar = await Capture(catalog,
             "tutorial.mp4." + media.Sha256 + extension, caption, "captions");
-        var processor = new LocalTextProcessor(catalog);
+        var processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         var cue = Assert.Single(catalog.Media.SearchCues("violet"));
@@ -60,7 +60,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         const string caption = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nViolet physics demonstration.\n";
         var cues = await Capture(catalog,
             "tutorial.mp4." + video.Sha256 + ".vtt", caption, "captions");
-        var processor = new LocalTextProcessor(catalog);
+        var processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.Single(catalog.Media.SearchCues("Violet"));
@@ -94,7 +94,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         await Capture(catalog, "tutorial.mp4." + video.Sha256 + ".vtt",
             "WEBVTT\n\n00:00:01.000 --> 00:00:05.000\nViolet first.\n\n" +
             "00:00:03.000 --> 00:00:06.000\nViolet overlapping.\n", "overlapping");
-        var processor = new LocalTextProcessor(catalog);
+        var processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
@@ -110,7 +110,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         var captions = await Capture(catalog, "clip.mp4." + video.Sha256 + ".vtt",
             "WEBVTT\n\n00:00:03.000 --> 00:00:06.000\nViolet assembly instruction.\n",
             "captions");
-        var worker = new LocalTextProcessor(catalog);
+        var worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 

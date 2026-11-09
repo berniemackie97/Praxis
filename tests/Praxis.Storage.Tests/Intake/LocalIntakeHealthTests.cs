@@ -32,7 +32,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         var path = Path.Combine(inbox, "note.md");
         File.WriteAllText(path, "# First\nOriginal text");
         using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var monitor = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
         var started = monitor.Snapshot();
         Assert.Equal("starting", started.State);
         Assert.Null(started.LastSuccessfulScanUtc);
@@ -74,7 +74,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     public async Task OwnerPausePreventsNewCapturesAndResumeReconcilesThem()
     {
         using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new LocalWatchedIntake(catalog, inbox,
+        var monitor = new IntakeHarness(catalog, inbox,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         Assert.True(monitor.SetPaused(true).Paused);
         using var cancellation = new CancellationTokenSource();
@@ -102,8 +102,9 @@ public sealed class LocalIntakeHealthTests : IDisposable
             Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
 
             monitor.SetPaused(false);
+            // Capture and processing are independent; wait for both to settle.
             await WaitForAsync(() =>
-                catalog.Library.List().FirstOrDefault()?.Revision == 2 &&
+                catalog.Library.List().FirstOrDefault() is { Revision: 2, ProcessingState: "completed" } &&
                 monitor.Snapshot().ImportedSinceStart == 2);
             Assert.Empty(catalog.Search.Query("Written"));
             Assert.Single(catalog.Search.Query("Completely"));
@@ -123,7 +124,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     {
         var removable = Path.Combine(workspace, "removable");
         using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new LocalWatchedIntake(catalog, removable,
+        var monitor = new IntakeHarness(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using var cancellation = new CancellationTokenSource();
         var running = monitor.RunAsync(cancellation.Token);
@@ -165,14 +166,14 @@ public sealed class LocalIntakeHealthTests : IDisposable
         var captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, "unmounted.md"), source, 256, "offline-original");
         var disconnected = Path.Combine(workspace, "not-mounted");
-        var monitor = new LocalWatchedIntake(catalog, disconnected,
+        var monitor = new IntakeHarness(catalog, disconnected,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using var cancellation = new CancellationTokenSource();
         var running = monitor.RunAsync(cancellation.Token);
         try
         {
             await WaitForAsync(() => monitor.Snapshot().State == "offline");
-            var service = new LocalDesktopProtocol(catalog, monitor: monitor);
+            var service = new LocalDesktopProtocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
             using var status = System.Text.Json.JsonDocument.Parse(
                 await service.HandleAsync(
                     """{"requestId":"status","action":"intakeStatus"}"""));
