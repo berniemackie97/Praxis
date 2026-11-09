@@ -1,10 +1,11 @@
+using System.Globalization;
 using System.Text;
 
 namespace Praxis.Storage;
 
 public sealed record TextDerivative(
-    Guid ItemId, int Revision, string SourceSha256, string Outcome,
-    string? Content, string? ReasonCode);
+    Guid SourceId, Guid ItemId, int Revision, string ProcessorKey, string SourceSha256,
+    string Outcome, string? Content, string? ReasonCode, DateTimeOffset ProducedUtc);
 
 internal sealed record LeasedTextSource(string SourceKind, string Locator, OriginalObject Original);
 
@@ -133,7 +134,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var command = Command(connection, """
-                SELECT d.source_digest, d.outcome, d.content, d.reason_code
+                SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
                 FROM text_derivatives d
                 JOIN processing_jobs j ON j.item_id = d.item_id
                     AND j.revision = d.revision AND j.processor_key = d.processor_key
@@ -150,9 +151,12 @@ public sealed partial class LocalCatalog
             command.Parameters.AddWithValue("$processor", DefaultProcessorKey);
             using var reader = command.ExecuteReader();
             return reader.Read()
-                ? new TextDerivative(itemId, revision, reader.GetString(0),
-                    reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3))
+                ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,
+                    DefaultProcessorKey, reader.GetString(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind))
                 : null;
         }
     }
