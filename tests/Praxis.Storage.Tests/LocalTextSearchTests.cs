@@ -145,6 +145,11 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.Throws<ArgumentException>(() => catalog.SearchText(new string('z', 65)));
 
         Assert.Throws<InvalidOperationException>(() => catalog.RebuildTextSearchIndex(1));
+        Assert.Throws<InvalidOperationException>(() => catalog.RebuildTextSearchIndex(
+            maxDocuments: 2, maxTextBytes: 4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.RebuildTextSearchIndex(
+            maxTextBytes: 0));
+        Assert.Empty(catalog.SearchText("violet OR nonexistent"));
         Assert.Equal(2, catalog.SearchText("violet").Count);
         Assert.Single(catalog.SearchText("violet", 1));
         Assert.Equal(2, catalog.RebuildTextSearchIndex(2));
