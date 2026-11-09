@@ -140,6 +140,10 @@ struct PraxisWindow: View {
                     model.page = 0
                     model.refresh()
                 }
+                if model.items.isEmpty {
+                    Text("No captured sources in this view yet.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 List(model.items) { item in
                     Button { model.select(item) } label: {
                         VStack(alignment: .leading, spacing: 3) {
@@ -252,7 +256,6 @@ struct PraxisWindow: View {
                     .textFieldStyle(.roundedBorder)
                 Button("Create") {
                     model.createCollection(newCollectionName)
-                    newCollectionName = ""
                 }
                 .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

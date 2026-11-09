@@ -22,6 +22,7 @@ final class Workbench: ObservableObject {
     private var input: FileHandle?
     private var buffer = Data()
     private var requests: [String: String] = [:]
+    private var previewTarget = ""
 
     func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
         guard !running else { return }
@@ -160,6 +161,7 @@ final class Workbench: ObservableObject {
     func select(_ item: LibraryItem) {
         selected = item
         preview = "Loading extracted text…"
+        previewTarget = "\(item.itemId):\(item.revision)"
         assignedCollectionIds = []
         send("preview", ["itemId": item.itemId, "revision": item.revision])
         send("sourceCollections", ["sourceId": item.sourceId])
@@ -167,6 +169,7 @@ final class Workbench: ObservableObject {
 
     func previewHit(_ hit: SearchHit) {
         preview = "Loading extracted text…"
+        previewTarget = "\(hit.itemId):\(hit.revision)"
         send("preview", ["itemId": hit.itemId, "revision": hit.revision])
     }
 
@@ -207,7 +210,17 @@ final class Workbench: ObservableObject {
             return
         }
         do {
-            requests[id] = action
+            if action == "preview", let itemId = fields["itemId"] as? String,
+               let revision = fields["revision"] as? Int {
+                requests[id] = "preview:\(itemId):\(revision)"
+            } else if action == "sourceCollections",
+                      let sourceId = fields["sourceId"] as? String {
+                requests[id] = "sourceCollections:\(sourceId)"
+            } else if action == "library" {
+                requests[id] = "library:\(selectedCollectionId):\(page)"
+            } else {
+                requests[id] = action
+            }
             try input.write(contentsOf: encoded + Data([0x0A]))
         } catch {
             requests.removeValue(forKey: id)
@@ -234,10 +247,12 @@ final class Workbench: ObservableObject {
                 continue
             }
             switch action {
-            case "library":
+            case let context where context.hasPrefix("library:"):
+                guard context == "library:\(selectedCollectionId):\(page)" else { continue }
                 items = reply.data?.items ?? []
-                if let previous = selected {
-                    selected = items.first(where: { $0.itemId == previous.itemId })
+                if let previous = selected,
+                   let updated = items.first(where: { $0.itemId == previous.itemId }) {
+                    selected = updated
                 }
             case "collections":
                 collections = reply.data?.collections ?? []
@@ -257,12 +272,16 @@ final class Workbench: ObservableObject {
                     send("sourceCollections", ["sourceId": source.sourceId])
                 }
                 refresh()
-            case "sourceCollections":
-                assignedCollectionIds = reply.data?.collectionIds ?? []
+            case let context where context.hasPrefix("sourceCollections:"):
+                if let selected, context == "sourceCollections:\(selected.sourceId)" {
+                    assignedCollectionIds = reply.data?.collectionIds ?? []
+                }
             case "search": hits = reply.data?.hits ?? []
-            case "preview":
-                preview = reply.data?.content ??
-                    "No extracted text (\(reply.data?.reasonCode ?? reply.data?.outcome ?? "pending")). The original remains preserved."
+            case let context where context.hasPrefix("preview:"):
+                if context == "preview:\(previewTarget)" {
+                    preview = reply.data?.content ??
+                        "No extracted text (\(reply.data?.reasonCode ?? reply.data?.outcome ?? "pending")). The original remains preserved."
+                }
             case "verify":
                 message = reply.data?.verified == true
                     ? "Original integrity verified against stored SHA-256." : "Verification incomplete."
