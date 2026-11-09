@@ -109,7 +109,7 @@ internal static class LocalMediaHeaderParser
         }
 
         var size = header[4] & 0x7f;
-        if (size < 7 || size > header.Length - 5)
+        if (size < 7 || size == 0x7f || size > header.Length - 5)
         {
             return false;
         }
