@@ -36,7 +36,7 @@ The selected design avoids creating an HTTP authority for the first-party UI mer
 - Authenticate all source-bearing operations using explicitly issued integration credentials; then authorize the operation and **every returned source** against a source-scoped grant, including counts, snippets, search results, caches and originals. Deny-by-default before parsing any private payload. Each route must require a precise capability; possession of a valid token never implies another operation or source scope.
 - Do not expose a private route when credential verification, store protection, audit recording or resource limits cannot be enforced. No unauthenticated local diagnostic endpoints may return private state.
 
-The initial route catalog is only `GET /health/live`, with no private source operations. Future route names in the test plan are **fixtures**, not published endpoints.
+The present route catalog contains only `/health/live` (registered through ASP.NET Core `MapHealthChecks`), with no private source operations; the current mapping is not an authorization mechanism. Future route names in the test plan are **fixtures**, not published endpoints.
 
 ## Credential and grant lifecycle (future integration contract)
 
