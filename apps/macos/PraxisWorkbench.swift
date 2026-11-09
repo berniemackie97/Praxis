@@ -32,6 +32,7 @@ final class Workbench: ObservableObject {
     @Published var noteText = ""
     @Published private(set) var savingNote = false
     @Published private(set) var exportingOriginal = false
+    @Published private(set) var inspectingMedia = false
     private var noteCaptureId: String?
     private var budgetTargetRevision = 0
 
@@ -121,6 +122,7 @@ final class Workbench: ObservableObject {
                     self?.savingNote = false
                     self?.exportingOriginal = false
                     self?.mediaInspection = nil
+                    self?.inspectingMedia = false
                     self?.requests.removeAll()
                     self?.buffer.removeAll()
                     if process.terminationStatus != 0 {
@@ -225,7 +227,8 @@ final class Workbench: ObservableObject {
     }
 
     func inspectSelectedMedia() {
-        guard let item = selected, item.sourceStatus == "active" else { return }
+        guard !inspectingMedia, let item = selected,
+              item.sourceStatus == "active" else { return }
         let ext = URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased()
         guard ["mp4", "mov", "m4v", "webm", "mkv"].contains(ext) else {
             message = "Select a captured video file to inspect."
@@ -233,7 +236,7 @@ final class Workbench: ObservableObject {
         }
 
         mediaInspection = nil
-        send("mediaInspection", [
+        inspectingMedia = send("mediaInspection", [
             "sourceId": item.sourceId,
             "revision": item.revision
         ])
@@ -420,6 +423,7 @@ final class Workbench: ObservableObject {
                 if action == "noteCapture" { savingNote = false }
                 if action == "exportOriginal" { exportingOriginal = false }
                 if action.hasPrefix("mediaInspection:") {
+                    inspectingMedia = false
                     guard let selected,
                           action == "mediaInspection:\(selected.sourceId):\(selected.revision)" else {
                         continue
@@ -512,6 +516,7 @@ final class Workbench: ObservableObject {
             case "search": hits = reply.data?.hits ?? []
             case "mediaCues": videoClips = reply.data?.clips ?? []
             case let context where context.hasPrefix("mediaInspection:"):
+                inspectingMedia = false
                 guard let selected,
                       context == "mediaInspection:\(selected.sourceId):\(selected.revision)",
                       selected.sourceStatus == "active",
