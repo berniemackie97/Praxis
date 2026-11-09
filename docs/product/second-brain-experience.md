@@ -4,6 +4,24 @@
 
 Praxis is a local-first **personal knowledge intelligence and agent platform** that works **without Obsidian, a cloud account, or an AI provider**. The product is not complete when it merely browses or searches files: it must progressively interpret supported knowledge, connect corroborating evidence across sources, investigate questions, and produce actionable, cited conclusions without inventing facts. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Obsidian remains an optional editor/source adapter.
 
+## Actual product MVP: intelligent Second Brain
+
+**Owner decision (November 9, 2026):** The first product release must be an integrated, production-quality, agent-powered system. A functional Inbox, local text index or collection browser alone is a foundational delivery checkpoint (#130), not an MVP release. The cross-stage acceptance gate is **#170**.
+
+A representative owner workflow:
+
+1. Open Praxis on a Mac; designate a local root and import a versioned corpus of projects, source code, assembly/disassembly exports, technical notes and format documents. Automatic capture/reconciliation preserves originals and exact lineage.
+2. Deterministic parsers and approved local agents extract, classify, normalize and **correlate** supported entities, structures, claims and relationships. No document or model hallucination becomes canonical fact; unrecognized formats remain explicit. Reprocessing corrects derived outputs and preserves reviewed owner decisions.
+3. Build quality-evaluated lexical/semantic/structural retrieval, selective evidence expansion, reranking where measured useful, and tool-assisted bounded investigations. Ask a complex domain question; get a specific supported explanation, traceable source/version/span references and transparent disagreement/abstention, not a file list.
+4. Use a **persistent first-party Praxis assistant** to ask questions or request tasks. Inspect scope, plan, tool arguments, model/location, budget, progress, verification and audit; approve/revoke side effects. The model never grants itself permission.
+5. Operate with **local-first inference** (measured Ollama/Qwen where capable), cache/provenance/context budgets and explicitly approved escalation to supported stronger models. Evaluate official and terms-compliant routes for Claude, Codex, Gemini, Grok, DeepSeek and other providers. Never equate app subscriptions with unrestricted API access, or silently transmit source material to remote inference.
+6. Browse a **linked, provenance-aware derived Markdown representation in Obsidian**, and optionally export inspected, versioned, task-specific context packs for coding agents. Root/nested `AGENTS.md` and provider-specific context instructions are **reviewed projections**, not authority granted by imported source text; avoid floods of repetitive context.
+7. Pass audited correctness, retrieval, prompt-injection, resource, backup/recovery, permission, privacy and real macOS workflows with concrete benchmark fixtures and reproducible run evidence. Production-grade is a testable engineering bar; no model can guarantee perfect understanding of arbitrary input.
+
+**Delivery ownership:** #170 integrated acceptance; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+
+**First release boundary:** one owner, one local machine, a representative technical corpus, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
+
 ## Core experience
 
 The owner can drag files, choose a folder, type or paste a thought, dictate a note, or explicitly save a web page. Approved integrations—including a browser extension, Obsidian and a future MCP server for agents—feed the same ingestion contract. An input folder is a convenient *inbox*, not the authoritative database and not a mandatory physical organization model.
@@ -117,7 +135,7 @@ Prefer deterministic processing and a measured local inference backend (for exam
 
 Beyond note dictation (#109/#110), later first-party push-to-talk interaction (#161) can use free offline STT/TTS with clear microphone control and text fallback; spoken instructions cannot silently approve sensitive actions. The product must remain useful without audio hardware or any paid inference/voice service.
 
-## Required first local demonstration
+## Foundational local demonstration (#130; not the complete MVP)
 
 1. Start Praxis on a supported desktop without installing or opening Obsidian and without network access.
 2. Import a mixed, bounded test folder containing Markdown, one supported PDF, an image, a video, a code file and an unknown binary. Every accepted file is present with original digest and a transparent extraction state.
@@ -127,7 +145,7 @@ Beyond note dictation (#109/#110), later first-party push-to-talk interaction (#
 6. Inspect and export/restore original bytes and metadata; distinguish full backups from a single-file restore.
 7. Prove no private content is transmitted to an external host and that unrelated processes or browser pages cannot read the local service.
 
-Subsequent slices add quick capture, dictation, browser extension, richer media, suggestions and agent access. None may silently expand remote trust or promise universal file comprehension.
+This demonstrates the local foundation, **not** the release-ready intelligent Second Brain. The complete product MVP is the integrated gate #170; agent-assisted knowledge, Obsidian views, model routing and task execution are not optional future aspirations. None may silently expand remote trust or promise universal file comprehension.
 
 ## Not yet decided
 
