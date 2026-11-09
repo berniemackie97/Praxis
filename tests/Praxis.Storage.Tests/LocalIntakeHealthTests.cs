@@ -89,8 +89,9 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
             Assert.False(monitor.SetPaused(false).Paused);
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed");
-            Assert.Equal("watching", monitor.Snapshot().State);
+                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed" &&
+                monitor.Snapshot().State == "watching" &&
+                monitor.Snapshot().ImportedSinceStart == 1);
             Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
             Assert.Single(catalog.SearchText("paused"));
 
@@ -102,8 +103,8 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
             monitor.SetPaused(false);
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.Revision == 2);
-            Assert.Equal(2, monitor.Snapshot().ImportedSinceStart);
+                catalog.ListLibrary().FirstOrDefault()?.Revision == 2 &&
+                monitor.Snapshot().ImportedSinceStart == 2);
             Assert.Empty(catalog.SearchText("paused"));
             await catalog.VerifyOriginalAsync(Assert.Single(catalog.ListLibrary()).ItemId);
         }
@@ -134,9 +135,10 @@ public sealed class LocalIntakeHealthTests : IDisposable
             Directory.CreateDirectory(removable);
             File.WriteAllText(Path.Combine(removable, "reconnected.md"), "# Reconnected");
             await WaitForAsync(() =>
-                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed");
+                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed" &&
+                monitor.Snapshot().State == "watching" &&
+                monitor.Snapshot().ImportedSinceStart == 1);
             var saved = Assert.Single(catalog.ListLibrary());
-            Assert.Equal("watching", monitor.Snapshot().State);
             Assert.NotNull(monitor.Snapshot().LastSuccessfulScanUtc);
             Assert.Single(catalog.SearchText("Reconnected"));
 

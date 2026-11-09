@@ -66,7 +66,7 @@ public sealed partial class LocalWatchedIntake
                 IsPaused ? "paused" : errors.Count == 0 ? "watching" : "degraded",
                 IsPaused, now, observedFiles,
                 checked(currentStatus.ImportedSinceStart + imported),
-                errors.Count, errorsSnapshot,
+                errors.Count, Array.AsReadOnly(errorsSnapshot),
                 errors.Count == 0 ? null :
                     $"{errors.Count} source error(s) need attention.");
         }
