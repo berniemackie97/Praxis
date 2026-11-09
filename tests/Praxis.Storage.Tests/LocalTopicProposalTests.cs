@@ -190,6 +190,28 @@ public sealed class LocalTopicProposalTests : IDisposable
     }
 
     [Fact]
+    public void MissingEligibilityViewIsRejectedWithoutRewritingTheCatalog()
+    {
+        using (var catalog = LocalCatalog.Open(root)) { }
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(root, "catalog.sqlite"),
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false
+        }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DROP VIEW eligible_enrichment_proposals";
+            command.ExecuteNonQuery();
+        }
+
+        Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
+        Assert.Equal(0L, Scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='view' AND name='eligible_enrichment_proposals'"));
+    }
+
+    [Fact]
     public async Task ReviewRejectsInvalidDecisionsCorrectionsAndUnknownSources()
     {
         using var catalog = LocalCatalog.Open(root);
