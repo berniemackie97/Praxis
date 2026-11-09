@@ -332,6 +332,55 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
     }
 
+    [Fact]
+    public async Task DesktopShowsSourceMovementEvidenceOnlyWhileSourceIsActive()
+    {
+        var data = Path.Combine(root, "data");
+        var inbox = Path.Combine(root, "inbox");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(inbox);
+        if (!OperatingSystem.IsWindows())
+        {
+            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(data, mode);
+            File.SetUnixFileMode(inbox, mode);
+        }
+
+        var previous = Path.Combine(inbox, "original.md");
+        var current = Path.Combine(inbox, "renamed.md");
+        File.WriteAllText(previous, "# Rename evidence");
+        using var catalog = LocalCatalog.Open(data);
+        var monitor = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero);
+        var time = DateTimeOffset.UtcNow;
+        await monitor.ReconcileAsync(time);
+        await monitor.ReconcileAsync(time.AddSeconds(1));
+        var source = Assert.Single(catalog.ListLibrary());
+
+        File.Move(previous, current);
+        monitor.QueueRename(previous, current);
+        await monitor.ReconcileAsync(time.AddSeconds(2));
+
+        var protocol = new LocalDesktopProtocol(catalog, monitor: monitor);
+        using var listed = await Send(protocol,
+            $"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
+        Assert.True(listed.RootElement.GetProperty("ok").GetBoolean());
+        var move = listed.RootElement.GetProperty("data").GetProperty("moves")[0];
+        Assert.Equal(previous, move.GetProperty("previousPath").GetString());
+        Assert.Equal(current, move.GetProperty("currentPath").GetString());
+        Assert.Equal(source.Sha256, move.GetProperty("sha256").GetString());
+
+        Assert.True(catalog.RevokeSource(source.SourceId));
+        using var revoked = await Send(protocol,
+            $"""{"requestId":"revoked","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
+        Assert.Equal(0, revoked.RootElement.GetProperty("data")
+            .GetProperty("moves").GetArrayLength());
+
+        using var invalid = await Send(protocol,
+            """{"requestId":"invalid","action":"sourceMoves","sourceId":"bad"}""");
+        Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
+        await catalog.VerifyOriginalAsync(source.ItemId);
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]
