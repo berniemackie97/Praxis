@@ -201,7 +201,11 @@ public sealed class LocalMultiDomainEvidenceTests : IDisposable
             "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nViolet topic.\n", "legacy");
         await Capture(catalog, "tutorial.mp4." + video.Sha256 + ".srt",
             "1\n00:00:10,000 --> 00:00:02,000\nViolet invalid timing.\n", "invalid");
+        await Capture(catalog, "tutorial.mp4." + video.Sha256 + ".vtt",
+            "WEBVTT\\n\\n00:00:01.000 --> 00:00:05.000\\nViolet first.\\n\\n" +
+            "00:00:03.000 --> 00:00:06.000\\nViolet overlapping.\\n", "overlapping");
         var processor = new LocalTextProcessor(catalog);
+        Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
