@@ -69,6 +69,8 @@ jobs:
         if: matrix.os == 'Linux'
       - run: python3 scripts/release/smoke_worker_protocol.py
         if: matrix.os == 'Linux'
+      - run: python3 scripts/release/smoke_catalog_recovery.py
+        if: matrix.os == 'Linux'
       - run: node --test integrations/obsidian/test/archive-session-cli.test.js
         if: matrix.os == 'Linux'
       - run: node --test integrations/obsidian/test/install-local-cli.test.js

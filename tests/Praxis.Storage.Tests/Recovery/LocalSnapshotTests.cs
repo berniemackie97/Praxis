@@ -77,6 +77,52 @@ public sealed class LocalSnapshotTests : IDisposable
     }
 
     [Fact]
+    public async Task OfflineBackupPreservesTheOriginalSchemaAndRestoresIntoTheCurrentSchema()
+    {
+        var databasePath = Path.Combine(Live, "catalog.sqlite");
+        using (var database = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Pooling = false
+        }.ToString()))
+        {
+            database.Open();
+            foreach (var name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql" })
+            {
+                using var schema = typeof(LocalCatalog).Assembly
+                    .GetManifestResourceStream("Praxis.Storage." + name)!;
+                using var reader = new StreamReader(schema);
+                using var migration = database.CreateCommand();
+                migration.CommandText = await reader.ReadToEndAsync();
+                migration.ExecuteNonQuery();
+            }
+        }
+
+        var original = await File.ReadAllBytesAsync(databasePath);
+        var report = await LocalCatalog.BackupExistingAsync(Live, Backup, 10_000_000);
+        Assert.Equal(original, await File.ReadAllBytesAsync(databasePath));
+        Assert.Equal(report, await LocalCatalog.VerifyBackupAsync(Backup, 10_000_000));
+        var manifest = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(Backup, "manifest.json")));
+        Assert.Equal(2, manifest!["CatalogVersion"]!.GetValue<int>());
+
+        await LocalCatalog.RestoreAsync(Backup, Restored, 10_000_000);
+        using var restored = LocalCatalog.Open(Restored);
+        using var databaseCheck = Connect(restored.DatabasePath);
+        using var command = databaseCheck.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        Assert.Equal((long)restored.SchemaVersion, command.ExecuteScalar());
+    }
+
+    [Fact]
+    public async Task OfflineBackupRefusesACatalogThatIsOpenForIntake()
+    {
+        using var live = LocalCatalog.Open(Live);
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            LocalCatalog.BackupExistingAsync(Live, Backup, 10_000_000));
+        Assert.False(Directory.Exists(Backup));
+    }
+
+    [Fact]
     public async Task SnapshotExcludesUncommittedPublishedObjects()
     {
         using var live = LocalCatalog.Open(Live);

@@ -54,6 +54,10 @@ See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [engineeri
 
 `LocalNoteJournal` is a bounded, local-only checkpoint for multiple pending Markdown edits, conflict resolution, accepted-change receipts and a durable applied cursor. It survives ordinary process restarts and verifies echoed events without losing queued content. It is not encrypted storage, a complete vault backup or an authenticated synchronization service. See [ADR 0008](docs/decisions/0008-durable-offline-note-journal.md) for the owner-controlled directory, limits, and unimplemented integration gates.
 
+## Local catalog backup and restore
+
+Use the [offline recovery commands](docs/delivery/macos-workbench.md#offline-catalog-recovery) to back up the Praxis catalog and preserved originals together, verify the snapshot, and restore into a new directory.
+
 ## Local vault capture and restore
 
 `LocalVaultExchange.CaptureArchive(sourceDirectory, archivePath)` captures a local Markdown folder, binary originals and hidden files into a validated collection ZIP. `LocalVaultExchange.RestoreArchive(archivePath, newDirectory)` restores the latest Markdown files and original attachments into a **new** directory, never overwriting a vault. Links are preserved as written; their meaning and target identity are not inferred. Empty nested directories, invalid UTF-8, and symbolic links fail explicitly.
