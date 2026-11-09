@@ -171,7 +171,7 @@ internal sealed class OriginalFileStore
         OriginalObject original, int prefixBytes, long maxBytes,
         CancellationToken cancellationToken)
     {
-        if (prefixBytes is < 1 or > 64 * 1024)
+        if (prefixBytes < 1 || prefixBytes > 64 * 1024)
         {
             throw new ArgumentOutOfRangeException(nameof(prefixBytes));
         }

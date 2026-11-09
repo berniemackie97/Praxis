@@ -84,10 +84,17 @@ internal static class LocalMediaHeaderParser
 
         var ftypLength = BinaryPrimitives.ReadUInt32BigEndian(header);
         if (ftypLength < 16 || ftypLength > header.Length ||
-            (ftypLength - 16) % 4 != 0 ||
-            !header.Slice(8, 4).ToArray().All(c => c is >= 0x20 and <= 0x7e))
+            (ftypLength - 16) % 4 != 0)
         {
             return (null, null);
+        }
+
+        for (var i = 8; i < 12; i++)
+        {
+            if (header[i] is < 0x20 or > 0x7e)
+            {
+                return (null, null);
+            }
         }
 
         return ("iso-bmff", ReadMovieDuration(header, (int)ftypLength));

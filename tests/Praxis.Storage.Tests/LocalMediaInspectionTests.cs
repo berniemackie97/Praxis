@@ -152,6 +152,49 @@ public sealed class LocalMediaInspectionTests : IDisposable
             catalog.InspectMediaAsync(video.SourceId, cancelled.Token));
     }
 
+    [Fact]
+    public async Task MetadataVerificationReadsBeyondTheBoundedHeaderAndHonorsByteCeilings()
+    {
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var bytes = new byte[70_000];
+        FastStartMovie().CopyTo(bytes, 0);
+        var video = await Capture(catalog, "large-fixture.mp4", bytes, "large");
+        var store = new OriginalFileStore(dataRoot);
+        await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await store.ReadVerifiedPrefixAsync(
+                new OriginalObject(video.Sha256, bytes.Length), 64,
+                bytes.Length - 1, CancellationToken.None));
+
+        var first = await catalog.InspectMediaAsync(video.SourceId);
+        Assert.Equal("header_recognized", first.Outcome);
+        Assert.Equal(12_000L, first.DurationMilliseconds);
+
+        var objectPath = Path.Combine(dataRoot, "objects", video.Sha256[..2],
+            video.Sha256[2..4], video.Sha256);
+        bytes[66_000] ^= 0xff;
+        File.WriteAllBytes(objectPath, bytes);
+        await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await catalog.InspectMediaAsync(video.SourceId));
+    }
+
+    [Fact]
+    public void ContainerParserDoesNotInventMovieDurationFromIncompleteHeaders()
+    {
+        var header = FastStartMovie();
+        var wrongTimescale = (byte[])header.Clone();
+        BinaryPrimitives.WriteUInt32BigEndian(wrongTimescale.AsSpan(44, 4), 0);
+        Assert.Null(LocalMediaHeaderParser.Read(wrongTimescale, ".mp4").DurationMilliseconds);
+
+        var unsupported = (byte[])header.Clone();
+        unsupported[4] = 0xff;
+        Assert.Null(LocalMediaHeaderParser.Read(unsupported, ".mp4").Container);
+
+        var truncated = header.AsSpan(0, 16);
+        var recognized = LocalMediaHeaderParser.Read(truncated, ".mp4");
+        Assert.Equal("iso-bmff", recognized.Container);
+        Assert.Null(recognized.DurationMilliseconds);
+    }
+
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, byte[] content, string requestKey)
     {
