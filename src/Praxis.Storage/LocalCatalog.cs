@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -16,7 +16,10 @@ public sealed partial class LocalCatalog : IDisposable
         ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc"),
         ("search_index_keys", "rowid, item_id, revision, source_id"),
         ("source_collections", "collection_id, name, name_key, created_utc, archived_utc"),
-        ("source_collection_memberships", "collection_id, source_id, created_utc")
+        ("source_collection_memberships", "collection_id, source_id, created_utc"),
+        ("enrichment_runs", "item_id, revision, processor_key, source_digest, outcome, created_utc"),
+        ("enrichment_proposals", "proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence, evidence_offset, status, correction, created_utc, reviewed_utc"),
+        ("enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc")
     ];
 
     private readonly FileStream lockFile;
@@ -143,6 +146,13 @@ public sealed partial class LocalCatalog : IDisposable
                 collections.ExecuteNonQuery();
             }
 
+            if (version < 7)
+            {
+                using var enrichment = Command(database, ReadSchema("LocalCatalog.V7.sql"));
+                enrichment.Transaction = transaction;
+                enrichment.ExecuteNonQuery();
+            }
+
             transaction.Commit();
         }
 
@@ -234,7 +244,8 @@ public sealed partial class LocalCatalog : IDisposable
             if ((version < 3 && name == "processing_jobs") ||
                 (version < 4 && name == "text_derivatives") ||
                 (version < 5 && name == "search_index_keys") ||
-                (version < 6 && name is "source_collections" or "source_collection_memberships"))
+                (version < 6 && name is "source_collections" or "source_collection_memberships") ||
+                (version < 7 && name is "enrichment_runs" or "enrichment_proposals" or "enrichment_reviews"))
             {
                 continue;
             }
