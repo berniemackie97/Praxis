@@ -59,7 +59,7 @@ try
     var watching = monitor.RunAsync(cancellation.Token);
     try
     {
-        var protocol = new LocalDesktopProtocol(catalog);
+        var protocol = new LocalDesktopProtocol(catalog, new LocalQuickCapture(catalog, inbox));
         using var reader = new StreamReader(Console.OpenStandardInput(),
             new UTF8Encoding(false, true));
         using var writer = new StreamWriter(Console.OpenStandardOutput(),

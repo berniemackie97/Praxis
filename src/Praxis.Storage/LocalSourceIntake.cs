@@ -139,7 +139,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         return imported;
     }
 
-    private string ValidateSourcePath(string sourcePath, bool expectDirectory)
+    internal string ValidateSourcePath(string sourcePath, bool expectDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         if (!Path.IsPathFullyQualified(sourcePath))

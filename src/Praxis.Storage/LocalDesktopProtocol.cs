@@ -2,7 +2,8 @@ using System.Text.Json;
 
 namespace Praxis.Storage;
 
-public sealed class LocalDesktopProtocol(LocalCatalog catalog)
+public sealed class LocalDesktopProtocol(
+    LocalCatalog catalog, LocalQuickCapture? quickCapture = null)
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -74,6 +75,14 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog)
                     collectionIds = catalog.ListSourceCollectionIds(
                         ReadGuid(root, "sourceId"))
                 },
+                "noteCapture" => new
+                {
+                    capture = await (quickCapture ??
+                        throw new InvalidOperationException("Quick capture is not configured."))
+                        .CaptureAsync(ReadGuid(root, "captureId"),
+                            ReadOptionalTitle(root), ReadString(root, "text", 8_000),
+                            cancellationToken)
+                },
                 "preview" => Preview(root),
                 "verify" => await VerifyAsync(root, cancellationToken),
                 "retry" => new
@@ -130,6 +139,22 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog)
     {
         StopRequested = true;
         return new { stopping = true };
+    }
+
+    private static string? ReadOptionalTitle(JsonElement root)
+    {
+        if (!root.TryGetProperty("title", out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind != JsonValueKind.String ||
+            property.GetString() is not { } title || title.Length > 80)
+        {
+            throw new ArgumentException("The note title is invalid.");
+        }
+
+        return title;
     }
 
     private static Guid? ReadOptionalGuid(JsonElement root, string property) =>
