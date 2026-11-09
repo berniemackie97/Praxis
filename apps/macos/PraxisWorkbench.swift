@@ -397,9 +397,12 @@ final class Workbench: ObservableObject {
             guard reply.ok else {
                 if action == "noteCapture" { savingNote = false }
                 if action == "exportOriginal" { exportingOriginal = false }
-                if action.hasPrefix("budgetSummary:") ||
-                   action.hasPrefix("budgetScenario:") {
+                if action.hasPrefix("budgetSummary:") {
                     clearBudgetResults()
+                } else if action.hasPrefix("budgetScenario:") {
+                    guard let report = budgetReport,
+                          action == "budgetScenario:\(report.sourceId):\(report.year):\(report.month):\(budgetTargetRevision)" else { continue }
+                    budgetScenario = nil
                 }
                 message = reply.error ?? "The operation failed."
                 continue
