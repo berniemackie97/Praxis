@@ -309,21 +309,15 @@
       ]
     },
     {
-      "issue": 180,
+      "issue": 176,
       "epic": 7,
       "area": "intelligence",
       "children": [
+        177,
+        178,
+        179,
         181,
-        182
-      ]
-    },
-    {
-      "issue": 183,
-      "epic": 7,
-      "area": "intelligence",
-      "children": [
-        184,
-        185
+        184
       ]
     }
   ],
@@ -658,8 +652,8 @@
       171,
       172,
       173,
-      180,
-      183
+      176,
+      179
     ],
     "171": [
       22,
@@ -683,28 +677,36 @@
       160,
       143
     ],
+    "177": [
+      114,
+      181,
+      29,
+      33,
+      32,
+      166
+    ],
+    "178": [
+      184,
+      31,
+      32,
+      33,
+      173
+    ],
+    "179": [
+      177,
+      178,
+      156,
+      29
+    ],
     "181": [
       103,
       106,
       114
     ],
-    "182": [
-      181,
-      33,
-      32,
-      166
-    ],
     "184": [
       102,
       103,
       129
-    ],
-    "185": [
-      184,
-      31,
-      33,
-      32,
-      173
     ]
   },
   "priorities": {
@@ -799,12 +801,12 @@
     "171": "P1",
     "172": "P1",
     "173": "P1",
-    "180": "P1",
+    "176": "P1",
+    "177": "P1",
+    "178": "P1",
+    "179": "P1",
     "181": "P1",
-    "182": "P1",
-    "183": "P1",
-    "184": "P1",
-    "185": "P1"
+    "184": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -816,8 +818,10 @@
     "128": "knowledge",
     "129": "security",
     "136": "knowledge",
+    "177": "clients",
+    "178": "intelligence",
+    "179": "intelligence",
     "181": "retrieval",
-    "182": "clients",
     "184": "knowledge"
   },
   "decision_queue": [
@@ -1063,10 +1067,9 @@
         150,
         155,
         156,
-        180,
         181,
-        183,
-        184
+        184,
+        176
       ],
       "exit": "Given an authorized representative collection spanning technical artifacts, captioned video and structured monthly finance records, Praxis builds versioned evidence and reviewable relationships, retrieves supported textual/temporal/typed facts and produces bounded source-cited multi-step investigations or abstentions. No invented media timestamps, amounts or automatic model permission."
     },
@@ -1101,8 +1104,9 @@
         171,
         172,
         173,
-        182,
-        185
+        177,
+        178,
+        179
       ],
       "exit": "Owner-run end-to-end proof spanning three domain workflows: technical cross-file research, a playable timecoded video tutorial excerpt with full-source navigation, and an evidence-backed monthly income/bills/spending budget with reviewable reductions. Demonstrate first-party persistent chat, scoped task execution, source spans and financial rows, Obsidian views, reviewed agent context, measured local-first inference and authorized optional escalation; pass resilience, privacy and cost controls."
     }
