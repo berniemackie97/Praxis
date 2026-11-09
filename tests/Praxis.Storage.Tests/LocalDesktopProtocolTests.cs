@@ -87,20 +87,20 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var collectionId = created.RootElement.GetProperty("data")
             .GetProperty("collection").GetProperty("collectionId").GetString()!;
         using var added = await Send(protocol,
-            $"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(added.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var filtered = await Send(protocol,
-            $"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
+            $$"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(saved.ItemId.ToString("D"), filtered.RootElement
             .GetProperty("data").GetProperty("items")[0].GetProperty("itemId").GetString());
 
         using var memberships = await Send(protocol,
-            $"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.Equal(collectionId, memberships.RootElement.GetProperty("data")
             .GetProperty("collectionIds")[0].GetString());
 
         using var renamed = await Send(protocol,
-            $"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
+            $$"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
         Assert.True(renamed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var listed = await Send(protocol,
             """{"requestId":"six","action":"collections"}""");
@@ -108,10 +108,10 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             .GetProperty("collections")[0].GetProperty("name").GetString());
 
         using var removed = await Send(protocol,
-            $"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var empty = await Send(protocol,
-            $"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
+            $$"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(0, empty.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
         await catalog.VerifyOriginalAsync(saved.ItemId);
@@ -136,7 +136,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var service = new LocalDesktopProtocol(catalog, new LocalQuickCapture(catalog, inbox));
         var captureId = Guid.NewGuid();
         var payload =
-            $"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";
+            $$"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";
         using var saved = await Send(service, payload);
         Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
         var source = saved.RootElement.GetProperty("data")
@@ -157,7 +157,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal(originalDigest, Assert.Single(catalog.SearchText("violet")).OriginalSha256);
 
         using var mismatch = await Send(service,
-            $"""{"requestId":"mismatch","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"Another body"}""");
+            $$"""{"requestId":"mismatch","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"Another body"}""");
         Assert.False(mismatch.RootElement.GetProperty("ok").GetBoolean());
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
     }
@@ -175,7 +175,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         var protocol = new LocalDesktopProtocol(catalog);
         using var response = await Send(protocol,
-            $"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
+            $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
         Assert.Empty(catalog.ListLibrary());
     }
