@@ -413,7 +413,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Theory]
     [InlineData("budgetSummary")]
     [InlineData("budgetScenario")]
-    public async Task DesktopProtocolDoesNotExposeBudgetCommands(string action)
+    public async Task BudgetCommandsDenyMissingSourceIdentity(string action)
     {
         Directory.CreateDirectory(root);
         if (!OperatingSystem.IsWindows())
@@ -425,11 +425,9 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         var protocol = new LocalDesktopProtocol(catalog);
         using var result = await Send(protocol, $$"""
-            {"requestId":"retired","action":"{{action}}"}
+            {"requestId":"missing","action":"{{action}}","year":2026,"month":11,"targets":[]}
             """);
         Assert.False(result.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal("The desktop action is not supported.",
-            result.RootElement.GetProperty("error").GetString());
         Assert.False(result.RootElement.TryGetProperty("data", out _));
     }
 
