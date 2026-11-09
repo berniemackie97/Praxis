@@ -112,7 +112,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var empty = await Send(protocol,
             $"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
-        Assert.Empty(empty.RootElement.GetProperty("data").GetProperty("items").EnumerateArray());
+        Assert.Equal(0, empty.RootElement.GetProperty("data")
+            .GetProperty("items").GetArrayLength());
         await catalog.VerifyOriginalAsync(saved.ItemId);
     }
 

@@ -59,7 +59,7 @@ public sealed class LocalCollectionsTests : IDisposable
             Assert.Equal(collectionId, collection.CollectionId);
             Assert.Equal(2, collection.ActiveSourceCount);
             Assert.Equal(2, reopened.ListLibrary(collectionId: collectionId).Count);
-            Assert.Equal([collectionId], reopened.ListSourceCollectionIds(firstSource));
+            Assert.Equal(new[] { collectionId }, reopened.ListSourceCollectionIds(firstSource));
             Assert.True(reopened.RemoveSourceFromCollection(collectionId, secondSource));
             Assert.False(reopened.RemoveSourceFromCollection(collectionId, secondSource));
             Assert.Single(reopened.ListLibrary(collectionId: collectionId));
@@ -116,7 +116,7 @@ public sealed class LocalCollectionsTests : IDisposable
         Assert.Equal(collectionId, Assert.Single(reopened.ListCollections()).CollectionId);
         Assert.Equal(itemId,
             Assert.Single(reopened.ListLibrary(collectionId: collectionId)).ItemId);
-        Assert.Equal([collectionId], reopened.ListSourceCollectionIds(sourceId));
+        Assert.Equal(new[] { collectionId }, reopened.ListSourceCollectionIds(sourceId));
         await reopened.VerifyOriginalAsync(itemId);
     }
 
@@ -172,7 +172,7 @@ public sealed class LocalCollectionsTests : IDisposable
         Assert.Throws<InvalidOperationException>(() =>
             catalog.RenameCollection(second.CollectionId, "RESEARCH"));
         Assert.True(catalog.RenameCollection(second.CollectionId, "Project Notes"));
-        Assert.Equal(["Project Notes", "Research"],
+        Assert.Equal(new[] { "Project Notes", "Research" },
             catalog.ListCollections().Select(c => c.Name).ToArray());
         Assert.Single(catalog.ListCollections(1, 1));
 
