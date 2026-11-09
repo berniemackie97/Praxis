@@ -233,10 +233,11 @@ struct PraxisWindow: View {
                         URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased()) {
                         Divider()
                         Text("Media original").font(.headline)
-                        Button("Inspect verified media header") {
+                        Button(model.inspectingMedia ? "Inspecting media…" :
+                               "Inspect verified media header") {
                             model.inspectSelectedMedia()
                         }
-                        .disabled(item.sourceStatus != "active")
+                        .disabled(item.sourceStatus != "active" || model.inspectingMedia)
                         if let inspected = model.mediaInspection,
                            inspected.sourceId == item.sourceId,
                            inspected.revision == item.revision,
