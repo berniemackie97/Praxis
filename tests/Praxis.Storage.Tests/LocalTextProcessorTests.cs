@@ -180,6 +180,38 @@ public sealed class LocalTextProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task TextClaimsDoNotExpireJobsOwnedByOtherProcessors()
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var item = await Capture(catalog, "scoped.txt", Encoding.UTF8.GetBytes("scoped"), "scope");
+        Assert.True(catalog.QueueProcessing(item.ItemId, 1, "media-v1"));
+        var time = new DateTimeOffset(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
+        var media = Assert.IsType<ProcessingLease>(catalog.TryClaimProcessing(
+            TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time, processorKey: "media-v1"));
+        Assert.Equal("media-v1", media.ProcessorKey);
+
+        var text = Assert.IsType<ProcessingLease>(catalog.TryClaimProcessing(
+            TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time.AddSeconds(2),
+            processorKey: LocalCatalog.DefaultProcessorKey));
+        Assert.Equal(LocalCatalog.DefaultProcessorKey, text.ProcessorKey);
+        Assert.Equal("running", catalog.ListProcessingJobs()
+            .Single(job => job.ProcessorKey == "media-v1").State);
+    }
+
+    [Fact]
+    public async Task CanceledWorkCannotProduceTextWithoutExplicitRetry()
+    {
+        using var catalog = LocalCatalog.Open(root);
+        var item = await Capture(catalog, "canceled.txt", Encoding.UTF8.GetBytes("private"), "cancel");
+        Assert.True(catalog.CancelProcessing(item.ItemId, 1, LocalCatalog.DefaultProcessorKey));
+        Assert.False(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.Null(catalog.ReadTextDerivative(item.ItemId, 1));
+        Assert.True(catalog.RetryProcessing(item.ItemId, 1, LocalCatalog.DefaultProcessorKey));
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.Equal("private", catalog.ReadTextDerivative(item.ItemId, 1)?.Content);
+    }
+
+    [Fact]
     public void SchemaThreeCatalogMigratesWithoutDiscardingProcessingJobs()
     {
         var path = Path.Combine(root, "catalog.sqlite");
