@@ -33,6 +33,23 @@ After launching, drop Markdown, UTF-8 text, and an unsupported binary into the s
 
 A watched root that disconnects after launch is handled by the worker's existing offline/retry logic; source originals are retained. Real unplug/reconnect identity, overflow and intermittent-write testing remain open (#105/#130).
 
+## Offline catalog recovery
+
+Quit Praxis before backing up its data directory. From a Release build, run the following with your actual absolute paths. Choose existing owner-private parent directories and fresh names for the backup and restored catalog. The example limit is 10 GiB.
+
+```sh
+dotnet run --project src/Praxis.Worker -c Release --no-build -- \
+  recovery backup /absolute/PraxisData /absolute/private-backups/backup-01 --max-bytes 10737418240
+dotnet run --project src/Praxis.Worker -c Release --no-build -- \
+  recovery verify /absolute/private-backups/backup-01 --max-bytes 10737418240
+dotnet run --project src/Praxis.Worker -c Release --no-build -- \
+  recovery restore /absolute/private-backups/backup-01 /absolute/private-restore/PraxisData --max-bytes 10737418240
+```
+
+Backup opens the existing database read-only and holds the normal catalog lock. It snapshots schemas v2 through the current version without migrating the source. Restore upgrades the staged copy where needed. Successful commands return the original object count, snapshot bytes and snapshot catalog SHA-256 as JSON. The new directory becomes visible after verification.
+
+Keep snapshots private because they contain plaintext originals and catalog data. The byte limit covers the snapshot database and its recorded originals. A failed or interrupted operation can leave a private `.incomplete-...` directory. Use the independently verified backup for a retry. Native recovery controls and removable-media acceptance remain open. See [ADR 0018](../decisions/0018-coherent-local-backup.md) and the [physical recovery checklist](../testing/physical-catalog-recovery.md).
+
 ## Protocol boundaries
 
 A request is newline-delimited JSON containing a `requestId`, an allowlisted `action`, and bounded action-specific fields. The actions are `library`, `search`, `preview`, `verify`, `retry`, `revoke` and `stop`. The desktop handler limits request JSON to 16 KiB, pages to 200 records, search results to 30 and preview content to 12,000 characters. Underlying search and catalog APIs retain their own input validation and source-revocation checks.

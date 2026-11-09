@@ -216,22 +216,40 @@ public sealed partial class LocalCatalog
 
         await using (var input = new FileStream(source, FileMode.Open,
             FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous))
-        await using (var output = OpenNewPrivateFile(target))
         {
-            await input.CopyToAsync(output, 64 * 1024, cancellationToken);
+            if (input.Length != length)
+            {
+                throw new InvalidDataException("The snapshot catalog length has changed.");
+            }
+
+            await using var output = OpenNewPrivateFile(target);
+            var buffer = new byte[64 * 1024];
+            for (var remaining = length; remaining > 0;)
+            {
+                var count = (int)Math.Min(remaining, buffer.Length);
+                await input.ReadExactlyAsync(buffer.AsMemory(0, count), cancellationToken);
+                await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+                remaining -= count;
+            }
+
+            if (input.ReadByte() != -1)
+            {
+                throw new InvalidDataException("The snapshot catalog length has changed.");
+            }
+
             await output.FlushAsync(cancellationToken);
             output.Flush(flushToDisk: true);
         }
 
-        var (copiedLength, copiedHash) = await HashFileAsync(target, cancellationToken);
-        if (copiedLength != length || copiedHash != digest)
+        var (_, copiedHash) = await HashFileAsync(target, cancellationToken, length);
+        if (copiedHash != digest)
         {
             throw new InvalidDataException("The copied snapshot catalog failed verification.");
         }
     }
 
     private static async Task<(long Length, string Digest)> HashFileAsync(
-        string path, CancellationToken cancellationToken)
+        string path, CancellationToken cancellationToken, long? expectedLength = null)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
@@ -241,8 +259,34 @@ public sealed partial class LocalCatalog
         await using var input = new FileStream(path, FileMode.Open,
             FileAccess.Read, FileShare.Read, 64 * 1024,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        return (input.Length, Convert.ToHexStringLower(
-            await SHA256.HashDataAsync(input, cancellationToken)));
+        var length = input.Length;
+        if (expectedLength is { } expected && length != expected)
+        {
+            throw new InvalidDataException("The snapshot catalog length has changed.");
+        }
+
+        var digest = await SHA256.HashDataAsync(input, cancellationToken);
+        if (input.Length != length)
+        {
+            throw new InvalidDataException("The snapshot catalog length has changed.");
+        }
+
+        return (length, Convert.ToHexStringLower(digest));
+    }
+
+    private static bool IsSnapshotSchemaVersion(int version) =>
+        version is >= 2 and <= CatalogSchema.CurrentVersion;
+
+    private static void EnsureCatalogFitsBudget(SqliteConnection database, long maxBytes)
+    {
+        using var count = database.CreateCommand("PRAGMA page_count");
+        using var size = database.CreateCommand("PRAGMA page_size");
+        var pageCount = Convert.ToInt64(count.ExecuteScalar());
+        var pageSize = Convert.ToInt64(size.ExecuteScalar());
+        if (pageSize <= 0 || pageCount > maxBytes / pageSize)
+        {
+            throw new InvalidDataException("The snapshot catalog exceeds the byte budget.");
+        }
     }
 
     private static long EnforceBudget(
@@ -256,7 +300,7 @@ public sealed partial class LocalCatalog
         var remaining = maxBytes - catalogLength;
         foreach (var item in objects)
         {
-            if (item.Length < 0 || item.Length > remaining)
+            if (item is null || item.Length < 0 || item.Length > remaining)
             {
                 throw new InvalidDataException("The snapshot exceeds its byte budget.");
             }

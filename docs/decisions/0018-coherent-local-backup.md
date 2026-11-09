@@ -24,7 +24,7 @@ Committed ingest receipts and revisions are copied exactly. New v3 snapshots inc
 - Backup validation verifies accidental damage and mismatches, **not cryptographic authenticity**. Someone able to replace both manifest and catalog, or tamper with unencrypted plaintext files, is not defeated by SHA-256. No encryption, signing, cloud upload, key custody, schedule, incremental retention or OS-level snapshot is provided (#40/#50/#65).
 - Staging directory names explicitly signal incompleteness. Cancellation, missing media, permission failures, full storage, interrupted power or process termination can leave private staging behind; the last completed backup and existing library are not changed by cleanup. Such directories must **not** be treated as backups. Inspect and remove them manually only after validating completed copies.
 - The final directory rename is on the same parent filesystem. This improves publication ordering but does not prove durable metadata after a power loss or sudden removable-media unplug. The caller must not treat success as proof of fsync behavior of every drive/OS combination; restore verification is required before trusting a recovered copy.
-- No user-facing backup UI or owner CLI is shipped by this library slice; #108/#130 own end-to-end use and visible failure states.
+- The [offline worker commands](../delivery/macos-workbench.md#offline-catalog-recovery) expose backup, independent verification and restore. Backup acquires the normal catalog lock and opens the source SQLite database read-only, preserving its schema. Native recovery controls and first-use verification remain under #108/#130.
 
 ## Verification and acceptance
 

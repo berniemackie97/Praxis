@@ -17,7 +17,10 @@ public sealed partial class LocalCatalog : IDisposable
         this.connection = connection;
     }
 
-    public static LocalCatalog Open(string dataDirectory)
+    public static LocalCatalog Open(string dataDirectory) =>
+        Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
+
+    private static LocalCatalog Open(string dataDirectory, SqliteOpenMode mode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         if (!Path.IsPathFullyQualified(dataDirectory))
@@ -27,25 +30,43 @@ public sealed partial class LocalCatalog : IDisposable
 
         var root = Path.GetFullPath(dataDirectory);
         ValidateRoot(root);
+        var databasePath = Path.Combine(root, "catalog.sqlite");
+        if (mode == SqliteOpenMode.ReadOnly && !File.Exists(databasePath))
+        {
+            throw new FileNotFoundException("The source catalog does not exist.", databasePath);
+        }
+
         var lockPath = Path.Combine(root, "catalog.lock");
-        var fileLock = new FileStream(lockPath, FileMode.OpenOrCreate,
-            FileAccess.ReadWrite, FileShare.None);
+        var lockOptions = new FileStreamOptions
+        {
+            Mode = FileMode.OpenOrCreate,
+            Access = FileAccess.ReadWrite,
+            Share = FileShare.None
+        };
+        if (!OperatingSystem.IsWindows())
+        {
+            lockOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        var fileLock = new FileStream(lockPath, lockOptions);
         SqliteConnection? database = null;
         try
         {
-            var databasePath = Path.Combine(root, "catalog.sqlite");
             database = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
-                Mode = SqliteOpenMode.ReadWriteCreate,
+                Mode = mode,
                 Pooling = false
             }.ToString());
             database.Open();
-            CatalogSchema.Prepare(database);
-            if (!OperatingSystem.IsWindows())
+            if (mode != SqliteOpenMode.ReadOnly)
             {
-                File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                CatalogSchema.Prepare(database);
+                if (!OperatingSystem.IsWindows())
+                {
+                    File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
             }
 
             return new LocalCatalog(databasePath, fileLock, database);
