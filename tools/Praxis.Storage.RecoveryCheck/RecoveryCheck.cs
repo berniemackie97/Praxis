@@ -195,15 +195,21 @@ internal static class RecoveryCheck
         var drive = DriveInfo.GetDrives()
             .Where(d => d.IsReady)
             .OrderByDescending(d => d.RootDirectory.FullName.Length)
-            .FirstOrDefault(d => Path.IsPathFullyQualified(path) &&
-                Path.GetRelativePath(d.RootDirectory.FullName, path) is var relative &&
-                relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar,
-                    StringComparison.Ordinal) && !Path.IsPathRooted(relative));
+            .FirstOrDefault(d => IsWithinDrive(path, d.RootDirectory.FullName));
         var required = checked(LargeBytes * 4 + 1024L * 1024 * 1024);
         if (drive is null || drive.AvailableFreeSpace < required)
         {
             throw new IOException("The selected drive lacks the verified free space for this check.");
         }
+    }
+
+    private static bool IsWithinDrive(string path, string driveRoot)
+    {
+        var relative = Path.GetRelativePath(driveRoot, path);
+        return relative == "." || (!Path.IsPathRooted(relative) &&
+            relative != ".." &&
+            !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+            !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal));
     }
 
     private static void Require(bool condition, string message)
