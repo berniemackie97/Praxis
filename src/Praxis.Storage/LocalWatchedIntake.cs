@@ -7,7 +7,8 @@ public sealed partial class LocalWatchedIntake
     private const long MaximumFileBytes = 2L * 1024 * 1024 * 1024;
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
     private const int ProcessingBudgetPerScan = 64;
-    private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(5);
+    private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
+    private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
 
     private readonly LocalCatalog catalog;
     private readonly LocalSourceIntake intake;
@@ -83,6 +84,7 @@ public sealed partial class LocalWatchedIntake
             }
 
             var imported = 0;
+            var remainingHashBytes = HashBudgetPerScan;
             foreach (var file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -108,6 +110,12 @@ public sealed partial class LocalWatchedIntake
                     continue;
                 }
 
+                if (file.Length > remainingHashBytes)
+                {
+                    continue;
+                }
+
+                remainingHashBytes -= file.Length;
                 if (await TryImportAsync(file, stamp, now, cancellationToken))
                 {
                     imported++;
