@@ -16,6 +16,7 @@ final class Workbench: ObservableObject {
 
     @Published private(set) var hits: [SearchHit] = []
     @Published private(set) var videoClips: [VideoCue] = []
+    @Published private(set) var mediaInspection: MediaInspection?
     @Published private(set) var budgetReport: MonthlyBudgetReport?
     @Published private(set) var budgetScenario: BudgetScenario?
     @Published var budgetTargetText: [String: String] = [:]
@@ -119,6 +120,7 @@ final class Workbench: ObservableObject {
                     self?.intakeStatus = nil
                     self?.savingNote = false
                     self?.exportingOriginal = false
+                    self?.mediaInspection = nil
                     self?.requests.removeAll()
                     self?.buffer.removeAll()
                     if process.terminationStatus != 0 {
@@ -222,6 +224,21 @@ final class Workbench: ObservableObject {
         }
     }
 
+    func inspectSelectedMedia() {
+        guard let item = selected, item.sourceStatus == "active" else { return }
+        let ext = URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased()
+        guard ["mp4", "mov", "m4v", "webm", "mkv"].contains(ext) else {
+            message = "Select a captured video file to inspect."
+            return
+        }
+
+        mediaInspection = nil
+        send("mediaInspection", [
+            "sourceId": item.sourceId,
+            "revision": item.revision
+        ])
+    }
+
     func analyzeSelectedBudget() {
         guard let item = selected, item.sourceStatus == "active",
               URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased() == "csv"
@@ -275,6 +292,7 @@ final class Workbench: ObservableObject {
 
     func select(_ item: LibraryItem) {
         clearBudgetResults()
+        mediaInspection = nil
         selected = item
         preview = "Loading extracted text…"
         previewTarget = "\(item.itemId):\(item.revision)"
@@ -362,6 +380,10 @@ final class Workbench: ObservableObject {
                 requests[id] = "sourceCollections:\(sourceId)"
             } else if action == "library" {
                 requests[id] = "library:\(selectedCollectionId):\(page)"
+            } else if action == "mediaInspection",
+                      let sourceId = fields["sourceId"] as? String,
+                      let revision = fields["revision"] as? Int {
+                requests[id] = "mediaInspection:\(sourceId):\(revision)"
             } else if action == "budgetSummary" || action == "budgetScenario",
                       let sourceId = fields["sourceId"] as? String,
                       let year = fields["year"] as? Int,
@@ -397,6 +419,13 @@ final class Workbench: ObservableObject {
             guard reply.ok else {
                 if action == "noteCapture" { savingNote = false }
                 if action == "exportOriginal" { exportingOriginal = false }
+                if action.hasPrefix("mediaInspection:") {
+                    guard let selected,
+                          action == "mediaInspection:\(selected.sourceId):\(selected.revision)" else {
+                        continue
+                    }
+                    mediaInspection = nil
+                }
                 if action.hasPrefix("budgetSummary:") {
                     clearBudgetResults()
                 } else if action.hasPrefix("budgetScenario:") {
@@ -435,10 +464,12 @@ final class Workbench: ObservableObject {
                             updated.sha256 != previous.sha256 ||
                             updated.sourceStatus != "active" {
                             clearBudgetResults()
+                            mediaInspection = nil
                         }
                         selected = updated
                     } else {
                         clearBudgetResults()
+                        mediaInspection = nil
                         selected = nil
                     }
                 }
@@ -480,6 +511,19 @@ final class Workbench: ObservableObject {
                 if let selected { send("topics", ["sourceId": selected.sourceId]) }
             case "search": hits = reply.data?.hits ?? []
             case "mediaCues": videoClips = reply.data?.clips ?? []
+            case let context where context.hasPrefix("mediaInspection:"):
+                guard let selected,
+                      context == "mediaInspection:\(selected.sourceId):\(selected.revision)",
+                      selected.sourceStatus == "active",
+                      let media = reply.data?.media,
+                      media.sourceId == selected.sourceId,
+                      media.itemId == selected.itemId,
+                      media.revision == selected.revision,
+                      media.sourceSha256 == selected.sha256 else { continue }
+                mediaInspection = media
+                message = media.outcome == "header_recognized"
+                    ? "Verified original and recognized media header. Playback has not been validated."
+                    : "Original verified, but this media header is unsupported."
             case let context where context.hasPrefix("budgetSummary:"):
                 guard let selected,
                       context == "budgetSummary:\(selected.sourceId):\(budgetYear):\(budgetMonth)",
@@ -534,6 +578,7 @@ final class Workbench: ObservableObject {
             case "revoke":
                 if reply.data?.revoked == true {
                     clearBudgetResults()
+                    mediaInspection = nil
                     selected = nil
                 }
                 message = reply.data?.revoked == true
