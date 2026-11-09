@@ -18,7 +18,7 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(95, len(items))
+        self.assertEqual(96, len(items))
         self.assertEqual(59, items[136]["parent"])
         self.assertEqual("P2", items[136]["priority"])
         self.assertEqual("knowledge", items[136]["area"])
@@ -37,7 +37,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual({99, 100, 129}, dependencies[107])
         self.assertEqual(set(), dependencies[36])
         self.assertEqual([23], self.plan["dependency_removals"]["36"])
-        self.assertEqual({100, 101, 102, 103, 106, 108, 113, 129, 146}, dependencies[130])
+        self.assertEqual({100, 101, 102, 103, 106, 108, 113, 129, 146, 166}, dependencies[130])
         self.assertEqual(59, items[126]["parent"])
         self.assertEqual(59, items[128]["parent"])
         self.assertEqual(64, items[129]["parent"])
@@ -52,6 +52,9 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("security", items[117]["area"])
         self.assertEqual(64, items[108]["parent"])
         self.assertEqual(64, items[146]["parent"])
+        self.assertEqual(64, items[166]["parent"])
+        self.assertEqual("P1", items[166]["priority"])
+        self.assertEqual({126, 108}, dependencies[166])
         self.assertEqual("P1", items[146]["priority"])
         self.assertEqual({106}, dependencies[108])
         self.assertEqual({106}, dependencies[146])
@@ -61,7 +64,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual({101, 109, 111}, dependencies[26])
         self.assertNotIn(22, dependencies[26])
         self.assertEqual({14, 16, 102}, dependencies[27])
-        self.assertEqual([99, 122, 124, 126, 128, 100, 102, 101, 105, 103, 106, 129, 108, 146, 113, 130],
+        self.assertEqual([99, 122, 124, 126, 128, 100, 102, 101, 105, 103, 106, 129, 108, 146, 113, 166, 130],
                          self.plan["delivery_lanes"][0]["issues"])
         self.assertEqual("P1", items[105]["priority"])
         self.assertEqual({"from": "P2", "to": "P1"},

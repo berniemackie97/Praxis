@@ -220,7 +220,8 @@
         129,
         130,
         146,
-        161
+        161,
+        166
       ]
     },
     {
@@ -554,7 +555,8 @@
       108,
       113,
       129,
-      146
+      146,
+      166
     ],
     "146": [
       106
@@ -607,6 +609,10 @@
       30,
       32,
       157
+    ],
+    "166": [
+      126,
+      108
     ]
   },
   "priorities": {
@@ -683,7 +689,8 @@
     "159": "P3",
     "160": "P3",
     "161": "P3",
-    "162": "P3"
+    "162": "P3",
+    "166": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -784,9 +791,10 @@
         108,
         146,
         113,
+        166,
         130
       ],
-      "exit": "On the owner's Mac, open Praxis, automatically capture approved folder changes, explicitly save typed/pasted Markdown notes through the trusted UI, preserve originals and revisions, inspect/search and organize the sources in collections without Obsidian, remote inference or private HTTP; demonstrate failures, recovery and denied access."
+      "exit": "On the owner's Mac, open Praxis, automatically capture approved files and typed/pasted notes, preserve and retrieve verified original bytes through an explicit owner-selected no-overwrite export, inspect/search sources, organize collections and recover the catalog without Obsidian, external inference or private HTTP; demonstrate fault handling and denied access."
     },
     {
       "id": "L1",
