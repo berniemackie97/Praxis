@@ -32,6 +32,7 @@ final class Workbench: ObservableObject {
     @Published private(set) var savingNote = false
     @Published private(set) var exportingOriginal = false
     private var noteCaptureId: String?
+    private var budgetTargetRevision = 0
 
     private var child: Process?
     private var input: FileHandle?
@@ -238,12 +239,14 @@ final class Workbench: ObservableObject {
     }
 
     func clearBudgetResults() {
+        budgetTargetRevision += 1
         budgetReport = nil
         budgetScenario = nil
         budgetTargetText.removeAll()
     }
 
     func updateBudgetTarget(category: String, text: String) {
+        budgetTargetRevision += 1
         budgetTargetText[category] = text
         budgetScenario = nil
     }
@@ -363,7 +366,8 @@ final class Workbench: ObservableObject {
                       let sourceId = fields["sourceId"] as? String,
                       let year = fields["year"] as? Int,
                       let month = fields["month"] as? Int {
-                requests[id] = "\(action):\(sourceId):\(year):\(month)"
+                let suffix = action == "budgetScenario" ? ":\(budgetTargetRevision)" : ""
+                requests[id] = "\(action):\(sourceId):\(year):\(month)\(suffix)"
             } else {
                 requests[id] = action
             }
@@ -491,8 +495,16 @@ final class Workbench: ObservableObject {
                     : "Posted amounts are actual. Category targets are hypothetical and do not change transactions."
             case let context where context.hasPrefix("budgetScenario:"):
                 guard let report = budgetReport,
-                      context == "budgetScenario:\(report.sourceId):\(report.year):\(report.month)" else { continue }
-                budgetScenario = reply.data?.scenario
+                      context == "budgetScenario:\(report.sourceId):\(report.year):\(report.month):\(budgetTargetRevision)",
+                      let selected, selected.revision == report.revision,
+                      selected.sha256 == report.sourceSha256 else { continue }
+                if let scenario = reply.data?.scenario,
+                   scenario.revision == report.revision &&
+                   scenario.sourceSha256 == report.sourceSha256 {
+                    budgetScenario = scenario
+                } else {
+                    budgetScenario = nil
+                }
                 message = budgetScenario == nil
                     ? "No scenario result was returned."
                     : "Illustrative comparison calculated locally; no expenses were changed."
