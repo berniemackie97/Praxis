@@ -15,6 +15,10 @@ final class Workbench: ObservableObject {
     @Published var selectedMembershipId = ""
 
     @Published private(set) var hits: [SearchHit] = []
+    @Published private(set) var videoClips: [VideoCue] = []
+    @Published private(set) var budgetReport: MonthlyBudgetReport?
+    @Published var budgetYear = Calendar.current.component(.year, from: Date())
+    @Published var budgetMonth = Calendar.current.component(.month, from: Date())
     @Published private(set) var selected: LibraryItem?
     @Published private(set) var preview = ""
     @Published private(set) var message = "Select a private catalog and watched Inbox."
@@ -208,9 +212,27 @@ final class Workbench: ObservableObject {
     func search() {
         if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             send("search", ["query": query])
+            send("mediaCues", ["query": query, "limit": 20])
         } else {
             hits = []
+            videoClips = []
         }
+    }
+
+    func analyzeSelectedBudget() {
+        guard let item = selected, item.sourceStatus == "active",
+              URL(fileURLWithPath: item.sourceLocator).pathExtension.lowercased() == "csv"
+        else {
+            message = "Select an active financial CSV in the Library first."
+            return
+        }
+
+        budgetReport = nil
+        send("budgetSummary", [
+            "sourceId": item.sourceId,
+            "year": budgetYear,
+            "month": budgetMonth
+        ])
     }
 
     func select(_ item: LibraryItem) {
@@ -330,6 +352,7 @@ final class Workbench: ObservableObject {
             guard reply.ok else {
                 if action == "noteCapture" { savingNote = false }
                 if action == "exportOriginal" { exportingOriginal = false }
+                if action == "budgetSummary" { budgetReport = nil }
                 message = reply.error ?? "The operation failed."
                 continue
             }
@@ -396,6 +419,12 @@ final class Workbench: ObservableObject {
                     : "The proposal is unchanged or no longer current."
                 if let selected { send("topics", ["sourceId": selected.sourceId]) }
             case "search": hits = reply.data?.hits ?? []
+            case "mediaCues": videoClips = reply.data?.clips ?? []
+            case "budgetSummary":
+                budgetReport = reply.data?.budget
+                message = budgetReport == nil
+                    ? "No budget report was returned."
+                    : "Verified source data summarized locally. Review pending and estimated amounts separately."
             case let context where context.hasPrefix("preview:"):
                 if context == "preview:\(previewTarget)" {
                     preview = reply.data?.content ??

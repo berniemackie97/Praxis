@@ -81,6 +81,73 @@ struct SourceMovement: Decodable, Identifiable {
     var id: String { "\(sourceId):\(recordedUtc):\(previousPath)" }
 }
 
+
+struct VideoCue: Decodable, Identifiable {
+    let captionSourceId: String
+    let captionItemId: String
+    let captionRevision: Int
+    let captionSha256: String
+    let captionOffset: Int
+    let captionLength: Int
+    let cueNumber: Int
+    let startMilliseconds: Int64
+    let endMilliseconds: Int64
+    let captionText: String
+    let producer: String
+    let videoSourceId: String
+    let videoItemId: String
+    let videoRevision: Int
+    let videoSha256: String
+    let videoLocator: String
+    var id: String { "\(captionItemId):\(captionRevision):\(cueNumber)" }
+    var range: String {
+        "\(startMilliseconds / 1000)s–\(endMilliseconds / 1000)s"
+    }
+}
+
+struct BudgetCategory: Decodable, Identifiable {
+    let category: String
+    let postedSpending: Double
+    let plannedBills: Double
+    let rowCount: Int
+    var id: String { category }
+}
+
+struct BudgetEvidence: Decodable, Identifiable {
+    let sourceRow: Int
+    let recordId: String
+    let date: String
+    let kind: String
+    let status: String
+    let amount: Double
+    let category: String
+    let description: String
+    var id: String { recordId }
+}
+
+struct MonthlyBudgetReport: Decodable {
+    let sourceId: String
+    let itemId: String
+    let revision: Int
+    let sourceSha256: String
+    let year: Int
+    let month: Int
+    let currency: String
+    let postedIncome: Double
+    let postedSpending: Double
+    let plannedBills: Double
+    let pendingNetSpending: Double
+    let actualBalance: Double
+    let balanceAfterPlannedBills: Double
+    let includedRows: Int
+    let ignoredDuplicateRows: Int
+    let pendingRows: Int
+    let transfersExcluded: Int
+    let evidenceTruncated: Bool
+    let categories: [BudgetCategory]
+    let evidence: [BudgetEvidence]
+}
+
 struct ResponseData: Decodable {
     let items: [LibraryItem]?
     let status: IntakeStatus?
@@ -92,6 +159,8 @@ struct ResponseData: Decodable {
     let moves: [SourceMovement]?
     let changed: Bool?
     let hits: [SearchHit]?
+    let clips: [VideoCue]?
+    let budget: MonthlyBudgetReport?
     let outcome: String?
     let content: String?
     let reasonCode: String?

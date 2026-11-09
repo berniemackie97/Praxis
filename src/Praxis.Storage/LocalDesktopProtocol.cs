@@ -42,6 +42,20 @@ public sealed class LocalDesktopProtocol(
                 {
                     hits = catalog.SearchText(ReadString(root, "query", 256), 30)
                 },
+                "mediaCues" => new
+                {
+                    clips = catalog.SearchVideoCues(
+                        ReadString(root, "query", 256),
+                        ReadInteger(root, "limit", 20, 1, 50))
+                },
+                "budgetSummary" => new
+                {
+                    budget = await new LocalMonthlyBudgetAnalyzer(catalog).AnalyzeAsync(
+                        ReadGuid(root, "sourceId"),
+                        ReadInteger(root, "year", 0, 2000, 2100),
+                        ReadInteger(root, "month", 0, 1, 12),
+                        cancellationToken)
+                },
                 "collections" => new
                 {
                     collections = catalog.ListCollections(

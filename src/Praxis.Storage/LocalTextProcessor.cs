@@ -9,7 +9,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
     // An extension establishes a supported text decoding policy, not the file's semantics.
     internal static readonly string[] SupportedExtensions =
     [
-        ".txt", ".md", ".markdown",
+        ".txt", ".md", ".markdown", ".vtt", ".srt",
         ".cs", ".csx", ".fs", ".fsx",
         ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx",
         ".asm", ".s", ".lst"

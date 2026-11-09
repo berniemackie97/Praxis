@@ -18,7 +18,7 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(96, len(items))
+        self.assertEqual(121, len(items))
         self.assertEqual(59, items[136]["parent"])
         self.assertEqual("P2", items[136]["priority"])
         self.assertEqual("knowledge", items[136]["area"])
@@ -80,11 +80,33 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("P1", items[92]["priority"])
         self.assertIn(92, dependencies[22])
         self.assertEqual(8, len(self.plan["milestones"]))
-        self.assertEqual(17, len(self.plan["features"]))
+        self.assertEqual(21, len(self.plan["features"]))
         self.assertEqual(1, items[2]["parent"])
         self.assertEqual(3, items[54]["parent"])
         self.assertEqual(54, items[14]["parent"])
         self.assertEqual({15, 17, 40, 41}, dependencies[19])
+        self.assertEqual(7, items[176]["parent"])
+        for number in (177, 178, 179, 181, 184):
+            self.assertEqual(176, items[number]["parent"])
+        self.assertEqual("retrieval", items[181]["area"])
+        self.assertEqual("clients", items[177]["area"])
+        self.assertEqual("knowledge", items[184]["area"])
+        for number in (176, 177, 178, 179, 181, 184, 114):
+            self.assertEqual("P1", items[number]["priority"])
+        self.assertEqual({103, 106, 114}, dependencies[181])
+        self.assertEqual({181, 114, 103, 106, 29, 31, 33, 32, 166}, dependencies[177])
+        self.assertEqual({102, 103, 129}, dependencies[184])
+        self.assertEqual({184, 103, 115, 31, 32, 33, 173}, dependencies[178])
+        self.assertEqual({177, 178, 156, 29}, dependencies[179])
+        self.assertIn(176, dependencies[170])
+        self.assertIn(179, dependencies[170])
+        self.assertIn(181, self.plan["delivery_lanes"][4]["issues"])
+        self.assertIn(184, self.plan["delivery_lanes"][4]["issues"])
+        self.assertIn(177, self.plan["delivery_lanes"][6]["issues"])
+        self.assertIn(178, self.plan["delivery_lanes"][6]["issues"])
+        self.assertIn(179, self.plan["delivery_lanes"][6]["issues"])
+        self.assertEqual({"from": "P2", "to": "P1"},
+                         self.plan["priority_migrations"]["114"])
         self.assertEqual({71, 73}, dependencies[67])
 
     def test_duplicate_child_is_rejected(self):

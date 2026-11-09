@@ -315,7 +315,9 @@
       "children": [
         177,
         178,
-        179
+        179,
+        181,
+        184
       ]
     }
   ],
@@ -676,25 +678,39 @@
       143
     ],
     "177": [
-      114,
-      103,
-      106,
       29,
       31,
       32,
-      33
+      33,
+      103,
+      106,
+      114,
+      166,
+      181
     ],
     "178": [
+      32,
+      33,
       103,
       115,
-      32,
-      33
+      173,
+      184
     ],
     "179": [
       177,
       178,
       156,
       29
+    ],
+    "181": [
+      103,
+      106,
+      114
+    ],
+    "184": [
+      102,
+      103,
+      129
     ]
   },
   "priorities": {
@@ -755,7 +771,7 @@
     "111": "P2",
     "112": "P2",
     "113": "P1",
-    "114": "P2",
+    "114": "P1",
     "115": "P1",
     "116": "P1",
     "117": "P1",
@@ -792,7 +808,9 @@
     "176": "P1",
     "177": "P1",
     "178": "P1",
-    "179": "P1"
+    "179": "P1",
+    "181": "P1",
+    "184": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -803,7 +821,10 @@
     "126": "knowledge",
     "128": "knowledge",
     "129": "security",
-    "136": "knowledge"
+    "136": "knowledge",
+    "177": "clients",
+    "181": "retrieval",
+    "184": "knowledge"
   },
   "decision_queue": [
     13,
@@ -914,6 +935,10 @@
       "to": "P1"
     },
     "105": {
+      "from": "P2",
+      "to": "P1"
+    },
+    "114": {
       "from": "P2",
       "to": "P1"
     },
@@ -1035,17 +1060,19 @@
     },
     {
       "id": "L4",
-      "name": "Technical knowledge slice within the cross-domain MVP",
+      "name": "Core MVP: cross-domain evidence and bounded investigations",
       "issues": [
         149,
+        150,
         152,
         153,
         154,
-        150,
         155,
-        156
+        156,
+        181,
+        184
       ],
-      "exit": "Process a supported versioned technical corpus, correlate evidence across code/disassembly/notes, answer a genuine technical question with citations or abstain. This is one of multiple required domains, not the definition of the entire MVP."
+      "exit": "Given owner-approved technical, captioned video and structured financial sources, build versioned evidence, retrieve explicit source/text/time/record selectors, and perform bounded cited investigations or abstain. Validate changes, revocation, privacy, no fabricated timestamps or amounts and measured resource limits."
     },
     {
       "id": "L5",

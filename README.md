@@ -132,3 +132,7 @@ The first-party Library now has a draft owner-selected **Export original…** ac
 ## Observed file moves (development)
 
 Praxis now has a draft opt-in-folder rename continuity implementation for already captured files. It preserves source identity only when a filesystem move event is independently verified against the current original digest and an unoccupied target; historical paths are recorded in schema v8. Copies and missed moves are not inferred as the same source. See [ADR 0025](docs/decisions/0025-file-source-relocations.md) for evidence limits, security and migration requirements. First-party and physical hardware acceptance remain open.
+
+### Multidomain MVP direction
+
+Technical research is an example, not Praxis's domain limit. MVP gate [#170](https://github.com/berniemackie97/Praxis/issues/170) now also requires in-chat replay of cited video tutorial excerpts ([#176](https://github.com/berniemackie97/Praxis/issues/180)) and grounded monthly budgeting over owner-approved income/bill/transaction evidence ([#176](https://github.com/berniemackie97/Praxis/issues/183)). The in-progress read-only caption cue and local CSV analysis implementation is specified in [ADR 0027](docs/decisions/0027-cross-domain-evidence.md). Neither video playback nor autonomous financial advice is currently shipped.
