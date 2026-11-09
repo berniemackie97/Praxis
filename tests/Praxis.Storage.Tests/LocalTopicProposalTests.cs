@@ -148,6 +148,48 @@ public sealed class LocalTopicProposalTests : IDisposable
     }
 
     [Fact]
+    public void ExistingVersionSixCatalogMigratesWithoutLosingUserCollections()
+    {
+        var databasePath = Path.Combine(root, "catalog.sqlite");
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false
+        }.ToString()))
+        {
+            connection.Open();
+            foreach (var version in new[]
+                { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql",
+                  "LocalCatalog.V4.sql", "LocalCatalog.V5.sql", "LocalCatalog.V6.sql" })
+            {
+                using var resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                    "Praxis.Storage." + version)!;
+                using var reader = new StreamReader(resource);
+                using var command = connection.CreateCommand();
+                command.CommandText = reader.ReadToEnd();
+                command.ExecuteNonQuery();
+            }
+
+            using var insert = connection.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO source_collections
+                    (collection_id, name, name_key, created_utc)
+                VALUES ($id, 'Research', 'RESEARCH', '2026-11-09T00:00:00Z')
+                """;
+            insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+            insert.ExecuteNonQuery();
+        }
+
+        using var upgraded = LocalCatalog.Open(root);
+        Assert.Equal(7, upgraded.SchemaVersion);
+        Assert.Equal("Research", Assert.Single(upgraded.ListCollections()).Name);
+        Assert.False(new LocalTopicProposer(upgraded).ProcessNext());
+        Assert.Empty(upgraded.ListTopicProposals(Guid.NewGuid()));
+        Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_runs"));
+    }
+
+    [Fact]
     public async Task ReviewRejectsInvalidDecisionsCorrectionsAndUnknownSources()
     {
         using var catalog = LocalCatalog.Open(root);
