@@ -158,6 +158,7 @@ public sealed partial class LocalCatalog : IDisposable
 
         VerifySchema(database, CurrentSchemaVersion);
         VerifySearchSchema(database);
+        VerifyEnrichmentView(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
             "wal", StringComparison.OrdinalIgnoreCase))
         {
@@ -271,6 +272,29 @@ public sealed partial class LocalCatalog : IDisposable
             {
                 throw new InvalidDataException("The catalog schema is incomplete.", exception);
             }
+        }
+    }
+
+    private static void VerifyEnrichmentView(SqliteConnection database)
+    {
+        using var definition = Command(database, """
+            SELECT sql FROM sqlite_master WHERE type = 'view'
+              AND name = 'eligible_enrichment_proposals'
+            """);
+        if (definition.ExecuteScalar() is not string)
+        {
+            throw new InvalidDataException("The enrichment eligibility view is missing.");
+        }
+
+        using var projection = Command(database,
+            "SELECT source_id, proposal_id FROM eligible_enrichment_proposals LIMIT 0");
+        try
+        {
+            using var reader = projection.ExecuteReader();
+        }
+        catch (SqliteException exception)
+        {
+            throw new InvalidDataException("The enrichment eligibility view is incompatible.", exception);
         }
     }
 

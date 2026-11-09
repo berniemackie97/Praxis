@@ -141,24 +141,12 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var query = Command(connection, """
-                SELECT p.proposal_id, s.source_id, p.item_id, p.revision,
-                       p.source_digest, p.processor_key, p.value,
-                       p.evidence, p.evidence_offset, p.status, p.correction
-                FROM enrichment_proposals p
-                JOIN item_versions v ON v.item_id = p.item_id AND v.revision = p.revision
-                    AND v.digest = p.source_digest
-                JOIN items i ON i.item_id = p.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                JOIN text_derivatives d ON d.item_id = p.item_id
-                    AND d.revision = p.revision AND d.source_digest = p.source_digest
-                    AND d.processor_key = 'source-text-v1'
-                JOIN processing_jobs j ON j.item_id = d.item_id
-                    AND j.revision = d.revision AND j.processor_key = d.processor_key
-                WHERE s.source_id = $source AND s.status = 'active'
-                  AND j.state = 'completed' AND d.outcome = 'completed'
-                  AND p.revision = (SELECT MAX(v2.revision) FROM item_versions v2
-                                    WHERE v2.item_id = p.item_id)
-                ORDER BY p.evidence_offset, p.proposal_id LIMIT $limit
+                SELECT proposal_id, source_id, item_id, revision,
+                       source_digest, processor_key, value, evidence,
+                       evidence_offset, status, correction
+                FROM eligible_enrichment_proposals
+                WHERE source_id = $source
+                ORDER BY evidence_offset, proposal_id LIMIT $limit
                 """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);

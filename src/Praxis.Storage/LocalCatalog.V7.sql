@@ -44,4 +44,21 @@ CREATE TABLE enrichment_reviews (
 
 CREATE INDEX enrichment_reviews_proposal ON enrichment_reviews(proposal_id, reviewed_utc);
 
+CREATE VIEW eligible_enrichment_proposals AS
+SELECT p.*, s.source_id
+FROM enrichment_proposals p
+JOIN item_versions v ON v.item_id = p.item_id AND v.revision = p.revision
+    AND v.digest = p.source_digest
+JOIN items i ON i.item_id = p.item_id
+JOIN sources s ON s.source_id = i.source_id
+JOIN text_derivatives d ON d.item_id = p.item_id
+    AND d.revision = p.revision AND d.source_digest = p.source_digest
+    AND d.processor_key = 'source-text-v1'
+JOIN processing_jobs j ON j.item_id = d.item_id
+    AND j.revision = d.revision AND j.processor_key = d.processor_key
+WHERE s.status = 'active'
+    AND j.state = 'completed' AND d.outcome = 'completed'
+    AND p.revision = (SELECT MAX(current.revision) FROM item_versions current
+                      WHERE current.item_id = p.item_id);
+
 PRAGMA user_version = 7;
