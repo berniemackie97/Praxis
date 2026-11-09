@@ -169,9 +169,9 @@ struct BudgetScenario: Decodable {
     let postedIncome: Double
     let postedSpending: Double
     let plannedBills: Double
-    let actualAfterPlannedBills: Double
+    let baselineNetAfterPlannedBills: Double
     let illustrativeReduction: Double
-    let hypotheticalAfterPlannedBills: Double
+    let hypotheticalNetAfterPlannedBills: Double
     let pendingRows: Int
     let evidenceTruncated: Bool
     let categories: [BudgetScenarioCategory]
