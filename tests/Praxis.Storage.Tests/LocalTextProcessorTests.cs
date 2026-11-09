@@ -260,7 +260,7 @@ public sealed class LocalTextProcessorTests : IDisposable
 
 
     [Theory]
-    [InlineData("parser.cs", "public sealed class C3Reader { public void ParseVertex() {} }")]
+    [InlineData("parser.cs", "public sealed class C3Reader { public void ParseTriangleMesh() {} }")]
     [InlineData("engine.cpp", "void ParseTriangleMesh() { /* source only */ }")]
     [InlineData("symbols.asm", "ParseTriangleMesh PROC\n MOV EAX, 1\n RET\nParseTriangleMesh ENDP")]
     [InlineData("model.lst", "SYMBOL ParseTriangleMesh at section text")]
