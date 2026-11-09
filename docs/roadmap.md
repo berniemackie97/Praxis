@@ -56,13 +56,15 @@ Finish the threat/host/key/recovery decisions (#13/#15/#50) and versioned confli
 
 The owner's MVP is **not** satisfied by #130's capture, file browsing and keyword search. #130 is an enabling L0 acceptance checkpoint. The actual first release requires:
 
-- **Interpret and relate:** #149/#152–#154 plus #115/#116 extract supported project/source/ASM/format knowledge, version, provenance, contradictions and reviewable claims.
-- **Reason and answer:** #29/#33/#150/#155/#156/#172 prove evaluated hybrid/structural retrieval, bounded agentic investigation, exact claim-level citations, uncertainty, no-answer and revocation cases on a real authorized corpus.
+- **Interpret and relate across modalities:** #149/#152–#154 and #176/#177/#178 plus #115/#116 extract supported code/ASM concepts, time-aligned video moments and structured bills/income/transactions into versioned, provenance-rich, permissioned knowledge, without treating uncertain inferred claims as fact.
+- **Reason and answer:** #29/#33/#150/#155/#156/#172/#179 prove evaluated retrieval/investigation across *three* domain gold sets, with exact text/symbol/time-range/record citations, honest uncertainty, no-answer and revocation behavior.
 - **Efficient agents:** #143 provides task-scoped, hierarchically organized, versioned context packs and owner-reviewed root/nested `AGENTS.md` or tool-specific projections. Generated instructions never bypass consent or read unapproved data.
 - **Local-first inference and escalation:** #31/#172 benchmark Ollama on actual local hardware, choose a measured retrieval+reasoning pipeline, and independently authorize supported Claude/Codex/Gemini/Grok/DeepSeek providers where available; enforce token/context/cost budgets, caching/invalidation, fallback policy and explicit disclosure.
 - **Ask and do:** #33/#32/#34/#160/#173 support first-party persistent chat, planned bounded actions, tool discovery proposals, independent approval, progress, cancellation and auditable verification.
 - **Obsidian companion:** #57/#171 publish owner-approved, linked and provenance-grounded Markdown views into a selected vault without destructive conflicts or a competing canonical store.
-- **Real release gate:** #170 demonstrates these as one product on the owner's Mac with representative technical questions and one approved task; failure, injection, data recovery, revocation and cost/latency evidence are mandatory.
+- **Real release gate:** #170 demonstrates these as one product on the owner's Mac: cited technical answers; directly playable tutorial segments in chat with full-video access; an editable and numerically verified monthly budget from authorized records; and one approved task. Failure, injection, data recovery, revocation and cost/latency evidence are mandatory.
+
+The MVP includes feature [#176](https://github.com/berniemackie97/Praxis/issues/176) (multimodal and structured domain understanding), with [#177](https://github.com/berniemackie97/Praxis/issues/177) video clips, [#178](https://github.com/berniemackie97/Praxis/issues/178) financial budgeting and [#179](https://github.com/berniemackie97/Praxis/issues/179) cross-domain evaluation. Technical research is one representative use case, not the product boundary.
 
 This is an **end-to-end vertical slice at production quality**, not a requirement to support all possible files, models, connected services or devices on day one. Foundational L0 remains the next blocking engineering gate, but the roadmap must not claim MVP completion there.
 
