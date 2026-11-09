@@ -33,12 +33,12 @@
     {
       "stage": "M5",
       "title": "M5 — Authorized intelligence",
-      "description": "Grounded model use, scoped connector actions and durable workflows. Exit: permissions, audits, prompt-injection and failure-mode tests."
+      "description": "Grounded technical knowledge interpretation, evidence-aware agentic investigation, local-first model choice, scoped connector event ingestion and authorized automation. Exit: source-cited cross-artifact answers, revocation, evaluation and permission tests."
     },
     {
       "stage": "M6",
       "title": "M6 — First-party clients",
-      "description": "First-party Praxis interfaces that access the same local and future multi-device contracts, independent of Obsidian; earliest usable local UI may deliver before M2/M3/M6 exit."
+      "description": "Independent first-party Praxis workbench, capture and conversational interfaces using trusted local contracts; expanded device clients after separate platform verification. First useful local UI precedes complete M6 exit."
     },
     {
       "stage": "M7",
@@ -195,7 +195,8 @@
       "children": [
         32,
         34,
-        35
+        35,
+        160
       ]
     },
     {
@@ -218,7 +219,8 @@
         108,
         129,
         130,
-        146
+        146,
+        161
       ]
     },
     {
@@ -268,6 +270,36 @@
         117,
         118,
         119
+      ]
+    },
+    {
+      "issue": 149,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        152,
+        153,
+        154
+      ]
+    },
+    {
+      "issue": 150,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        155,
+        156
+      ]
+    },
+    {
+      "issue": 151,
+      "epic": 7,
+      "area": "automation",
+      "children": [
+        157,
+        158,
+        159,
+        162
       ]
     }
   ],
@@ -526,6 +558,55 @@
     ],
     "146": [
       106
+    ],
+    "152": [
+      103,
+      106
+    ],
+    "153": [
+      152
+    ],
+    "154": [
+      153,
+      115,
+      116
+    ],
+    "155": [
+      33,
+      32,
+      153
+    ],
+    "156": [
+      155,
+      29
+    ],
+    "157": [
+      102,
+      32
+    ],
+    "158": [
+      157,
+      35,
+      30
+    ],
+    "159": [
+      157,
+      32
+    ],
+    "160": [
+      32,
+      117,
+      155
+    ],
+    "161": [
+      33,
+      109,
+      110
+    ],
+    "162": [
+      30,
+      32,
+      157
     ]
   },
   "priorities": {
@@ -588,7 +669,21 @@
     "129": "P1",
     "130": "P1",
     "136": "P2",
-    "146": "P1"
+    "146": "P1",
+    "149": "P1",
+    "150": "P2",
+    "151": "P2",
+    "152": "P1",
+    "153": "P2",
+    "154": "P2",
+    "155": "P2",
+    "156": "P2",
+    "157": "P2",
+    "158": "P2",
+    "159": "P3",
+    "160": "P3",
+    "161": "P3",
+    "162": "P3"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -606,9 +701,9 @@
     30,
     36,
     50,
-    99,
     117,
-    129
+    152,
+    162
   ],
   "dependency_removals": {
     "26": [
@@ -726,6 +821,34 @@
         119
       ],
       "exit": "An independently authorized local integration host and paired agent can retrieve only scoped grounded knowledge; write operations require separate permissions and approval, with revocation and prompt-injection tests."
+    },
+    {
+      "id": "L4",
+      "name": "Deep technical knowledge and evidence-grounded investigations",
+      "issues": [
+        149,
+        152,
+        153,
+        154,
+        150,
+        155,
+        156
+      ],
+      "exit": "Given an authorized, revisioned technical corpus, Praxis extracts supported code/disassembly structure, reconciles evidence and contradictions, and answers multi-source mechanism questions with verified citations or an explicit abstention. Re-run evaluates local models, failures, cost and revoked sources."
+    },
+    {
+      "id": "L5",
+      "name": "Typed connected history, scoped tools and conversational voice",
+      "issues": [
+        151,
+        157,
+        158,
+        159,
+        162,
+        160,
+        161
+      ],
+      "exit": "One explicitly authorized typed connector demonstrates incremental history, replay, revocation and provenance without unnecessary AI classification; proposed agent tools require independently enforced approval. Conversational offline voice remains a separately verified user interaction, not a mandatory connector feature."
     }
   ]
 }
