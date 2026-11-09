@@ -1,9 +1,42 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Praxis.Storage;
 
 internal readonly struct DesktopRequestFields(JsonElement root)
 {
+    public IReadOnlyList<MonthlyBudgetTarget> BudgetTargets()
+    {
+        if (!root.TryGetProperty("targets", out var value) ||
+            value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > 50)
+        {
+            throw new ArgumentException("Budget targets must be a bounded array.");
+        }
+
+        var targets = new List<MonthlyBudgetTarget>(value.GetArrayLength());
+        foreach (var entry in value.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object ||
+                !entry.TryGetProperty("category", out var category) ||
+                category.ValueKind != JsonValueKind.String ||
+                category.GetString() is not { Length: > 0 and <= 80 } name ||
+                !entry.TryGetProperty("target", out var target) ||
+                target.ValueKind != JsonValueKind.String ||
+                target.GetString() is not { } amount ||
+                amount.Length is < 1 or > 40 ||
+                !decimal.TryParse(amount, NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture, out var parsed) ||
+                parsed < 0m || parsed > 1_000_000_000m)
+            {
+                throw new ArgumentException("Budget targets contain invalid typed values.");
+            }
+
+            targets.Add(new MonthlyBudgetTarget(name, parsed));
+        }
+
+        return targets;
+    }
+
     public bool RequireBoolean(string property)
     {
         if (!root.TryGetProperty(property, out var value) ||

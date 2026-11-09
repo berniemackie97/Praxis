@@ -24,6 +24,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalTopicProposals Topics { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
+    public LocalFinancialEvidence Finance { get; }
     public LocalCatalogRecovery Recovery { get; }
 
     private LocalCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
@@ -43,6 +44,7 @@ public sealed class LocalCatalog : IDisposable
         Topics = new LocalTopicProposals(database);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
+        Finance = new LocalFinancialEvidence(Sources, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
     }
 
