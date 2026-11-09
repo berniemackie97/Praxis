@@ -207,6 +207,26 @@ public sealed class LocalMediaInspectionTests : IDisposable
         Assert.Null(recognized.DurationMilliseconds);
     }
 
+    [Fact]
+    public void VersionOneIsoMovieHeaderUsesItsSixtyFourBitTimebaseFields()
+    {
+        var media = new byte[64];
+        FastStartMovie().AsSpan(0, 16).CopyTo(media);
+        BinaryPrimitives.WriteUInt32BigEndian(media.AsSpan(16, 4), 48);
+        "moov"u8.CopyTo(media.AsSpan(20, 4));
+        BinaryPrimitives.WriteUInt32BigEndian(media.AsSpan(24, 4), 40);
+        "mvhd"u8.CopyTo(media.AsSpan(28, 4));
+        media[32] = 1;
+        BinaryPrimitives.WriteUInt32BigEndian(media.AsSpan(52, 4), 1_000);
+        BinaryPrimitives.WriteUInt64BigEndian(media.AsSpan(56, 8), 25_000);
+        Assert.Equal(25_000L, LocalMediaHeaderParser.Read(media, ".mp4")
+            .DurationMilliseconds);
+
+        BinaryPrimitives.WriteUInt64BigEndian(media.AsSpan(56, 8),
+            ulong.MaxValue);
+        Assert.Null(LocalMediaHeaderParser.Read(media, ".mp4").DurationMilliseconds);
+    }
+
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, byte[] content, string requestKey)
     {
