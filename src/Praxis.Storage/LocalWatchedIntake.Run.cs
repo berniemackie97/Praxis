@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Praxis.Storage;
 
 public sealed partial class LocalWatchedIntake
@@ -32,7 +34,7 @@ public sealed partial class LocalWatchedIntake
         watcher.Error += error;
         watcher.EnableRaisingEvents = true;
 
-        report("Watching the approved intake directory: " + root);
+        report("Watching the approved intake directory: " + JsonSerializer.Serialize(root));
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -43,15 +45,15 @@ public sealed partial class LocalWatchedIntake
                 }
                 catch (IOException exception)
                 {
-                    report("Intake scan failed; will retry: " + exception.Message);
+                    report("Intake scan failed; will retry: " + JsonSerializer.Serialize(exception.Message));
                 }
                 catch (UnauthorizedAccessException exception)
                 {
-                    report("Intake scan was denied; will retry: " + exception.Message);
+                    report("Intake scan was denied; will retry: " + JsonSerializer.Serialize(exception.Message));
                 }
                 catch (InvalidDataException exception)
                 {
-                    report("Intake scan rejected unsafe input: " + exception.Message);
+                    report("Intake scan rejected unsafe input: " + JsonSerializer.Serialize(exception.Message));
                 }
 
                 await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
