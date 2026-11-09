@@ -84,7 +84,8 @@ public sealed class LocalMonthlyBudgetAnalyzer(LocalCatalog catalog)
                 kind is not ("income" or "expense" or "bill" or "refund" or "transfer") ||
                 currency != "USD" ||
                 category.Length is < 1 or > 80 || category.Any(char.IsControl) ||
-                description.Length is < 1 or > 200 || description.Any(char.IsControl) ||
+                description.Length is < 1 or > 200 ||
+                description.Any(c => char.IsControl(c) && c is not ('\n' or '\r' or '\t')) ||
                 status is not ("posted" or "pending" or "estimated") ||
                 (kind == "bill") != (status == "estimated"))
             {
