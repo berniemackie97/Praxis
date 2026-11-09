@@ -31,6 +31,7 @@ public sealed partial class LocalWatchedIntake
                     {
                         watcher.Dispose();
                         watcher = null;
+                        ClearPendingRenames();
                         report("Watched directory is offline; captured originals are retained.");
                     }
                 }
@@ -38,6 +39,7 @@ public sealed partial class LocalWatchedIntake
                 {
                     watcher?.Dispose();
                     watcher = null;
+                    ClearPendingRenames();
                     try
                     {
                         if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
@@ -123,7 +125,8 @@ public sealed partial class LocalWatchedIntake
                            NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime
         };
         FileSystemEventHandler changed = (_, _) => Signal();
-        RenamedEventHandler renamed = (_, _) => Signal();
+        RenamedEventHandler renamed = (_, change) =>
+            QueueRename(change.OldFullPath, change.FullPath);
         ErrorEventHandler error = (_, _) =>
         {
             Interlocked.Exchange(ref watcherFaulted, 1);

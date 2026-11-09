@@ -70,6 +70,7 @@ public sealed partial class LocalWatchedIntake
         {
             var files = intake.InspectFolder(root, MaximumFiles, MaximumDepth,
                 MaximumFolderBytes, cancellationToken);
+            await ReconcileRenamesAsync(files, cancellationToken);
             var present = files.Select(file => file.SourcePath)
                 .ToHashSet(StringComparer.Ordinal);
             var removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
