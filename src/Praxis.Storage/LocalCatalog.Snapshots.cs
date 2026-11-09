@@ -145,7 +145,7 @@ public sealed partial class LocalCatalog
         CancellationToken cancellationToken)
     {
         if (manifest.FormatVersion != SnapshotFormatVersion ||
-            manifest.CatalogVersion is not (2 or 3 or CurrentSchemaVersion) ||
+            manifest.CatalogVersion is not (2 or 3 or 4 or CurrentSchemaVersion) ||
             manifest.Objects is null ||
             manifest.Objects.Count > MaximumSnapshotObjects ||
             !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)

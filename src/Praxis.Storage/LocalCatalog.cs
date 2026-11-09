@@ -4,7 +4,7 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private static readonly (string Name, string Columns)[] Tables =
     [
         ("original_objects", "digest, byte_length, recorded_utc"),
@@ -13,7 +13,8 @@ public sealed partial class LocalCatalog : IDisposable
         ("item_versions", "item_id, revision, digest, observed_utc"),
         ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
         ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code"),
-        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc")
+        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc"),
+        ("search_index_keys", "rowid, item_id, revision, source_id")
     ];
 
     private readonly FileStream lockFile;
@@ -119,13 +120,21 @@ public sealed partial class LocalCatalog : IDisposable
                 processing.ExecuteNonQuery();
             }
 
-            using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
-            extraction.Transaction = transaction;
-            extraction.ExecuteNonQuery();
+            if (version < 4)
+            {
+                using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
+                extraction.Transaction = transaction;
+                extraction.ExecuteNonQuery();
+            }
+
+            using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
+            search.Transaction = transaction;
+            search.ExecuteNonQuery();
             transaction.Commit();
         }
 
         VerifySchema(database, CurrentSchemaVersion);
+        VerifySearchSchema(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
             "wal", StringComparison.OrdinalIgnoreCase))
         {
@@ -210,7 +219,8 @@ public sealed partial class LocalCatalog : IDisposable
         foreach (var (name, columns) in Tables)
         {
             if ((version < 3 && name == "processing_jobs") ||
-                (version < 4 && name == "text_derivatives"))
+                (version < 4 && name == "text_derivatives") ||
+                (version < 5 && name == "search_index_keys"))
             {
                 continue;
             }
@@ -236,6 +246,42 @@ public sealed partial class LocalCatalog : IDisposable
             {
                 throw new InvalidDataException("The catalog schema is incomplete.", exception);
             }
+        }
+    }
+
+    private static void VerifySearchSchema(SqliteConnection database)
+    {
+        foreach (var (kind, name) in new (string Kind, string Name)[]
+        {
+            ("table", "text_search"),
+            ("view", "eligible_text_search"),
+            ("trigger", "text_search_new_version"),
+            ("trigger", "text_search_source_revoked"),
+            ("trigger", "text_search_job_completed")
+        })
+        {
+            using var command = Command(database, """
+                SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
+                """);
+            command.Parameters.AddWithValue("$type", kind);
+            command.Parameters.AddWithValue("$name", name);
+            if (command.ExecuteScalar() is not string definition ||
+                (name == "text_search" &&
+                 !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException("The local search schema is incompatible.");
+            }
+        }
+
+        using var projection = Command(database,
+            "SELECT locator, content FROM text_search LIMIT 0");
+        try
+        {
+            using var reader = projection.ExecuteReader();
+        }
+        catch (SqliteException exception)
+        {
+            throw new InvalidDataException("The local search index is unavailable.", exception);
         }
     }
 
