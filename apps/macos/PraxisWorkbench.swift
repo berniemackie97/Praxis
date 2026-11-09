@@ -131,6 +131,7 @@ final class Workbench: ObservableObject {
         }
         send("library", fields)
         send("collections", ["limit": 100])
+        if let selected { send("topics", ["sourceId": selected.sourceId]) }
     }
 
     func saveNote() {
