@@ -52,9 +52,9 @@ jobs:
         if: matrix.os == 'macOS'
         run: bash scripts/macos/test-worker-session.sh
       - run: node --version
-      - run: node --check integrations/obsidian/main.js
-      - run: node --check integrations/obsidian/archive-session.js
-      - run: node --check integrations/obsidian/cli-process.js
+      - run: node --check integrations/obsidian/src/main.js
+      - run: node --check integrations/obsidian/src/archive-session.js
+      - run: node --check integrations/obsidian/src/cli-process.js
       - run: node --test integrations/obsidian/test/archive-session.test.js
       - run: node --check integrations/obsidian/scripts/package.js
       - run: node integrations/obsidian/scripts/package.js artifacts/obsidian/praxis-vault

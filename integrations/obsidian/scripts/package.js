@@ -6,9 +6,9 @@ const { randomUUID } = require('node:crypto');
 
 const root = path.resolve(__dirname, '..');
 const modules = [
-    ['cli-process', 'cli-process.js'],
-    ['archive-session', 'archive-session.js'],
-    ['main', 'main.js']
+    ['cli-process', 'src/cli-process.js'],
+    ['archive-session', 'src/archive-session.js'],
+    ['main', 'src/main.js']
 ];
 const externals = new Set([
     'obsidian', 'node:path', 'node:crypto', 'node:fs/promises', 'node:child_process'

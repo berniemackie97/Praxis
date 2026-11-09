@@ -5,8 +5,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { ArchiveSession } = require('../archive-session');
-const { runVaultCli } = require('../cli-process');
+const { ArchiveSession } = require('../src/archive-session');
+const { runVaultCli } = require('../src/cli-process');
 
 const Assembly = path.resolve('tools/Praxis.VaultCli/bin/Release/net10.0/Praxis.VaultCli.dll');
 
