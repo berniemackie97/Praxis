@@ -116,11 +116,18 @@ private final class Workbench: ObservableObject {
             process.standardError = stderr
             stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let bytes = handle.availableData
+                if bytes.isEmpty {
+                    handle.readabilityHandler = nil
+                    return
+                }
                 DispatchQueue.main.async { self?.receive(bytes) }
             }
             stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
                 let bytes = handle.availableData
-                guard !bytes.isEmpty else { return }
+                if bytes.isEmpty {
+                    handle.readabilityHandler = nil
+                    return
+                }
                 DispatchQueue.main.async {
                     self?.message = String(decoding: bytes.prefix(2048), as: UTF8.self)
                 }
