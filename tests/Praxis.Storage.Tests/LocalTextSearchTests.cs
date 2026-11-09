@@ -46,6 +46,8 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.EndsWith("journal.md", hit.SourceLocator, StringComparison.Ordinal);
         Assert.Contains("⟦violet⟧", hit.Snippet, StringComparison.OrdinalIgnoreCase);
         Assert.True(hit.Snippet.Length <= 480);
+        Assert.Contains("⟦journal⟧", Assert.Single(catalog.SearchText("journal")).Snippet,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Empty(catalog.SearchText("absent"));
         Assert.Empty(catalog.SearchText("kitchen violet"));
 
