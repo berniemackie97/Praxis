@@ -551,6 +551,7 @@
       101,
       102,
       103,
+      105,
       106,
       108,
       113,
@@ -794,7 +795,7 @@
         166,
         130
       ],
-      "exit": "On the owner's Mac, open Praxis, automatically capture approved files and typed/pasted notes, preserve and retrieve verified original bytes through an explicit owner-selected no-overwrite export, inspect/search sources, organize collections and recover the catalog without Obsidian, external inference or private HTTP; demonstrate fault handling and denied access."
+      "exit": "On the owner's Mac, start Praxis, monitor the approved Inbox with visible healthy/offline/degraded/paused states and recovery actions, capture folders and typed notes, preserve and verify original bytes and export them on request, inspect/search and organize the catalog without Obsidian, remote inference or private HTTP; demonstrate failure recovery, integrity and denied access."
     },
     {
       "id": "L1",
