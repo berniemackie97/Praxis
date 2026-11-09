@@ -202,6 +202,71 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task OfflineApprovedIntakeResumesAfterDirectoryReturns()
+    {
+        var removable = Path.Combine(workspace, "offline");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var monitor = new LocalWatchedIntake(catalog, removable,
+            TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+        using var cancellation = new CancellationTokenSource();
+        var running = monitor.RunAsync(cancellation.Token);
+        try
+        {
+            await Task.Delay(200);
+            Assert.False(Directory.Exists(removable));
+            Directory.CreateDirectory(removable);
+            File.WriteAllText(Path.Combine(removable, "resumed.md"), "violet reconnected");
+            await WaitForAsync(() =>
+                catalog.ListLibrary().FirstOrDefault()?.ProcessingState == "completed");
+            Assert.Single(catalog.SearchText("reconnected"));
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
+    [Fact]
+    public async Task OfflineWatcherStillDrainsPreviouslyQueuedProcessing()
+    {
+        var outside = Path.Combine(workspace, "queued.txt");
+        File.WriteAllText(outside, "violet from existing queue");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var original = await new LocalSourceIntake(catalog)
+            .ImportFileAsync(outside, 100, "offline-queued");
+        Assert.Equal("queued", Assert.Single(catalog.ListProcessingJobs()).State);
+
+        var monitor = new LocalWatchedIntake(
+            catalog, Path.Combine(workspace, "not-mounted"),
+            TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+        using var cancellation = new CancellationTokenSource();
+        var running = monitor.RunAsync(cancellation.Token);
+        try
+        {
+            await WaitForAsync(() =>
+                catalog.ReadTextDerivative(original.ItemId, 1)?.Outcome == "completed");
+            Assert.Equal(original.ItemId, Assert.Single(catalog.SearchText("violet")).ItemId);
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.True(condition(), "The local intake worker did not converge.");
+    }
+
     private LocalWatchedIntake NewMonitor(
         LocalCatalog catalog, TimeSpan? quietPeriod = null, TimeSpan? scanInterval = null) =>
         new(catalog, inbox, quietPeriod ?? TimeSpan.FromSeconds(1),
