@@ -276,8 +276,8 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.Equal("completed", derivative.Outcome);
         Assert.Equal(content, derivative.Content);
         Assert.Equal(source.Sha256, derivative.SourceSha256);
-        var hit = Assert.Single(catalog.SearchText("ParseTriangleMesh").Where(
-            hit => hit.SourceId == source.SourceId));
+        var hit = Assert.Single(catalog.SearchText("ParseTriangleMesh"),
+            result => result.SourceId == source.SourceId);
         Assert.Equal(source.ItemId, hit.ItemId);
         Assert.Equal(source.Sha256, hit.OriginalSha256);
         await catalog.VerifyOriginalAsync(source.ItemId);
@@ -372,7 +372,9 @@ public sealed class LocalTextProcessorTests : IDisposable
     {
         using var database = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = databasePath, Mode = SqliteOpenMode.ReadWrite, Pooling = false
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false
         }.ToString());
         database.Open();
         using var transaction = database.BeginTransaction();
