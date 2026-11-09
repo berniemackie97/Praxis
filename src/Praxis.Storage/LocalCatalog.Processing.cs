@@ -105,7 +105,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            ExpireAttemptLimitedJobs(now, maxAttempts, transaction);
+            ExpireAttemptLimitedJobs(now, maxAttempts, processorKey, transaction);
             using var select = Command(connection, """
                 SELECT j.item_id, j.revision, j.processor_key
                 FROM processing_jobs j
@@ -295,17 +295,18 @@ public sealed partial class LocalCatalog
     }
 
     private void ExpireAttemptLimitedJobs(
-        string now, int maxAttempts, SqliteTransaction transaction)
+        string now, int maxAttempts, string? processorKey, SqliteTransaction transaction)
     {
         using var command = Command(connection, """
             UPDATE processing_jobs
             SET state = 'failed', failure_code = 'attempt_limit',
                 lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
-            WHERE attempt >= $maximum AND
-                (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
+            WHERE attempt >= $maximum AND ($processor IS NULL OR processor_key = $processor)
+                AND (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
             """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$maximum", maxAttempts);
+        command.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", now);
         command.ExecuteNonQuery();
     }
