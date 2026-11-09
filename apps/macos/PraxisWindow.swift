@@ -259,41 +259,50 @@ struct PraxisWindow: View {
     }
 
     private var topicReview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Review suggested topics").font(.headline)
-            Text("Only literal Markdown headings are proposed. These are not accepted facts or collection assignments.")
-                .font(.caption).foregroundStyle(.secondary)
-            ForEach(model.topicProposals) { proposal in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(proposal.value).fontWeight(.medium)
-                    Text("Evidence: \(proposal.evidence) · \(proposal.producer) · \(proposal.status)")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if let correction = proposal.correction {
-                        Text("Owner correction: \(correction)").font(.caption)
-                    }
-                    HStack {
-                        Button("Accept") { model.reviewTopic(proposal, decision: "accepted") }
-                        Button("Reject") { model.reviewTopic(proposal, decision: "rejected") }
-                    }
-                }
-            }
-            if !model.topicProposals.isEmpty {
-                HStack {
-                    TextField("Correct selected topic text", text: $correctedTopic)
-                        .textFieldStyle(.roundedBorder)
-                    Menu("Correct…") {
+        DisclosureGroup("Suggested topics (\(model.topicProposals.count))") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Candidates come from literal Markdown headings, not a model. Reviewing them does not rewrite a source or assign a collection.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(model.topicProposals) { proposal in
-                            Button(proposal.value) {
-                                model.reviewTopic(proposal, decision: "corrected",
-                                    correction: correctedTopic)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(proposal.value).fontWeight(.medium)
+                                Text("Evidence: \(proposal.evidence) · \(proposal.producer) · \(proposal.status)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                if let correction = proposal.correction {
+                                    Text("Owner correction: \(correction)").font(.caption)
+                                }
+                                HStack {
+                                    Button("Accept") {
+                                        model.reviewTopic(proposal, decision: "accepted")
+                                    }
+                                    Button("Reject") {
+                                        model.reviewTopic(proposal, decision: "rejected")
+                                    }
+                                }
                             }
-                            .disabled(correctedTopic.trimmingCharacters(
-                                in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
-                    .disabled(correctedTopic.trimmingCharacters(
-                        in: .whitespacesAndNewlines).isEmpty ||
-                        correctedTopic.count > 80)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 165)
+                if !model.topicProposals.isEmpty {
+                    HStack {
+                        TextField("Correct topic text", text: $correctedTopic)
+                            .textFieldStyle(.roundedBorder)
+                        Menu("Correct…") {
+                            ForEach(model.topicProposals) { proposal in
+                                Button(proposal.value) {
+                                    model.reviewTopic(proposal, decision: "corrected",
+                                        correction: correctedTopic)
+                                }
+                            }
+                        }
+                        .disabled(correctedTopic.trimmingCharacters(
+                            in: .whitespacesAndNewlines).isEmpty ||
+                            correctedTopic.count > 80)
+                    }
                 }
             }
         }
