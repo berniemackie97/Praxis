@@ -37,7 +37,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual({99, 100, 129}, dependencies[107])
         self.assertEqual(set(), dependencies[36])
         self.assertEqual([23], self.plan["dependency_removals"]["36"])
-        self.assertEqual({100, 101, 102, 103, 106, 108, 113, 129, 146, 166}, dependencies[130])
+        self.assertEqual({100, 101, 102, 103, 105, 106, 108, 113, 129, 146, 166}, dependencies[130])
         self.assertEqual(59, items[126]["parent"])
         self.assertEqual(59, items[128]["parent"])
         self.assertEqual(64, items[129]["parent"])

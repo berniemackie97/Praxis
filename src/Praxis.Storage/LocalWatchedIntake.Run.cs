@@ -15,8 +15,18 @@ public sealed partial class LocalWatchedIntake
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                if (IsPaused)
+                {
+                    SetState("paused", "New file capture is paused by the owner.");
+                    await ProcessPendingAsync(cancellationToken);
+                    await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
+                    Interlocked.Exchange(ref wakePending, 0);
+                    continue;
+                }
+
                 if (!Directory.Exists(root))
                 {
+                    SetState("offline", OfflineProblem);
                     if (watcher is not null)
                     {
                         watcher.Dispose();
@@ -37,18 +47,22 @@ public sealed partial class LocalWatchedIntake
 
                         Interlocked.Exchange(ref watcherFaulted, 0);
                         watcher = CreateWatcher();
+                        SetState("resuming");
                         report("Watching the approved directory: " + JsonSerializer.Serialize(root));
                     }
                     catch (IOException exception)
                     {
+                        SetState("degraded", "Filesystem notifications are unavailable; polling and retrying: " + exception.Message);
                         report("Watcher setup will retry: " + JsonSerializer.Serialize(exception.Message));
                     }
                     catch (UnauthorizedAccessException exception)
                     {
+                        SetState("degraded", "Watcher access denied: " + exception.Message);
                         report("Watcher setup denied: " + JsonSerializer.Serialize(exception.Message));
                     }
                     catch (InvalidDataException exception)
                     {
+                        SetState("degraded", "Watcher configuration rejected: " + exception.Message);
                         report("Watcher setup rejected: " + JsonSerializer.Serialize(exception.Message));
                     }
                 }
@@ -61,20 +75,29 @@ public sealed partial class LocalWatchedIntake
                 }
                 catch (IOException exception)
                 {
+                    var offline = !Directory.Exists(root);
+                    SetState(offline ? "offline" : "degraded",
+                        offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
                     report("Intake scan will retry: " + JsonSerializer.Serialize(exception.Message));
                 }
                 catch (UnauthorizedAccessException exception)
                 {
+                    SetState("degraded", "Intake scan access denied: " + exception.Message);
                     report("Intake scan denied: " + JsonSerializer.Serialize(exception.Message));
                 }
                 catch (InvalidDataException exception)
                 {
+                    SetState("degraded", "Intake scan rejected input: " + exception.Message);
                     report("Intake scan rejected input: " + JsonSerializer.Serialize(exception.Message));
                 }
 
                 if (!completedScan)
                 {
                     await ProcessPendingAsync(cancellationToken);
+                }
+                else if (watcher is null && Directory.Exists(root))
+                {
+                    SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
                 }
 
                 await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
@@ -87,6 +110,7 @@ public sealed partial class LocalWatchedIntake
         finally
         {
             watcher?.Dispose();
+            SetState("stopped");
         }
     }
 

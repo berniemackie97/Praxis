@@ -3,7 +3,8 @@ using System.Text.Json;
 namespace Praxis.Storage;
 
 public sealed class LocalDesktopProtocol(
-    LocalCatalog catalog, LocalQuickCapture? quickCapture = null)
+    LocalCatalog catalog, LocalQuickCapture? quickCapture = null,
+    LocalWatchedIntake? monitor = null)
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -103,6 +104,18 @@ public sealed class LocalDesktopProtocol(
                         ReadString(root, "destinationPath", 4_096),
                         cancellationToken)
                 },
+                "intakeStatus" => new
+                {
+                    status = RequireMonitor().Snapshot()
+                },
+                "intakePause" => new
+                {
+                    status = RequireMonitor().SetPaused(ReadBoolean(root, "paused"))
+                },
+                "intakeRescan" => new
+                {
+                    status = RequireMonitor().RequestRescan()
+                },
                 "preview" => Preview(root),
                 "verify" => await VerifyAsync(root, cancellationToken),
                 "retry" => new
@@ -131,6 +144,20 @@ public sealed class LocalDesktopProtocol(
                 requestId, ok = false, error = exception.Message
             }, JsonOptions);
         }
+    }
+
+    private LocalWatchedIntake RequireMonitor() =>
+        monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+
+    private static bool ReadBoolean(JsonElement root, string property)
+    {
+        if (!root.TryGetProperty(property, out var value) ||
+            value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new ArgumentException($"The {property} field must be true or false.");
+        }
+
+        return value.GetBoolean();
     }
 
     private object Preview(JsonElement root)

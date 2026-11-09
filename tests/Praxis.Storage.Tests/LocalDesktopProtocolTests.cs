@@ -286,6 +286,52 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.False(File.Exists(Path.Combine(exports, "blocked.bin")));
     }
 
+    [Fact]
+    public async Task TrustedDesktopCanInspectPauseResumeAndRetrySupervisedIntake()
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(root);
+        var intake = new LocalWatchedIntake(catalog,
+            Path.Combine(root, "not-started"), TimeSpan.Zero);
+        var service = new LocalDesktopProtocol(catalog, monitor: intake);
+
+        using var initial = await Send(service,
+            """{"requestId":"initial","action":"intakeStatus"}""");
+        Assert.Equal("starting", initial.RootElement.GetProperty("data")
+            .GetProperty("status").GetProperty("state").GetString());
+
+        using var paused = await Send(service,
+            """{"requestId":"pause","action":"intakePause","paused":true}""");
+        Assert.True(paused.RootElement.GetProperty("ok").GetBoolean());
+        Assert.True(paused.RootElement.GetProperty("data")
+            .GetProperty("status").GetProperty("paused").GetBoolean());
+
+        using var retried = await Send(service,
+            """{"requestId":"retry","action":"intakeRescan"}""");
+        Assert.Equal("paused", retried.RootElement.GetProperty("data")
+            .GetProperty("status").GetProperty("state").GetString());
+
+        using var resumed = await Send(service,
+            """{"requestId":"resume","action":"intakePause","paused":false}""");
+        Assert.False(resumed.RootElement.GetProperty("data")
+            .GetProperty("status").GetProperty("paused").GetBoolean());
+
+        using var malformed = await Send(service,
+            """{"requestId":"malformed","action":"intakePause","paused":"true"}""");
+        Assert.False(malformed.RootElement.GetProperty("ok").GetBoolean());
+
+        var unconfigured = new LocalDesktopProtocol(catalog);
+        using var denied = await Send(unconfigured,
+            """{"requestId":"denied","action":"intakeStatus"}""");
+        Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]

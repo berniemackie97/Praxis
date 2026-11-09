@@ -126,3 +126,10 @@ This establishes the authoritative proposal lifecycle required by later local-mo
 The first-party Library now has a draft explicit export path for preserved originals. It retrieves the current active source version from the canonical object store, streams and hashes exact bytes, and performs owner-selected atomic no-overwrite publication. Unsupported file formats, and items whose physical watched source path has gone offline, retain their original bytes as long as the canonical source remains active. This removes the need to browse Praxis's private SHA-256 storage manually. A revoked or superseded source cannot be exported as a current active source. The app uses the already established private child-process boundary; no external agent tools or network endpoints are added.
 
 The owner's deferred integrated smoke (#130) must validate the UI, error feedback, exact binary fidelity, denied destinations, physical-recovery behavior and current-version fences. The software PR is not itself a signed or verified MVP release.
+
+
+## First-use intake observability checkpoint (#105)
+
+The L0 application now includes a draft operator-visible health path for its single approved watched Inbox: watching/offline/degraded/paused states, last completed scan, per-session capture counts and bounded file-specific errors, plus user-triggered pause, resume and retry scan. It reuses the existing watcher, catalog and private worker protocol; no second importer, untrusted local API, source reset or inference service is introduced.
+
+The owner acceptance exercise must demonstrate a missing Inbox before launch, reconnection and catch-up, an intentionally unreadable or invalid file, restoration of healthy status after correction, pause while files change, resumption and capture, preserved originals and active search while the Inbox is offline, and non-destructive retry. These tests have not yet run on hardware; #105/#130 are not complete.
