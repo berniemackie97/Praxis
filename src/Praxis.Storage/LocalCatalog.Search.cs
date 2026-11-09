@@ -95,11 +95,13 @@ public sealed partial class LocalCatalog
             using (var reader = count.ExecuteReader())
             {
                 reader.Read();
-                eligible = reader.GetInt32(0);
-                if (eligible > maxDocuments || reader.GetInt64(1) > maxTextBytes)
+                var documentCount = reader.GetInt64(0);
+                if (documentCount > maxDocuments || reader.GetInt64(1) > maxTextBytes)
                 {
                     throw new InvalidOperationException("The rebuild exceeds its data budget.");
                 }
+
+                eligible = (int)documentCount;
             }
 
             using var clear = Command(connection, "DELETE FROM text_search");
