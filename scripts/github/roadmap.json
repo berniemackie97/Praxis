@@ -33,7 +33,7 @@
     {
       "stage": "M5",
       "title": "M5 — Authorized intelligence",
-      "description": "Integrated local-first knowledge intelligence: reviewable technical facts/relationships, hybrid retrieval, source-cited investigated answers, scoped task execution, evaluated local inference and authorized provider routing. Intelligent MVP owner-run release gate #170."
+      "description": "General-purpose grounded knowledge intelligence and agentic reasoning across supported technical, multimedia and structured personal sources; evaluated answers and artifacts, authorized tasks and source-aware citations. True cross-domain MVP gate #170."
     },
     {
       "stage": "M6",
@@ -306,6 +306,16 @@
         158,
         159,
         162
+      ]
+    },
+    {
+      "issue": 176,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        177,
+        178,
+        179
       ]
     }
   ],
@@ -639,7 +649,9 @@
       150,
       171,
       172,
-      173
+      173,
+      176,
+      179
     ],
     "171": [
       22,
@@ -662,6 +674,27 @@
       150,
       160,
       143
+    ],
+    "177": [
+      114,
+      103,
+      106,
+      29,
+      31,
+      32,
+      33
+    ],
+    "178": [
+      103,
+      115,
+      32,
+      33
+    ],
+    "179": [
+      177,
+      178,
+      156,
+      29
     ]
   },
   "priorities": {
@@ -755,7 +788,11 @@
     "170": "P1",
     "171": "P1",
     "172": "P1",
-    "173": "P1"
+    "173": "P1",
+    "176": "P1",
+    "177": "P1",
+    "178": "P1",
+    "179": "P1"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -998,7 +1035,7 @@
     },
     {
       "id": "L4",
-      "name": "Core MVP: deep technical extraction, relationship evidence and bounded investigations",
+      "name": "Technical knowledge slice within the cross-domain MVP",
       "issues": [
         149,
         152,
@@ -1008,7 +1045,7 @@
         155,
         156
       ],
-      "exit": "Given an authorized, revisioned technical corpus, Praxis extracts supported code/disassembly structure, reconciles evidence and contradictions, and answers multi-source mechanism questions with verified citations or an explicit abstention. Re-run evaluates local models, failures, cost and revoked sources."
+      "exit": "Process a supported versioned technical corpus, correlate evidence across code/disassembly/notes, answer a genuine technical question with citations or abstain. This is one of multiple required domains, not the definition of the entire MVP."
     },
     {
       "id": "L5",
@@ -1026,7 +1063,7 @@
     },
     {
       "id": "L6",
-      "name": "Integrated intelligent Second Brain MVP acceptance",
+      "name": "Integrated general-purpose intelligent Second Brain MVP",
       "issues": [
         31,
         32,
@@ -1040,9 +1077,13 @@
         170,
         171,
         172,
-        173
+        173,
+        176,
+        177,
+        178,
+        179
       ],
-      "exit": "Owner-run end-to-end proof: local intake and agent-assisted technical extraction, evidence-linked relationships, evaluated hybrid/structural RAG, source-cited answers/abstention, scoped planned task execution, Obsidian derived knowledge views, root/nested reviewed agent context projections, and measured local-first inference with explicit authorized cloud escalation; pass resilience, privacy and cost-control gates."
+      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured provider escalation, and reliability/privacy/revocation/cost tests."
     }
   ]
 }
