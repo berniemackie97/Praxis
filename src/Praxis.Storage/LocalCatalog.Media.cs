@@ -70,9 +70,7 @@ internal static class LocalMediaHeaderParser
     {
         if (extension is ".webm" or ".mkv")
         {
-            return header.Length >= 4 &&
-                header[0] == 0x1a && header[1] == 0x45 &&
-                header[2] == 0xdf && header[3] == 0xa3
+            return HasSupportedEbmlHeader(header, extension)
                 ? ("ebml", null) : (null, null);
         }
 
@@ -98,6 +96,45 @@ internal static class LocalMediaHeaderParser
         }
 
         return ("iso-bmff", ReadMovieDuration(header, (int)ftypLength));
+    }
+
+    private static bool HasSupportedEbmlHeader(
+        ReadOnlySpan<byte> header, string extension)
+    {
+        if (header.Length < 12 || header[0] != 0x1a || header[1] != 0x45 ||
+            header[2] != 0xdf || header[3] != 0xa3 ||
+            (header[4] & 0x80) == 0)
+        {
+            return false;
+        }
+
+        var size = header[4] & 0x7f;
+        if (size < 7 || size > header.Length - 5)
+        {
+            return false;
+        }
+
+        var body = header.Slice(5, size);
+        for (var i = 0; i <= body.Length - 3; i++)
+        {
+            if (body[i] != 0x42 || body[i + 1] != 0x82 ||
+                (body[i + 2] & 0x80) == 0)
+            {
+                continue;
+            }
+
+            var length = body[i + 2] & 0x7f;
+            if (i + 3 + length > body.Length)
+            {
+                return false;
+            }
+
+            var type = body.Slice(i + 3, length);
+            return type.SequenceEqual("webm"u8) ||
+                (extension == ".mkv" && type.SequenceEqual("matroska"u8));
+        }
+
+        return false;
     }
 
     private static long? ReadMovieDuration(ReadOnlySpan<byte> header, int offset)
@@ -145,13 +182,19 @@ internal static class LocalMediaHeaderParser
                 if (body[0] == 0)
                 {
                     timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(12, 4));
-                    duration = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(16, 4));
+                    var rawDuration = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(16, 4));
+                    if (rawDuration == uint.MaxValue)
+                    {
+                        return null;
+                    }
+
+                    duration = rawDuration;
                 }
                 else if (body[0] == 1 && body.Length >= 32)
                 {
                     timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(20, 4));
                     var rawDuration = BinaryPrimitives.ReadUInt64BigEndian(body.Slice(24, 8));
-                    if (rawDuration > long.MaxValue)
+                    if (rawDuration == ulong.MaxValue || rawDuration > long.MaxValue)
                     {
                         return null;
                     }
