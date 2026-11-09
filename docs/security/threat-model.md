@@ -77,6 +77,12 @@ Priority indicates what must be blocked before private remote data is accepted; 
 | T13 | High | Human error, malicious update or lost device creates unrecoverable destruction | Audit, immutable/versioned restore points, tested revoke and restore operations. [#40](https://github.com/berniemackie97/Praxis/issues/40), [#46](https://github.com/berniemackie97/Praxis/issues/46) |
 | T14 | Medium | Encrypted collections still expose timing, sizes, endpoints or device associations | Minimize metadata and log retention; document residual leakage. [#13](https://github.com/berniemackie97/Praxis/issues/13), [#50](https://github.com/berniemackie97/Praxis/issues/50) |
 
+## Approved owner-local caller architecture — #129
+
+The owner-approved decisions in [ADR 0021](../decisions/0021-owner-local-caller-security.md) select direct trusted first-party application calls (in-process initially), a **separate authenticated loopback boundary only for future integrations**, no ordinary-browser API access, future individually paired capture-only extensions, future separately authorized source-scoped read-only MCP agents, short-lived renewable and revocable credentials, and one isolated private store/runtime per OS user. The [security verification matrix](../testing/owner-local-caller-security.md) distinguishes the currently testable liveness-only API from the unimplemented listener, credential and OS isolation tests.
+
+This local policy does not grant remote hosting, account sharing, third-party data access, model inference, encrypted-at-rest protection, or recovery/key-custody decisions. Those remain open in #13/#50. The present `Praxis.Api` host still has only liveness and no implemented authentication; existing plaintext catalog permissions do not protect against same-user compromise, and Windows ACL and real OS-peer isolation need verification before private endpoints can ship.
+
 ## Additional local capture, browser, voice and agent boundaries (planned)
 
 These are requirements for future work, **not** evidence of implemented security controls:
