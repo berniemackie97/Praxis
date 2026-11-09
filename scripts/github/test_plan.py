@@ -55,8 +55,12 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual({101, 109, 111}, dependencies[26])
         self.assertNotIn(22, dependencies[26])
         self.assertEqual({14, 16, 102}, dependencies[27])
-        self.assertEqual([99, 122, 124, 126, 128, 100, 102, 101, 103, 106, 129, 107, 108, 130],
+        self.assertEqual([99, 122, 124, 126, 128, 100, 102, 101, 105, 103, 106, 129, 107, 108, 130],
                          self.plan["delivery_lanes"][0]["issues"])
+        self.assertEqual("P1", items[105]["priority"])
+        self.assertEqual({"from": "P2", "to": "P1"},
+                         self.plan["priority_migrations"]["105"])
+        self.assertNotIn(105, self.plan["delivery_lanes"][2]["issues"])
         self.assertEqual(57, items[94]["parent"])
         self.assertEqual("P1", items[94]["priority"])
         self.assertEqual(57, items[92]["parent"])
