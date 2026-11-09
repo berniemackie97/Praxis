@@ -5,13 +5,13 @@ using Xunit;
 
 namespace Praxis.Storage.Tests;
 
-public sealed class LocalTopicProposalTests : IDisposable
+public sealed class LocalHeadingProposalTests : IDisposable
 {
     private readonly string workspace = Path.Combine(Path.GetTempPath(),
         "praxis-topics-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 
-    public LocalTopicProposalTests()
+    public LocalHeadingProposalTests()
     {
         root = Path.Combine(workspace, "catalog");
         Directory.CreateDirectory(root);
@@ -33,9 +33,9 @@ public sealed class LocalTopicProposalTests : IDisposable
         var proposer = ProcessingDriver.Topics(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
-        Assert.Equal("generated", catalog.Topics.Outcome(captured.SourceId));
+        Assert.Equal("generated", catalog.Proposals.Outcome(captured.SourceId));
 
-        var proposals = catalog.Topics.List(captured.SourceId);
+        var proposals = catalog.Proposals.List(captured.SourceId);
         Assert.Equal(new[] { "Architecture", "Runtime" }, proposals.Select(p => p.Value).ToArray());
         foreach (var proposal in proposals)
         {
@@ -47,15 +47,15 @@ public sealed class LocalTopicProposalTests : IDisposable
             Assert.Equal("pending", proposal.Status);
         }
 
-        Assert.True(catalog.Topics.Review(proposals[0].ProposalId, "accepted"));
-        Assert.False(catalog.Topics.Review(proposals[0].ProposalId, "accepted"));
-        Assert.True(catalog.Topics.Review(proposals[0].ProposalId, "corrected",
+        Assert.True(catalog.Proposals.Review(proposals[0].ProposalId, "accepted"));
+        Assert.False(catalog.Proposals.Review(proposals[0].ProposalId, "accepted"));
+        Assert.True(catalog.Proposals.Review(proposals[0].ProposalId, "corrected",
             "System architecture"));
-        Assert.True(catalog.Topics.Review(proposals[1].ProposalId, "rejected"));
+        Assert.True(catalog.Proposals.Review(proposals[1].ProposalId, "rejected"));
         Assert.Equal(new[] { "corrected", "rejected" },
-            catalog.Topics.List(captured.SourceId).Select(p => p.Status).ToArray());
+            catalog.Proposals.List(captured.SourceId).Select(p => p.Status).ToArray());
         Assert.Equal("System architecture",
-            catalog.Topics.List(captured.SourceId)[0].Correction);
+            catalog.Proposals.List(captured.SourceId)[0].Correction);
         Assert.Equal(3L, Scalar("SELECT COUNT(*) FROM enrichment_reviews"));
         await catalog.Originals.VerifyAsync(captured.ItemId);
     }
@@ -67,27 +67,27 @@ public sealed class LocalTopicProposalTests : IDisposable
         var first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var old = Assert.Single(catalog.Topics.List(first.SourceId));
-        Assert.True(catalog.Topics.Review(old.ProposalId, "accepted"));
+        var old = Assert.Single(catalog.Proposals.List(first.SourceId));
+        Assert.True(catalog.Proposals.Review(old.ProposalId, "accepted"));
 
         var revised = await Capture(catalog, "topic.md", "# Updated\nRevised body", "two");
         Assert.Equal(first.ItemId, revised.ItemId);
         Assert.Equal(2, revised.Revision);
-        Assert.Empty(catalog.Topics.List(first.SourceId));
-        Assert.Equal("pending", catalog.Topics.Outcome(first.SourceId));
-        Assert.False(catalog.Topics.Review(old.ProposalId, "rejected"));
+        Assert.Empty(catalog.Proposals.List(first.SourceId));
+        Assert.Equal("pending", catalog.Proposals.Outcome(first.SourceId));
+        Assert.False(catalog.Proposals.Review(old.ProposalId, "rejected"));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var current = Assert.Single(catalog.Topics.List(first.SourceId));
+        var current = Assert.Single(catalog.Proposals.List(first.SourceId));
         Assert.Equal("Updated", current.Value);
         Assert.NotEqual(old.ProposalId, current.ProposalId);
         Assert.Equal("pending", current.Status);
         Assert.Equal(1L, Scalar("SELECT COUNT(*) FROM enrichment_reviews"));
 
         Assert.True(catalog.Sources.Revoke(first.SourceId));
-        Assert.Equal("unavailable", catalog.Topics.Outcome(first.SourceId));
-        Assert.Empty(catalog.Topics.List(first.SourceId));
-        Assert.False(catalog.Topics.Review(current.ProposalId, "accepted"));
+        Assert.Equal("unavailable", catalog.Proposals.Outcome(first.SourceId));
+        Assert.Empty(catalog.Proposals.List(first.SourceId));
+        Assert.False(catalog.Proposals.Review(current.ProposalId, "accepted"));
         Assert.Equal(2L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));
         await catalog.Originals.VerifyAsync(first.ItemId);
     }
@@ -104,8 +104,8 @@ public sealed class LocalTopicProposalTests : IDisposable
 
         Assert.True(catalog.Sources.Revoke(source.SourceId));
 
-        Assert.False(catalog.Topics.CommitCandidates(
-            lease, candidate, [new TopicEvidence("Fenced topic", 2)]));
+        Assert.False(catalog.Proposals.Commit(
+            lease, candidate, [new ProposalCandidate("topic", null, "Fenced topic", 2, 12)]));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_runs"));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));
         Assert.Equal("canceled", Scalar(
@@ -130,10 +130,10 @@ public sealed class LocalTopicProposalTests : IDisposable
         Assert.True(proposer.ProcessNext());
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
-        Assert.Empty(catalog.Topics.List(empty.SourceId));
-        Assert.Empty(catalog.Topics.List(plain.SourceId));
-        Assert.Equal("abstained", catalog.Topics.Outcome(empty.SourceId));
-        Assert.Equal("unsupported", catalog.Topics.Outcome(plain.SourceId));
+        Assert.Empty(catalog.Proposals.List(empty.SourceId));
+        Assert.Empty(catalog.Proposals.List(plain.SourceId));
+        Assert.Equal("abstained", catalog.Proposals.Outcome(empty.SourceId));
+        Assert.Equal("unsupported", catalog.Proposals.Outcome(plain.SourceId));
         Assert.Equal("abstained", Scalar(
             "SELECT outcome FROM enrichment_runs WHERE item_id = '" + empty.ItemId + "'"));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_proposals"));
@@ -156,20 +156,20 @@ public sealed class LocalTopicProposalTests : IDisposable
             var proposer = ProcessingDriver.Topics(catalog);
             Assert.True(proposer.ProcessNext());
             Assert.True(proposer.ProcessNext());
-            var firstProposal = Assert.Single(catalog.Topics.List(first.SourceId));
-            var secondProposal = Assert.Single(catalog.Topics.List(second.SourceId));
+            var firstProposal = Assert.Single(catalog.Proposals.List(first.SourceId));
+            var secondProposal = Assert.Single(catalog.Proposals.List(second.SourceId));
             Assert.NotEqual(firstProposal.ProposalId, secondProposal.ProposalId);
-            Assert.True(catalog.Topics.Review(firstProposal.ProposalId, "accepted"));
+            Assert.True(catalog.Proposals.Review(firstProposal.ProposalId, "accepted"));
             await catalog.Recovery.BackupAsync(backup, 20_000_000);
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using var restored = LocalCatalog.Open(target);
-        Assert.Equal(11, restored.SchemaVersion);
+        Assert.Equal(12, restored.SchemaVersion);
         Assert.Equal("accepted",
-            Assert.Single(restored.Topics.List(first.SourceId)).Status);
+            Assert.Single(restored.Proposals.List(first.SourceId)).Status);
         Assert.Equal("pending",
-            Assert.Single(restored.Topics.List(second.SourceId)).Status);
+            Assert.Single(restored.Proposals.List(second.SourceId)).Status);
         Assert.False(ProcessingDriver.Topics(restored).ProcessNext());
         await restored.Originals.VerifyAsync(first.ItemId);
         await restored.Originals.VerifyAsync(second.ItemId);
@@ -210,10 +210,10 @@ public sealed class LocalTopicProposalTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(root);
-        Assert.Equal(11, upgraded.SchemaVersion);
+        Assert.Equal(12, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
-        Assert.Empty(upgraded.Topics.List(Guid.NewGuid()));
+        Assert.Empty(upgraded.Proposals.List(Guid.NewGuid()));
         Assert.Equal(0L, Scalar("SELECT COUNT(*) FROM enrichment_runs"));
     }
 
@@ -246,17 +246,17 @@ public sealed class LocalTopicProposalTests : IDisposable
         var item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var candidate = Assert.Single(catalog.Topics.List(item.SourceId));
+        var candidate = Assert.Single(catalog.Proposals.List(item.SourceId));
         Assert.Throws<ArgumentException>(() =>
-            catalog.Topics.Review(candidate.ProposalId, "approved"));
+            catalog.Proposals.Review(candidate.ProposalId, "approved"));
         Assert.Throws<ArgumentException>(() =>
-            catalog.Topics.Review(candidate.ProposalId, "corrected", " "));
+            catalog.Proposals.Review(candidate.ProposalId, "corrected", " "));
         Assert.Throws<ArgumentException>(() =>
-            catalog.Topics.Review(candidate.ProposalId, "accepted", "unexpected"));
+            catalog.Proposals.Review(candidate.ProposalId, "accepted", "unexpected"));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            catalog.Topics.List(item.SourceId, 101));
-        Assert.False(catalog.Topics.Review(Guid.NewGuid(), "accepted"));
-        Assert.Equal("pending", Assert.Single(catalog.Topics.List(item.SourceId)).Status);
+            catalog.Proposals.List(item.SourceId, 101));
+        Assert.False(catalog.Proposals.Review(Guid.NewGuid(), "accepted"));
+        Assert.Equal("pending", Assert.Single(catalog.Proposals.List(item.SourceId)).Status);
     }
 
     private async Task<CapturedOriginal> Capture(

@@ -14,7 +14,7 @@ internal sealed class ProcessingDriver(LocalCatalog catalog, ILocalProcessingHan
         new(catalog, new LocalTextProcessor(catalog));
 
     internal static ProcessingDriver Topics(LocalCatalog catalog) =>
-        new(catalog, new LocalTopicProposer(catalog));
+        new(catalog, new LocalHeadingProposer(catalog));
 
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {

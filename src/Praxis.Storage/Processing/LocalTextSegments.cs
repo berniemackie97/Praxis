@@ -56,6 +56,36 @@ public sealed class LocalTextSegments
         });
     }
 
+    /// <summary>
+    /// Completed segment spans of one revision for a downstream processor that already holds a
+    /// verified copy of the text (see <see cref="LocalTextDerivatives.ReadLeasedInput"/>).
+    /// </summary>
+    internal IReadOnlyList<TextSegmentSpan> ReadCompleted(Guid itemId, int revision)
+    {
+        return database.Execute(connection =>
+        {
+            using var query = connection.CreateCommand("""
+                SELECT g.start_offset, g.length, g.heading_path
+                FROM text_segments g
+                JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
+                    AND j.processor_key = g.processor_key AND j.state = 'completed'
+                WHERE g.item_id = $item AND g.revision = $revision
+                ORDER BY g.ordinal
+                """);
+            query.Parameters.AddWithValue("$item", itemId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision);
+            using var reader = query.ExecuteReader();
+            var spans = new List<TextSegmentSpan>();
+            while (reader.Read())
+            {
+                spans.Add(new TextSegmentSpan(reader.GetInt32(0), reader.GetInt32(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2)));
+            }
+
+            return spans;
+        });
+    }
+
     /// <summary>Stores the segments and completes the leased job in one transaction.</summary>
     internal bool Commit(ProcessingLease lease, LeasedText input, IReadOnlyList<TextSegmentSpan> segments)
     {

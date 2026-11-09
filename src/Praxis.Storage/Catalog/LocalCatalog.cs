@@ -22,7 +22,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalTextDerivatives Text { get; }
     public LocalTextSegments Segments { get; }
     public LocalTextSearch Search { get; }
-    public LocalTopicProposals Topics { get; }
+    public LocalProposals Proposals { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
@@ -43,7 +43,7 @@ public sealed class LocalCatalog : IDisposable
         Text = new LocalTextDerivatives(database);
         Segments = new LocalTextSegments(database);
         Search = new LocalTextSearch(database);
-        Topics = new LocalTopicProposals(database);
+        Proposals = new LocalProposals(database);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);

@@ -190,7 +190,7 @@ public sealed class LocalTextSearchTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
         using var recovered = LocalCatalog.Open(destination);
-        Assert.Equal(11, recovered.SchemaVersion);
+        Assert.Equal(12, recovered.SchemaVersion);
         Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);
         Assert.Equal(1, recovered.Search.Rebuild());
         Assert.Equal(retained.SourceId, Assert.Single(recovered.Search.Query("violet")).SourceId);
@@ -242,7 +242,7 @@ public sealed class LocalTextSearchTests : IDisposable
         }
 
         using var upgraded = LocalCatalog.Open(dataRoot);
-        Assert.Equal(11, upgraded.SchemaVersion);
+        Assert.Equal(12, upgraded.SchemaVersion);
         var hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
         Assert.Equal(1, upgraded.Search.Rebuild());

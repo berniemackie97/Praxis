@@ -16,7 +16,12 @@ public sealed class LocalProcessingPipeline
     private readonly TimeSpan idlePoll;
     private readonly Action<string> report;
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
+    private static readonly TimeSpan MinimumBackoff = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaximumBackoff = TimeSpan.FromMinutes(10);
     private readonly HashSet<string> reopenExhausted = new(StringComparer.Ordinal);
+    private readonly Lock backoffGate = new();
+    private readonly Dictionary<string, (DateTimeOffset Until, TimeSpan Next)> backoff =
+        new(StringComparer.Ordinal);
     private int wakePending;
     private int nextHandler;
 
@@ -52,16 +57,30 @@ public sealed class LocalProcessingPipeline
         report = status ?? (_ => { });
     }
 
-    /// <summary>The deterministic local processors: extraction, heading proposals, segmentation.</summary>
+    /// <summary>
+    /// The local processors: extraction, heading proposals, segmentation and model enrichment
+    /// with the owner's configured local model (deferred while none is enabled).
+    /// </summary>
     public static LocalProcessingPipeline CreateDefault(
         LocalCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null) =>
         new(catalog,
-            [new LocalTextProcessor(catalog), new LocalTopicProposer(catalog), new LocalTextSegmenter(catalog)],
+            [
+                new LocalTextProcessor(catalog), new LocalHeadingProposer(catalog),
+                new LocalTextSegmenter(catalog), new LocalSemanticExtractor(catalog, ModelConnection.Open)
+            ],
             idlePoll, status);
 
-    /// <summary>Signals that new work may be available; coalesces repeated signals.</summary>
+    /// <summary>
+    /// Signals that new work may be available and clears runtime backoffs, so an owner action
+    /// such as enabling a model is retried immediately. Coalesces repeated signals.
+    /// </summary>
     public void Wake()
     {
+        lock (backoffGate)
+        {
+            backoff.Clear();
+        }
+
         if (Interlocked.CompareExchange(ref wakePending, 1, 0) == 0)
         {
             wakeSignal.Release();
@@ -72,7 +91,7 @@ public sealed class LocalProcessingPipeline
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var claimed = TryClaimNext(_ => true) ?? (ReopenWork() ? TryClaimNext(_ => true) : null);
+        var claimed = TryClaimNext(IsAvailable) ?? (ReopenWork() ? TryClaimNext(IsAvailable) : null);
         if (claimed is not { } job)
         {
             return false;
@@ -93,7 +112,8 @@ public sealed class LocalProcessingPipeline
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                while (TryClaimNext(handler => active[handler] < handler.MaxConcurrency) is { } job)
+                while (TryClaimNext(handler =>
+                    active[handler] < handler.MaxConcurrency && IsAvailable(handler)) is { } job)
                 {
                     active[job.Handler]++;
                     running.Add((ExecuteAsync(job.Handler, job.Lease, cancellationToken), job.Handler));
@@ -185,10 +205,18 @@ public sealed class LocalProcessingPipeline
         try
         {
             await handler.ProcessAsync(lease, cancellationToken);
+            ClearBackoff(handler);
         }
         catch (Exception) when (cancellationToken.IsCancellationRequested)
         {
             // Interrupted by shutdown: the lease expires and the job is reclaimed later.
+        }
+        catch (ProcessorUnavailableException unavailable)
+        {
+            catalog.Processing.Defer(lease);
+            var delay = BackOff(handler);
+            report($"Processor {handler.ProcessorKey} is waiting for its runtime " +
+                $"({unavailable.Code}); retrying in {delay.TotalSeconds:0} s or on the next wake.");
         }
         catch (Exception exception)
         {
@@ -197,6 +225,34 @@ public sealed class LocalProcessingPipeline
             catalog.Processing.Finish(lease, ProcessingCompletion.Failed, FaultCode);
             report($"Processor {handler.ProcessorKey} faulted on item {lease.ItemId:D} " +
                 $"revision {lease.Revision}: {exception.GetType().Name}");
+        }
+    }
+
+    private bool IsAvailable(ILocalProcessingHandler handler)
+    {
+        lock (backoffGate)
+        {
+            return !backoff.TryGetValue(handler.ProcessorKey, out var state) ||
+                state.Until <= DateTimeOffset.UtcNow;
+        }
+    }
+
+    private TimeSpan BackOff(ILocalProcessingHandler handler)
+    {
+        lock (backoffGate)
+        {
+            var delay = backoff.TryGetValue(handler.ProcessorKey, out var state) ? state.Next : MinimumBackoff;
+            var next = delay * 2 > MaximumBackoff ? MaximumBackoff : delay * 2;
+            backoff[handler.ProcessorKey] = (DateTimeOffset.UtcNow + delay, next);
+            return delay;
+        }
+    }
+
+    private void ClearBackoff(ILocalProcessingHandler handler)
+    {
+        lock (backoffGate)
+        {
+            backoff.Remove(handler.ProcessorKey);
         }
     }
 

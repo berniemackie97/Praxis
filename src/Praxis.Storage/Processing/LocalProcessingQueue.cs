@@ -289,6 +289,30 @@ public sealed class LocalProcessingQueue
         });
     }
 
+    /// <summary>
+    /// Returns a held lease's job to the queue and refunds the attempt it consumed, for work
+    /// that could not start because a runtime dependency was unavailable.
+    /// </summary>
+    public bool Defer(ProcessingLease lease)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        return database.Execute(connection =>
+        {
+            using var command = connection.CreateCommand("""
+                UPDATE processing_jobs
+                SET state = 'queued', attempt = MAX(attempt - 1, 0),
+                    lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
+                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                  AND state = 'running' AND lease_key = $lease
+                """);
+            ProcessingJobKey.BindLease(command, lease);
+            command.Parameters.AddWithValue("$now", now);
+            return command.ExecuteNonQuery() == 1;
+        });
+    }
+
     public bool Retry(Guid itemId, int revision, string processorKey)
     {
         ProcessingJobKey.Validate(itemId, revision, processorKey);

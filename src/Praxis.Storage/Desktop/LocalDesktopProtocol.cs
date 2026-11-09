@@ -101,13 +101,15 @@ public sealed class LocalDesktopProtocol(
                 "noteCapture" => await CaptureNoteAsync(fields, cancellationToken),
                 "topics" => new
                 {
-                    proposals = catalog.Topics.List(
+                    proposals = catalog.Proposals.List(
                         fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 40, 1, 100)),
-                    outcome = catalog.Topics.Outcome(fields.RequireGuid("sourceId"))
+                    outcome = catalog.Proposals.Outcome(fields.RequireGuid("sourceId")),
+                    semanticOutcome = catalog.Proposals.Outcome(
+                        fields.RequireGuid("sourceId"), LocalProcessors.SemanticExtraction)
                 },
                 "topicReview" => new
                 {
-                    reviewed = catalog.Topics.Review(
+                    reviewed = catalog.Proposals.Review(
                         fields.RequireGuid("proposalId"),
                         fields.RequireString("decision", 16),
                         fields.OptionalText("correction", 80, "The review correction is invalid."))
@@ -196,14 +198,19 @@ public sealed class LocalDesktopProtocol(
         return new { capture };
     }
 
-    private ModelProfile SaveModelProfile(DesktopRequestFields fields) =>
-        catalog.Models.Save(new ModelProfile(
+    private ModelProfile SaveModelProfile(DesktopRequestFields fields)
+    {
+        var saved = catalog.Models.Save(new ModelProfile(
             ModelProfile.LocalEnrichment,
             fields.RequireString("provider", 32),
             fields.RequireString("endpoint", 256),
             fields.RequireString("model", 200),
             fields.IntegerOrDefault("contextTokens", 16_384, 2_048, 262_144),
             fields.RequireBoolean("enabled")));
+        // A model change applies to the next job; waking clears any runtime backoff.
+        processing?.Wake();
+        return saved;
+    }
 
     private static async Task<IReadOnlyList<InstalledModel>> ListLocalModelsAsync(
         DesktopRequestFields fields, CancellationToken cancellationToken)
