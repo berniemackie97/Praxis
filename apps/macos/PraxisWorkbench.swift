@@ -17,6 +17,8 @@ final class Workbench: ObservableObject {
     @Published private(set) var hits: [SearchHit] = []
     @Published private(set) var videoClips: [VideoCue] = []
     @Published private(set) var budgetReport: MonthlyBudgetReport?
+    @Published private(set) var budgetScenario: BudgetScenario?
+    @Published var budgetTargetText: [String: String] = [:]
     @Published var budgetYear = Calendar.current.component(.year, from: Date())
     @Published var budgetMonth = Calendar.current.component(.month, from: Date())
     @Published private(set) var selected: LibraryItem?
@@ -227,7 +229,7 @@ final class Workbench: ObservableObject {
             return
         }
 
-        budgetReport = nil
+        clearBudgetResults()
         send("budgetSummary", [
             "sourceId": item.sourceId,
             "year": budgetYear,
@@ -235,7 +237,36 @@ final class Workbench: ObservableObject {
         ])
     }
 
+    func clearBudgetResults() {
+        budgetReport = nil
+        budgetScenario = nil
+        budgetTargetText.removeAll()
+    }
+
+    func previewBudgetScenario() {
+        guard let report = budgetReport,
+              let selected, selected.itemId == report.itemId,
+              selected.revision == report.revision,
+              selected.sha256 == report.sourceSha256,
+              selected.sourceStatus == "active" else {
+            message = "Reanalyze the current active CSV before previewing a budget."
+            return
+        }
+
+        let targets = budgetTargetText
+            .filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { ["category": $0.key, "target": $0.value] }
+        budgetScenario = nil
+        send("budgetScenario", [
+            "sourceId": report.sourceId,
+            "year": report.year,
+            "month": report.month,
+            "targets": targets
+        ])
+    }
+
     func select(_ item: LibraryItem) {
+        clearBudgetResults()
         selected = item
         preview = "Loading extracted text…"
         previewTarget = "\(item.itemId):\(item.revision)"
@@ -323,6 +354,11 @@ final class Workbench: ObservableObject {
                 requests[id] = "sourceCollections:\(sourceId)"
             } else if action == "library" {
                 requests[id] = "library:\(selectedCollectionId):\(page)"
+            } else if action == "budgetSummary" || action == "budgetScenario",
+                      let sourceId = fields["sourceId"] as? String,
+                      let year = fields["year"] as? Int,
+                      let month = fields["month"] as? Int {
+                requests[id] = "\(action):\(sourceId):\(year):\(month)"
             } else {
                 requests[id] = action
             }
@@ -352,7 +388,10 @@ final class Workbench: ObservableObject {
             guard reply.ok else {
                 if action == "noteCapture" { savingNote = false }
                 if action == "exportOriginal" { exportingOriginal = false }
-                if action == "budgetSummary" { budgetReport = nil }
+                if action.hasPrefix("budgetSummary:") ||
+                   action.hasPrefix("budgetScenario:") {
+                    clearBudgetResults()
+                }
                 message = reply.error ?? "The operation failed."
                 continue
             }
@@ -378,9 +417,18 @@ final class Workbench: ObservableObject {
             case let context where context.hasPrefix("library:"):
                 guard context == "library:\(selectedCollectionId):\(page)" else { continue }
                 items = reply.data?.items ?? []
-                if let previous = selected,
-                   let updated = items.first(where: { $0.itemId == previous.itemId }) {
-                    selected = updated
+                if let previous = selected {
+                    if let updated = items.first(where: { $0.itemId == previous.itemId }) {
+                        if updated.revision != previous.revision ||
+                            updated.sha256 != previous.sha256 ||
+                            updated.sourceStatus != "active" {
+                            clearBudgetResults()
+                        }
+                        selected = updated
+                    } else {
+                        clearBudgetResults()
+                        selected = nil
+                    }
                 }
             case "collections":
                 collections = reply.data?.collections ?? []
@@ -420,11 +468,23 @@ final class Workbench: ObservableObject {
                 if let selected { send("topics", ["sourceId": selected.sourceId]) }
             case "search": hits = reply.data?.hits ?? []
             case "mediaCues": videoClips = reply.data?.clips ?? []
-            case "budgetSummary":
+            case let context where context.hasPrefix("budgetSummary:"):
+                guard let selected,
+                      context == "budgetSummary:\(selected.sourceId):\(budgetYear):\(budgetMonth)",
+                      selected.sourceStatus == "active" else { continue }
                 budgetReport = reply.data?.budget
+                budgetScenario = nil
+                budgetTargetText.removeAll()
                 message = budgetReport == nil
                     ? "No budget report was returned."
-                    : "Verified source data summarized locally. Review pending and estimated amounts separately."
+                    : "Posted amounts are actual. Category targets are hypothetical and do not change transactions."
+            case let context where context.hasPrefix("budgetScenario:"):
+                guard let report = budgetReport,
+                      context == "budgetScenario:\(report.sourceId):\(report.year):\(report.month)" else { continue }
+                budgetScenario = reply.data?.scenario
+                message = budgetScenario == nil
+                    ? "No scenario result was returned."
+                    : "Illustrative comparison calculated locally; no expenses were changed."
             case let context where context.hasPrefix("preview:"):
                 if context == "preview:\(previewTarget)" {
                     preview = reply.data?.content ??
@@ -446,6 +506,10 @@ final class Workbench: ObservableObject {
                     ? "Processing retry queued." : "This source is not eligible for retry."
                 refresh()
             case "revoke":
+                if reply.data?.revoked == true {
+                    clearBudgetResults()
+                    selected = nil
+                }
                 message = reply.data?.revoked == true
                     ? "Source removed from active retrieval; original bytes retained."
                     : "This source is not active."
