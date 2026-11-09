@@ -431,7 +431,7 @@ struct PraxisWindow: View {
                         Text(report.plannedBills, format: .currency(code: report.currency))
                     }
                     GridRow {
-                        Text("Balance after planned bills")
+                        Text("Net after unpaid planned bills (not an account balance)")
                         Text(report.balanceAfterPlannedBills, format: .currency(code: report.currency))
                             .fontWeight(.semibold)
                     }
@@ -452,6 +452,53 @@ struct PraxisWindow: View {
                             }
                         }
                         Divider()
+                        Text("Try your own spending targets").font(.headline)
+                        Text("These targets compare with spending already posted. They describe a hypothetical comparable month, not money already saved. Praxis does not classify expenses as optional.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(Array(report.categories.filter {
+                            $0.postedSpending > 0
+                        }.prefix(50))) { category in
+                            HStack {
+                                Text(category.category)
+                                Spacer()
+                                Text("Observed: \(category.postedSpending.formatted(.currency(code: report.currency)))")
+                                    .font(.caption)
+                                TextField("Target USD", text: Binding(
+                                    get: { model.budgetTargetText[category.category] ?? "" },
+                                    set: { model.updateBudgetTarget(category: category.category, text: $0) }
+                                ))
+                                .frame(width: 110)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel("Spending target for \(category.category)")
+                            }
+                        }
+                        if report.categories.filter({ $0.postedSpending > 0 }).count > 50 {
+                            Text("Only the first 50 positive-spending categories can be edited in this preview.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Button("Preview budget scenario") {
+                            model.previewBudgetScenario()
+                        }
+                        .disabled(report.categories.allSatisfy { $0.postedSpending <= 0 })
+                        if let scenario = model.budgetScenario,
+                           scenario.itemId == report.itemId,
+                           scenario.revision == report.revision,
+                           scenario.sourceSha256 == report.sourceSha256 {
+                            Text("Illustrative scenario").font(.headline)
+                            Text("Observed net after unpaid bills: \(scenario.baselineNetAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
+                            Text("Hypothetical reduction: \(scenario.illustrativeReduction.formatted(.currency(code: scenario.currency)))")
+                            Text("Hypothetical net after unpaid bills: \(scenario.hypotheticalNetAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
+                                .fontWeight(.semibold)
+                            Text("Actual transactions, pending items, unpaid bills and source evidence are unchanged. Reaching a target is not guaranteed.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            ForEach(scenario.categories.filter {
+                                $0.illustrativeReduction > 0
+                            }) { line in
+                                Text("\(line.category): \(line.observedSpending.formatted(.currency(code: scenario.currency))) → \(line.hypotheticalTarget.formatted(.currency(code: scenario.currency)))")
+                                    .font(.caption)
+                            }
+                        }
+                        Divider()
                         Text("Source-row evidence").font(.headline)
                         ForEach(report.evidence) { entry in
                             Text("Row \(entry.sourceRow) · \(entry.date) · \(entry.kind) · \(entry.description) · \(entry.amount.formatted(.currency(code: report.currency)))")
@@ -467,6 +514,8 @@ struct PraxisWindow: View {
             }
             Spacer(minLength: 0)
         }
+        .onChange(of: model.budgetMonth) { _ in model.clearBudgetResults() }
+        .onChange(of: model.budgetYear) { _ in model.clearBudgetResults() }
     }
 
     private var collectionManagement: some View {

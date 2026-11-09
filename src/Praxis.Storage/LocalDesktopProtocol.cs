@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Praxis.Storage;
@@ -55,6 +56,14 @@ public sealed class LocalDesktopProtocol(
                         ReadInteger(root, "year", 0, 2000, 2100),
                         ReadInteger(root, "month", 0, 1, 12),
                         cancellationToken)
+                },
+                "budgetScenario" => new
+                {
+                    scenario = await new LocalBudgetScenarioPlanner(catalog).PreviewAsync(
+                        ReadGuid(root, "sourceId"),
+                        ReadInteger(root, "year", 0, 2000, 2100),
+                        ReadInteger(root, "month", 0, 1, 12),
+                        ReadBudgetTargets(root), cancellationToken)
                 },
                 "collections" => new
                 {
@@ -158,15 +167,43 @@ public sealed class LocalDesktopProtocol(
             or InvalidDataException or UnauthorizedAccessException
             or KeyNotFoundException or NotSupportedException)
         {
-            return JsonSerializer.Serialize(new
-            {
-                requestId, ok = false, error = exception.Message
-            }, JsonOptions);
+            var failure = new { requestId, ok = false, error = exception.Message };
+            return JsonSerializer.Serialize(failure, JsonOptions);
         }
     }
 
     private LocalWatchedIntake RequireMonitor() =>
         monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+
+    private static IReadOnlyList<MonthlyBudgetTarget> ReadBudgetTargets(JsonElement root)
+    {
+        if (!root.TryGetProperty("targets", out var entries) ||
+            entries.ValueKind != JsonValueKind.Array || entries.GetArrayLength() > 50)
+        {
+            throw new ArgumentException("Supply at most 50 category targets.");
+        }
+
+        var targets = new List<MonthlyBudgetTarget>(entries.GetArrayLength());
+        foreach (var entry in entries.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                throw new ArgumentException("Each target must be an object.");
+            }
+
+            var category = ReadString(entry, "category", 80);
+            var amountText = ReadString(entry, "target", 24);
+            if (!decimal.TryParse(amountText, NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture, out var amount))
+            {
+                throw new ArgumentException("Budget targets must use decimal USD amounts.");
+            }
+
+            targets.Add(new MonthlyBudgetTarget(category, amount));
+        }
+
+        return targets;
+    }
 
     private static bool ReadBoolean(JsonElement root, string property)
     {

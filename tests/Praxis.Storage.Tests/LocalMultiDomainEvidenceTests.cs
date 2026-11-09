@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Praxis.Storage.Tests;
 
-public sealed class LocalMultiDomainEvidenceTests : IDisposable
+public sealed partial class LocalMultiDomainEvidenceTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
         Path.GetTempPath(), "praxis-evidence-" + Guid.NewGuid().ToString("N"));
@@ -287,6 +287,7 @@ public sealed class LocalMultiDomainEvidenceTests : IDisposable
         Assert.Equal(new[] { 2, 4 }, report.Evidence.Select(e => e.SourceRow).ToArray());
         Assert.Equal("Two-line\\nreceipt", report.Evidence[0].Description);
     }
+
 
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, string contents, string requestKey)

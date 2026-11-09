@@ -119,13 +119,21 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
 
     private static bool HasNonTextSignature(ReadOnlySpan<byte> input)
     {
+        ReadOnlySpan<byte> png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        ReadOnlySpan<byte> zip = [0x50, 0x4b, 0x03, 0x04];
+        ReadOnlySpan<byte> elf = [0x7f, 0x45, 0x4c, 0x46];
+        ReadOnlySpan<byte> gzip = [0x1f, 0x8b];
+        ReadOnlySpan<byte> machLittleEndian = [0xcf, 0xfa, 0xed, 0xfe];
+        ReadOnlySpan<byte> machBigEndian = [0xfe, 0xed, 0xfa, 0xcf];
+        ReadOnlySpan<byte> machUniversal = [0xca, 0xfe, 0xba, 0xbe];
+
         return input.StartsWith("%PDF-"u8) ||
-               input.StartsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
-               input.StartsWith([0x50, 0x4b, 0x03, 0x04]) ||
-               input.StartsWith([0x7f, 0x45, 0x4c, 0x46]) ||
-               input.StartsWith([0x1f, 0x8b]) ||
-               input.StartsWith([0xcf, 0xfa, 0xed, 0xfe]) ||
-               input.StartsWith([0xfe, 0xed, 0xfa, 0xcf]) ||
-               input.StartsWith([0xca, 0xfe, 0xba, 0xbe]);
+               input.StartsWith(png) ||
+               input.StartsWith(zip) ||
+               input.StartsWith(elf) ||
+               input.StartsWith(gzip) ||
+               input.StartsWith(machLittleEndian) ||
+               input.StartsWith(machBigEndian) ||
+               input.StartsWith(machUniversal);
     }
 }
