@@ -91,9 +91,11 @@ public sealed class LocalTextProcessorTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         var malformed = await Capture(catalog, "invalid.txt", [0xff, 0xfe, 0x41], "invalid");
         var corrupt = await Capture(catalog, "corrupt.md", Encoding.UTF8.GetBytes("good"), "corrupt");
-        var file = ObjectPath(corrupt.Sha256);
-        File.WriteAllBytes(file, Encoding.UTF8.GetBytes("bad!"));
+        var truncated = await Capture(catalog, "truncated.txt", Encoding.UTF8.GetBytes("complete"), "truncated");
+        File.WriteAllBytes(ObjectPath(corrupt.Sha256), Encoding.UTF8.GetBytes("bad!"));
+        File.WriteAllBytes(ObjectPath(truncated.Sha256), Encoding.UTF8.GetBytes("short"));
         var processor = new LocalTextProcessor(catalog);
+        Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         var states = catalog.ListProcessingJobs();
@@ -101,9 +103,12 @@ public sealed class LocalTextProcessorTests : IDisposable
             states.Single(job => job.ItemId == malformed.ItemId).FailureCode);
         Assert.Equal("corrupt_original",
             states.Single(job => job.ItemId == corrupt.ItemId).FailureCode);
+        Assert.Equal("corrupt_original",
+            states.Single(job => job.ItemId == truncated.ItemId).FailureCode);
         Assert.All(states, job => Assert.Equal("failed", job.State));
         Assert.Null(catalog.ReadTextDerivative(malformed.ItemId, 1));
         Assert.Null(catalog.ReadTextDerivative(corrupt.ItemId, 1));
+        Assert.Null(catalog.ReadTextDerivative(truncated.ItemId, 1));
         Assert.True(catalog.RetryProcessing(malformed.ItemId, 1,
             LocalCatalog.DefaultProcessorKey));
         Assert.True(await processor.ProcessNextAsync());
