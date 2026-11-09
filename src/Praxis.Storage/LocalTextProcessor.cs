@@ -17,16 +17,24 @@ public sealed class LocalTextProcessor(LocalCatalog catalog)
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+    private bool legacyScanComplete;
 
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var lease = catalog.TryClaimProcessing(LeaseDuration,
             processorKey: LocalCatalog.DefaultProcessorKey);
-        if (lease is null && catalog.RequeueNewlySupportedText(SupportedExtensions))
+        if (lease is null && !legacyScanComplete)
         {
-            lease = catalog.TryClaimProcessing(LeaseDuration,
-                processorKey: LocalCatalog.DefaultProcessorKey);
+            if (catalog.RequeueNewlySupportedText(SupportedExtensions))
+            {
+                lease = catalog.TryClaimProcessing(LeaseDuration,
+                    processorKey: LocalCatalog.DefaultProcessorKey);
+            }
+            else
+            {
+                legacyScanComplete = true;
+            }
         }
 
         if (lease is null)
