@@ -1,5 +1,3 @@
-using Microsoft.Data.Sqlite;
-
 namespace Praxis.Storage;
 
 public sealed record LocalFileVersion(
