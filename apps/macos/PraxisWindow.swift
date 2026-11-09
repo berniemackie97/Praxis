@@ -431,7 +431,7 @@ struct PraxisWindow: View {
                         Text(report.plannedBills, format: .currency(code: report.currency))
                     }
                     GridRow {
-                        Text("Balance after planned bills")
+                        Text("Net after unpaid planned bills (not an account balance)")
                         Text(report.balanceAfterPlannedBills, format: .currency(code: report.currency))
                             .fontWeight(.semibold)
                     }
@@ -485,9 +485,9 @@ struct PraxisWindow: View {
                            scenario.revision == report.revision,
                            scenario.sourceSha256 == report.sourceSha256 {
                             Text("Illustrative scenario").font(.headline)
-                            Text("Actual balance after planned bills: \(scenario.actualAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
+                            Text("Observed net after unpaid bills: \(scenario.baselineNetAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
                             Text("Hypothetical reduction: \(scenario.illustrativeReduction.formatted(.currency(code: scenario.currency)))")
-                            Text("Hypothetical balance after bills: \(scenario.hypotheticalAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
+                            Text("Hypothetical net after unpaid bills: \(scenario.hypotheticalNetAfterPlannedBills.formatted(.currency(code: scenario.currency)))")
                                 .fontWeight(.semibold)
                             Text("Actual transactions, pending items, unpaid bills and source evidence are unchanged. Reaching a target is not guaranteed.")
                                 .font(.caption).foregroundStyle(.secondary)
