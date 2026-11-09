@@ -562,7 +562,7 @@
     "102": "P1",
     "103": "P1",
     "104": "P2",
-    "105": "P2",
+    "105": "P1",
     "106": "P1",
     "107": "P1",
     "108": "P1",
@@ -663,6 +663,7 @@
         100,
         102,
         101,
+        105,
         103,
         106,
         129,
@@ -670,7 +671,7 @@
         108,
         130
       ],
-      "exit": "After merged code and actual macOS first-run verification, import mixed files/folders, recover catalog and original bytes after restart, search source-attributed text and inspect originals in first-party Praxis without Obsidian, cloud or remote inference; verify unauthorized access is denied."
+      "exit": "After merged code and actual macOS first-run verification, automatically capture approved intake-folder changes and import mixed files/folders, recover catalog and original bytes after restart, search source-attributed text and inspect originals in first-party Praxis without Obsidian, cloud or remote inference; verify unauthorized access is denied."
     },
     {
       "id": "L1",
@@ -689,7 +690,6 @@
       "id": "L2",
       "name": "Source depth and usable organization",
       "issues": [
-        105,
         114,
         115,
         116,
