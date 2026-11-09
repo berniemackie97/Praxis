@@ -4,7 +4,7 @@ GitHub [Praxis Roadmap Project #3](https://github.com/users/berniemackie97/proje
 
 ## Execution focus: standalone local Praxis
 
-The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The active local-first path now distinguishes completed foundation #99/#122/#124 from open S1c #126, S1d #128 and parent #100; then #102/#101 → #103 → #106, with local caller-policy spike #129 before #107, followed by #108 and end-to-end release proof #130. Voice #109/#110, browser #104/#111/#112 and MCP #117–#119 remain distinct follow-on outcomes. Obsidian #5 is optional and does not block initial direct capture.
+The repository milestones (M0–M7) classify **acceptance gates**, not the order developers must code them. Reviewed cross-milestone delivery lanes are in [standalone-mvp.md](delivery/standalone-mvp.md) and `scripts/github/roadmap.json`. The active local-first path now distinguishes completed foundation #99/#122/#124 from open S1c #126, S1d #128 and parent #100; then #102/#101 → #103 → #106, with local caller-policy spike #129 before #107, followed by #108 and end-to-end release proof #130. Voice #109/#110, browser #104/#111/#112 and MCP #117–#119 remain distinct follow-on outcomes. The subsequent intelligence portfolio includes deep technical structure/evidence #149–#154, bounded investigations #150/#155/#156, typed connector history #151/#157–#159/#162, tool approval proposals #160 and optional offline conversational voice #161. These capabilities do not block the L0 release gate #130; neither source search nor a general-purpose chatbot proves technical comprehension. Obsidian #5 is optional and does not block initial direct capture.
 
 Limit work-in-progress to one cohesive implementation slice awaiting merge per active workstream, except independent decision spikes. Each issue is audited against current code before taking it, and every PR reports exact test evidence, unresolved integration gaps and its linked parent issue. Do not close a parent feature because a single child test passes. No remote processing or agent permission is inferred from user-local ingestion.
 
@@ -71,6 +71,8 @@ Recommended Project views: Delivery Board (active issues), Feature Portfolio, De
 
 ## Administrative synchronization
 
-GitHub's repository connector does not manage Projects fields, views, milestones or sub-issue relationships. The repository includes an owner-run [idempotent configuration tool](../scripts/github/plan.py) using authenticated GitHub CLI. See [setup and verification](project-setup.md).
+GitHub's repository connector does not manage Projects fields, views, milestones or sub-issue relationships. Changes to the live private Project #3 cannot be inferred from repository issue edits. After merging a validated roadmap PR, run the owner-side reconciler and inspect field values and parent/dependency links; no claim of a synchronized board is made without that evidence.
+
+The repository includes an owner-run [idempotent configuration tool](../scripts/github/plan.py) using authenticated GitHub CLI. See [setup and verification](project-setup.md).
 
 The tool only fills missing issue/project metadata, creates required labels/milestones/views, and converts the audited JSON mapping into native GitHub relationships. It does not create feature issues, merge PRs, change issue descriptions, delete labels, or overwrite curated open-item project statuses. A committed change to the mapping requires normal PR review.
