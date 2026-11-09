@@ -1,32 +1,28 @@
+using System.Text.Json;
+
 namespace Praxis.Storage;
 
-public sealed partial class LocalWatchedIntake
+/// <summary>
+/// Owner-approved watched folder. Runs filesystem notifications plus periodic rescans,
+/// survives the folder going offline, honors owner pause and signals the processing pipeline
+/// after each capture. Scanning, rename correlation and status are separate components.
+/// </summary>
+public sealed class LocalWatchedIntake
 {
-    private const int MaximumFiles = 5_000;
-    private const int MaximumDepth = 12;
-    private const long MaximumFileBytes = 2L * 1024 * 1024 * 1024;
-    private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
-    private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
-    private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
+    private const string OfflineProblem =
+        "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
 
-    private readonly LocalCatalog catalog;
-    private readonly LocalSourceIntake intake;
-    private readonly Action notifyCaptured;
     private readonly string root;
-    private readonly TimeSpan quietPeriod;
     private readonly TimeSpan rescanInterval;
     private readonly Action<string> report;
-    private readonly Dictionary<string, ObservedState> observations =
-        new(StringComparer.Ordinal);
-    private readonly Dictionary<string, VerifiedState> verified =
-        new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> errors =
-        new(StringComparer.Ordinal);
+    private readonly Action notifyCaptured;
+    private readonly IntakeStatusTracker status = new();
+    private readonly ObservedRenameCorrelator renames;
+    private readonly WatchedFileReconciler reconciler;
     private readonly SemaphoreSlim scanLock = new(1, 1);
-
-    private sealed record FileStamp(long Length, DateTime LastWriteUtc);
-    private sealed record ObservedState(FileStamp Stamp, DateTimeOffset FirstSeen);
-    private sealed record VerifiedState(FileStamp Stamp, DateTimeOffset LastVerified);
+    private readonly SemaphoreSlim wakeSignal = new(0, 1);
+    private int wakePending;
+    private int watcherFaulted;
 
     public LocalWatchedIntake(
         LocalCatalog catalog, string intakeDirectory,
@@ -40,99 +36,212 @@ public sealed partial class LocalWatchedIntake
             throw new ArgumentException("The intake directory must be absolute.", nameof(intakeDirectory));
         }
 
-        this.quietPeriod = quietPeriod ?? TimeSpan.FromSeconds(3);
-        this.rescanInterval = rescanInterval ?? TimeSpan.FromSeconds(10);
-        if (this.quietPeriod < TimeSpan.Zero)
+        var quiet = quietPeriod ?? TimeSpan.FromSeconds(3);
+        if (quiet < TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(quietPeriod));
         }
 
+        this.rescanInterval = rescanInterval ?? TimeSpan.FromSeconds(10);
         if (this.rescanInterval < TimeSpan.FromMilliseconds(100))
         {
             throw new ArgumentOutOfRangeException(nameof(rescanInterval));
         }
 
-        this.catalog = catalog;
-        intake = new LocalSourceIntake(catalog);
-        notifyCaptured = onCaptured ?? (() => { });
         root = Path.GetFullPath(intakeDirectory);
         report = status ?? (_ => { });
+        notifyCaptured = onCaptured ?? (() => { });
+        var intake = new LocalSourceIntake(catalog);
+        renames = new ObservedRenameCorrelator(catalog, intake, root, report, Signal);
+        reconciler = new WatchedFileReconciler(
+            catalog, intake, root, quiet, renames, this.status, report);
     }
 
-    public async Task<int> ReconcileAsync(
-        DateTimeOffset now, CancellationToken cancellationToken = default)
+    public LocalIntakeStatus Snapshot() => status.Snapshot();
+
+    public LocalIntakeStatus SetPaused(bool pause)
+    {
+        status.SetPaused(pause);
+        Signal();
+        return status.Snapshot();
+    }
+
+    public LocalIntakeStatus RequestRescan()
+    {
+        Signal();
+        return status.Snapshot();
+    }
+
+    /// <summary>Runs one reconciliation pass; returns the number of new revisions captured.</summary>
+    public async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         await scanLock.WaitAsync(cancellationToken);
         try
         {
-            var files = intake.InspectFolder(root, MaximumFiles, MaximumDepth,
-                MaximumFolderBytes, cancellationToken);
-            var renameHashBytes = await ReconcileRenamesAsync(files, cancellationToken);
-            var present = files.Select(file => file.SourcePath)
-                .ToHashSet(StringComparer.Ordinal);
-            var removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
-            foreach (var missing in removed)
-            {
-                observations.Remove(missing);
-                verified.Remove(missing);
-                errors.Remove(missing);
-            }
-
-            if (removed.Length != 0)
-            {
-                report($"No longer observed: {removed.Length} paths; captured originals are preserved.");
-            }
-
-            var imported = 0;
-            var remainingHashBytes = HashBudgetPerScan - renameHashBytes;
-            foreach (var file in files)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (IsTemporaryName(file.SourcePath))
-                {
-                    continue;
-                }
-
-                var stamp = new FileStamp(file.Length, file.LastWriteUtc);
-                if (!observations.TryGetValue(file.SourcePath, out var observed) ||
-                    observed.Stamp != stamp)
-                {
-                    observations[file.SourcePath] = new ObservedState(stamp, now);
-                    verified.Remove(file.SourcePath);
-                    continue;
-                }
-
-                if (now - observed.FirstSeen < quietPeriod ||
-                    (verified.TryGetValue(file.SourcePath, out var previous) &&
-                     previous.Stamp == stamp &&
-                     now - previous.LastVerified < FullVerificationInterval))
-                {
-                    continue;
-                }
-
-                if (file.Length > remainingHashBytes)
-                {
-                    continue;
-                }
-
-                remainingHashBytes -= file.Length;
-                if (await TryImportAsync(file, stamp, now, cancellationToken))
-                {
-                    imported++;
-                }
-            }
-
-            if (imported != 0)
+            var result = await reconciler.ReconcileAsync(now, cancellationToken);
+            if (result.Imported != 0)
             {
                 notifyCaptured();
             }
 
-            RecordSuccessfulScan(now, files.Count, imported);
-            return imported;
+            status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported);
+            return result.Imported;
         }
         finally
         {
             scanLock.Release();
+        }
+    }
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        FileSystemWatcher? watcher = null;
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (status.IsPaused)
+                {
+                    status.SetState("paused", "New file capture is paused by the owner.");
+                }
+                else
+                {
+                    watcher = MaintainWatcher(watcher);
+                    if (await TryScanAsync(cancellationToken) && watcher is null && Directory.Exists(root))
+                    {
+                        status.SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
+                    }
+                }
+
+                await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
+                Interlocked.Exchange(ref wakePending, 0);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            watcher?.Dispose();
+            status.SetState("stopped");
+        }
+    }
+
+    internal void QueueRename(string previousPath, string currentPath) =>
+        renames.Queue(previousPath, currentPath);
+
+    /// <summary>
+    /// Keeps a notification watcher matched to the folder's availability: dropped while the
+    /// folder is offline, recreated after a watcher error. Rescans continue either way.
+    /// </summary>
+    private FileSystemWatcher? MaintainWatcher(FileSystemWatcher? watcher)
+    {
+        if (!Directory.Exists(root))
+        {
+            status.SetState("offline", OfflineProblem);
+            if (watcher is not null)
+            {
+                watcher.Dispose();
+                renames.Clear();
+                report("Watched directory is offline; captured originals are retained.");
+            }
+
+            return null;
+        }
+
+        if (watcher is not null && Interlocked.Exchange(ref watcherFaulted, 0) == 0)
+        {
+            return watcher;
+        }
+
+        watcher?.Dispose();
+        renames.Clear();
+        try
+        {
+            if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidDataException("The watched directory cannot be linked.");
+            }
+
+            Interlocked.Exchange(ref watcherFaulted, 0);
+            var created = CreateWatcher();
+            status.SetState("resuming");
+            report("Watching the approved directory: " + JsonSerializer.Serialize(root));
+            return created;
+        }
+        catch (IOException exception)
+        {
+            status.SetState("degraded", "Filesystem notifications are unavailable; polling and retrying: " + exception.Message);
+            report("Watcher setup will retry: " + JsonSerializer.Serialize(exception.Message));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            status.SetState("degraded", "Watcher access denied: " + exception.Message);
+            report("Watcher setup denied: " + JsonSerializer.Serialize(exception.Message));
+        }
+        catch (InvalidDataException exception)
+        {
+            status.SetState("degraded", "Watcher configuration rejected: " + exception.Message);
+            report("Watcher setup rejected: " + JsonSerializer.Serialize(exception.Message));
+        }
+
+        return null;
+    }
+
+    private async Task<bool> TryScanAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ReconcileAsync(DateTimeOffset.UtcNow, cancellationToken);
+            return true;
+        }
+        catch (IOException exception)
+        {
+            var offline = !Directory.Exists(root);
+            status.SetState(offline ? "offline" : "degraded",
+                offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
+            report("Intake scan will retry: " + JsonSerializer.Serialize(exception.Message));
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            status.SetState("degraded", "Intake scan access denied: " + exception.Message);
+            report("Intake scan denied: " + JsonSerializer.Serialize(exception.Message));
+        }
+        catch (InvalidDataException exception)
+        {
+            status.SetState("degraded", "Intake scan rejected input: " + exception.Message);
+            report("Intake scan rejected input: " + JsonSerializer.Serialize(exception.Message));
+        }
+
+        return false;
+    }
+
+    private FileSystemWatcher CreateWatcher()
+    {
+        var watcher = new FileSystemWatcher(root)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                           NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime
+        };
+        watcher.Created += (_, _) => Signal();
+        watcher.Changed += (_, _) => Signal();
+        watcher.Deleted += (_, _) => Signal();
+        watcher.Renamed += (_, change) => renames.Queue(change.OldFullPath, change.FullPath);
+        watcher.Error += (_, _) =>
+        {
+            Interlocked.Exchange(ref watcherFaulted, 1);
+            Signal();
+        };
+        watcher.EnableRaisingEvents = true;
+        return watcher;
+    }
+
+    private void Signal()
+    {
+        if (Interlocked.CompareExchange(ref wakePending, 1, 0) == 0)
+        {
+            wakeSignal.Release();
         }
     }
 }
