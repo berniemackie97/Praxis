@@ -247,6 +247,42 @@ public sealed partial class LocalCatalog : IDisposable
         }
     }
 
+    private static void VerifySearchSchema(SqliteConnection database)
+    {
+        foreach (var (kind, name) in new (string Kind, string Name)[]
+        {
+            ("table", "text_search"),
+            ("view", "eligible_text_search"),
+            ("trigger", "text_search_new_version"),
+            ("trigger", "text_search_source_revoked"),
+            ("trigger", "text_search_job_completed")
+        })
+        {
+            using var command = Command(database, """
+                SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
+                """);
+            command.Parameters.AddWithValue("$type", kind);
+            command.Parameters.AddWithValue("$name", name);
+            if (command.ExecuteScalar() is not string definition ||
+                (name == "text_search" &&
+                 !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException("The local search schema is incompatible.");
+            }
+        }
+
+        using var projection = Command(database,
+            "SELECT item_id, revision, source_id, locator, content FROM text_search LIMIT 0");
+        try
+        {
+            using var reader = projection.ExecuteReader();
+        }
+        catch (SqliteException exception)
+        {
+            throw new InvalidDataException("The local search index is unavailable.", exception);
+        }
+    }
+
     private static string ReadSchema(string fileName)
     {
         using var stream = typeof(LocalCatalog).Assembly
