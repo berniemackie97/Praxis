@@ -105,6 +105,20 @@ struct VideoCue: Decodable, Identifiable {
     }
 }
 
+struct MediaInspection: Decodable {
+    let sourceId: String
+    let itemId: String
+    let revision: Int
+    let sourceSha256: String
+    let originalBytes: Int64
+    let sourceExtension: String
+    let outcome: String
+    let containerFamily: String?
+    let durationMilliseconds: Int64?
+    let reasonCode: String?
+    let producer: String
+}
+
 struct BudgetCategory: Decodable, Identifiable {
     let category: String
     let postedSpending: Double
@@ -189,6 +203,7 @@ struct ResponseData: Decodable {
     let changed: Bool?
     let hits: [SearchHit]?
     let clips: [VideoCue]?
+    let media: MediaInspection?
     let budget: MonthlyBudgetReport?
     let scenario: BudgetScenario?
     let outcome: String?
