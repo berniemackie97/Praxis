@@ -30,14 +30,16 @@ struct PraxisWindow: View {
             if model.running {
                 Picker("Workspace", selection: $section) {
                     Text("Inbox & Library").tag(0)
-                    Text("Search").tag(1)
-                    Text("Collections").tag(2)
-                    Text("Configuration").tag(3)
+                    Text("Quick note").tag(1)
+                    Text("Search").tag(2)
+                    Text("Collections").tag(3)
+                    Text("Configuration").tag(4)
                 }.pickerStyle(.segmented)
                 if section == 0 { library }
-                if section == 1 { search }
-                if section == 2 { collectionManagement }
-                if section == 3 { configuration }
+                if section == 1 { quickNote }
+                if section == 2 { search }
+                if section == 3 { collectionManagement }
+                if section == 4 { configuration }
             } else {
                 setup
             }
@@ -128,6 +130,7 @@ struct PraxisWindow: View {
                 HStack {
                     Text("Captured sources").font(.headline)
                     Spacer()
+                    Button("New note") { section = 1 }
                     Button("Refresh") { model.refresh() }
                 }
                 Picker("Collection", selection: $model.selectedCollectionId) {
@@ -215,6 +218,41 @@ struct PraxisWindow: View {
                 }
                 Spacer(minLength: 0)
             }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var quickNote: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Capture a thought").font(.title2.weight(.semibold))
+            Text("Type or paste Markdown, a quotation, or a URL. Nothing reads your clipboard automatically, fetches websites, or sends content to a model.")
+                .foregroundStyle(.secondary)
+            TextField("Title (optional)", text: $model.noteTitle)
+                .textFieldStyle(.roundedBorder)
+                .disabled(model.savingNote)
+            TextEditor(text: $model.noteText)
+                .font(.system(.body, design: .monospaced))
+                .disabled(model.savingNote)
+                .border(Color.secondary.opacity(0.3))
+                .accessibilityLabel("Note content")
+            Text("Saving creates a private Markdown original in your approved Inbox. The optional title becomes its heading. Use Command-Return to save.")
+                .font(.footnote).foregroundStyle(.secondary)
+            HStack {
+                Button(model.savingNote ? "Saving…" : "Save note") {
+                    model.saveNote()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(model.savingNote ||
+                    model.noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    model.noteText.count > 8_000 ||
+                    model.noteTitle.count > 80)
+                Button("Discard draft", role: .destructive) { model.discardNote() }
+                    .disabled(model.savingNote ||
+                        (model.noteText.isEmpty && model.noteTitle.isEmpty))
+                Spacer()
+                Text("\(model.noteText.count) / 8,000 characters")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 

@@ -87,20 +87,20 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         var collectionId = created.RootElement.GetProperty("data")
             .GetProperty("collection").GetProperty("collectionId").GetString()!;
         using var added = await Send(protocol,
-            $"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(added.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var filtered = await Send(protocol,
-            $"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
+            $$"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(saved.ItemId.ToString("D"), filtered.RootElement
             .GetProperty("data").GetProperty("items")[0].GetProperty("itemId").GetString());
 
         using var memberships = await Send(protocol,
-            $"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.Equal(collectionId, memberships.RootElement.GetProperty("data")
             .GetProperty("collectionIds")[0].GetString());
 
         using var renamed = await Send(protocol,
-            $"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
+            $$"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
         Assert.True(renamed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var listed = await Send(protocol,
             """{"requestId":"six","action":"collections"}""");
@@ -108,13 +108,76 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             .GetProperty("collections")[0].GetProperty("name").GetString());
 
         using var removed = await Send(protocol,
-            $"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
+            $$"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using var empty = await Send(protocol,
-            $"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
+            $$"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(0, empty.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
         await catalog.VerifyOriginalAsync(saved.ItemId);
+    }
+
+    [Fact]
+    public async Task PrivateQuickCaptureProtocolPreservesAndIndexesTheSubmittedNote()
+    {
+        var data = Path.Combine(root, "data");
+        var inbox = Path.Combine(root, "inbox");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(inbox);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(data,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(inbox,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(data);
+        var service = new LocalDesktopProtocol(catalog, new LocalQuickCapture(catalog, inbox));
+        var captureId = Guid.NewGuid();
+        var payload =
+            $$"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";
+        using var saved = await Send(service, payload);
+        Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
+        var source = saved.RootElement.GetProperty("data")
+            .GetProperty("capture").GetProperty("original");
+        var itemId = source.GetProperty("itemId").GetString();
+        var originalDigest = source.GetProperty("sha256").GetString();
+        var filename = saved.RootElement.GetProperty("data")
+            .GetProperty("capture").GetProperty("sourcePath").GetString();
+        Assert.Equal("# Inbox Thought\n\nA violet first thought.", File.ReadAllText(filename!));
+        Assert.Equal(itemId, Assert.Single(catalog.ListLibrary()).ItemId.ToString("D"));
+
+        using var retried = await Send(service, payload);
+        Assert.Equal(itemId, retried.RootElement.GetProperty("data")
+            .GetProperty("capture").GetProperty("original")
+            .GetProperty("itemId").GetString());
+        Assert.Single(catalog.ListLibrary());
+        Assert.True(await new LocalTextProcessor(catalog).ProcessNextAsync());
+        Assert.Equal(originalDigest, Assert.Single(catalog.SearchText("violet")).OriginalSha256);
+
+        using var mismatch = await Send(service,
+            $$"""{"requestId":"mismatch","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"Another body"}""");
+        Assert.False(mismatch.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public async Task QuickCaptureIsDeniedWithoutApprovedIntakeRoot()
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using var catalog = LocalCatalog.Open(root);
+        var protocol = new LocalDesktopProtocol(catalog);
+        using var response = await Send(protocol,
+            $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
+        Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Empty(catalog.ListLibrary());
     }
 
     [Theory]
