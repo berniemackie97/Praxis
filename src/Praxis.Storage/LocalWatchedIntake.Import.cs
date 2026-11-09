@@ -121,7 +121,7 @@ public sealed partial class LocalWatchedIntake
             await SHA256.HashDataAsync(stream, cancellationToken));
     }
 
-    private static string MakeRequestKey(string path, int previousRevision, string digest) =>
+    private string MakeRequestKey(string path, int previousRevision, string digest) =>
         "watch-" + Convert.ToHexStringLower(SHA256.HashData(
-            Encoding.UTF8.GetBytes($"praxis-watched-file-v1\n{path}\n{previousRevision}\n{digest}")));
+            Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{catalog.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
 }

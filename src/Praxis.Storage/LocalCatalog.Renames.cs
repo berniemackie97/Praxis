@@ -44,6 +44,18 @@ public sealed partial class LocalCatalog
         }
     }
 
+    internal long CountMovesFrom(string previousPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
+        lock (connection)
+        {
+            using var command = Command(connection,
+                "SELECT COUNT(*) FROM source_locator_moves WHERE old_locator = $path");
+            command.Parameters.AddWithValue("$path", Path.GetFullPath(previousPath));
+            return (long)command.ExecuteScalar()!;
+        }
+    }
+
     internal bool RelocateObservedFile(
         string previousPath, string currentPath, string verifiedDigest)
     {
