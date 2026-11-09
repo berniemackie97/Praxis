@@ -30,7 +30,7 @@ public sealed class LocalCatalogTests : IDisposable
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
-        Assert.Equal(7L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('original_objects', 'sources', 'items', 'item_versions', 'ingest_requests', 'processing_jobs', 'text_derivatives')"));
+        Assert.Equal(8L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('original_objects', 'sources', 'items', 'item_versions', 'ingest_requests', 'processing_jobs', 'text_derivatives', 'search_index_keys')"));
         Assert.Equal("ok", Scalar(reader, "PRAGMA integrity_check"));
         Assert.Equal(0L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
     }
