@@ -112,7 +112,8 @@ public sealed partial class LocalCatalog
                 throw new DirectoryNotFoundException(entry.FullName);
             }
 
-            if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+            if (entry.LinkTarget is not null ||
+                (entry.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 resolved = (entry.ResolveLinkTarget(true) as DirectoryInfo)?.FullName
                     ?? throw new InvalidDataException("An export directory link is not a directory.");

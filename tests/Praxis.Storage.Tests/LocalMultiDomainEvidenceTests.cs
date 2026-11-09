@@ -219,12 +219,12 @@ public sealed partial class LocalMultiDomainEvidenceTests : IDisposable
         using var catalog = LocalCatalog.Open(dataRoot);
         var video = await Capture(catalog, "clip.mp4", "video content", "video");
         var captions = await Capture(catalog, "clip.mp4." + video.Sha256 + ".vtt",
-            "WEBVTT\\n\\n00:00:03.000 --> 00:00:06.000\\nViolet assembly instruction.\\n",
+            "WEBVTT\n\n00:00:03.000 --> 00:00:06.000\nViolet assembly instruction.\n",
             "captions");
         var finance = await Capture(catalog, "monthly.csv",
-            "date,record_id,kind,amount,currency,category,description,status\\n" +
-            "2026-11-01,pay,income,1100.00,USD,Income,Salary,posted\\n" +
-            "2026-11-02,food,expense,100.00,USD,Groceries,Food,posted\\n",
+            "date,record_id,kind,amount,currency,category,description,status\n" +
+            "2026-11-01,pay,income,1100.00,USD,Income,Salary,posted\n" +
+            "2026-11-02,food,expense,100.00,USD,Groceries,Food,posted\n",
             "financial");
         var worker = new LocalTextProcessor(catalog);
         Assert.True(await worker.ProcessNextAsync());
@@ -276,16 +276,16 @@ public sealed partial class LocalMultiDomainEvidenceTests : IDisposable
     [Fact]
     public async Task BudgetCsvHandlesQuotedLineBreaksWithoutChangingPhysicalRowCitations()
     {
-        var csv = "date,record_id,kind,amount,currency,category,description,status\\r\\n" +
-            "2026-11-01,one,expense,10.00,USD,Home,\"Two-line\\nreceipt\",posted\\r\\n" +
-            "2026-11-02,two,expense,5.00,USD,Home,Second purchase,posted\\r\\n";
+        var csv = "date,record_id,kind,amount,currency,category,description,status\r\n" +
+            "2026-11-01,one,expense,10.00,USD,Home,\"Two-line\nreceipt\",posted\r\n" +
+            "2026-11-02,two,expense,5.00,USD,Home,Second purchase,posted\r\n";
         using var catalog = LocalCatalog.Open(dataRoot);
         var source = await Capture(catalog, "quoted.csv", csv, "quoted");
         var report = await new LocalMonthlyBudgetAnalyzer(catalog)
             .AnalyzeAsync(source.SourceId, 2026, 11);
         Assert.Equal(15m, report.PostedSpending);
         Assert.Equal(new[] { 2, 4 }, report.Evidence.Select(e => e.SourceRow).ToArray());
-        Assert.Equal("Two-line\\nreceipt", report.Evidence[0].Description);
+        Assert.Equal("Two-line\nreceipt", report.Evidence[0].Description);
     }
 
 

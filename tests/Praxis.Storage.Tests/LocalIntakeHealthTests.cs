@@ -93,7 +93,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
                 monitor.Snapshot().State == "watching" &&
                 monitor.Snapshot().ImportedSinceStart == 1);
             Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
-            Assert.Single(catalog.SearchText("paused"));
+            Assert.Single(catalog.SearchText("Written"));
 
             monitor.SetPaused(true);
             File.WriteAllText(first, "Completely different revision");
@@ -105,7 +105,8 @@ public sealed class LocalIntakeHealthTests : IDisposable
             await WaitForAsync(() =>
                 catalog.ListLibrary().FirstOrDefault()?.Revision == 2 &&
                 monitor.Snapshot().ImportedSinceStart == 2);
-            Assert.Empty(catalog.SearchText("paused"));
+            Assert.Empty(catalog.SearchText("Written"));
+            Assert.Single(catalog.SearchText("Completely"));
             await catalog.VerifyOriginalAsync(Assert.Single(catalog.ListLibrary()).ItemId);
         }
         finally
