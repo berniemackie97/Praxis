@@ -150,7 +150,7 @@ internal static class LocalTimedCaptionParser
         }
 
         var cues = new List<TimedCue>();
-        var previous = -1L;
+        var previousEnd = -1L;
         while (startIndex < lines.Count)
         {
             while (startIndex < lines.Count && string.IsNullOrWhiteSpace(lines[startIndex].Text))
@@ -177,7 +177,7 @@ internal static class LocalTimedCaptionParser
 
             if (timingIndex >= startIndex ||
                 !TryTiming(lines[timingIndex].Text, extension, out var from, out var to) ||
-                from < previous || to <= from ||
+                from < previousEnd || to <= from ||
                 to - from > MaximumCueMilliseconds || to > MaximumMediaMilliseconds ||
                 timingIndex + 1 == startIndex)
             {
@@ -205,7 +205,7 @@ internal static class LocalTimedCaptionParser
                 throw new InvalidDataException("The timed-caption file exceeds its cue budget.");
             }
 
-            previous = from;
+            previousEnd = to;
         }
 
         return cues;
