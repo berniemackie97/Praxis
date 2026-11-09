@@ -20,7 +20,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT s.source_id, i.item_id, v.revision, v.digest, s.status
                 FROM sources s
                 JOIN items i ON i.source_id = s.source_id
@@ -52,7 +52,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
                        v.revision, v.digest, o.byte_length, j.state, d.outcome
                 FROM items i

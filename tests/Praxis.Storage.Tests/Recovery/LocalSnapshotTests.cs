@@ -178,6 +178,50 @@ public sealed class LocalSnapshotTests : IDisposable
     }
 
     [Fact]
+    public async Task SnapshotDestinationsRejectAliasedPathsInsideTheSource()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var alias = Path.Combine(workspace, "workspace-alias");
+        Directory.CreateSymbolicLink(alias, workspace);
+
+        using var live = LocalCatalog.Open(Live);
+        var nestedBackup = Path.Combine(alias, Path.GetFileName(Live), "nested-backup");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            live.BackupAsync(nestedBackup, 10_000_000));
+        Assert.False(Directory.Exists(Path.Combine(Live, "nested-backup")));
+        Assert.Empty(Directory.GetDirectories(Live, ".nested-backup.incomplete-*"));
+
+        await live.BackupAsync(Backup, 10_000_000);
+        var nestedRestore = Path.Combine(alias, Path.GetFileName(Backup), "nested-restore");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            LocalCatalog.RestoreAsync(Backup, nestedRestore, 10_000_000));
+        Assert.False(Directory.Exists(Path.Combine(Backup, "nested-restore")));
+        Assert.Empty(Directory.GetDirectories(Backup, ".nested-restore.incomplete-*"));
+        await LocalCatalog.VerifyBackupAsync(Backup, 10_000_000);
+    }
+
+    [Fact]
+    public async Task BackupRejectsAnOversizedObjectBeforeCopyingIt()
+    {
+        using var live = LocalCatalog.Open(Live);
+        using var input = new MemoryStream([1, 2, 3]);
+        var saved = await live.CaptureFileAsync(Source("oversized"), input, 10, "oversized");
+        using (var original = File.OpenWrite(ObjectPath(Live, saved.Sha256)))
+        {
+            original.SetLength(1024);
+        }
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => live.BackupAsync(Backup, 10_000_000));
+        Assert.False(Directory.Exists(Backup));
+        var staging = Assert.Single(Directory.GetDirectories(workspace, ".snapshot.incomplete-*"));
+        Assert.False(File.Exists(ObjectPath(staging, saved.Sha256)));
+    }
+
+    [Fact]
     public async Task CancelledSnapshotDoesNotCreateDestination()
     {
         using var live = LocalCatalog.Open(Live);

@@ -4,30 +4,11 @@ namespace Praxis.Storage;
 
 public sealed partial class LocalCatalog : IDisposable
 {
-    private const int CurrentSchemaVersion = 8;
-    private static readonly (string Name, string Columns)[] Tables =
-    [
-        ("original_objects", "digest, byte_length, recorded_utc"),
-        ("sources", "source_id, source_kind, locator, created_utc, status"),
-        ("items", "item_id, source_id"),
-        ("item_versions", "item_id, revision, digest, observed_utc"),
-        ("ingest_requests", "request_key, source_id, state, attempt, failure_code"),
-        ("processing_jobs", "item_id, revision, processor_key, state, attempt, total_attempts, lease_key, lease_until_utc, failure_code"),
-        ("text_derivatives", "item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc"),
-        ("search_index_keys", "rowid, item_id, revision, source_id"),
-        ("source_collections", "collection_id, name, name_key, created_utc, archived_utc"),
-        ("source_collection_memberships", "collection_id, source_id, created_utc"),
-        ("enrichment_runs", "item_id, revision, processor_key, source_digest, outcome, created_utc"),
-        ("enrichment_proposals", "proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence, evidence_offset, status, correction, created_utc, reviewed_utc"),
-        ("enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc"),
-        ("source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc")
-    ];
-
     private readonly FileStream lockFile;
     private readonly SqliteConnection connection;
 
     public string DatabasePath { get; }
-    public int SchemaVersion => CurrentSchemaVersion;
+    public int SchemaVersion => CatalogSchema.CurrentVersion;
 
     private LocalCatalog(string databasePath, FileStream lockFile, SqliteConnection connection)
     {
@@ -60,7 +41,7 @@ public sealed partial class LocalCatalog : IDisposable
                 Pooling = false
             }.ToString());
             database.Open();
-            Prepare(database);
+            CatalogSchema.Prepare(database);
             if (!OperatingSystem.IsWindows())
             {
                 File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -74,110 +55,6 @@ public sealed partial class LocalCatalog : IDisposable
             database?.Dispose();
             fileLock.Dispose();
             throw;
-        }
-    }
-
-    private static void Prepare(SqliteConnection database)
-    {
-        Execute(database, "PRAGMA foreign_keys = ON");
-        Execute(database, "PRAGMA busy_timeout = 5000");
-        VerifyIntegrity(database);
-
-        var version = Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
-        if (version is < 0 or > CurrentSchemaVersion)
-        {
-            throw new NotSupportedException("The catalog schema version is not supported.");
-        }
-
-        if (version == 0 && Convert.ToInt64(Scalar(database, """
-            SELECT COUNT(*) FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-            """)) != 0)
-        {
-            throw new InvalidDataException("An unversioned database already contains user tables.");
-        }
-
-        if (version is >= 1 and < CurrentSchemaVersion)
-        {
-            VerifySchema(database, version);
-        }
-
-        if (version < CurrentSchemaVersion)
-        {
-            using var transaction = database.BeginTransaction();
-            if (version == 0)
-            {
-                using var initial = Command(database, ReadSchema("LocalCatalog.sql"));
-                initial.Transaction = transaction;
-                initial.ExecuteNonQuery();
-            }
-
-            if (version < 2)
-            {
-                using var upgrade = Command(database, ReadSchema("LocalCatalog.V2.sql"));
-                upgrade.Transaction = transaction;
-                upgrade.ExecuteNonQuery();
-            }
-
-            if (version < 3)
-            {
-                using var processing = Command(database, ReadSchema("LocalCatalog.V3.sql"));
-                processing.Transaction = transaction;
-                processing.ExecuteNonQuery();
-            }
-
-            if (version < 4)
-            {
-                using var extraction = Command(database, ReadSchema("LocalCatalog.V4.sql"));
-                extraction.Transaction = transaction;
-                extraction.ExecuteNonQuery();
-            }
-
-            if (version < 5)
-            {
-                using var search = Command(database, ReadSchema("LocalCatalog.V5.sql"));
-                search.Transaction = transaction;
-                search.ExecuteNonQuery();
-            }
-
-            if (version < 6)
-            {
-                using var collections = Command(database, ReadSchema("LocalCatalog.V6.sql"));
-                collections.Transaction = transaction;
-                collections.ExecuteNonQuery();
-            }
-
-            if (version < 7)
-            {
-                using var enrichment = Command(database, ReadSchema("LocalCatalog.V7.sql"));
-                enrichment.Transaction = transaction;
-                enrichment.ExecuteNonQuery();
-            }
-
-            if (version < 8)
-            {
-                using var movements = Command(database, ReadSchema("LocalCatalog.V8.sql"));
-                movements.Transaction = transaction;
-                movements.ExecuteNonQuery();
-            }
-
-            transaction.Commit();
-        }
-
-        VerifySchema(database, CurrentSchemaVersion);
-        VerifySearchSchema(database);
-        VerifyEnrichmentView(database);
-        if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
-            "wal", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
-        }
-
-        Execute(database, "PRAGMA synchronous = FULL");
-        if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 ||
-            Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
-        {
-            throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
         }
     }
 
@@ -229,146 +106,6 @@ public sealed partial class LocalCatalog : IDisposable
                 throw new InvalidDataException("A reserved catalog file name is occupied by a directory.");
             }
         }
-    }
-
-    private static void VerifyIntegrity(SqliteConnection database)
-    {
-        if (!string.Equals(Scalar(database, "PRAGMA integrity_check") as string,
-                "ok", StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("The catalog failed SQLite integrity verification.");
-        }
-
-        using var badReference = Command(database, "PRAGMA foreign_key_check").ExecuteReader();
-        if (badReference.Read())
-        {
-            throw new InvalidDataException("The catalog contains invalid foreign key references.");
-        }
-    }
-
-    private static void VerifySchema(SqliteConnection database, int version)
-    {
-        foreach (var (name, columns) in Tables)
-        {
-            if ((version < 3 && name == "processing_jobs") ||
-                (version < 4 && name == "text_derivatives") ||
-                (version < 5 && name == "search_index_keys") ||
-                (version < 6 && name is "source_collections" or "source_collection_memberships") ||
-                (version < 7 && name is "enrichment_runs" or "enrichment_proposals" or "enrichment_reviews") ||
-                (version < 8 && name == "source_locator_moves"))
-            {
-                continue;
-            }
-
-            using var command = Command(database,
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
-            command.Parameters.AddWithValue("$name", name);
-            if (command.ExecuteScalar() is not string definition ||
-                !definition.TrimEnd().EndsWith("STRICT", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException("The catalog schema is incompatible.");
-            }
-
-            var requiredColumns = version >= 2 && name == "ingest_requests"
-                ? $"{columns}, revision"
-                : columns;
-            using var projection = Command(database, $"SELECT {requiredColumns} FROM {name} LIMIT 0");
-            try
-            {
-                using var reader = projection.ExecuteReader();
-            }
-            catch (SqliteException exception)
-            {
-                throw new InvalidDataException("The catalog schema is incomplete.", exception);
-            }
-        }
-    }
-
-    private static void VerifyEnrichmentView(SqliteConnection database)
-    {
-        using var definition = Command(database, """
-            SELECT sql FROM sqlite_master WHERE type = 'view'
-              AND name = 'eligible_enrichment_proposals'
-            """);
-        if (definition.ExecuteScalar() is not string)
-        {
-            throw new InvalidDataException("The enrichment eligibility view is missing.");
-        }
-
-        using var projection = Command(database,
-            "SELECT source_id, proposal_id FROM eligible_enrichment_proposals LIMIT 0");
-        try
-        {
-            using var reader = projection.ExecuteReader();
-        }
-        catch (SqliteException exception)
-        {
-            throw new InvalidDataException("The enrichment eligibility view is incompatible.", exception);
-        }
-    }
-
-    private static void VerifySearchSchema(SqliteConnection database)
-    {
-        foreach (var (kind, name) in new (string Kind, string Name)[]
-        {
-            ("table", "text_search"),
-            ("view", "eligible_text_search"),
-            ("trigger", "text_search_new_version"),
-            ("trigger", "text_search_source_revoked"),
-            ("trigger", "text_search_job_completed")
-        })
-        {
-            using var command = Command(database, """
-                SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
-                """);
-            command.Parameters.AddWithValue("$type", kind);
-            command.Parameters.AddWithValue("$name", name);
-            if (command.ExecuteScalar() is not string definition ||
-                (name == "text_search" &&
-                 !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidDataException("The local search schema is incompatible.");
-            }
-        }
-
-        using var projection = Command(database,
-            "SELECT locator, content FROM text_search LIMIT 0");
-        try
-        {
-            using var reader = projection.ExecuteReader();
-        }
-        catch (SqliteException exception)
-        {
-            throw new InvalidDataException("The local search index is unavailable.", exception);
-        }
-    }
-
-    private static string ReadSchema(string fileName)
-    {
-        using var stream = typeof(LocalCatalog).Assembly
-            .GetManifestResourceStream($"Praxis.Storage.{fileName}")
-            ?? throw new InvalidOperationException("The catalog migration resource is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
-
-    private static object? Scalar(SqliteConnection connection, string sql)
-    {
-        using var command = Command(connection, sql);
-        return command.ExecuteScalar();
-    }
-
-    private static void Execute(SqliteConnection connection, string sql)
-    {
-        using var command = Command(connection, sql);
-        command.ExecuteNonQuery();
-    }
-
-    private static SqliteCommand Command(SqliteConnection connection, string sql)
-    {
-        var command = connection.CreateCommand();
-        command.CommandText = sql;
-        return command;
     }
 
     public void Dispose()

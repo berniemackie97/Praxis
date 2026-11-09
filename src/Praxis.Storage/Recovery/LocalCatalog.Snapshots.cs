@@ -47,7 +47,7 @@ public sealed partial class LocalCatalog
                 connection.BackupDatabase(snapshot);
             }
 
-            using var journal = Command(snapshot, "PRAGMA journal_mode = DELETE");
+            using var journal = snapshot.CreateCommand("PRAGMA journal_mode = DELETE");
             if (!string.Equals(journal.ExecuteScalar() as string,
                 "delete", StringComparison.OrdinalIgnoreCase))
             {
@@ -56,7 +56,7 @@ public sealed partial class LocalCatalog
         }
 
         RestrictFile(catalogPath);
-        var objects = ReadSnapshotObjects(catalogPath, CurrentSchemaVersion);
+        var objects = ReadSnapshotObjects(catalogPath, CatalogSchema.CurrentVersion);
         var (catalogLength, catalogDigest) =
             await HashFileAsync(catalogPath, cancellationToken);
         var totalBytes = EnforceBudget(catalogLength, objects, maxBytes);
@@ -65,13 +65,13 @@ public sealed partial class LocalCatalog
         foreach (var original in objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await source.CopyVerifiedAsync(
+            await source.CopyVerifiedToStoreAsync(
                 new OriginalObject(original.Digest, original.Length),
                 target, cancellationToken);
         }
 
         var manifest = new LocalSnapshotManifest(
-            SnapshotFormatVersion, CurrentSchemaVersion,
+            SnapshotFormatVersion, CatalogSchema.CurrentVersion,
             catalogDigest, catalogLength, objects);
         var manifestPath = Path.Combine(staging, "manifest.json");
         await using (var output = OpenNewPrivateFile(manifestPath))
@@ -109,7 +109,7 @@ public sealed partial class LocalCatalog
         foreach (var original in expected.Objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await source.CopyVerifiedAsync(
+            await source.CopyVerifiedToStoreAsync(
                 new OriginalObject(original.Digest, original.Length),
                 target, cancellationToken);
         }
@@ -145,7 +145,7 @@ public sealed partial class LocalCatalog
         CancellationToken cancellationToken)
     {
         if (manifest.FormatVersion != SnapshotFormatVersion ||
-            manifest.CatalogVersion is not (2 or 3 or 4 or 5 or 6 or 7 or CurrentSchemaVersion) ||
+            manifest.CatalogVersion is < 2 or > CatalogSchema.CurrentVersion ||
             manifest.Objects is null ||
             manifest.Objects.Count > MaximumSnapshotObjects ||
             !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)

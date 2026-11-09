@@ -6,6 +6,8 @@ public sealed class LocalDesktopProtocol(
     LocalCatalog catalog, LocalQuickCapture? quickCapture = null,
     LocalWatchedIntake? monitor = null)
 {
+    public const int MaximumRequestCharacters = 16_384;
+
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
@@ -16,7 +18,7 @@ public sealed class LocalDesktopProtocol(
         string? requestId = null;
         try
         {
-            if (request.Length is < 2 or > 16_384)
+            if (request.Length is < 2 or > MaximumRequestCharacters)
             {
                 throw new ArgumentException("The desktop request exceeds its size limit.");
             }

@@ -38,22 +38,9 @@ internal sealed class OriginalFileStore
         {
             var length = 0L;
             string digest;
-            var options = new FileStreamOptions
-            {
-                Mode = FileMode.CreateNew,
-                Access = FileAccess.Write,
-                Share = FileShare.None,
-                BufferSize = BufferLength,
-                Options = FileOptions.Asynchronous | FileOptions.SequentialScan
-            };
-            if (!OperatingSystem.IsWindows())
-            {
-                options.UnixCreateMode = PrivateFileMode;
-            }
-
             using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                await using (var output = new FileStream(pending, options))
+                await using (var output = CreatePrivateFile(pending))
                 {
                     var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
                     try
@@ -138,19 +125,7 @@ internal sealed class OriginalFileStore
             throw new InvalidDataException("The original exceeds the extraction byte budget.");
         }
 
-        var path = ExistingObjectPath(original.Digest);
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("An original object path is a symbolic link.");
-        }
-
-        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        if (input.Length != original.Length)
-        {
-            throw new InvalidDataException("An original object has a conflicting length.");
-        }
-
+        await using var input = OpenOriginal(original);
         var bytes = new byte[(int)original.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);
         if (input.Length != original.Length)
@@ -197,19 +172,14 @@ internal sealed class OriginalFileStore
             throw new ArgumentException("The original requires a writable export stream.");
         }
 
-        var path = ExistingObjectPath(original.Digest);
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("An original object path is a symbolic link.");
-        }
+        await using var input = OpenOriginal(original);
+        await CopyVerifiedAsync(input, original, destination, prefix, cancellationToken);
+    }
 
-        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        if (input.Length != original.Length)
-        {
-            throw new InvalidDataException("The original object has a conflicting length.");
-        }
-
+    private static async Task CopyVerifiedAsync(
+        FileStream input, OriginalObject original, Stream destination,
+        Memory<byte> prefix, CancellationToken cancellationToken)
+    {
         var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
         try
         {
@@ -248,7 +218,7 @@ internal sealed class OriginalFileStore
         }
     }
 
-    public async Task CopyVerifiedAsync(
+    internal async Task CopyVerifiedToStoreAsync(
         OriginalObject original, OriginalFileStore destination,
         CancellationToken cancellationToken)
     {
@@ -258,16 +228,48 @@ internal sealed class OriginalFileStore
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        var sourcePath = ExistingObjectPath(original.Digest);
-        if ((File.GetAttributes(sourcePath) & FileAttributes.ReparsePoint) != 0)
+        await using var input = OpenOriginal(original);
+        var objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
+        var first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
+        var second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
+        await using var output = CreatePrivateFile(Path.Combine(second, original.Digest));
+        await CopyVerifiedAsync(input, original, output, default, cancellationToken);
+        await output.FlushAsync(cancellationToken);
+        output.Flush(flushToDisk: true);
+    }
+
+    private FileStream OpenOriginal(OriginalObject original)
+    {
+        var input = OpenRead(ExistingObjectPath(original.Digest));
+        try
+        {
+            if (input.Length != original.Length)
+            {
+                throw new InvalidDataException("An original object has a conflicting length.");
+            }
+
+            return input;
+        }
+        catch
+        {
+            input.Dispose();
+            throw;
+        }
+    }
+
+    private static FileStream OpenRead(string path)
+    {
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("An original object path is a symbolic link.");
         }
 
-        var objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
-        var first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
-        var second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
-        var targetPath = Path.Combine(second, original.Digest);
+        return new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    }
+
+    private static FileStream CreatePrivateFile(string path)
+    {
         var options = new FileStreamOptions
         {
             Mode = FileMode.CreateNew,
@@ -281,17 +283,7 @@ internal sealed class OriginalFileStore
             options.UnixCreateMode = PrivateFileMode;
         }
 
-        await using (var input = new FileStream(sourcePath, FileMode.Open,
-            FileAccess.Read, FileShare.Read, BufferLength,
-            FileOptions.Asynchronous | FileOptions.SequentialScan))
-        await using (var output = new FileStream(targetPath, options))
-        {
-            await input.CopyToAsync(output, BufferLength, cancellationToken);
-            await output.FlushAsync(cancellationToken);
-            output.Flush(flushToDisk: true);
-        }
-
-        await destination.VerifyAsync(original, cancellationToken);
+        return new FileStream(path, options);
     }
 
     private string ExistingObjectPath(string digest)
@@ -367,14 +359,7 @@ internal sealed class OriginalFileStore
     private static async Task VerifyAsync(
         string path, string digest, long length, CancellationToken cancellationToken)
     {
-        var attributes = File.GetAttributes(path);
-        if ((attributes & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("An original object path is a symbolic link.");
-        }
-
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var stream = OpenRead(path);
         if (stream.Length != length ||
             !CryptographicOperations.FixedTimeEquals(
                 await SHA256.HashDataAsync(stream, cancellationToken),

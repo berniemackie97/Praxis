@@ -14,7 +14,7 @@ public sealed partial class LocalCatalog
         var expected = new Dictionary<string, OriginalObject>(StringComparer.Ordinal);
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT DISTINCT o.digest, o.byte_length
                 FROM item_versions v
                 JOIN original_objects o ON o.digest = v.digest

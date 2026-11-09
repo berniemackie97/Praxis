@@ -21,7 +21,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc
                 FROM source_locator_moves m
                 JOIN sources s ON s.source_id = m.source_id
@@ -49,7 +49,7 @@ public sealed partial class LocalCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
         lock (connection)
         {
-            using var command = Command(connection,
+            using var command = connection.CreateCommand(
                 "SELECT COUNT(*) FROM source_locator_moves WHERE old_locator = $path");
             command.Parameters.AddWithValue("$path", Path.GetFullPath(previousPath));
             return (long)command.ExecuteScalar()!;
@@ -79,7 +79,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var eligible = Command(connection, """
+            using var eligible = connection.CreateCommand("""
                 SELECT s.source_id
                 FROM sources s JOIN items i ON i.source_id = s.source_id
                 JOIN item_versions v ON v.item_id = i.item_id
@@ -99,7 +99,7 @@ public sealed partial class LocalCatalog
                 return false;
             }
 
-            using var move = Command(connection, """
+            using var move = connection.CreateCommand("""
                 UPDATE sources SET locator = $new
                 WHERE source_id = $source AND locator = $old AND status = 'active'
                 """);
@@ -112,7 +112,7 @@ public sealed partial class LocalCatalog
                 throw new InvalidDataException("The observed source changed during relocation.");
             }
 
-            using var history = Command(connection, """
+            using var history = connection.CreateCommand("""
                 INSERT INTO source_locator_moves
                     (move_id, source_id, old_locator, new_locator, digest, recorded_utc)
                 VALUES ($id, $source, $old, $new, $digest, $at)

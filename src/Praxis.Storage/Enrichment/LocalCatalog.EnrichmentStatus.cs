@@ -11,7 +11,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT s.status, s.source_kind, s.locator, j.state, d.outcome, r.outcome
                 FROM sources s
                 JOIN items i ON i.source_id = s.source_id

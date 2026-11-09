@@ -14,7 +14,7 @@ public sealed partial class LocalCatalog
         var id = Guid.NewGuid();
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 INSERT INTO source_collections (collection_id, name, name_key, created_utc)
                 VALUES ($id, $name, $key, $now)
                 """);
@@ -41,7 +41,7 @@ public sealed partial class LocalCatalog
         var (display, key) = NormalizeCollectionName(name);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 UPDATE source_collections SET name = $name, name_key = $key
                 WHERE collection_id = $id AND archived_utc IS NULL
                 """);
@@ -64,7 +64,7 @@ public sealed partial class LocalCatalog
         ValidateCollectionId(collectionId);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 UPDATE source_collections SET archived_utc = $now
                 WHERE collection_id = $id AND archived_utc IS NULL
                 """);
@@ -79,7 +79,7 @@ public sealed partial class LocalCatalog
         ValidateCollectionPage(limit, offset);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT c.collection_id, c.name, (
                     SELECT COUNT(*) FROM source_collection_memberships m
                     JOIN sources s ON s.source_id = m.source_id
@@ -115,7 +115,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT c.collection_id
                 FROM source_collection_memberships m
                 JOIN source_collections c ON c.collection_id = m.collection_id
@@ -144,7 +144,7 @@ public sealed partial class LocalCatalog
         ValidateCollectionId(sourceId);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 INSERT INTO source_collection_memberships
                     (collection_id, source_id, created_utc)
                 SELECT c.collection_id, s.source_id, $now
@@ -167,7 +167,7 @@ public sealed partial class LocalCatalog
         ValidateCollectionId(sourceId);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 DELETE FROM source_collection_memberships
                 WHERE collection_id = $collection AND source_id = $source
                   AND EXISTS (

@@ -16,7 +16,7 @@ public sealed partial class LocalCatalog
         ValidateJobIdentity(lease.ItemId, lease.Revision, lease.ProcessorKey);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT s.source_kind, s.locator, v.digest, o.byte_length
                 FROM processing_jobs j
                 JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
@@ -64,7 +64,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var source = Command(connection, """
+            using var source = connection.CreateCommand("""
                 SELECT v.digest
                 FROM processing_jobs j
                 JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
@@ -85,7 +85,7 @@ public sealed partial class LocalCatalog
             }
 
             var outcome = content is null ? "unsupported" : "completed";
-            using var insert = Command(connection, """
+            using var insert = connection.CreateCommand("""
                 INSERT INTO text_derivatives
                     (item_id, revision, processor_key, source_digest,
                      outcome, content, reason_code, created_utc)
@@ -101,7 +101,7 @@ public sealed partial class LocalCatalog
             insert.Parameters.AddWithValue("$now", now);
             insert.ExecuteNonQuery();
 
-            using var finish = Command(connection, """
+            using var finish = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = $outcome, lease_key = NULL, lease_until_utc = NULL,
                     failure_code = NULL, updated_utc = $now
@@ -139,7 +139,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var find = Command(connection, $"""
+            using var find = connection.CreateCommand($"""
                 SELECT d.item_id, d.revision
                 FROM text_derivatives d
                 JOIN processing_jobs j ON j.item_id = d.item_id
@@ -176,7 +176,7 @@ public sealed partial class LocalCatalog
                 revision = reader.GetInt32(1);
             }
 
-            using var remove = Command(connection, """
+            using var remove = connection.CreateCommand("""
                 DELETE FROM text_derivatives
                 WHERE item_id = $item AND revision = $revision
                   AND processor_key = 'source-text-v1'
@@ -190,7 +190,7 @@ public sealed partial class LocalCatalog
                 throw new InvalidOperationException("The unsupported derivative changed.");
             }
 
-            using var requeue = Command(connection, """
+            using var requeue = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'queued', attempt = 0, lease_key = NULL,
                     lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
@@ -220,7 +220,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
                 FROM text_derivatives d
                 JOIN processing_jobs j ON j.item_id = d.item_id

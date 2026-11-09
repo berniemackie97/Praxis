@@ -73,7 +73,7 @@ public sealed partial class LocalCatalog
         string locator, string requestKey, OriginalObject original, SqliteTransaction transaction)
     {
         var recordedUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-        using (var check = Command(connection,
+        using (var check = connection.CreateCommand(
             "SELECT byte_length FROM original_objects WHERE digest=$digest"))
         {
             check.Transaction = transaction;
@@ -87,7 +87,7 @@ public sealed partial class LocalCatalog
         Guid sourceId, itemId;
         int revision;
         string? previousDigest = null;
-        using (var source = Command(connection, """
+        using (var source = connection.CreateCommand("""
             SELECT s.source_id, s.status, i.item_id, v.revision, v.digest
             FROM sources s
             JOIN items i ON i.source_id = s.source_id
@@ -123,7 +123,7 @@ public sealed partial class LocalCatalog
             }
         }
 
-        using var command = Command(connection, """
+        using var command = connection.CreateCommand("""
             INSERT INTO original_objects (digest, byte_length, recorded_utc)
                 VALUES ($digest, $length, $recorded)
                 ON CONFLICT(digest) DO NOTHING;
@@ -136,7 +136,7 @@ public sealed partial class LocalCatalog
 
         if (previousDigest is null)
         {
-            using var source = Command(connection, """
+            using var source = connection.CreateCommand("""
                 INSERT INTO sources (source_id, source_kind, locator, created_utc)
                     VALUES ($source, 'file', $locator, $recorded);
                 INSERT INTO items (item_id, source_id) VALUES ($item, $source);
@@ -151,7 +151,7 @@ public sealed partial class LocalCatalog
 
         if (previousDigest != original.Digest)
         {
-            using var version = Command(connection, """
+            using var version = connection.CreateCommand("""
                 INSERT INTO item_versions (item_id, revision, digest, observed_utc)
                     VALUES ($item, $revision, $digest, $recorded)
                 """);
@@ -164,7 +164,7 @@ public sealed partial class LocalCatalog
             QueueProcessingVersion(itemId, revision, DefaultProcessorKey, recordedUtc, transaction);
         }
 
-        using var receipt = Command(connection, """
+        using var receipt = connection.CreateCommand("""
             INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
                 VALUES ($key, $source, 'committed', 1, NULL, $revision)
             """);
@@ -180,7 +180,7 @@ public sealed partial class LocalCatalog
     private CapturedOriginal? ReadReceipt(
         string requestKey, string locator, SqliteTransaction? transaction = null)
     {
-        using var command = Command(connection, """
+        using var command = connection.CreateCommand("""
             SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
                    r.revision, o.digest, o.byte_length
             FROM ingest_requests r
@@ -229,7 +229,7 @@ public sealed partial class LocalCatalog
         OriginalObject original;
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT o.digest, o.byte_length
                 FROM item_versions v
                 JOIN original_objects o ON o.digest = v.digest

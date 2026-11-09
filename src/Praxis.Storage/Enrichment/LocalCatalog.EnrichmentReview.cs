@@ -32,7 +32,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var eligible = Command(connection, """
+            using var eligible = connection.CreateCommand("""
                 SELECT status, correction FROM eligible_enrichment_proposals
                 WHERE proposal_id = $id
                 """);
@@ -57,7 +57,7 @@ public sealed partial class LocalCatalog
             }
 
             var now = Timestamp(DateTimeOffset.UtcNow);
-            using var update = Command(connection, """
+            using var update = connection.CreateCommand("""
                 UPDATE enrichment_proposals SET status = $decision,
                     correction = $correction, reviewed_utc = $now WHERE proposal_id = $id
                 """);
@@ -71,7 +71,7 @@ public sealed partial class LocalCatalog
                 throw new InvalidOperationException("The proposal review was not saved.");
             }
 
-            using var history = Command(connection, """
+            using var history = connection.CreateCommand("""
                 INSERT INTO enrichment_reviews
                     (review_id, proposal_id, decision, correction, reviewed_utc)
                 VALUES ($review, $id, $decision, $correction, $now)

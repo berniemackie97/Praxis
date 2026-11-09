@@ -30,7 +30,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT item_id, revision, processor_key, state, attempt, total_attempts,
                        lease_until_utc, failure_code
                 FROM processing_jobs
@@ -60,7 +60,7 @@ public sealed partial class LocalCatalog
         var now = Timestamp(DateTimeOffset.UtcNow);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 INSERT INTO processing_jobs
                     (item_id, revision, processor_key, state, attempt, total_attempts,
                      created_utc, updated_utc)
@@ -106,7 +106,7 @@ public sealed partial class LocalCatalog
         {
             using var transaction = connection.BeginTransaction();
             ExpireAttemptLimitedJobs(now, maxAttempts, processorKey, transaction);
-            using var select = Command(connection, """
+            using var select = connection.CreateCommand("""
                 SELECT j.item_id, j.revision, j.processor_key
                 FROM processing_jobs j
                 JOIN items i ON i.item_id = j.item_id
@@ -140,7 +140,7 @@ public sealed partial class LocalCatalog
             }
 
             var leaseKey = Guid.NewGuid();
-            using var claim = Command(connection, """
+            using var claim = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'running', attempt = attempt + 1,
                     total_attempts = total_attempts + 1, lease_key = $lease,
@@ -198,7 +198,7 @@ public sealed partial class LocalCatalog
         var now = Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = $state, lease_key = NULL, lease_until_utc = NULL,
                     failure_code = $failure, updated_utc = $now
@@ -223,7 +223,7 @@ public sealed partial class LocalCatalog
         ValidateJobIdentity(itemId, revision, processorKey);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'queued', attempt = 0, failure_code = NULL,
                     lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
@@ -244,7 +244,7 @@ public sealed partial class LocalCatalog
         ValidateJobIdentity(itemId, revision, processorKey);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'canceled', failure_code = NULL, lease_key = NULL,
                     lease_until_utc = NULL, updated_utc = $now
@@ -267,7 +267,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var source = Command(connection, """
+            using var source = connection.CreateCommand("""
                 UPDATE sources SET status = 'revoked'
                 WHERE source_id = $source AND status = 'active'
                 """);
@@ -278,7 +278,7 @@ public sealed partial class LocalCatalog
                 return false;
             }
 
-            using var jobs = Command(connection, """
+            using var jobs = connection.CreateCommand("""
                 UPDATE processing_jobs
                 SET state = 'canceled', failure_code = NULL, lease_key = NULL,
                     lease_until_utc = NULL, updated_utc = $now
@@ -297,7 +297,7 @@ public sealed partial class LocalCatalog
     private void ExpireAttemptLimitedJobs(
         string now, int maxAttempts, string? processorKey, SqliteTransaction transaction)
     {
-        using var command = Command(connection, """
+        using var command = connection.CreateCommand("""
             UPDATE processing_jobs
             SET state = 'failed', failure_code = 'attempt_limit',
                 lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
@@ -315,7 +315,7 @@ public sealed partial class LocalCatalog
         Guid itemId, int revision, string processor, string utc,
         SqliteTransaction transaction)
     {
-        using var command = Command(connection, """
+        using var command = connection.CreateCommand("""
             INSERT INTO processing_jobs
                 (item_id, revision, processor_key, state, attempt, total_attempts,
                  created_utc, updated_utc)

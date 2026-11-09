@@ -19,7 +19,7 @@ public sealed partial class LocalCatalog
         var expression = BuildTextQuery(query);
         lock (connection)
         {
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand("""
                 SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
                        snippet(text_search, -1, '⟦', '⟧', '…', 24)
                 FROM text_search
@@ -85,7 +85,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var count = Command(connection, """
+            using var count = connection.CreateCommand("""
                 SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
                 FROM eligible_text_search
                 """);
@@ -104,17 +104,17 @@ public sealed partial class LocalCatalog
                 eligible = (int)documentCount;
             }
 
-            using var clear = Command(connection, "DELETE FROM text_search");
+            using var clear = connection.CreateCommand("DELETE FROM text_search");
             clear.Transaction = transaction;
             clear.CommandTimeout = 30;
             clear.ExecuteNonQuery();
 
-            using var removeKeys = Command(connection, "DELETE FROM search_index_keys");
+            using var removeKeys = connection.CreateCommand("DELETE FROM search_index_keys");
             removeKeys.Transaction = transaction;
             removeKeys.CommandTimeout = 30;
             removeKeys.ExecuteNonQuery();
 
-            using var insertKeys = Command(connection, """
+            using var insertKeys = connection.CreateCommand("""
                 INSERT INTO search_index_keys (item_id, revision, source_id)
                 SELECT item_id, revision, source_id
                 FROM eligible_text_search ORDER BY item_id, revision
@@ -123,7 +123,7 @@ public sealed partial class LocalCatalog
             insertKeys.CommandTimeout = 30;
             insertKeys.ExecuteNonQuery();
 
-            using var populate = Command(connection, """
+            using var populate = connection.CreateCommand("""
                 INSERT INTO text_search (rowid, locator, content)
                 SELECT k.rowid, e.locator, e.content
                 FROM eligible_text_search e

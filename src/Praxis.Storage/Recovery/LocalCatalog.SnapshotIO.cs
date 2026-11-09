@@ -15,14 +15,14 @@ public sealed partial class LocalCatalog
             Pooling = false
         }.ToString());
         snapshot.Open();
-        VerifyIntegrity(snapshot);
-        if (Convert.ToInt32(Scalar(snapshot, "PRAGMA user_version")) != catalogVersion)
+        CatalogSchema.VerifyIntegrity(snapshot);
+        if (CatalogSchema.ReadVersion(snapshot) != catalogVersion)
         {
             throw new NotSupportedException("The snapshot catalog schema is not supported.");
         }
 
-        VerifySchema(snapshot, catalogVersion);
-        using (var receipts = Command(snapshot, """
+        CatalogSchema.VerifySchema(snapshot, catalogVersion);
+        using (var receipts = snapshot.CreateCommand("""
             SELECT COUNT(*) FROM ingest_requests r
             LEFT JOIN items i ON i.source_id = r.source_id
             LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
@@ -36,7 +36,7 @@ public sealed partial class LocalCatalog
         }
 
         var originals = new List<LocalSnapshotObject>();
-        using var command = Command(snapshot,
+        using var command = snapshot.CreateCommand(
             "SELECT digest, byte_length FROM original_objects ORDER BY digest");
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -89,8 +89,8 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("The backup path must be absolute.", nameof(backupDirectory));
         }
 
-        var root = Path.GetFullPath(backupDirectory);
-        CheckPrivateDirectory(root);
+        var root = CheckPrivateDirectory(Path.GetFullPath(backupDirectory));
+        root = CheckPrivateDirectory(CatalogPaths.ResolveExisting(root));
         var allowed = new HashSet<string>(StringComparer.Ordinal)
         {
             "catalog.sqlite", "manifest.json", "objects"
@@ -125,25 +125,24 @@ public sealed partial class LocalCatalog
             throw new ArgumentException("The destination must be absolute.", nameof(path));
         }
 
-        var full = Path.GetFullPath(path);
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         var parent = Path.GetDirectoryName(full)
             ?? throw new ArgumentException("A destination parent is required.", nameof(path));
         CheckPrivateDirectory(parent);
-        var relative = Path.GetRelativePath(disallowedRoot, full);
-        if (relative == "." ||
-            (!Path.IsPathRooted(relative) && relative != ".." &&
-             !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
-             !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)))
+        var resolvedParent = CheckPrivateDirectory(CatalogPaths.ResolveExisting(parent));
+        var destination = Path.Combine(resolvedParent, Path.GetFileName(full));
+        if (CatalogPaths.Contains(CatalogPaths.ResolveExisting(disallowedRoot), destination))
         {
             throw new InvalidOperationException("The destination cannot be inside the source.");
         }
 
-        if (File.Exists(full) || Directory.Exists(full))
+        if (File.Exists(destination) || Directory.Exists(destination) ||
+            new DirectoryInfo(destination).LinkTarget is not null)
         {
             throw new IOException("The destination already exists.");
         }
 
-        return full;
+        return destination;
     }
 
     private static string CreateStagingDirectory(string destination)

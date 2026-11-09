@@ -16,7 +16,7 @@ public sealed partial class LocalCatalog
     {
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT d.item_id, d.revision, d.source_digest, d.content
                 FROM text_derivatives d
                 JOIN processing_jobs j ON j.item_id = d.item_id AND j.revision = d.revision
@@ -55,7 +55,7 @@ public sealed partial class LocalCatalog
         lock (connection)
         {
             using var transaction = connection.BeginTransaction();
-            using var eligible = Command(connection, """
+            using var eligible = connection.CreateCommand("""
                 SELECT 1 FROM text_derivatives d
                 JOIN processing_jobs j ON j.item_id = d.item_id AND j.revision = d.revision
                     AND j.processor_key = d.processor_key
@@ -85,7 +85,7 @@ public sealed partial class LocalCatalog
             }
 
             var now = Timestamp(DateTimeOffset.UtcNow);
-            using var run = Command(connection, """
+            using var run = connection.CreateCommand("""
                 INSERT INTO enrichment_runs
                     (item_id, revision, processor_key, source_digest, outcome, created_utc)
                 VALUES ($item, $revision, $producer, $digest, $outcome, $now)
@@ -101,7 +101,7 @@ public sealed partial class LocalCatalog
 
             foreach (var item in evidence)
             {
-                using var proposal = Command(connection, """
+                using var proposal = connection.CreateCommand("""
                     INSERT INTO enrichment_proposals
                         (proposal_id, item_id, revision, processor_key, source_digest,
                          kind, value, evidence, evidence_offset, status, created_utc)
@@ -140,7 +140,7 @@ public sealed partial class LocalCatalog
 
         lock (connection)
         {
-            using var query = Command(connection, """
+            using var query = connection.CreateCommand("""
                 SELECT proposal_id, source_id, item_id, revision,
                        source_digest, processor_key, value, evidence,
                        evidence_offset, status, correction

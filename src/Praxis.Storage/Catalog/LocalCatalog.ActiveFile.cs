@@ -5,7 +5,7 @@ public sealed partial class LocalCatalog
     private (Guid ItemId, int Revision, string Digest, long Length, string Locator)?
         CurrentFileSource(Guid sourceId)
     {
-        using var query = Command(connection, """
+        using var query = connection.CreateCommand("""
             SELECT i.item_id, v.revision, v.digest, o.byte_length, s.locator
             FROM sources s
             JOIN items i ON i.source_id = s.source_id

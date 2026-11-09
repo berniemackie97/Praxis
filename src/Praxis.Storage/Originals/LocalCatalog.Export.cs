@@ -27,13 +27,10 @@ public sealed partial class LocalCatalog
             throw new DirectoryNotFoundException(requestedFolder);
         }
 
-        var resolvedCatalog = ResolveExistingDirectory(catalogRoot);
-        var folder = ResolveExistingDirectory(requestedFolder);
+        var resolvedCatalog = CatalogPaths.ResolveExisting(catalogRoot);
+        var folder = CatalogPaths.ResolveExisting(requestedFolder);
         var destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
-        var relative = Path.GetRelativePath(resolvedCatalog, destination);
-        if (relative is "." or ".." ||
-            (!relative.StartsWith(".." + Path.DirectorySeparatorChar,
-                StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
+        if (CatalogPaths.Contains(resolvedCatalog, destination))
         {
             throw new InvalidOperationException("An export cannot be written inside the private catalog.");
         }
@@ -93,49 +90,9 @@ public sealed partial class LocalCatalog
         }
     }
 
-    private static string ResolveExistingDirectory(string path, int linkDepth = 0)
-    {
-        if (linkDepth > 40)
-        {
-            throw new InvalidDataException("The export directory contains too many symbolic links.");
-        }
-
-        var parents = new Stack<string>();
-        var current = new DirectoryInfo(Path.GetFullPath(path));
-        while (current.Parent is { } parent)
-        {
-            parents.Push(current.Name);
-            current = parent;
-        }
-
-        var resolved = current.FullName;
-        while (parents.TryPop(out var name))
-        {
-            var entry = new DirectoryInfo(Path.Combine(resolved, name));
-            if (!entry.Exists)
-            {
-                throw new DirectoryNotFoundException(entry.FullName);
-            }
-
-            if (entry.LinkTarget is not null ||
-                (entry.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                var target = entry.ResolveLinkTarget(true) as DirectoryInfo
-                    ?? throw new InvalidDataException("An export directory link is not a directory.");
-                resolved = ResolveExistingDirectory(target.FullName, linkDepth + 1);
-            }
-            else
-            {
-                resolved = entry.FullName;
-            }
-        }
-
-        return resolved;
-    }
-
     private OriginalObject? CurrentExportableOriginal(Guid itemId, int revision)
     {
-        using var query = Command(connection, """
+        using var query = connection.CreateCommand("""
             SELECT v.digest, o.byte_length
             FROM item_versions v
             JOIN items i ON i.item_id = v.item_id

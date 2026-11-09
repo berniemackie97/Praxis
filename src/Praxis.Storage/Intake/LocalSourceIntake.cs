@@ -148,12 +148,8 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         }
 
         var full = Path.GetFullPath(sourcePath);
-        var dataRoot = ResolvePath(Path.GetDirectoryName(catalog.DatabasePath)!);
-        var relative = Path.GetRelativePath(dataRoot, ResolvePath(full));
-        if (relative == "." ||
-            (!Path.IsPathRooted(relative) && relative != ".." &&
-             !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
-             !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)))
+        var dataRoot = CatalogPaths.ResolveExisting(Path.GetDirectoryName(catalog.DatabasePath)!);
+        if (CatalogPaths.Contains(dataRoot, CatalogPaths.ResolveExisting(full)))
         {
             throw new InvalidOperationException("The data store cannot be imported as a source.");
         }
@@ -171,33 +167,6 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         }
 
         return full;
-    }
-
-    private static string ResolvePath(string path)
-    {
-        var root = Path.GetPathRoot(path)!;
-        var current = root;
-        foreach (var component in Path.GetRelativePath(root, path).Split(
-            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
-            StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(current, component);
-            var attributes = File.GetAttributes(candidate);
-            if ((attributes & FileAttributes.ReparsePoint) == 0)
-            {
-                current = candidate;
-                continue;
-            }
-
-            FileSystemInfo link = (attributes & FileAttributes.Directory) != 0
-                ? new DirectoryInfo(candidate)
-                : new FileInfo(candidate);
-            var target = link.ResolveLinkTarget(returnFinalTarget: true)?.FullName
-                ?? throw new InvalidDataException("The selected path contains a broken link.");
-            current = ResolvePath(target);
-        }
-
-        return current;
     }
 
     private List<string> DiscoverFiles(

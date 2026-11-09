@@ -89,11 +89,11 @@ public sealed class LocalNoteJournal : IDisposable
         {
             EnsureOpen();
             var blocked = state.Conflicts.Select(item => item.Edit.RecordId).ToHashSet();
+            var revisions = state.Records.ToDictionary(record => record.Id, record => record.Revision);
             var seen = new HashSet<Guid>();
             return Array.AsReadOnly(state.Pending.Where(item => seen.Add(item.RecordId) &&
                 !blocked.Contains(item.RecordId) &&
-                item.ExpectedRevision == (state.Records.FirstOrDefault(record =>
-                    record.Id == item.RecordId)?.Revision ?? 0)).ToArray());
+                item.ExpectedRevision == revisions.GetValueOrDefault(item.RecordId)).ToArray());
         }
     }
 
