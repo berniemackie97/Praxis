@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace Praxis.Storage;
 
@@ -52,7 +53,7 @@ public sealed partial class LocalWatchedIntake
                 verified[file.SourcePath] = new VerifiedState(stamp, now);
                 errors.Remove(file.SourcePath);
                 report("Captured source revision " + captured.Revision +
-                    ": " + file.SourcePath);
+                    ": " + JsonSerializer.Serialize(file.SourcePath));
                 return true;
             }
 
@@ -83,7 +84,8 @@ public sealed partial class LocalWatchedIntake
     {
         if (!errors.TryGetValue(path, out var previous) || previous != message)
         {
-            report("Intake error: " + path + ": " + message);
+            report("Intake error: " + JsonSerializer.Serialize(path) +
+                ": " + JsonSerializer.Serialize(message));
             errors[path] = message;
         }
     }
