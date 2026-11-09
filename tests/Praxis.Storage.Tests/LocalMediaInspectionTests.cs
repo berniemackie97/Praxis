@@ -148,6 +148,38 @@ public sealed class LocalMediaInspectionTests : IDisposable
     }
 
     [Fact]
+    public async Task DesktopInspectionRejectsStaleAndInvalidRevisions()
+    {
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var first = await Capture(catalog, "lesson.mp4", FastStartMovie(), "initial");
+        var updatedMovie = FastStartMovie();
+        BinaryPrimitives.WriteUInt32BigEndian(updatedMovie.AsSpan(48, 4), 2_000);
+        var revised = await Capture(catalog, "lesson.mp4", updatedMovie, "revision");
+        Assert.Equal(first.SourceId, revised.SourceId);
+        Assert.Equal(2, revised.Revision);
+
+        var protocol = new LocalDesktopProtocol(catalog);
+        using var stale = JsonDocument.Parse(await protocol.HandleAsync($$"""
+            {"requestId":"stale","action":"mediaInspection","sourceId":"{{first.SourceId:D}}","revision":1}
+            """));
+        Assert.False(stale.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("no longer current", stale.RootElement.GetProperty("error").GetString());
+
+        using var invalid = JsonDocument.Parse(await protocol.HandleAsync($$"""
+            {"requestId":"invalid","action":"mediaInspection","sourceId":"{{first.SourceId:D}}","revision":0}
+            """));
+        Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
+
+        using var current = JsonDocument.Parse(await protocol.HandleAsync($$"""
+            {"requestId":"current","action":"mediaInspection","sourceId":"{{first.SourceId:D}}","revision":2}
+            """));
+        Assert.True(current.RootElement.GetProperty("ok").GetBoolean());
+        var media = current.RootElement.GetProperty("data").GetProperty("media");
+        Assert.Equal(2, media.GetProperty("revision").GetInt32());
+        Assert.Equal(revised.Sha256, media.GetProperty("sourceSha256").GetString());
+    }
+
+    [Fact]
     public async Task CancelledInspectionDoesNotExposeIncompleteHeaderEvidence()
     {
         using var catalog = LocalCatalog.Open(dataRoot);

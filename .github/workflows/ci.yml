@@ -45,6 +45,12 @@ jobs:
       - run: dotnet restore Praxis.slnx --locked-mode
       - run: dotnet build Praxis.slnx -c Release --no-restore
       - run: dotnet test Praxis.slnx -c Release --no-build --no-restore
+      - name: Build the native macOS workbench
+        if: matrix.os == 'macOS'
+        run: bash scripts/macos/build-desktop.sh
+      - name: Verify the macOS worker connection
+        if: matrix.os == 'macOS'
+        run: bash scripts/macos/test-worker-session.sh
       - run: node --version
       - run: node --check integrations/obsidian/main.js
       - run: node --check integrations/obsidian/archive-session.js
