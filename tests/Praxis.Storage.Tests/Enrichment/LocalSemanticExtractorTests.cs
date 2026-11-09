@@ -33,7 +33,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
     {
         using var catalog = LocalCatalog.Open(root);
         EnableModel(catalog);
-        var model = new ScriptedModel(request => Excerpt(request).Contains("SQLite", StringComparison.Ordinal)
+        var model = new ScriptedChatModel(request => ScriptedChatModel.Excerpt(request).Contains("SQLite", StringComparison.Ordinal)
             ? """{"topics":[{"name":"Search","quote":"Search uses SQLite FTS5"}],"entities":[{"name":"SQLite","type":"technology","quote":"SQLite FTS5"},{"name":"Elasticsearch","type":"technology","quote":"Search uses"}]}"""
             : """{"topics":[{"name":"Storage","quote":"immutable originals"}],"entities":[{"name":"Praxis","type":"project","quote":"Praxis keeps"}]}""");
         var source = await CaptureAndPrepare(catalog, "notes.md", Document);
@@ -57,7 +57,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         using var run = Query("""
             SELECT model_provider, model_name, model_digest, input_tokens, output_tokens,
                    segments_examined, segments_total, rejected_count
-            FROM enrichment_runs WHERE processor_key = 'semantic-extract-v1'
+            FROM enrichment_runs WHERE processor_key = 'semantic-extract-v2'
             """);
         Assert.True(run.Read());
         Assert.Equal("ollama", run.GetString(0));
@@ -76,7 +76,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         await CaptureAndPrepare(catalog, "notes.md", Document);
         var reports = new List<string>();
-        var model = new ScriptedModel(_ => "{}") { DescribeFailure = InferenceFailure.Unavailable };
+        var model = new ScriptedChatModel(_ => "{}") { DescribeFailure = InferenceFailure.Unavailable };
         var pipeline = new LocalProcessingPipeline(catalog,
             [new LocalSemanticExtractor(catalog, _ => new ModelConnection(model))],
             status: reports.Add);
@@ -103,14 +103,14 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         using (var catalog = LocalCatalog.Open(root))
         {
             EnableModel(catalog);
-            var partly = new ScriptedModel(request => Excerpt(request).Contains("SQLite", StringComparison.Ordinal)
+            var partly = new ScriptedChatModel(request => ScriptedChatModel.Excerpt(request).Contains("SQLite", StringComparison.Ordinal)
                 ? throw new InferenceException(InferenceFailure.Truncated, "truncated")
                 : """{"topics":[{"name":"Storage","quote":"immutable originals"}],"entities":[]}""");
             var source = await CaptureAndPrepare(catalog, "notes.md", Document);
             Assert.True(await Extractor(catalog, partly).ProcessNextAsync());
             Assert.Equal("Storage", Assert.Single(catalog.Proposals.List(source.SourceId)).Value);
 
-            var broken = new ScriptedModel(_ => "{not json");
+            var broken = new ScriptedChatModel(_ => "{not json");
             await CaptureAndPrepare(catalog, "other.md", Document + "changed");
             Assert.True(await Extractor(catalog, broken).ProcessNextAsync());
             var failed = catalog.Processing.List().Single(job =>
@@ -125,7 +125,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         using var catalog = LocalCatalog.Open(root);
         EnableModel(catalog);
         var source = await CaptureAndPrepare(catalog, "notes.md", Document);
-        var model = new ScriptedModel(_ =>
+        var model = new ScriptedChatModel(_ =>
         {
             // The owner edits the file while the model is still working on the old revision.
             Capture(catalog, "notes.md", "# Storage\nRewritten.\n").GetAwaiter().GetResult();
@@ -149,7 +149,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
             new string('x', 250) + "\n";
         var source = await CaptureAndPrepare(catalog, "hostile.md", hostile);
         // A model that obeyed the injected text and invented support for it.
-        var obedient = new ScriptedModel(_ =>
+        var obedient = new ScriptedChatModel(_ =>
             """{"topics":[],"entities":[{"name":"Evil Corporation","type":"organization","quote":"Evil Corporation is a client"}]}""");
 
         Assert.True(await Extractor(catalog, obedient).ProcessNextAsync());
@@ -169,7 +169,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         var extractor = new ProcessingDriver(catalog, new LocalSemanticExtractor(catalog, profile =>
         {
             opened.Add(profile.Model);
-            return new ModelConnection(new ScriptedModel(_ => """{"topics":[],"entities":[]}""")
+            return new ModelConnection(new ScriptedChatModel(_ => """{"topics":[],"entities":[]}""")
             {
                 Identity = new ModelIdentity("ollama", profile.Model, "digest-" + profile.Model, null, null, null)
             });
@@ -183,7 +183,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
 
         Assert.Equal(["qwen:9b", "larger:14b"], opened);
         using var models = Query("""
-            SELECT model_name FROM enrichment_runs WHERE processor_key = 'semantic-extract-v1'
+            SELECT model_name FROM enrichment_runs WHERE processor_key = 'semantic-extract-v2'
             ORDER BY created_utc, model_name
             """);
         var recorded = new List<string>();
@@ -195,7 +195,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         Assert.Equal(["larger:14b", "qwen:9b"], recorded.Order());
     }
 
-    private static ProcessingDriver Extractor(LocalCatalog catalog, ScriptedModel model) =>
+    private static ProcessingDriver Extractor(LocalCatalog catalog, ScriptedChatModel model) =>
         new(catalog, new LocalSemanticExtractor(catalog, _ => new ModelConnection(model)));
 
     private static void EnableModel(LocalCatalog catalog) =>
@@ -224,8 +224,6 @@ public sealed class LocalSemanticExtractorTests : IDisposable
             Path.Combine(workspace, name), stream, 200_000, Guid.NewGuid().ToString("N"));
     }
 
-    private static string Excerpt(ChatRequest request) => request.Messages[^1].Content;
-
     private SqliteDataReader Query(string sql)
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -245,24 +243,6 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         if (Directory.Exists(workspace))
         {
             Directory.Delete(workspace, recursive: true);
-        }
-    }
-
-    private sealed class ScriptedModel(Func<ChatRequest, string> respond) : IChatModel
-    {
-        public List<ChatRequest> Requests { get; } = [];
-        public ModelIdentity Identity { get; init; } = new("ollama", "qwen:9b", "digest-1", "qwen35", "9B", "Q4_K_M");
-        public InferenceFailure? DescribeFailure { get; init; }
-
-        public Task<ModelIdentity> DescribeAsync(CancellationToken cancellationToken) =>
-            DescribeFailure is { } failure
-                ? throw new InferenceException(failure, "unavailable")
-                : Task.FromResult(Identity);
-
-        public Task<ChatResult> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)
-        {
-            Requests.Add(request);
-            return Task.FromResult(new ChatResult(respond(request), 100, 20, TimeSpan.FromSeconds(2)));
         }
     }
 }
