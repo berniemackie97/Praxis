@@ -190,6 +190,59 @@ public sealed class LocalObservedRenameTests : IDisposable
     }
 
     [Fact]
+    public async Task OverflowedEventQueueFallsBackToIndependentCapture()
+    {
+        var first = Path.Combine(inbox, "first.md");
+        var next = Path.Combine(inbox, "next.md");
+        File.WriteAllText(first, "# Same topic");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var reports = new List<string>();
+        var monitor = new LocalWatchedIntake(catalog, inbox,
+            TimeSpan.FromSeconds(1), status: reports.Add);
+        var now = DateTimeOffset.UtcNow;
+        await monitor.ReconcileAsync(now);
+        await monitor.ReconcileAsync(now.AddSeconds(2));
+        var before = Assert.Single(catalog.ListLibrary());
+
+        File.Move(first, next);
+        for (var index = 0; index < 129; index++)
+        {
+            monitor.QueueRename(first, next);
+        }
+
+        await monitor.ReconcileAsync(now.AddSeconds(3));
+        Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(5)));
+        var after = catalog.FindLatestFile(next);
+        Assert.NotNull(after);
+        Assert.NotEqual(before.SourceId, after.SourceId);
+        Assert.Equal(0L, Count("source_locator_moves"));
+        Assert.Contains(reports, value => value.Contains(
+            "Rename notification backlog exceeded", StringComparison.Ordinal));
+        await catalog.VerifyOriginalAsync(before.ItemId);
+    }
+
+    [Fact]
+    public async Task ExistingOldPathPreventsIdentityTransferEvenWithAQueuedEvent()
+    {
+        var first = Path.Combine(inbox, "before.md");
+        var second = Path.Combine(inbox, "copy.md");
+        File.WriteAllText(first, "# Shared");
+        using var catalog = LocalCatalog.Open(dataRoot);
+        var watcher = NewWatcher(catalog);
+        var now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        var original = Assert.Single(catalog.ListLibrary());
+
+        File.Copy(first, second);
+        watcher.QueueRename(first, second);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        await watcher.ReconcileAsync(now.AddSeconds(5));
+        Assert.NotEqual(original.SourceId, catalog.FindLatestFile(second)?.SourceId);
+        Assert.Equal(0L, Count("source_locator_moves"));
+    }
+
+    [Fact]
     public async Task ChangedDestinationCannotInheritPriorSourceIdentity()
     {
         var first = Path.Combine(inbox, "old.md");
