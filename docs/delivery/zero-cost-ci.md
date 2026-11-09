@@ -15,9 +15,9 @@ The repository stays **private**. The CI workflow uses only GitHub Actions **sel
 
    | Workflow check | Required custom runner label | Host requirement |
    | --- | --- | --- |
-   | Verify ubuntu-24.04 | `praxis-linux` | Linux host running Ubuntu 24.04 |
-   | Verify macos-15 | `praxis-macos` | macOS 15 or a reviewed compatible macOS host |
-   | Verify windows-2025 | `praxis-windows` | Windows host running Windows Server 2025 or a reviewed compatible Windows release |
+   | Verify Linux | `praxis-linux` | Linux runner (Ubuntu 24.04 recommended for original coverage) |
+   | Verify macOS | `praxis-macos` | macOS runner, including an up-to-date Apple Silicon Mac |
+   | Verify Windows | `praxis-windows` | Windows runner (Windows Server 2025 recommended for original coverage) |
 
    During registration, assign only the relevant custom label (e.g. GitHub's `./config.sh --labels praxis-macos` on macOS/Linux or `.\config.cmd --labels praxis-windows` on Windows). Default labels `self-hosted`, OS and architecture are added by GitHub automatically. Do not put multiple Praxis OS labels on the same worker; labels are routing hints, not OS virtualization or actual OS validation.
 3. Ensure each worker has network access to GitHub and the package feeds, **.NET 10 SDK 10.0.403** (the pinned `global.json` version; `actions/setup-dotnet` also installs it), a compatible Node.js runtime, and the Python 3 toolchain needed for platform-specific checks. On Unix, the command must be `python3`. Do not store private API data, original sources or production credentials in the runner workspace.
@@ -29,7 +29,7 @@ The repository stays **private**. The CI workflow uses only GitHub Actions **sel
      --jq '.runners[] | [.name, .status, (.labels | map(.name) | join(","))] | @tsv'
    ```
 
-   Confirm exactly the intended label maps to an **online**, actual target OS worker. The code review requirement is the same whether the runner is hosted or self-hosted.
+   Confirm exactly the intended label maps to an **online**, actual target OS worker. The workflow verifies the GitHub-reported actual OS family before checkout, and the code review requirement is the same whether the runner is hosted or self-hosted.
 
 **Using only a Mac:** A single macOS runner can run the macOS job, but **cannot establish Windows or Linux platform parity**. The other two jobs will remain queued until their correctly labeled workers are online. Do not mark CI green, remove required checks, or pretend the missing OS tests passed. Linux virtual machines and Windows machines/VMs can be provided later using existing resources; this design does not authorize paid hardware, operating-system licenses or commercial VM subscriptions.
 
@@ -44,7 +44,7 @@ gh run list --workflow ci.yml --limit 5
 
 On a PR, normal `pull_request` events start the same matrix. The `push: main` path runs after merge. **A real green result** requires all three jobs to execute and complete successfully, including restore/build/tests, Node integration and packaging tests, and the Linux-only release/format/roadmap/security checks. Capture the exact SHA, workflow run URL, job names, and test output under #137. Once this is demonstrated, reconcile #129's merged ADR tests and #106's merged search tests using a green commit that actually contains both.
 
-`workflow_dispatch` is enabled to rerun checks without fabricating a source change. Branch protection must require the same `Verify ubuntu-24.04`, `Verify macos-15` and `Verify windows-2025` names as before; their meanings remain three real OS executions.
+`workflow_dispatch` is enabled to rerun checks without fabricating a source change. **If branch protection requires the old check names**, update it only after the replacement jobs have successfully executed: require `Verify Linux`, `Verify macOS` and `Verify Windows`. These denote real OS-family executions, not fixed image versions. Do not drop a required check just to permit a merge.
 
 ## Security and capacity boundaries
 
