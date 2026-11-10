@@ -110,7 +110,7 @@ These are requirements for future work, **not** evidence of implemented security
 - **MCP:** agent identities have separately scoped read and write capabilities. Retrieved notes/web pages cannot instruct the service to escalate permissions; tools require bounded arguments/responses and auditable approvals; no agent receives arbitrary disk access (#117/#118/#119/#32).
 - **Deletion and index cleanup:** source revocation/deletion must retract unauthorized derived snippets, suggestions, cached responses and agent-visible results, even when identical bytes remain for another authorized source (#102/#106/#115/#118).
 
-A local first-party demonstration may run without remote trust decisions, but enabling external access, third-party inference or unattended agent side effects still requires #13/#15/#50 and corresponding authorization evidence.
+Owner product processing choices are complete in #50. Local first-party capture remains independently permitted within its reviewed trust boundary; remotely reachable private access requires #13's reviewed security contract and the implemented/verified #15/#19/#40/#41 controls. External provider disclosure and unattended agent side effects require independent #31/#32 approval regardless of deployment.
 
 ## Verified original-file publication boundary (S1b)
 
@@ -144,7 +144,8 @@ Job failure metadata is limited to short, non-sensitive error codes; do not reco
 
 **Before exposing a private-data sync endpoint:**
 
-- [ ] Trust mode and key custody are documented and agreed (#50).
+- [x] Local-only, client-held ciphertext and trusted-host *product modes* are expressly approved in closed #50.
+- [ ] Mode-specific key custody/recovery design is reviewed under #13; actual keys, authorized enrollment, rotation, failover and recovery are independently tested under #15/#40/#41.
 - [ ] Device enrollment, authorization, token revocation and negative cross-identity tests pass (#15).
 - [ ] TLS/non-loopback deployment boundary and secret storage are verified (#41).
 - [ ] Content and attachment limits, validation and replay behavior pass adversarial tests (#19, #21).
@@ -153,7 +154,7 @@ Job failure metadata is limited to short, non-sensitive error codes; do not reco
 
 **Before permitting indexing, remote inference or action tools:**
 
-- [ ] Processing consent and provenance are enforced by collection/source (#27, #28, #31).
+- [ ] Processing consent and provenance are enforced by **security space and source** (not many-to-many organizational collections) at original, derivative and query boundaries (#15/#27/#28/#31).
 - [ ] No unauthorized content leaves the designated trust domain (#31, #32).
 - [ ] Prompt injection and cross-scope access tests demonstrate policy independent of model responses (#32).
 - [ ] Action authorization, auditing and idempotent recovery are verified (#32, #34).
