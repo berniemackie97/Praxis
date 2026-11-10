@@ -114,7 +114,7 @@ The #29 follow-up modifies only the test corruption fixture: it reads an existin
 
 ## Expanded ranking measurement — v3 (#29)
 
-The synthetic v3 corpus (`retrieval-corpus-v3.json`) contains **31 separate original sources, 28 expected-searchable**, including code, Markdown, text, caption sidecars, two independently owned duplicate originals, conflicting notes and untrusted text. Three source originals are intentionally unsupported: CSV financial transactions, PDF and a media file. It has **35 authored judgments** across technical, protocol, storage, operations, video text, research, safety, finance and unsupported-input cases; five are no-evidence queries. The v3 corpus is independent of historical v1/v2 fixtures and deliberately has more than five eligible results, so recall@5 cannot be trivially satisfied by returning nearly every result. Labels are provisional pending independent owner review, and the dataset is still too small to claim general production relevance.
+The synthetic v3 corpus (`retrieval-corpus-v3.json`) contains **32 separate original sources, 29 expected-searchable**, including code, Markdown, text, caption sidecars, two independently owned duplicate originals, conflicting notes and untrusted text. Three source originals are intentionally unsupported: CSV financial transactions, PDF and a media file. It has **36 authored judgments** across technical, protocol, storage, operations, video text, research, safety, finance and unsupported-input cases; five are no-evidence queries. The v3 corpus is independent of historical v1/v2 fixtures and deliberately has more than five eligible results, so recall@5 cannot be trivially satisfied by returning nearly every result. Labels are provisional pending independent owner review, and the dataset is still too small to claim general production relevance.
 
 `RetrievalRankingEvaluationTests` runs v3 through the actual capture, text extraction, FTS5 and source provenance assertions without external inference. It verifies exact expected lexical identities and scorers with ranked positive results, incorrect negatives and duplicates. The optional local-Ollama test executes **both v2 and v3** when `PRAXIS_RETRIEVAL_OLLAMA_MODEL` is set, comparing lexical, semantic-only and fused top-five results. Every query reports **ordered stable source keys**, judged relevant keys, and separate per-mode elapsed time. Reports aggregate **recall@1/3/5, precision@1/3/5 and MRR@5 across only positive-answer queries**; no-evidence correctness is a separate fraction. No-answer queries never inflate ranking precision or recall by being assigned a perfect 1. V3 **precision@k uses a fixed denominator k**, even when fewer than k results are returned, and recall@k divides by the number of genuinely relevant sources; no-evidence queries are excluded from both. MRR@5 is reciprocal first relevant rank with zero if no relevant item appears in the top five. The real-model runner records per-mode p50/p95 via nearest-rank order statistics, one host/run only, model digest, index segment count, catalog bytes and test-process memory. Sequential semantic and fused calls each embed the query; these are **not cold-start throughput, single-answer latency, GPU RSS or model cost measurements**. All compared modes query identical authorized synthetic sources.
 
@@ -157,7 +157,7 @@ The `ps` **RSS column is KiB**. Match the actual model runner PID to `ollama ps`
 
 ### Independent judgment review
 
-Use only the synthetic repository fixture. Export the 35 cases to a worksheet; inspect every `relevant` source against the original content and write corrections rather than silently changing expected IDs:
+Use only the synthetic repository fixture. Export the 36 cases to a worksheet; inspect every `relevant` source against the original content and write corrections rather than silently changing expected IDs:
 
 ```bash
 mkdir -p "$HOME/Desktop/Praxis-29-evidence"
@@ -165,14 +165,14 @@ jq -r '.documents[] | "=== \(.id) ===\n\(.path)\n\(.content)\n"' \
   tests/Praxis.Storage.Tests/Fixtures/retrieval-corpus-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/corpus-v3-review.txt"
 jq -r '(
-  ["case","domain","query","expected_sources","approved","correction","reason"],
-  (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),"","",""])
+  ["case","domain","query","relevant_sources","lexical_expected","approved","correction","reason"],
+  (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),(.lexicalExpected|join(",")),"","",""])
 ) | @tsv' \
   tests/Praxis.Storage.Tests/Fixtures/retrieval-judgments-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/judgment-v3-review.tsv"
 ```
 
-Mark each case approved or explain why additional, fewer or different sources are relevant. This is **source-retrieval relevance**; it does not confirm a generated answer, the correct cue time, financial arithmetic or instruction following. The v2 judgment labels also remain provisional unless the owner separately signs them off. Cases with conflicting evidence should preserve both sources; source text containing instructions remains inert. A reviewed corpus and an observed baseline must precede any candidate reranker or abstention threshold selection.
+Mark each case approved or explain why additional, fewer or different sources are relevant. This is **source-retrieval relevance**; it does not confirm a generated answer, the correct cue time, financial arithmetic or instruction following. A deliberate term-match distractor in v3 is a lexical result but is judged irrelevant, so ranking precision can detect false-positive search matches. The v2 judgment labels also remain provisional unless the owner separately signs them off. Cases with conflicting evidence should preserve both sources; source text containing instructions remains inert. A reviewed corpus and an observed baseline must precede any candidate reranker or abstention threshold selection.
 
 ### Completion boundary
 
