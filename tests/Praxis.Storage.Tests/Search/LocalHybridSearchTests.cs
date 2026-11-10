@@ -184,7 +184,8 @@ public sealed class LocalHybridSearchTests : IDisposable
             TimeSpan.FromMinutes(1), processorKey: LocalProcessors.TextSegments));
         await new LocalTextSegmenter(catalog).ProcessAsync(lease, CancellationToken.None);
         Assert.Equal("completed", Assert.Single(catalog.Processing.List(),
-            job => job.ItemId == lease.ItemId && job.ProcessorKey == LocalProcessors.TextSegments).State);
+            job => job.ItemId == lease.ItemId && job.Revision == lease.Revision &&
+                job.ProcessorKey == LocalProcessors.TextSegments).State);
     }
 
     public void Dispose()
