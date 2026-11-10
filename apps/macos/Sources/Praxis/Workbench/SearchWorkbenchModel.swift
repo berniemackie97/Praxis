@@ -38,13 +38,22 @@ final class SearchWorkbenchModel: ObservableObject {
     func updateSemanticIndex(rebuild: Bool = false) {
         guard !indexing else { return }
         indexing = true
-        let sent = request("semanticIndex", ["rebuild": rebuild]) { model, response in
-            model.indexing = false
-            if let update = response.data?.index {
-                model.notice = "Indexed \(update.indexed) segments. \(update.hasMore ? "More remain; update again." : "Index is current.")"
+        do {
+            try worker.send("semanticIndex", fields: ["rebuild": rebuild]) { [weak self] response in
+                guard let self else { return }
+                self.indexing = false
+                guard response.ok else {
+                    self.error = response.error ?? "Semantic indexing failed."
+                    return
+                }
+                if let update = response.data?.index {
+                    self.notice = "Indexed \(update.indexed) segments. \(update.hasMore ? "More remain; update again." : "Index is current.")"
+                }
             }
+        } catch {
+            indexing = false
+            self.error = error.localizedDescription
         }
-        if !sent { indexing = false }
     }
 
     func select(_ hit: SearchHit) {
