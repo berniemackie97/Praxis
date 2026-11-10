@@ -19,6 +19,7 @@ public sealed class SecurityRegistry : IDisposable
     public Guid InstallationId { get; }
     public SecurityOperator Operator { get; }
     public DeviceProofVerifier DeviceProofs { get; }
+    public SpaceKeyDistribution SpaceKeys { get; }
 
     private SecurityRegistry(FileStream lease, SqliteConnection connection, TimeProvider clock)
     {
@@ -31,6 +32,7 @@ public sealed class SecurityRegistry : IDisposable
             throw new InvalidDataException("The security registry installation identity is missing."));
         Operator = new SecurityOperator(this);
         DeviceProofs = new DeviceProofVerifier(this);
+        SpaceKeys = new SpaceKeyDistribution(this);
     }
 
     public static SecurityRegistry Open(string dataDirectory, TimeProvider? timeProvider = null)
