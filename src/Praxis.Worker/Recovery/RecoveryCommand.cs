@@ -36,6 +36,19 @@ internal static class RecoveryCommand
                 when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
                 report = await SecurityRegistrySnapshots.RestoreAsync(backup, destination, maxBytes, cancellationToken);
                 break;
+            case ["recovery", "set-backup", var catalog, var identity, var destination, "--max-bytes", var limit]
+                when IsAbsolutePath(catalog) && IsAbsolutePath(identity) && IsAbsolutePath(destination) &&
+                     TryParseByteLimit(limit, out long maxBytes):
+                report = await LocalRecoverySet.BackupExistingAsync(catalog, identity, destination, maxBytes, cancellationToken);
+                break;
+            case ["recovery", "set-verify", var backup, "--max-bytes", var limit]
+                when IsAbsolutePath(backup) && TryParseByteLimit(limit, out long maxBytes):
+                report = await LocalRecoverySet.VerifyAsync(backup, maxBytes, cancellationToken);
+                break;
+            case ["recovery", "set-restore", var backup, var destination, "--max-bytes", var limit]
+                when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
+                report = await LocalRecoverySet.RestoreAsync(backup, destination, maxBytes, cancellationToken);
+                break;
             default:
                 Console.Error.WriteLine("""
                     Usage:
@@ -45,6 +58,9 @@ internal static class RecoveryCommand
                       Praxis.Worker recovery identity-backup <absolute-registry> <new-absolute-backup> --max-bytes <positive-byte-count>
                       Praxis.Worker recovery identity-verify <absolute-backup> --max-bytes <positive-byte-count>
                       Praxis.Worker recovery identity-restore <absolute-backup> <new-absolute-registry> --max-bytes <positive-byte-count>
+                      Praxis.Worker recovery set-backup <absolute-catalog> <absolute-identity> <new-absolute-set> --max-bytes <positive-byte-count>
+                      Praxis.Worker recovery set-verify <absolute-set> --max-bytes <positive-byte-count>
+                      Praxis.Worker recovery set-restore <absolute-set> <new-absolute-destination> --max-bytes <positive-byte-count>
                     """);
                 return 2;
         }
