@@ -186,6 +186,12 @@
       "path": "media/clip.mp4",
       "content": "Unsupported binary media bytes must never become searchable source text.",
       "searchable": false
+    },
+    {
+      "id": "keyword-distractor",
+      "path": "operations/build-output.txt",
+      "content": "Diagnostic log: triangle mesh. This line is a recorded search-string example from build output; it contains no information about triangle geometry or model loading.",
+      "searchable": true
     }
   ]
 }
