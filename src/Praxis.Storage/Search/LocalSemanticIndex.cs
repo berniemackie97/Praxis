@@ -117,6 +117,11 @@ public sealed class LocalSemanticIndex
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (ValidateModel((await model.DescribeAsync(cancellationToken)).Digest) != digest)
+        {
+            throw new InvalidDataException("The embedding model changed during indexing; retry with a stable model.");
+        }
+
         int inserted = database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -201,6 +206,11 @@ public sealed class LocalSemanticIndex
         }
 
         float[] queryVector = Normalize(embedded[0]);
+        if (ValidateModel((await model.DescribeAsync(cancellationToken)).Digest) != digest)
+        {
+            throw new InvalidDataException("The embedding model changed during retrieval; rebuild the index.");
+        }
+
         return database.Execute(connection =>
         {
             using SqliteCommand read = connection.CreateCommand("""
