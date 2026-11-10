@@ -102,6 +102,8 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
 
             Assert.True(catalog.Sources.Revoke(quick.SourceId));
             Assert.Equal("revoked", catalog.Sources.ReadProvenance(quick.SourceId)!.Status);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new LocalQuickCapture(catalog, inbox).CaptureAsync(captureId, "Shared", "violet blueprint"));
             Assert.Empty(catalog.Search.Query("violet"));
             Assert.Equal(2, catalog.Search.Rebuild());
             Assert.Equal(updated.SourceId, Assert.Single(catalog.Search.Query("amber")).SourceId);

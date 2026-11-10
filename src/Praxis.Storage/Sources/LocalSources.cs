@@ -63,7 +63,7 @@ public sealed class LocalSources
                                                                  ORDER BY v.revision DESC LIMIT 1
                                                                  """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            query.Parameters.AddWithValue("$revision", revision.HasValue ? revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
             query.Parameters.AddWithValue("$processor", LocalProcessors.SourceText);
             using SqliteDataReader reader = query.ExecuteReader();
             if (!reader.Read())
