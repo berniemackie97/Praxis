@@ -39,7 +39,10 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
             rebuild: true, maxSegments: 512);
         indexClock.Stop();
         Assert.False(updated.HasMore);
-        Assert.True(updated.Indexed > 0);
+        int eligibleSegments = fixture.Originals.Values.Sum(original =>
+            fixture.Catalog.Segments.List(original.ItemId, original.Revision).Count);
+        Assert.True(eligibleSegments > 0);
+        Assert.Equal(eligibleSegments, updated.Indexed);
 
         RetrievalRankingReport report = new(output);
         List<double> lexicalTimes = new();
@@ -54,7 +57,7 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
             lexicalTimes.Add(clock.Elapsed.TotalMilliseconds);
 
             clock.Restart();
-            IReadOnlyList<SemanticSearchHit> semantic = await fixture.Catalog.Embeddings.QueryAsync(
+            var semantic = await fixture.Catalog.Embeddings.QueryAsync(
                 judgment.Query, model, 5);
             clock.Stop();
             semanticTimes.Add(clock.Elapsed.TotalMilliseconds);
