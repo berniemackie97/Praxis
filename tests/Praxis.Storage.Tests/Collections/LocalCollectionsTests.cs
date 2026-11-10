@@ -116,7 +116,7 @@ public sealed class LocalCollectionsTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
         using LocalCatalog reopened = LocalCatalog.Open(destination);
-        Assert.Equal(14, reopened.SchemaVersion);
+        Assert.Equal(16, reopened.SchemaVersion);
         Assert.Equal(collectionId, Assert.Single(reopened.Collections.List()).CollectionId);
         Assert.Equal(itemId,
             Assert.Single(reopened.Library.List(collectionId: collectionId)).ItemId);
@@ -153,7 +153,7 @@ public sealed class LocalCollectionsTests : IDisposable
         }
 
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
-        Assert.Equal(14, catalog.SchemaVersion);
+        Assert.Equal(16, catalog.SchemaVersion);
         Assert.Empty(catalog.Collections.List());
         Assert.Equal("Migrated", catalog.Collections.Create("Migrated").Name);
         Assert.Empty(catalog.Search.Query("missing"));
