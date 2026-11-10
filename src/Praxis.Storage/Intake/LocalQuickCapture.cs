@@ -35,7 +35,7 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
 
         await VerifyPublishedAsync(destination, bytes, cancellationToken);
         using MemoryStream content = new(bytes, writable: false);
-        CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), cancellationToken);
+        CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), CaptureRequestContext.QuickNote(root), cancellationToken);
         return new LocalQuickCaptureReceipt(destination, original);
     }
 
