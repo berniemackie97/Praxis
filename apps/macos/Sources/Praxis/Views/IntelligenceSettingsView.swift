@@ -10,6 +10,8 @@ struct IntelligenceSettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 LocalModelSettings(model: model)
                 Divider()
+                LocalEmbeddingSettings(model: model)
+                Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Stronger-model verification").font(.headline)
                     Text("Praxis runs your own signed-in CLIs, never API keys. Each request waits for your approval. Lower cost weight is tried first; the daily limit caps requests per provider.")
@@ -77,6 +79,54 @@ private struct LocalModelSettings: View {
         endpoint = profile.endpoint.hasSuffix("/") ? String(profile.endpoint.dropLast()) : profile.endpoint
         modelName = profile.model
         contextTokens = profile.contextTokens
+        enabled = profile.enabled
+    }
+}
+
+private struct LocalEmbeddingSettings: View {
+    @ObservedObject var model: IntelligenceSettingsModel
+    @State private var endpoint = "http://127.0.0.1:11434"
+    @State private var modelName = ""
+    @State private var enabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Local semantic retrieval").font(.headline)
+            Text("Optional, offline embeddings via a model installed in your own Ollama runtime. No remote API or automatic model download. Select an embedding-capable model, then update the index in Search.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                TextField("Ollama address", text: $endpoint).textFieldStyle(.roundedBorder)
+                    .frame(width: 240)
+                Button("List installed models") { model.listModels(endpoint: endpoint) }
+            }
+            HStack {
+                Picker("Embedding model", selection: $modelName) {
+                    if modelName.isEmpty { Text("Choose a model").tag("") }
+                    if !modelName.isEmpty && !model.installedModels.contains(where: { $0.name == modelName }) {
+                        Text(modelName).tag(modelName)
+                    }
+                    ForEach(model.installedModels) { installed in
+                        Text(installed.name).tag(installed.name)
+                    }
+                }
+                .frame(maxWidth: 420)
+                Toggle("Enable hybrid search", isOn: $enabled)
+                Button("Save") {
+                    model.saveEmbeddingProfile(endpoint: endpoint, model: modelName, enabled: enabled)
+                }
+                .disabled(modelName.isEmpty)
+            }
+        }
+        .onAppear { load(model.embeddingProfile) }
+        .onReceive(model.$embeddingProfile.removeDuplicates().dropFirst()) { profile in
+            load(profile)
+        }
+    }
+
+    private func load(_ profile: ModelProfile?) {
+        guard let profile else { return }
+        endpoint = profile.endpoint.hasSuffix("/") ? String(profile.endpoint.dropLast()) : profile.endpoint
+        modelName = profile.model
         enabled = profile.enabled
     }
 }
