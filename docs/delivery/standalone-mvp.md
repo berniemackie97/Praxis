@@ -28,13 +28,13 @@ Design validation on actual source/domain questions, not superficial generated s
 | S1a — catalog bootstrap | #122 under #100 | Pin/lock SQLite provider, validate schema migration, owner-local directory, WAL/FK settings, rollback/reopen and incompatible-catalog refusal; **not yet a working import** |
 | S1b — streamed original publication | #124 under #100 | Bound and verify input streams; non-overwriting same-volume publication before a transaction records original/source/item/first version; distinguish source identities despite byte deduplication |
 | S1c — retry and interruption safety | #126 under #100 | Preserve source identity across retries and revisions, durable receipts and read-only orphan/corruption inventory; no destructive object collection |
-| S1d — coherent local recovery | #128 under #100 | [Merged PR #134](https://github.com/berniemackie97/Praxis/pull/134) supplies coherent snapshot/restore and automated regressions. The [opt-in physical verification plan](../testing/physical-catalog-recovery.md) supplies a >2 GiB and reconnect acceptance path, but actual device, disk-full and unmount evidence remain open |
-| S2 — automatic owner-local intake | #102, #101, #105 | Merged #135 supplies durable intake and processing contracts. The [automatic intake checkpoint](automatic-intake-mvp.md) adds a supervised watched folder and bounded extraction worker with no per-file command. Initial worker launch is still manual; first-party setup UI, rename-aware lifecycle and full source processing remain open |
-| S3 — first extraction | #103 | S3a proposal adds bounded, digest-verified UTF-8 text/Markdown derivatives and explicit unsupported outcomes; PDF parsing and broader type/signature coverage remain open |
-| S4 — rebuildable search | #106 | [Proposed schema-v5 search slice] adds FTS5 ranked literal-term retrieval, version/revocation-triggered invalidation, source attribution, bounded highlighted snippets and transactional derived-index rebuild; CI/review and UI integration remain unverified |
+| S1d — coherent local recovery | #128 under #100 | Merged #134 and #197 deliver coherent catalog-plus-originals snapshots and owner-invokable offline backup/verify/restore; opt-in physical verification tooling exists. Real unplug, disk-full and >2 GiB device acceptance remain open (#128) |
+| S2 — automatic owner-local intake | #102, #101, #105 | Merged #135/#144/#168/#169/#202/#213 implement independently leased processing, supervised watched-folder capture, health/pause/retry, conservative observed moves and canonical path identity. The first-party app configures the watched Inbox; physical watcher/overflow/volume tests are still open (#105) |
+| S3 — first extraction | #103 | Merged #138 adds bounded original-verified text derivatives; #175 adds supported code/listing text and #193 narrowly inspects verified video headers. PDF breadth and fuller media processing are still open (#103/#114) |
+| S4 — rebuildable search | #106 | Merged #140 provides revision-fenced FTS5 local search and deterministic reindex. Hybrid/structural retrieval quality and cited answer evaluation remain #29/#172/#179, not a claim of completed RAG |
 | S5 — owner-local trust and future integration | #129, #107 | Approved in-process or protected child-process first-party authority; #107's separately authenticated loopback integration host remains blocked independently and is not required for the first local UI |
-| S6 — usable Praxis app | #108, #146 | First-party trusted Inbox/Library/Search and user-owned collections work end-to-end **without Obsidian**, a cloud account, a private HTTP listener or a required model provider |
-| S7 — integrated acceptance | #130 | Real macOS first-run and cross-platform regression prove mixed-source import, provenance, recovery, indexed search, denial tests and user-visible errors |
+| S6 — usable Praxis app | #108, #146, #215 | Merged #145/#147/#148/#167/#212 and native Xcode #216–#220 implement a private worker-backed SwiftUI application with Inbox/Library/Search, collections, quick notes, original export and knowledge/model screens. Successful owner-Mac build, launch, app-hosted tests and first-use UX remain unverified (#215/#130) |
+| S7 — integrated acceptance | #130 | Open: actual Mac first-run, mixed-source capture/search/restart/recovery/denial and current Windows/Linux/macOS automated acceptance. CI blocked by unprovisioned runners (#137) |
 
 These are separate issue-sized implementation reviews, not an instruction to introduce a framework per row. A slice must re-audit actual code, dependencies and CI before implementation; one PR may cover multiple closely coupled acceptance points only when it remains reviewable. Cross-platform API/unit tests and a real macOS first-run acceptance are required before claiming the local MVP complete.
 
@@ -42,7 +42,9 @@ These are separate issue-sized implementation reviews, not an instruction to int
 
 ## Status checkpoint — November 9, 2026
 
-Merged PRs #144, #145, #147 and #148 now provide a first macOS workbench with supervised automatic intake, named collections and direct note capture. These are implementation milestones, not proof of the end-to-end first-use acceptance: #130 remains open for owner-run macOS GUI and mixed-corpus/restart/recovery/security verification. #146 remains open for unverified collection acceptance even though its implementation is merged. CI status and hardware verification must be read live rather than inferred from merge state.
+Merged #144–#220 have advanced the owner-local app, including bounded local Ollama enrichment (#205/#206), entity relations and owner governance (#207), owner-approved stronger CLI checks (#210) and first-party Knowledge/Verification/Models views (#212). The native Xcode project and follow-up packaging/compiler fixes (#216–#220) are on `main`, but #215 has no verified successful owner-Mac build/launch/worker session. No current GitHub Actions matrix has completed while #137 lacks runners. The local foundation #130 and intelligent MVP #170 remain separate, open acceptance gates.
+
+The first model-backed knowledge graph is an implemented **proposal and evidence** layer, not an independently proven answer engine. The full MVP still requires cited cross-domain chat, playable video moments, typed financial reconciliation and editable budget outputs, approved tasks, Obsidian projections and measured provider selection.
 
 ## Next capture experiences
 
@@ -90,21 +92,19 @@ The declarative [GitHub project plan](../../scripts/github/roadmap.json) records
 
 ## First-party macOS checkpoint and execution dependencies
 
-[Draft PR #145](https://github.com/berniemackie97/Praxis/pull/145) proposes a native macOS workbench that supervises the existing automatic .NET worker through private child-process pipes, rather than requiring a source-bearing HTTP host. It adds first-run catalog/Inbox setup and an initial Library/Search/preview workflow; actual UI and new protocol test execution remain unverified. [#146](https://github.com/berniemackie97/Praxis/issues/146) owns first-use user-authored collections. Enrichment proposals and inferred relationships remain distinct #115/#116 work and are not an implied capability of the watcher.
+The first-party SwiftUI application introduced in merged #145 now has a version-controlled Xcode Application target (#216) and follow-up build repairs (#217/#218/#220). All canonical storage, processing, inference and knowledge services remain in the .NET worker on private pipes; #107 is an independently gated external integration API, not a prerequisite for #130. The native app is **not yet hardware-accepted**; execute #215 then the full #130 fixture plan.
 
-Under approved ADR 0021, #107 is an **external integration** dependency and may proceed separately after its storage/security gates; it does not block #108 or local-only #130. Declarative planning proposes retiring blocked-by #101/#107 for #108 and #107 for #130, preserving #101's own outstanding first-use acceptance. #107 moves from L0 to L3; #146 enters L0. The GitHub Project custom Status/Priority/Stage must be reconciled with these scoped changes by the owner until project-write access is available. No parent issue closes from an unverified draft.
-
+The [declarative GitHub plan](../../scripts/github/roadmap.json) now tracks #215 as a P1/M6 child of #64 and prerequisite for #130. Foundation work for user-owned collections (#146), quick capture (#113), watch recovery (#105) and original export (#166) is merged, but each issue retains its hardware/security acceptance as applicable. Project #3 fields and native dependencies require owner-side reconciliation after merge; modifying this file does not update the live private board.
 
 ## Owner-authored first-use collections — #146
 
-The first-party workbench now has a draft schema-v6 and UI integration for named owner-owned collections, source membership, archive and collection-filtered browsing. Collections are explicit source-ID assignments, not filesystem folders or AI classifications. The data follows coherent catalog snapshots and remains recoverable alongside preserved originals. Source revision updates retain membership; source revocation excludes it from active collection views. This draft is not a passed local build, three-OS CI result or GUI acceptance.
+Merged #147 added schema-v6 owner-authored collections, source membership, archive and collection-filtered browsing. Assignments are explicit source identities, not filesystem folders or model decisions. They survive source updates and coherent backups while active views exclude revoked sources. #146 remains open for actual current-app create/rename/archive/restart/restore acceptance and #137 cross-platform CI evidence.
 
-The proposed agent-assisted continuation is #115's separately authorized **proposal** lifecycle after deterministic extraction. Any rule/model-enriched suggestion must be stamped with source/item/revision/digest/processor identity, bounded in runtime and output, reviewable and reversible, never silently accepted or promoted into canonical owner-authored collection assignments. #116 owns richer relations; #143 owns scoped source-backed agent context packs. The initial release works with all inference disabled.
-
+Machine proposals belong to #115/#116 and do not silently change collection membership. The newer merged model/graph work #205–#212 shares the canonical provenance and review boundaries without making the initial no-model foundation dependent on inference.
 
 ## First-use quick note checkpoint (#113)
 
-Typed or intentionally pasted notes are a P1/L0 first-use requirement, not a prerequisite to separately gated voice/browser integrations. Draft implementation in the quick-note feature branch writes a bounded owner-authored Markdown file atomically into the **already-approved watched Inbox**, then commits the same exact bytes through the canonical original object and source-revision catalog. The existing text worker indexes that saved source; collection assignment and search are the same as for other approved Markdown files. No clipboard watcher, third-party service, URL fetch or agent model is involved.
+Typed or intentionally pasted notes are a P1/L0 first-use requirement, not a prerequisite to separately gated voice/browser integrations. Merged #148 implements quick note capture: the first-party app writes a bounded owner-authored Markdown file atomically into the **already-approved watched Inbox**, then commits the same exact bytes through the canonical original object and source-revision catalog. The existing text worker indexes that saved source; collection assignment and search are the same as for other approved Markdown files. No clipboard watcher, third-party service, URL fetch or agent model is involved.
 
 The app provides an optional title, a text editor, Command-Return save, explicit acknowledgement and a retryable capture token while the process remains alive. A title is an authored Markdown heading, not an inferred label. Note file publication is owner-private on POSIX; root selection still obeys the approved watched-source boundary. Source files remain in the opted-in Inbox, and removing them from that folder does not automatically revoke preserved originals. The initial service uses `file` source identities rather than introducing a competing quick-note database.
 
@@ -126,30 +126,26 @@ Do not create a graph database, broad tool runtime, uncontrolled session monitor
  
 ## Reviewable enrichment checkpoint (#115)
 
-The initial schema-v7 deterministic proposal worker follows verified text extraction. It creates only literal Markdown-heading candidates with exact source/revision/digest/evidence references; a heading-free eligible Markdown file records abstention. The owner can accept, reject or correct a proposal in the trusted app. Decisions and history survive restart/backup, while changed or revoked sources make older candidates unavailable for active review. This does **not** automatically assign a collection, call a model or authorize an agent. See [ADR 0024](../decisions/0024-reviewable-enrichment.md).
+Merged #165 established heading-derived, revision-fenced suggestions and owner accept/reject/correct history. Merged #204–#207 add deterministic text segmentation, bounded Ollama-derived topic/entity/relation proposals, quote-verification, a cross-source entity graph and explicit owner governance. #210 adds redaction-previewed, approved Codex/Claude CLI verification; #212 exposes Knowledge, Verification and Models workspaces. None of these agents can grant themselves tool permissions or overwrite canonical sources.
 
-This establishes the authoritative proposal lifecycle required by later local-model enrichment and knowledge relationships, without moving those L2/L4 gates into the L0 release definition. Native first-run verification and physical recovery remain open under #130 and #128.
-
+This is implemented proposal/graph infrastructure, **not** proof that a quoted assertion is true or that arbitrary sources are understood. #115/#116 remain open for measured quality, correction, rebuild/revocation and native first-party verification; #31/#172 own measured model escalation and #170 owns integrated answer/task acceptance.
 
 ## L0 source-original retrieval gate — #166
 
-The first-party Library now has a draft explicit export path for preserved originals. It retrieves the current active source version from the canonical object store, streams and hashes exact bytes, and performs owner-selected atomic no-overwrite publication. Unsupported file formats, and items whose physical watched source path has gone offline, retain their original bytes as long as the canonical source remains active. This removes the need to browse Praxis's private SHA-256 storage manually. A revoked or superseded source cannot be exported as a current active source. The app uses the already established private child-process boundary; no external agent tools or network endpoints are added.
+Merged #167 added user-selected original export; #192 fixed linked-destination aliases against the private catalog. The worker verifies current source identity and exact original bytes, stages into an owner-selected destination and refuses overwrite. It does not use the watched input path or grant a network/agent write.
 
-The owner's deferred integrated smoke (#130) must validate the UI, error feedback, exact binary fidelity, denied destinations, physical-recovery behavior and current-version fences. The software PR is not itself a signed or verified MVP release.
-
+#166 remains open for actual macOS Save dialog, symlink/TOCTOU, removal/revocation, cancellation and physical-volume acceptance. Merged implementation and the owner's prior reported Mac regression pass do not substitute for current native-app verification (#215/#130).
 
 ## First-use intake observability checkpoint (#105)
 
-The L0 application now includes a draft operator-visible health path for its single approved watched Inbox: watching/offline/degraded/paused states, last completed scan, per-session capture counts and bounded file-specific errors, plus user-triggered pause, resume and retry scan. It reuses the existing watcher, catalog and private worker protocol; no second importer, untrusted local API, source reset or inference service is introduced.
+Merged #168 exposes watching/offline/degraded/paused states, last scan, bounded per-file errors and non-destructive pause/resume/retry controls. Merged #202 moved processing out of the watched intake scan and separated watcher responsibilities; #213 canonicalizes path aliases for stable source identity. These are implementation checkpoints, not complete fault-handling proof.
 
-The owner acceptance exercise must demonstrate a missing Inbox before launch, reconnection and catch-up, an intentionally unreadable or invalid file, restoration of healthy status after correction, pause while files change, resumption and capture, preserved originals and active search while the Inbox is offline, and non-destructive retry. These tests have not yet run on hardware; #105/#130 are not complete.
-
+The #105/#130 exit still requires a real OS watcher, volume disconnection/reattachment, missed events/overflow, partial writes, restart, consent and recovery trials. No source disappearance should silently destroy its preserved canonical original.
 
 ## L0 event-confirmed source relocation — #105
 
-The first-party watched-Inbox worker has a draft conservative rename path. Only an observed file rename followed by verified stable SHA-256, active source and unoccupied destination can update the canonical locator. It keeps the source and item identities, revisions, original digests, manual collections and reviewed derivatives intact, while saving the old/new locator in schema-v8 history. Independent copies and unobserved moves do not merge. The owner Library inspector can display the recorded move evidence. This is not proof of physical removable-volume identity, which remains #128/#130 acceptance.
-
+Merged #169 preserves source identity only for observed in-scope file renames followed by stable SHA-256 and source-state verification, retaining provenance, collections and prior decisions. Unobserved moves and same-content copies are not guessed into one source; #213 also prevents duplicate logical identities from alternate symlink path spellings. Hardware rename, disconnect, missed-event and identity-reuse cases remain to be accepted under #105/#130.
 
 ## Cross-domain evidence
 
-Digest-bound caption search (#181) supports exact time ranges for captured video sources. Budget creation is an example assistant task (#178) using permitted records and scoped tools. Both outcomes depend on the integrated assistant and evidence model in #170.
+Merged #187 added timecoded caption cue evidence and a bounded, source-cited one-CSV financial summary; #188 added hypothetical owner-controlled spending targets; #193 added narrow digest-verified media header inspection. These are read-only evidence facilities, not finished media comprehension, chat playback, multi-source typed financial history or an approved editable budget workflow. #181/#184 and #177/#178 remain open, with #179/#170 owning independent cross-domain acceptance.

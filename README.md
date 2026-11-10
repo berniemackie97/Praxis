@@ -1,25 +1,29 @@
 # Praxis
 
-Praxis is a local-first, independent Second Brain for capturing, preserving, finding, organizing and eventually using knowledge through explicitly authorized agents. **Obsidian is optional**: it is an editor adapter, not the primary application or required storage. The active delivery priority is a standalone local Inbox/Library/Search experience, followed by voice dictation, browser save, reviewable enrichment and scoped MCP agent access.
+Praxis is a local-first, independent Second Brain for preserving and using owner-approved knowledge. Obsidian is an optional editor and derived-knowledge destination, not Praxis's canonical store. The first product MVP is an **integrated, source-grounded, permissioned assistant**; a working Inbox/Library/Search app is its necessary foundation, not the release itself.
 
 ## Current state
 
-The repository has an owner-local SQLite catalog, verified original-file preservation, revision-aware processing, bounded Markdown/text extraction, local FTS5 search and an automatically reconciling watched-folder worker. The worker is merged, and its source/test baseline was locally verified on macOS; the full watched-folder hardware acceptance is still open. The .NET API exposes liveness only and does not expose private knowledge over HTTP.
+**Merged on `main`:** a private owner-local SQLite catalog; verified immutable originals and revision/receipt history; supervised watched-folder intake with source-rename and path-alias handling; bounded text extraction and segmentation; FTS5 search; owner-authored collections and quick-note capture; original export; and explicit verified catalog backup/restore commands. Unsupported formats remain preserved without fabricated extraction.
 
-The [macOS workbench development slice](docs/delivery/macos-workbench.md) adds a first-party SwiftUI window that supervises that same worker through a private child-process pipe, with Inbox/Library/Search inspection and explicit source actions. **The workbench was merged without fresh native UI verification and is not yet released.** Source-backed URL capture, reviewable organization and enrichment, external agent grants, mobile clients and integrated first-run acceptance remain open. No cloud account or model provider is required for the local intake path.
+The first-party SwiftUI workbench is now a **checked-in Xcode macOS application**. It supervises the .NET 10 worker through private inherited pipes and exposes Inbox, Library, Search, Knowledge, Verification and Models workflows. The application build publishes the .NET worker into its bundle. Merged PRs #216–#220 address Xcode packaging, SwiftUI compilation and assembly-name collisions; **an actual successful owner-Mac Xcode build, window launch, worker session and first-run acceptance are still outstanding** (#215/#130).
+
+**Intelligence now implemented in bounded slices:** a loopback-only Ollama inference adapter; versioned, quote-checked topic/entity/relation proposals; cross-source entity identities and owner corrections; instruction-like evidence withholding; and owner-approved Codex/Claude CLI verification with inspectable, redactable requests. These are not evidence of perfect factual classification, unrestricted subscription APIs, general-purpose agent chat or autonomous tool authority. Source capture/search does not require a model. The .NET API currently exposes liveness rather than private knowledge over HTTP.
 
 ## Product direction and delivery status
 
-The [product experience](docs/product/second-brain-experience.md) defines the intended sources, original-versus-derived model, user-facing flows, microphone/browser capture and agent access. The [standalone local MVP plan](docs/delivery/standalone-mvp.md) defines a dependency-aware sequence of first useful slices and their acceptance criteria.
+The [product experience](docs/product/second-brain-experience.md) defines the intended first release; [foundation and intelligent MVP delivery](docs/delivery/standalone-mvp.md) tracks the independent acceptance gates.
 
-**Implemented on `main`:** portable note/attachment archives, optional Obsidian desktop interoperability, durable local catalog/originals, revision/receipt processing, bounded text derivatives, source-aware text search and a supervised automatic intake worker (merged PRs #123, #125, #132, #134, #135, #138, #140 and #144). **On `main`:** a macOS first-party application backed by the existing worker (merged PR #145, native smoke unverified). **On `main`:** persistent user-authored collections, source membership editing and filtered library navigation (merged PR #147; GUI acceptance still outstanding). **In the active draft:** trusted, keyboard-first quick note capture through the same preserved-original and indexing pipeline (#113). **Still open:** real UI acceptance (#108/#130), safe rename attribution (#105), physical recovery (#128), PDF/media processing (#103/#114), URL capture (#104), reviewed organization (#115/#116), scoped agents/MCP (#117–#119), remote sync and production release. Existing code and passing library tests are not proof of end-to-end release readiness.
+**Foundation #130 remains open** for verified macOS first run, mixed-source lifecycle, original recovery, denial/security and real device behavior. **Intelligent MVP #170 remains open** for evaluated cited technical answers, playable source-linked video excerpts, reconciled editable budgeting through the assistant, governed agent tasks, safe Obsidian knowledge projections and measured routing. Initial caption evidence, media-header inspection and single-source financial analysis are not substitutes for those complete workflows. URL/browser capture, speech, agent/MCP access, remote sync and production distribution remain separately gated.
+
+**Verification status:** targeted backend and model runs are documented in individual PRs; no current all-platform GitHub Actions success can be claimed while #137 has no provisioned runners. Merged code, local test evidence, first-party hardware acceptance and release readiness are distinct statuses. [Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board, with the [repository issue plan](scripts/github/roadmap.json) as its versioned reconciliation input.
 
 ## Development
 
 Requires the .NET 10 SDK.
 
 ```sh
-dotnet restore Praxis.slnx
+dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release
 dotnet test Praxis.slnx -c Release
 dotnet format Praxis.slnx --verify-no-changes
@@ -120,7 +124,7 @@ For a practical local trial using the current desktop adapter, see the [Mac firs
 
 ## Release verification
 
-The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions verifies the backend build and tests on Linux, macOS and Windows; the Linux job additionally smokes the published API on loopback and checks a [declared-license/dependency inventory](docs/dependencies/README.md). See [release verification](docs/release-verification.md) for update commands, evidence and limitations. These checks do not imply that mobile clients or production synchronization are implemented.
+The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions is configured for Linux, macOS and Windows backend verification; the Linux workflow also checks API liveness and the [dependency inventory](docs/dependencies/README.md). **Current workflows are queued without eligible runners (#137), not verified green.** See [release verification](docs/release-verification.md) for commands, evidence and release limitations.
 
 ## Owner-authored organization
 
@@ -128,22 +132,19 @@ First-use collections are persisted in the same source catalog (schema v6) and r
 
 ## Direct thoughts and paste capture
 
-The first-party Quick note workflow (under [#113](https://github.com/berniemackie97/Praxis/issues/113)) saves an explicit authored Markdown note into the selected Inbox with exact-byte original preservation, idempotent receipt and automatic downstream indexing. This draft does not monitor or transmit clipboard contents, fetch pasted URLs or invoke any model. See [the owner-local workbench guide](docs/delivery/macos-workbench.md). Native GUI/build verification remains open.
+Merged #148 implements first-party Quick note capture (#113) through the existing authorized Inbox/original/indexing path. It writes an explicitly authored Markdown note with an idempotent receipt; intentional paste is not a background clipboard watcher, and a pasted URL is not automatically fetched. #113 remains open for actual keyboard, failure, duplicate/restart and native-app acceptance.
 
- 
 ## Reviewable enrichment (development)
 
-Under #115, the proposal foundation stores source/revision/digest-bound literal Markdown-heading candidates and append-only owner review events in catalog schema v7. These are **not machine-understood topics or automatically accepted tags**. No model provider is required, and no external tool or agent receives new permissions. See [ADR 0024](docs/decisions/0024-reviewable-enrichment.md) and the [macOS workbench guide](docs/delivery/macos-workbench.md). Native acceptance and end-to-end release gates remain open.
-
+The heading-only schema-v7 proposal lifecycle (#165) is a historical foundation. Merged #205–#212 add loopback Ollama, versioned quoted topic/entity/relation proposals, cross-source entity identities, owner correction, flagged-evidence withholding and approved redactable stronger-model CLI verification. These remain **unverified inferred knowledge** until separately reviewed or corroborated; a quote is not proof of truth. #115/#116/#31 remain open for quality, revocation and current-app acceptance. No external agent or model acquires new rights from imported text.
 
 ## Exporting preserved originals (L0 development)
 
-The first-party Library now has a draft owner-selected **Export original…** action for the exact active source version, backed by the content-addressed original store rather than the watched source file. It verifies SHA-256 while streaming to a new, non-overwriting destination. Supported and unsupported formats use the same path, and owner approval is required for each destination. This does not create a remote sharing API, an agent grant or a full catalog backup. See the [workbench smoke guide](docs/delivery/macos-workbench.md) and tracked [#166](https://github.com/berniemackie97/Praxis/issues/166). The new feature is not yet locally compiled/accepted.
-
+Merged #167/#192 implement owner-selected, integrity-verified **Export original…** for the active source version, independent of the watched input file. Output is staged and published without overwriting an existing destination, and source revocation invalidates access. The path does not authorize remote/agent reads or replace coherent catalog backup. #166 remains open for current native Save dialog, physical/symlinked destinations and race/security acceptance.
 
 ## Observed file moves (development)
 
-Praxis now has a draft opt-in-folder rename continuity implementation for already captured files. It preserves source identity only when a filesystem move event is independently verified against the current original digest and an unoccupied target; historical paths are recorded in schema v8. Copies and missed moves are not inferred as the same source. See [ADR 0025](docs/decisions/0025-file-source-relocations.md) for evidence limits, security and migration requirements. First-party and physical hardware acceptance remain open.
+Merged #169 preserves stable source identity for verified observed file renames inside the approved Inbox, and #213 canonicalizes alternate path spellings. Copies or unobserved moves are not guessed to be the same source; prior locators remain traceable. Physical watch notifications, unplug/reattach, missed events, restart and security acceptance are still open under #105/#130.
 
 ### Multidomain MVP direction
 

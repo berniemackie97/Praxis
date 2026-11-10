@@ -39,9 +39,11 @@ Remote synchronization (M2), Obsidian desktop/mobile parity (M3), advanced infer
 
 ### Immediate priority and success measures
 
-Merged PRs #144/#145/#147/#148 implement automatic intake, initial macOS workbench, owner collections and quick notes. Their integration does not close the full #130 acceptance gate: confirm fresh-install/GUI, mixed files, restart/recovery, denied access and supported search with actual results before claiming a usable local release. #146 remains open for unverified acceptance despite its merged implementation.
+The local foundation now contains a version-controlled native Xcode workbench, owner-authored collections and notes, automatic watched intake, verified original export and offline recovery. Merged #205–#212 additionally implement bounded Ollama enrichment, an owner-governed cross-source entity/relationship layer and separately approved Codex/Claude CLI verification. These provide evidence-bearing components, not a verified end-user assistant or release.
 
-The **product success test** after L0 goes beyond document retrieval: ask a challenging question spanning disassembly, source code and notes; Praxis must reconstruct the supported answer with attributable evidence, highlight contradictions and gaps, and avoid claiming unsupported binary comprehension. This is planned in L4, not a new L0 release blocker.
+**Immediate P1 dependency:** verify current Xcode build, native launch and private .NET worker in #215 after merged #216–#220; then execute the mixed-source, offline/restart/security acceptance #130. GitHub Actions #137 is waiting on owner-deferred runners rather than producing green tests. #219 owns the P2 documentation/project-plan reconciliation. No hardware or cross-platform passing result is inferred from PR merge.
+
+After the L0 gate, the #170 product success test must independently demonstrate supported technical synthesis, source-linked in-chat video playback and reconciled editable monthly budgeting, along with approved tasks and permissioned knowledge projections. Existing read-only cue and CSV tools are not completion of those flows.
 
 ### Local foundation checkpoint — not the finished MVP
 
