@@ -201,6 +201,7 @@ internal static class SecurityRegistrySchema
                 ) STRICT;
                 CREATE TABLE pending_device_approvals (
                     challenge_id TEXT PRIMARY KEY,
+                    device_id TEXT NOT NULL UNIQUE,
                     space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
                     owner_device_id TEXT NOT NULL REFERENCES devices(device_id),
                     principal_id TEXT NOT NULL REFERENCES principals(principal_id),
@@ -233,7 +234,7 @@ internal static class SecurityRegistrySchema
             ("principal_recovery", "principal_id, public_key, version, registered_utc"),
             ("recovery_enrollments", "enrollment_id, principal_id, signing_key, wrapping_key, wrapping_signature, recovery_version, nonce, expires_utc, consumed"),
             ("device_approvals", "device_id, space_id, approved_by_device_id, approved_principal_id, challenge_id, nonce, expires_utc, owner_signature, applicant_signature"),
-            ("pending_device_approvals", "challenge_id, space_id, owner_device_id, principal_id, signing_public_key, wrapping_public_key, wrapping_signature, nonce, expires_utc, consumed")
+            ("pending_device_approvals", "challenge_id, device_id, space_id, owner_device_id, principal_id, signing_public_key, wrapping_public_key, wrapping_signature, nonce, expires_utc, consumed")
         })
         {
             using SqliteCommand check = connection.CreateCommand();
