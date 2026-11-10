@@ -119,7 +119,7 @@ public sealed class SecurityRegistryMigrationTests : IDisposable
         inspect.Open();
         using SqliteCommand version = inspect.CreateCommand();
         version.CommandText = "PRAGMA user_version";
-        Assert.Equal(2L, Convert.ToInt64(version.ExecuteScalar()));
+        Assert.Equal(3L, Convert.ToInt64(version.ExecuteScalar()));
     }
 
     [Fact]
