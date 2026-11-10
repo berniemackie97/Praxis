@@ -12,7 +12,7 @@ public interface INoteSyncExchange
 {
     Task<NoteSubmitResult> SubmitAsync(NoteSubmitRequest request, CancellationToken cancellationToken);
     Task<NotePullResult> PullAsync(NotePullRequest request, CancellationToken cancellationToken);
-    Task<NoteSnapshotResult> SnapshotAsync(Guid securitySpaceId, Guid collectionEpoch,
+    Task<NoteSnapshotResult> SnapshotAsync(Guid securitySpaceId, Guid collectionEpoch, Guid deviceId,
         CancellationToken cancellationToken);
 }
 
@@ -37,7 +37,7 @@ public sealed record NoteSubmitResult(
     Guid DeviceId, Guid OperationId, long Sequence, LocalNoteState? Current);
 
 public sealed record NotePullRequest(
-    int ProtocolVersion, Guid SecuritySpaceId, Guid CollectionEpoch,
+    int ProtocolVersion, Guid SecuritySpaceId, Guid CollectionEpoch, Guid DeviceId,
     long AfterSequence, int Limit);
 
 public enum NotePullStatus
