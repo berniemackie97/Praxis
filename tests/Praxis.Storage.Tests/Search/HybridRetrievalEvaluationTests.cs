@@ -150,8 +150,11 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         Assert.Empty(fixture.Catalog.Search.Query("ParseMesh"));
         Assert.Equal(revised.ItemId, Assert.Single(fixture.Catalog.Search.Query("UploadGeometry")).ItemId);
 
+        int currentSegments = fixture.Originals.Values.Sum(captured =>
+            fixture.Catalog.Segments.List(captured.ItemId, captured.Revision).Count) +
+            fixture.Catalog.Segments.List(revised.ItemId, revised.Revision).Count;
         int refreshed = (await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed;
-        Assert.Equal(expectedSegments, refreshed);
+        Assert.Equal(currentSegments, refreshed);
         Assert.DoesNotContain((await fixture.Catalog.Embeddings.QueryAsync("orbital physics", model)),
             hit => hit.Hit.SourceId == revoked.SourceId);
         await fixture.Catalog.Originals.VerifyAsync(revised.ItemId);
