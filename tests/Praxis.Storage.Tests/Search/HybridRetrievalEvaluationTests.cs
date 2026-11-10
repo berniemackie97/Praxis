@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Praxis.Inference;
@@ -177,13 +178,23 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         }.ToString()))
         {
             db.Open();
+            using SqliteCommand read = db.CreateCommand();
+            read.CommandText = """
+                SELECT vector FROM semantic_vectors
+                WHERE item_id = $item AND ordinal = 0
+                """;
+            read.Parameters.AddWithValue("$item", mesh.ItemId.ToString("D"));
+            byte[] vector = Assert.IsType<byte[]>(read.ExecuteScalar());
+            BinaryPrimitives.WriteSingleLittleEndian(vector.AsSpan(0, sizeof(float)), float.NaN);
+
             using SqliteCommand corrupt = db.CreateCommand();
             corrupt.CommandText = """
-                UPDATE semantic_vectors SET vector = x'00'
-                WHERE item_id = $item
+                UPDATE semantic_vectors SET vector = $vector
+                WHERE item_id = $item AND ordinal = 0
                 """;
             corrupt.Parameters.AddWithValue("$item", mesh.ItemId.ToString("D"));
-            Assert.True(corrupt.ExecuteNonQuery() > 0);
+            corrupt.Parameters.AddWithValue("$vector", vector);
+            Assert.Equal(1, corrupt.ExecuteNonQuery());
         }
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
