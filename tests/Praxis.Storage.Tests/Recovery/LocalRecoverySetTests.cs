@@ -147,14 +147,14 @@ public sealed class LocalRecoverySetTests : IDisposable
         }
 
         await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
-        Assert.Equal(2, ReadSchemaVersion(databasePath));
-        Assert.Equal(2, ReadSchemaVersion(Path.Combine(Backup, "catalog", "catalog.sqlite")));
+        Assert.Equal(2L, ReadSchemaVersion(databasePath));
+        Assert.Equal(2L, ReadSchemaVersion(Path.Combine(Backup, "catalog", "catalog.sqlite")));
         RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(Backup, Budget);
         Assert.Equal(0, verified.Catalog.ObjectCount);
         await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget);
         using LocalCatalog restored = LocalCatalog.Open(Path.Combine(Restored, "catalog"));
         Assert.True(restored.SchemaVersion > 2);
-        Assert.Equal(2, ReadSchemaVersion(databasePath));
+        Assert.Equal(2L, ReadSchemaVersion(databasePath));
     }
 
     [Fact]
