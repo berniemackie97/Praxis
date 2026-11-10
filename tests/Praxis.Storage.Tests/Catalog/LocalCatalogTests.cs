@@ -171,13 +171,12 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public async Task PriorSchemaReceiptsUpgradeWithoutManufacturingAuthorization()
     {
-        string file = Path.Combine(root, "legacy.md");
-        File.WriteAllText(file, "Legacy original");
         Guid sourceId;
         using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
-            CapturedOriginal original = await new Praxis.Storage.Intake.LocalSourceIntake(catalog)
-                .ImportFileAsync(file, 200, "legacy-key");
+            using MemoryStream bytes = new("Legacy original"u8.ToArray());
+            CapturedOriginal original = await catalog.Originals.CaptureFileAsync(
+                Path.Combine(TestPaths.Temp, "legacy-file.md"), bytes, 200, "legacy-key");
             sourceId = original.SourceId;
         }
 
