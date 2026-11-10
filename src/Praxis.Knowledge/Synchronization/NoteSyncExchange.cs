@@ -33,7 +33,7 @@ public enum NoteSubmitStatus
 }
 
 public sealed record NoteSubmitResult(
-    NoteSubmitStatus Status, Guid SecuritySpaceId, Guid CollectionEpoch,
+    int ProtocolVersion, NoteSubmitStatus Status, Guid SecuritySpaceId, Guid CollectionEpoch,
     Guid DeviceId, Guid OperationId, long Sequence, LocalNoteState? Current);
 
 public sealed record NotePullRequest(
@@ -51,12 +51,13 @@ public enum NotePullStatus
 }
 
 public sealed record NotePullResult(
-    NotePullStatus Status, Guid SecuritySpaceId, Guid CollectionEpoch,
+    int ProtocolVersion, NotePullStatus Status, Guid SecuritySpaceId, Guid CollectionEpoch,
+    Guid DeviceId,
     long RequestedCursor, long NextCursor, long HeadSequence,
     IReadOnlyList<AppliedNoteChange> Changes);
 
 public sealed record NoteSnapshotResult(
-    Guid SecuritySpaceId, LocalNoteSnapshot Snapshot);
+    int ProtocolVersion, Guid SecuritySpaceId, Guid DeviceId, LocalNoteSnapshot Snapshot);
 
 public enum NoteSyncState
 {
