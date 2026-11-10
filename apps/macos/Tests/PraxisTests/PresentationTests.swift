@@ -13,12 +13,12 @@ struct PresentationTests {
         #expect(FailureCode.label(code) == label)
     }
 
-    @Test func xcodeLaunchUsesAnApplicationBundleWithItsWorker() {
+    @Test func xcodeLaunchUsesAnApplicationBundleWithItsWorker() throws {
         #expect(Bundle.main.bundleURL.pathExtension == "app")
         #expect(Bundle.main.bundleIdentifier == "dev.praxis.renames-preview")
-        let worker = Bundle.main.resourceURL?
-            .appendingPathComponent("worker/Praxis.Worker.dll").path
-        #expect(worker != nil && FileManager.default.fileExists(atPath: worker!))
+        let worker = try #require(Bundle.main.resourceURL?
+            .appendingPathComponent("worker/Praxis.Worker.dll").path)
+        #expect(FileManager.default.fileExists(atPath: worker))
     }
 
     @Test func countsUseSingularAndPlural() {
