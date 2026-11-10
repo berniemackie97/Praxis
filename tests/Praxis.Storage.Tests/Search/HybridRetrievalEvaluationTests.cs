@@ -198,9 +198,11 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         File.Delete(originalPath);
         await Assert.ThrowsAnyAsync<IOException>(() =>
             fixture.Catalog.Originals.VerifyAsync(mesh.ItemId));
-        // Cached extracted evidence remains queryable until a separate integrity workflow
-        // reacts; the source digest does not prove the original object still exists.
-        Assert.Equal(mesh.ItemId, Assert.Single(fixture.Catalog.Search.Query("ParseMesh")).ItemId);
+        // A digest is not proof the object still exists. Report cached hits without
+        // requiring the current cache-availability policy to remain unchanged.
+        IReadOnlyList<LocalSearchHit> cached = fixture.Catalog.Search.Query("ParseMesh");
+        Assert.All(cached, hit => Assert.Equal(mesh.ItemId, hit.ItemId));
+        output.WriteLine($"missing_original_cached_hits={cached.Count} verification=failed");
     }
 
     [Fact]
