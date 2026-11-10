@@ -50,6 +50,16 @@ public sealed class LocalNoteJournal : IDisposable
         }
     }
 
+    public Guid CollectionEpoch
+    {
+        get { lock (gate) { EnsureOpen(); return state.CollectionEpoch; } }
+    }
+
+    public Guid DeviceId
+    {
+        get { lock (gate) { EnsureOpen(); return state.DeviceId; } }
+    }
+
     public long Cursor
     {
         get
