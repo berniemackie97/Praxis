@@ -67,7 +67,10 @@ public sealed class DeviceCertificateIssuer(SecurityRegistry registry)
             DateTimeOffset now = registry.UtcNow;
             DateTimeOffset start = now.Subtract(ClockSkew);
             DateTimeOffset end = now.Add(Validity);
-            if (!issuerCertificate.HasPrivateKey ||
+            using ECDsa? caPublicKey = issuerCertificate.GetECDsaPublicKey();
+            if (!issuerCertificate.HasPrivateKey || caPublicKey is null ||
+                caPublicKey.KeySize != 256 ||
+                caPublicKey.ExportParameters(false).Curve.Oid.Value != "1.2.840.10045.3.1.7" ||
                 new DateTimeOffset(issuerCertificate.NotBefore.ToUniversalTime()) > start ||
                 new DateTimeOffset(issuerCertificate.NotAfter.ToUniversalTime()) <= end ||
                 !issuerCertificate.Extensions.OfType<X509BasicConstraintsExtension>()
