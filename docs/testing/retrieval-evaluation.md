@@ -56,7 +56,7 @@ The next evaluation under #29 must record a pinned installed embedding model and
 
 After merged PR #228, the owner ran the fail-fast chain on macOS using .NET SDK 10.0.403: locked restore and a **fresh Release build passed**. The fresh suite executed **575 tests: 566 passed, 9 failed**. Eight historical snapshot/migration tests asserted schema version 14 despite the catalog now being at version 16; the hybrid retrieval revocation/revision test helper mistakenly expected a single processing job for an item and processor **across all revisions**, although its two revisions correctly retained separate job history. The fail-fast chain stopped at test failure, so **formatting was not run in this pass**.
 
-The follow-up to #28 updates those eight assertions to version 16 and scopes the helper's processing-job assertion to the exact claimed item, revision and processor. The patch does not alter catalog migrations, source identity or runtime retrieval behavior. **A fresh post-fix complete test and format result is still required; no final-head pass or cross-OS CI result is claimed.**
+The follow-up to #28 updates those eight assertions to version 16 and scopes the helper's processing-job assertion to the exact claimed item, revision and processor. The patch does not alter catalog migrations, source identity or runtime retrieval behavior. **Historical checkpoint before #232:** a fresh post-fix complete suite was still required here. The owner subsequently verified 593/593 Release tests and format exit code 0 on merged #232; the cross-OS CI matrix has not run.
 
 ## Hybrid evaluation v2 — task #29
 
@@ -110,7 +110,7 @@ After merged #230, the owner ran locked restore, a fresh Release build and the f
 
 The #29 follow-up modifies only the test corruption fixture: it reads an existing vector, writes `float.NaN` into its first 32-bit IEEE-754 element without changing its length, and updates that one segment. The SQLite length constraint is retained while `LocalSemanticIndex.QueryAsync` must fail closed on a non-finite decoded element. The test then requires a successful derived-index rebuild and verified original-loss behavior. No storage schema or production search change is needed.
 
-**Verification pending:** repeat the complete locked restore → fresh Release build → full tests → format chain after merging the repair; retain and review the actual output. This is test-fixture repair evidence, **not** a completed real-model benchmark, independently reviewed relevance judgment or executed cross-platform CI (#137).
+**Verification outcome:** the owner subsequently passed the locked restore → Release build → 593/593 full tests → format-exit-0 chain on merged #232. A fresh run is still required for any new unmerged test changes. This is test-fixture repair evidence, **not** a completed real-model benchmark, independently reviewed relevance judgment or executed cross-platform CI (#137).
 
 ## Expanded ranking measurement — v3 (#29)
 
@@ -164,8 +164,10 @@ mkdir -p "$HOME/Desktop/Praxis-29-evidence"
 jq -r '.documents[] | "=== \(.id) ===\n\(.path)\n\(.content)\n"' \
   tests/Praxis.Storage.Tests/Fixtures/retrieval-corpus-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/corpus-v3-review.txt"
-jq -r '["case","domain","query","expected_sources","approved","correction","reason"], \
-  (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),"","",""]) | @tsv' \
+jq -r '(
+  ["case","domain","query","expected_sources","approved","correction","reason"],
+  (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),"","",""])
+) | @tsv' \
   tests/Praxis.Storage.Tests/Fixtures/retrieval-judgments-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/judgment-v3-review.tsv"
 ```
