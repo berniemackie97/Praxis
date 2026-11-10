@@ -82,7 +82,7 @@ public sealed class LocalRecoverySetTests : IDisposable
         Assert.Equal(checkpoint, await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
         Assert.Equal(new[] { "catalog", "identity" },
             Directory.GetDirectories(Restored).Select(Path.GetFileName).Order().ToArray());
-        Assert.False(File.Exists(Path.Combine(Restored, "manifest.json")));
+        Assert.Empty(Directory.GetFiles(Restored));
 
         using (LocalCatalog catalog = LocalCatalog.Open(Path.Combine(Restored, "catalog")))
         {
@@ -184,6 +184,11 @@ public sealed class LocalRecoverySetTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget, cancelled.Token));
         Assert.False(Directory.Exists(Backup));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => LocalRecoverySet.BackupExistingAsync(
+            Catalog, Identity, Path.Combine(Catalog, "nested"), Budget));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => LocalRecoverySet.BackupExistingAsync(
+            Catalog, Identity, Path.Combine(Identity, "nested"), Budget));
 
         await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
         Directory.CreateDirectory(Restored);
