@@ -1,80 +1,61 @@
-# Source intake, provenance and capture authority
+# Canonical source intake and provenance
 
-**Scope:** Canonical owner-local ingestion contract under #27 and feature #59. This describes the actual SQLite and storage/processing interfaces, not an alternative ingestion engine or a general-purpose connector SDK.
+**Scope:** Local source ingestion contract for #27 and parent feature #59. This describes existing capture routes and their durable evidence. It does not authorize future integrations or create a general provider framework.
 
-## Persistence and source identity
+## Source and capture records
 
-| Stored entity | Canonical contract |
+| Owner | Stored evidence and meaning |
 | --- | --- |
-| `sources` / `items` | Immutable source/item IDs, source kind, canonical locator, origin time and current active/revoked status. A logical source has one item, independent of its content digest. |
-| `item_versions` / `original_objects` | Immutable per-item revision with recorded UTC, content SHA-256 and byte length. Identical originals may share an object, never source identity, collection ownership or revocation. |
-| `ingest_requests` | Durable committed request-key/source/revision receipt. A replay returns the committed historical revision; a reused key cannot target another source. Revision insertion, receipt insertion and initial processing work commit in one SQLite transaction. |
-| `capture_request_context` (schema v15) | Immutable per-request local route, authority basis, checked scope and recorded UTC. Written atomically with the receipt; older receipts intentionally remain unattributed. |
-| `processing_jobs` / `text_derivatives` | Versioned processor key, lease/retry state and failure code, source digest and explicit completed/unsupported extraction outcome/reason. Other processors retain independent states. |
-| `source_locator_moves` | Recorded owner-local source relocation without reassigning the source ID or rewriting historical capture scope. |
+| `sources` | Stable `source_id`, origin kind (`file` for implemented local sources), canonical locator, creation UTC and active/revoked status |
+| `items` | Stable `item_id` belonging to the logical source; a shared content digest never defines source identity |
+| `item_versions` / `original_objects` | Source revision, observation UTC, original SHA-256 and byte length; stored bytes are verified separately |
+| `ingest_requests` | Durable request key and committed source revision; repeating a committed request returns that revision rather than capturing newer bytes |
+| `capture_request_context` (schema v15) | Trusted entry-point route, asserted authority basis, checked path scope and recorded UTC, keyed to the committed request; created in the same transaction as the receipt |
+| `processing_jobs` | Per-revision processor, queued/running/completed/unsupported/failed/canceled state, attempt count, lease and failure code |
+| `text_derivatives` | Bounded extracted text or unsupported reason, tied to the original digest and processing version |
 
-`LocalSources.ReadProvenance(sourceId, revision?)` exposes the source/revision/original envelope plus the first committed request's recorded capture route/authority and source-text processing outcome. `LocalSources.ListCaptureReceipts(sourceId, revision?, limit)` enumerates *all* committed capture attempts, including retries using different keys and legacy entries. `LocalSources.ListProcessing(sourceId, revision?, limit)` exposes each recorded processor stage's actual status, attempts, failure and current-revision retry eligibility. All three are **trusted local catalog APIs**, not publicly exposed HTTP or remote connector endpoints.
+`LocalSources.ReadProvenance(sourceId, revision?)` projects these records as a read-only source/revision envelope. It includes source identity, status and locator, observed original digest/size, source-text processor state and failure, extraction outcome, retry eligibility, and capture context from the **first committed request for that revision**, when present. When more than one request captures the same unchanged revision, `LocalSources.ListCaptureReceipts` exposes the individual receipts and their separate contexts. `LocalSources.ListProcessing` exposes per-processor state. Historical and revoked metadata remain inspectable only to the trusted local catalog owner; they are not searchable authority.
 
-A `ReadProvenance` digest is catalog metadata. Use `LocalOriginals.VerifyAsync` before claiming the stored original bytes remain valid; content hashes are not automatically rechecked on every search. Past revisions and revoked-source metadata remain inspectable locally for audit/owner recovery, but the current retrieval and enrichment visibility filters must exclude revoked or superseded evidence.
+Version 15 adds context without backfilling or reinterpreting earlier requests. A receipt created under an older schema has a null route, basis, scope and capture timestamp; a replay remains compatible with that historical receipt but does not create consent evidence. `direct_local` denotes use of the lower-level original API and records `unattributed_local_call`, not an approved adapter. New local adapters use:
 
-## Authority model: what is and is not proven
-
-The current application runs an owner-controlled local process, uses an explicitly configured Inbox and accepts explicit file/folder selections and submitted quick notes. The actual capture *route* and *scope* can be recorded when this trusted code invokes the original store:
-
-| Route | Basis stored | Scope validated before publishing | Capture entry point |
-| --- | --- | --- | --- |
-| `selected_file` | `owner_selected` | Exactly the canonical selected path | `LocalSourceIntake.ImportFileAsync` |
-| `selected_folder` | `owner_selected` | Canonical root containing every imported file | `LocalSourceIntake.ImportFolderAsync` |
-| `watched_folder` | `owner_configured` | Canonical configured Inbox root | `LocalWatchedIntake` via `LocalSourceIntake` |
-| `quick_note` | `owner_submitted` | Canonical Inbox root containing the created note | `LocalQuickCapture` |
-| `direct_local` | `unattributed_local_call` | No asserted grant/scope | Low-level `LocalOriginals` call, retained for direct local integrations and tests |
-
-This metadata represents the trusted **local invocation path**, not cryptographic proof of human identity, persistent OAuth consent, or a transferable capability. The database does not have authenticated owner/actor identity or a general grant ledger. That distinction is intentional: **never infer or manufacture consent from a source's text, file name, URL, request key or hash**. Existing pre-v15 receipts have no `capture_request_context` row. Their route, basis, scope and capture time remain NULL after migration; a successful replay does not retroactively turn legacy input into an approved grant.
-
-The capture context is checked against the final canonical locator before bytes are published and again at the durable receipt boundary. Request keys are bound to both logical source and recorded capture route/scope; reuse from a different route is rejected before rereading bytes. Scope comparisons are rooted path comparisons, not insecure string-prefix matches. The catalog data root and selected symlink leaves cannot be imported through the high-level entry points. No new network or filesystem capability is granted by this metadata, and nobody can promote `direct_local` into a scoped owner approval simply by asking for provenance.
-
-## Lifecycles and bounded recovery
-
-1. An accepted request validates the caller-selected path, scope, size and read permissions, stages immutable original bytes and verifies the stored digest. Source/item, revision, receipt, capture context and initial processing job are committed atomically. Existing committed request keys return their earlier revision after restart, subject to current safety limits.
-2. A new request key for changed content at the same active canonical locator records the next revision with the same source/item IDs. Unchanged content can have another request receipt without creating a revision. New work is queued for the current revision; stale revisions cannot be newly queued, claimed or retried through the local processing queue.
-3. Processing can report queued/running/completed/unsupported/failed/canceled independently for each processor. Its job state, attempt counts, failure code and retry eligibility are inspectable. An explicitly requested retry is permitted only for a failed/canceled job on the current revision of an active source; no implicit retry can reactivate revoked content.
-4. A missing file in a watched directory is **not** automatically an owner revocation: the already captured, verified original remains available across removable-volume outages. Explicit `Sources.Revoke` cancels pending/running work and excludes that source's current evidence from search and derived knowledge. Other sources referencing identical bytes remain searchable and preserved. Reversal of revocation is **not** silently permitted by the current policy; a separate explicit owner-governed restore decision is required, not an automatic filesystem event.
-5. Original-store loss/corruption is detected on byte verification and must not be represented as a successful original restore. Database/objects snapshots and physical-drive recovery acceptance remain #128/#40. This local ingestion contract does not silently delete an object still referenced by another source.
-
-## Conformance matrix
-
-| Contract case | Implemented local paths | Required verification |
+| Route | Authority basis label | Checked scope |
 | --- | --- | --- |
-| Request replay, key-to-source and key-to-route/scope binding | Explicit file/folder, quick note, watched file | Atomic receipts, stable source IDs, no silent duplicate, concurrency key collision |
-| Original sharing without source ownership merge | Manual file/folder, quick note, watched file | Distinct source/item IDs and one verified object for matching bytes |
-| Revision and search visibility | File, watched folder and quick-note source | Current-only processing and retrieval; historical receipt retained |
-| Revocation, disconnected source, retry | Active local paths | No unauthorized recapture; independent sources remain visible; removable-file loss does not imply revoke |
-| Invalid and unsupported input | Local file and note | Bounded path/byte/title/UTF-8 validation; durable job failure or unsupported result; source bytes are inert content |
-| Restart/migration and loss/recovery | Local catalog and original store | Stable receipts, legacy-v14 unattributed migration, no invented scope; verification of originals and derived-index rebuilding |
+| `selected_file` | `owner_selected` | The selected canonical file path |
+| `selected_folder` | `owner_selected` | The selected canonical directory containing each file |
+| `watched_folder` | `owner_configured` | The previously configured canonical watched root |
+| `quick_note` | `owner_submitted` | The approved private inbox containing the created note |
 
-Conformance tests live in `tests/Praxis.Storage.Tests/Intake/SourceProvenanceConformanceTests.cs`, `CaptureRequestContractTests.cs`, and the original/processing/recovery test suites. The schema upgrade test explicitly simulates a v14 catalog with committed receipts and confirms no false authority is backfilled.
+These labels describe **which trusted local call site supplied the scope**. They are not authenticated user identity, transferable consent tokens or evidence that a remote actor granted access. The scope check happens before original publication. Reuse of an attributed request key with a different route or scope is rejected, even for the same locator. Scope membership is necessary but does not replace the adapters' own path, link and store-exclusion checks.
 
-## Contract for future adapters (not implementations)
+## Implemented adapter boundaries and lifecycle
 
-Reserved `sources.source_kind` values do not make URL, voice, browser, agent or connector capture functional. Before **each** new adapter is accepted, its owning work item must add tests against the same canonical receipt/revision/ownership policy, plus these trust-boundary cases:
+- Manual file and bounded folder import (`LocalSourceIntake`) validate absolute paths, canonicalize linked ancestors, reject source symlinks and importing the catalog, and enforce file/folder budgets. A folder batch gives each file a stable request key and records the same selected root as its scope.
+- Quick note capture (`LocalQuickCapture`) writes and verifies a private Markdown file in the configured inbox, using a stable capture ID. A conflicting note with the same ID cannot overwrite the committed original.
+- Watched intake (`LocalWatchedIntake`) uses an approved root, stable-write checks and periodic rescans; file contents are never treated as authority or instructions. Missing paths preserve already captured originals.
+- The routes converge on `LocalOriginals.CaptureFileAsync`, `ingest_requests`, versioned originals and `processing_jobs`. Identical bytes from two locators may share the object store but not source identity, ownership, search scope or revocation.
 
-- **URL/article (#104):** explicit owner consent and scoped origin/redirect policy, SSRF/DNS rebinding prevention, bounded fetch and content decompression, saved exact response bytes and URL metadata, no unapproved credential forwarding; page text cannot request further network activity.
-- **Voice (#96):** explicit microphone/session approval and stop/cancel, locally preserved audio with timestamps and device/session provenance, transcription as versioned derivative rather than a fake original, safe permission revocation, interrupted recording and offline transcriber failures.
-- **Browser selection (#96):** explicit tab/document origin, owner-chosen selection bounds, extension-host authentication, no ambient browsing or clipboard access, no page-controlled grant escalation and correct replay semantics for changed document snapshots.
-- **External connectors (#30/#32/#117):** typed source/actor/tenant and per-connector grant IDs with expiry/revocation, least-privilege scopes, no cross-identity hash ownership merge, retry/reconnect and rate-limit budgets, no implicit remote data exfiltration and permission recheck on each external action. Remote identity #15 precedes multi-owner access.
+Changed content under an active canonical locator creates the next source/item revision. Unchanged bytes with a different request key retain the same revision and gain an additional attributed receipt. An old committed request key replays its own revision, including after the source changes; a new request key cannot silently inherit a different route or scope. On a new revision, only the current active revision can be queued, claimed or retried, and stale leases cannot successfully finish or defer work into the active pipeline. Source-backed search excludes old revisions as soon as the new one is recorded. Explicit revocation blocks implicit recapture and suppresses derived search visibility without deleting other sources' content-addressed originals.
 
-Those adapters and their permission models are separately owned and **not** added by #27; implementing them solely to close this issue would duplicate #59/#96 and bypass approval gates.
+The projection's digest and size are catalog claims, not cryptographic proof that storage is intact: use `LocalOriginals.VerifyAsync` to validate the original bytes. `source-text-v1` documents a single processor, not completion of future semantic, audio or image processing.
 
-## Verification commands and release gate
+## Security and authorization boundary
+
+Local capture authority comes from the trusted owner-local call and checked path scope, **not from imported bytes**. Notes, file contents, URLs or embedded prompts never grant filesystem access, connector privileges or outbound requests. No general grant identifier, actor signature, consent proof or multi-device trust model is stored by this schema. URL, voice, browser, GitHub, banking and other providers must implement their own authorization and independently persist the appropriate durable provenance before being treated as active adapters. Reserved source-kind names do not mean those providers exist. Remote identity and permission control belong to #13, #15, #32, #117 and the owning adapter work.
+
+## Conformance and validation
+
+`SourceProvenanceConformanceTests` validates file, quick-note and watched-folder intake against the same catalog: independent source/item identities with shared original bytes, durable captured-route attribution, replay, revision invalidation, separate search ownership, revocation, index rebuild, restart and exact-byte verification, as well as malformed and unsupported input.
+
+`CaptureRequestContractTests` covers selected-folder scope on a batch and repeat imports, conflicting route/scope reuse, out-of-scope watcher claims, current-revision retry/claim restrictions, stale-lease completion/defer fencing, failed extraction/recovery and missing watched-file preservation. `LocalCatalogTests` covers schema-v15 upgrade and the absence of invented consent evidence on legacy receipts.
+
+From the repository root:
 
 ```bash
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
-  -c Release --no-build --no-restore \
-  --filter 'FullyQualifiedName~CaptureRequestContractTests|FullyQualifiedName~SourceProvenanceConformanceTests'
+dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~CaptureRequestContractTests|FullyQualifiedName~SourceProvenanceConformanceTests"
 dotnet test Praxis.slnx -c Release --no-build --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 ```
 
-An issue cannot be declared verified by code review alone. Record actual test/format results, CI state and current-main integration before closing #27. GitHub Actions #137 is still blocked by intentionally deferred runners, and the separate first-run GUI acceptance gate is #130. No green CI or Mac runtime evidence is inferred from this document.
+**Remaining issue #27 acceptance:** the current conformance suite proves the shared contract for three active *local* adapters only. Authorization-specific tests for URL, voice, browser and later connectors must be added when those adapters are implemented by their owning issues; this PR does not fabricate or implement them. Full .NET build/test/format results, CI and owner-machine recovery verification must be recorded before accepting this PR. Cross-provider acceptance and remote ownership are separate gates. Do not close #27 merely because the local receipt schema and projection exist.
