@@ -389,6 +389,25 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         Assert.Equal(NoteSyncState.UpToDate, (await sync.ReconcileAsync()).State);
     }
 
+    [Fact]
+    public async Task ResponseProtocolOrDeviceSubstitutionCannotAdvanceLocalCheckpoint()
+    {
+        JournalSyncExchangeFixture server = new(Space, Epoch);
+        using LocalNoteJournal first = Open(DeviceA);
+        OfflineNoteSynchronizer synchronizer = new(first, Space, server);
+        first.Queue(Guid.NewGuid(), LocalNoteAction.Upsert, "version.md", "local");
+        server.AlterNextSubmit = receipt => receipt with { ProtocolVersion = 2 };
+        await Assert.ThrowsAsync<InvalidDataException>(() => synchronizer.ReconcileAsync());
+        Assert.Equal(0, first.Cursor);
+        Assert.Single(first.Pending);
+
+        await synchronizer.ReconcileAsync();
+        Assert.Equal(1, first.Cursor);
+        server.AlterNextPull = page => page with { DeviceId = DeviceB };
+        await Assert.ThrowsAsync<InvalidDataException>(() => synchronizer.ReconcileAsync());
+        Assert.Equal(1, first.Cursor);
+    }
+
     private LocalNoteJournal Open(Guid deviceId) =>
         LocalNoteJournal.Open(Path.Combine(directory, deviceId.ToString("N")), Epoch, deviceId);
 
