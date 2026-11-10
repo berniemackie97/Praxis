@@ -263,8 +263,12 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         }
         catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new { hits = catalog.Search.Query(query, 30), mode = "lexical",
-                notice = "The local embedding runtime is unavailable; showing keyword results." };
+            return new
+            {
+                hits = catalog.Search.Query(query, 30),
+                mode = "lexical",
+                notice = "The local embedding runtime is unavailable; showing keyword results."
+            };
         }
     }
 
