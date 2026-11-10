@@ -40,7 +40,7 @@ public sealed class RecoveryEnrollmentTests : IDisposable
             Register(registry, ownerWrite, originalSigner, offlineRecoverySigner);
             SpaceKeyPublication first = ClientSpaceKeys.Protect(installation, space, 1,
                 lostDevice, originalSigner, registry.SpaceKeys.Recipients(ownerWrite),
-                oldKey, contentRecovery);
+                Trusted((lostDevice, originalSigner)), oldKey, contentRecovery);
             registry.SpaceKeys.Publish(ownerWrite, first);
             Assert.True(registry.Operator.RevokeDevice(lostDevice));
         }
@@ -77,7 +77,8 @@ public sealed class RecoveryEnrollmentTests : IDisposable
             byte[] rotatedKey = ClientSpaceKeys.GenerateContentKey();
             SpaceKeyPublication second = ClientSpaceKeys.Protect(installation, space, 2,
                 replacement, replacementSigner, reopened.SpaceKeys.Recipients(ownerWrite),
-                rotatedKey, ClientSpaceKeys.GenerateRecoverySecret());
+                Trusted((replacement, replacementSigner)), rotatedKey,
+                ClientSpaceKeys.GenerateRecoverySecret());
             reopened.SpaceKeys.Publish(ownerWrite, second);
             AvailableSpaceKey? latest = reopened.SpaceKeys.Download(
                 Prove(reopened, replacementSigner, replacement, space, SecurityPermission.Read));
@@ -162,6 +163,7 @@ public sealed class RecoveryEnrollmentTests : IDisposable
         Register(registry, ownerWrite, ownerSigner, recovery);
         SpaceKeyPublication pub = ClientSpaceKeys.Protect(registry.InstallationId,
             space, 1, ownerDevice, ownerSigner, registry.SpaceKeys.Recipients(ownerWrite),
+            Trusted((ownerDevice, ownerSigner), (memberDevice, memberSigner)),
             ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(ownerWrite, pub);
         Assert.Throws<UnauthorizedAccessException>(() =>
@@ -281,6 +283,10 @@ public sealed class RecoveryEnrollmentTests : IDisposable
         Assert.Null(registry.Recovery.Complete(challenge.EnrollmentId,
             Sign(recovery, challenge.Message), Sign(signer, challenge.Message)));
     }
+
+    private static IReadOnlyDictionary<Guid, byte[]> Trusted(
+        params (Guid DeviceId, ECDsa Signer)[] devices) =>
+        devices.ToDictionary(x => x.DeviceId, x => x.Signer.ExportSubjectPublicKeyInfo());
 
     private static ECDsa Signer() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
