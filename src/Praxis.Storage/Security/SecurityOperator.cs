@@ -352,7 +352,7 @@ public sealed class SecurityOperator
         });
     }
 
-    private static void RequireRekeyForPrincipal(SqliteConnection connection,
+    internal static void RequireRekeyForPrincipal(SqliteConnection connection,
         SqliteTransaction transaction, Guid principalId)
     {
         using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction, """
