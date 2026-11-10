@@ -25,7 +25,7 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
         if (request.SecuritySpaceId != securitySpaceId ||
             RevokedDevices.Contains(request.DeviceId))
         {
-            return Task.FromResult(new NoteSubmitResult(NoteSubmitStatus.Unauthorized,
+            return Task.FromResult(new NoteSubmitResult(request.ProtocolVersion, NoteSubmitStatus.Unauthorized,
                 request.SecuritySpaceId, request.CollectionEpoch, request.DeviceId,
                 request.Edit.OperationId, 0, null));
         }
@@ -47,7 +47,7 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
             throw new IOException("Simulated lost response after the server accepted a mutation.");
         }
 
-        NoteSubmitResult result = new(reply.Status switch
+        NoteSubmitResult result = new(request.ProtocolVersion, reply.Status switch
         {
             ApplyStatus.Applied => NoteSubmitStatus.Applied,
             ApplyStatus.StaleRevision => NoteSubmitStatus.StaleRevision,
@@ -76,8 +76,8 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
         if (request.SecuritySpaceId != securitySpaceId ||
             RevokedDevices.Contains(request.DeviceId))
         {
-            return Task.FromResult(new NotePullResult(NotePullStatus.Unauthorized,
-                request.SecuritySpaceId, request.CollectionEpoch, request.AfterSequence,
+            return Task.FromResult(new NotePullResult(request.ProtocolVersion, NotePullStatus.Unauthorized,
+                request.SecuritySpaceId, request.CollectionEpoch, request.DeviceId, request.AfterSequence,
                 request.AfterSequence, 0, []));
         }
 
@@ -89,14 +89,14 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
             throw new IOException("Simulated response lost before the client committed a page.");
         }
 
-        NotePullResult result = new(page.Status switch
+        NotePullResult result = new(request.ProtocolVersion, page.Status switch
         {
             PullStatus.Ok => NotePullStatus.Ok,
             PullStatus.CursorExpired => NotePullStatus.CursorExpired,
             PullStatus.WrongCollectionEpoch => NotePullStatus.WrongCollectionEpoch,
             PullStatus.InvalidCursor => NotePullStatus.InvalidCursor,
             _ => throw new InvalidDataException()
-        }, securitySpaceId, request.CollectionEpoch, request.AfterSequence,
+        }, securitySpaceId, request.CollectionEpoch, request.DeviceId, request.AfterSequence,
             page.Status == PullStatus.Ok ? page.Cursor : request.AfterSequence,
             page.Status == PullStatus.Ok ? page.HeadSequence : 0,
             page.Changes.Select(c => new AppliedNoteChange(c.Sequence, Convert(c.Record))).ToArray());
@@ -120,7 +120,7 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
         }
 
         SyncSnapshot snapshot = Server.Snapshot();
-        NoteSnapshotResult result = new(securitySpaceId,
+        NoteSnapshotResult result = new(1, securitySpaceId, deviceId,
             new LocalNoteSnapshot(epoch, snapshot.Cursor, snapshot.Records.Select(Convert).ToArray()));
         if (AlterNextSnapshot is { } alter)
         {
