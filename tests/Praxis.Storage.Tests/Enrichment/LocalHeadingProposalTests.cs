@@ -170,7 +170,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using LocalCatalog restored = LocalCatalog.Open(target);
-        Assert.Equal(14, restored.SchemaVersion);
+        Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Proposals.List(first.SourceId)).Status);
         Assert.Equal("pending",
@@ -215,7 +215,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         }
 
         using LocalCatalog upgraded = LocalCatalog.Open(root);
-        Assert.Equal(14, upgraded.SchemaVersion);
+        Assert.Equal(16, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
         Assert.Empty(upgraded.Proposals.List(Guid.NewGuid()));
