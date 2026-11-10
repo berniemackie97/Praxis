@@ -69,9 +69,8 @@ public sealed class SecuritySnapshotTests : IDisposable
         }
 
         Assert.Equal(backup, await SecurityRegistrySnapshots.RestoreAsync(Backup, Restored, Budget));
-        Assert.Equal(new[] { "identity.sqlite" },
-            Directory.GetFileSystemEntries(Restored).Select(Path.GetFileName)
-                .Where(x => x != "identity.lock").OrderBy(x => x).ToArray());
+        Assert.Single(Directory.GetFileSystemEntries(Restored));
+        Assert.True(File.Exists(Path.Combine(Restored, "identity.sqlite")));
 
         using SecurityRegistry restored = SecurityRegistry.Open(Restored);
         Assert.Equal(installation, restored.InstallationId);
@@ -152,7 +151,6 @@ public sealed class SecuritySnapshotTests : IDisposable
         Assert.Equal("unchanged", File.ReadAllText(Path.Combine(Restored, "owner.txt")));
         Assert.Equal(0, Directory.GetDirectories(root, ".restored.incomplete-*").Length);
         Assert.Equal(0, Directory.GetDirectories(root, ".backup.incomplete-*").Length);
-        Assert.Equal(Budget, Budget); // The operation did not require a larger allowance.
     }
 
     [Fact]
