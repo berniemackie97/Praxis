@@ -14,13 +14,15 @@ struct KnowledgeView: View {
                         .onSubmit { model.refresh() }
                     Button("Refresh") { model.refresh() }
                 }
-                Picker("Type", selection: $model.typeFilter) {
+                Picker("Type", selection: Binding(
+                    get: { model.typeFilter },
+                    set: { model.setTypeFilter($0) }
+                )) {
                     Text("All types").tag("")
                     ForEach(KnowledgeVocabulary.entityTypes, id: \.self) { type in
                         Text(KnowledgeVocabulary.label(type)).tag(type)
                     }
                 }
-                .onChange(of: model.typeFilter) { _ in model.refresh() }
                 if model.entities.isEmpty {
                     Text("No entities yet. They appear once the local model has enriched captured text.")
                         .font(.caption).foregroundStyle(.secondary)

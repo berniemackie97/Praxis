@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// The local enrichment model and the subscription CLIs that may verify its results.
@@ -65,12 +66,14 @@ private struct LocalModelSettings: View {
                 .disabled(modelName.isEmpty)
             }
         }
-        .onAppear(perform: load)
-        .onChange(of: model.profile) { _ in load() }
+        .onAppear { load(model.profile) }
+        .onReceive(model.$profile.removeDuplicates().dropFirst()) { profile in
+            load(profile)
+        }
     }
 
-    private func load() {
-        guard let profile = model.profile else { return }
+    private func load(_ profile: ModelProfile?) {
+        guard let profile else { return }
         endpoint = profile.endpoint.hasSuffix("/") ? String(profile.endpoint.dropLast()) : profile.endpoint
         modelName = profile.model
         contextTokens = profile.contextTokens
@@ -88,8 +91,6 @@ private struct ProviderSettings: View {
     @State private var costWeight = 10
     @State private var dailyLimit = 20
     @State private var enabled = false
-
-    private var saved: VerificationProvider? { model.providers.first { $0.providerId == providerId } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -120,12 +121,14 @@ private struct ProviderSettings: View {
         }
         .padding(10)
         .background(Color.secondary.opacity(0.05))
-        .onAppear(perform: load)
-        .onChange(of: model.providers) { _ in load() }
+        .onAppear { load(model.providers) }
+        .onReceive(model.$providers.removeDuplicates().dropFirst()) { providers in
+            load(providers)
+        }
     }
 
-    private func load() {
-        guard let saved else {
+    private func load(_ providers: [VerificationProvider]) {
+        guard let saved = providers.first(where: { $0.providerId == providerId }) else {
             costWeight = defaultWeight
             if executable.isEmpty { executable = model.discovered[providerId] ?? "" }
             return
