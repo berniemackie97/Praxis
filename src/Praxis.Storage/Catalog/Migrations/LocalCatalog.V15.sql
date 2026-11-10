@@ -20,4 +20,7 @@ CREATE TABLE capture_request_context (
     )
 ) STRICT;
 
+CREATE INDEX ingest_requests_source_revision
+    ON ingest_requests(source_id, revision, state);
+
 PRAGMA user_version = 15;

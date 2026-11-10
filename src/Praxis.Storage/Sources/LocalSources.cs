@@ -9,7 +9,12 @@ public sealed record LocalSourceProvenance(
     DateTimeOffset CreatedUtc, int Revision, DateTimeOffset ObservedUtc,
     string OriginalSha256, long OriginalBytes, string? ProcessorKey,
     string? ProcessingState, string? FailureCode, string? ExtractionOutcome,
-    string? ExtractionReasonCode);
+    string? ExtractionReasonCode, string? CaptureRoute, string? CaptureAuthorityBasis,
+    string? CaptureScope, DateTimeOffset? CaptureRecordedUtc);
+
+public sealed record LocalCaptureReceipt(
+    string RequestKey, int Revision, string? Route, string? AuthorityBasis,
+    string? Scope, DateTimeOffset? RecordedUtc);
 
 public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
 
@@ -48,7 +53,8 @@ public sealed class LocalSources
                                                                  SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
                                                                         s.created_utc, v.revision, v.observed_utc, v.digest,
                                                                         o.byte_length, j.processor_key, j.state, j.failure_code,
-                                                                        d.outcome, d.reason_code
+                                                                        d.outcome, d.reason_code,
+                                                                        c.route, c.authority_basis, c.scope, c.recorded_utc
                                                                  FROM sources s
                                                                  JOIN items i ON i.source_id = s.source_id
                                                                  JOIN item_versions v ON v.item_id = i.item_id
@@ -58,6 +64,14 @@ public sealed class LocalSources
                                                                  LEFT JOIN text_derivatives d ON d.item_id = v.item_id
                                                                      AND d.revision = v.revision AND d.processor_key = j.processor_key
                                                                      AND d.source_digest = v.digest
+                                                                 LEFT JOIN ingest_requests r ON r.request_key = (
+                                                                     SELECT first_receipt.request_key
+                                                                     FROM ingest_requests first_receipt
+                                                                     WHERE first_receipt.source_id = s.source_id
+                                                                       AND first_receipt.revision = v.revision
+                                                                       AND first_receipt.state = 'committed'
+                                                                     ORDER BY first_receipt.rowid LIMIT 1)
+                                                                 LEFT JOIN capture_request_context c ON c.request_key = r.request_key
                                                                  WHERE s.source_id = $source
                                                                    AND ($revision IS NULL OR v.revision = $revision)
                                                                  ORDER BY v.revision DESC LIMIT 1
@@ -81,7 +95,54 @@ public sealed class LocalSources
                 reader.IsDBNull(11) ? null : reader.GetString(11),
                 reader.IsDBNull(12) ? null : reader.GetString(12),
                 reader.IsDBNull(13) ? null : reader.GetString(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14));
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.IsDBNull(17) ? null : reader.GetString(17),
+                reader.IsDBNull(18) ? null : CatalogValues.ParseTimestamp(reader.GetString(18)));
+        });
+    }
+
+    /// <summary>All committed receipt routes for one source, including legacy unattributed entries.</summary>
+    public IReadOnlyList<LocalCaptureReceipt> ListCaptureReceipts(Guid sourceId, int? revision = null, int limit = 100)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (revision is < 1 || limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT r.request_key, r.revision, c.route,
+                                                                        c.authority_basis, c.scope, c.recorded_utc
+                                                                 FROM ingest_requests r
+                                                                 LEFT JOIN capture_request_context c ON c.request_key = r.request_key
+                                                                 WHERE r.source_id = $source AND r.state = 'committed'
+                                                                   AND r.revision IS NOT NULL
+                                                                   AND ($revision IS NULL OR r.revision = $revision)
+                                                                 ORDER BY r.rowid DESC LIMIT $limit
+                                                                 """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalCaptureReceipt> result = new();
+            while (reader.Read())
+            {
+                result.Add(new LocalCaptureReceipt(reader.GetString(0), reader.GetInt32(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : CatalogValues.ParseTimestamp(reader.GetString(5))));
+            }
+
+            return result;
         });
     }
 
