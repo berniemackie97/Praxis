@@ -327,10 +327,18 @@ public sealed class ApprovedDeviceEnrollment(SecurityRegistry registry)
             return false;
         }
 
-        using ECDsa key = ECDsa.Create();
-        key.ImportSubjectPublicKeyInfo(publicKey, out int read);
-        return read == publicKey.Length && key.KeySize == 256 &&
-            key.VerifyData(message, signature, HashAlgorithmName.SHA256,
-                DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        try
+        {
+            using ECDsa key = ECDsa.Create();
+            key.ImportSubjectPublicKeyInfo(publicKey, out int read);
+            return read == publicKey.Length && key.KeySize == 256 &&
+                key.ExportParameters(false).Curve.Oid.Value == "1.2.840.10045.3.1.7" &&
+                key.VerifyData(message, signature, HashAlgorithmName.SHA256,
+                    DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
     }
 }
