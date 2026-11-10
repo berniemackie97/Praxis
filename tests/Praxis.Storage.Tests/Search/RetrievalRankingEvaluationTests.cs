@@ -11,8 +11,8 @@ public sealed class RetrievalRankingEvaluationTests(ITestOutputHelper output)
     {
         using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync(
             "retrieval-corpus-v3.json", "retrieval-judgments-v3.json");
-        Assert.Equal(31, fixture.Originals.Count);
-        Assert.Equal(35, fixture.Judgments.Judgments.Length);
+        Assert.Equal(32, fixture.Originals.Count);
+        Assert.Equal(36, fixture.Judgments.Judgments.Length);
         RetrievalRankingReport report = new(output);
 
         foreach (RetrievalJudgment judgment in fixture.Judgments.Judgments)
