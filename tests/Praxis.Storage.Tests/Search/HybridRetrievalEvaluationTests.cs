@@ -88,9 +88,8 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         }
 
         Assert.True(expectedNoAnswers > 0);
-        // The current top-k vector scorer has no abstention threshold. Report this deficiency,
-        // rather than pretending that synthetic high-rank matches establish answerability.
-        Assert.Equal(expectedNoAnswers, semanticFalseAnswers);
+        // A missing-answer query must remain in the scorecard even when a later ranking
+        // change improves abstention; observed false positives are not expected outcomes.
         output.WriteLine($"expected_no_answer={expectedNoAnswers} " +
             $"semantic_false_answers={semanticFalseAnswers} " +
             $"fixture=v{fixture.Judgments.SchemaVersion} database_bytes={fixture.DatabaseBytes()} " +
