@@ -7,6 +7,7 @@ final class IntelligenceSettingsModel: ObservableObject {
     private let channel: WorkerChannel
 
     @Published private(set) var profile: ModelProfile?
+    @Published private(set) var embeddingProfile: ModelProfile?
     @Published private(set) var installedModels: [InstalledModel] = []
     @Published private(set) var providers: [VerificationProvider] = []
     @Published private(set) var discovered: [String: String] = [:]
@@ -21,6 +22,9 @@ final class IntelligenceSettingsModel: ObservableObject {
     func refresh() {
         channel.send("modelProfile", as: ModelProfileData.self, failed: report) { [weak self] data in
             self?.profile = data.profile
+        }
+        channel.send("embeddingProfile", as: ModelProfileData.self, failed: report) { [weak self] data in
+            self?.embeddingProfile = data.profile
         }
         channel.send("verificationProviders", as: ProvidersData.self, failed: report) { [weak self] data in
             self?.providers = data.providers
@@ -43,6 +47,16 @@ final class IntelligenceSettingsModel: ObservableObject {
         ], as: ModelProfileData.self, failed: report) { [weak self] data in
             self?.profile = data.profile
             self?.notice = enabled ? "Local model saved. New text is enriched in the background." : "Local enrichment is off."
+        }
+    }
+
+    func saveEmbeddingProfile(endpoint: String, model: String, enabled: Bool) {
+        channel.send("embeddingProfileSave", [
+            "provider": "ollama", "endpoint": endpoint, "model": model,
+            "contextTokens": 2_048, "enabled": enabled
+        ], as: ModelProfileData.self, failed: report) { [weak self] data in
+            self?.embeddingProfile = data.profile
+            self?.notice = enabled ? "Local embedding model saved. Index your knowledge from Search to use hybrid retrieval." : "Semantic retrieval is off; keyword search remains available."
         }
     }
 
