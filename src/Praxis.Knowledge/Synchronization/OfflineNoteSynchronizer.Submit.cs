@@ -23,7 +23,8 @@ public sealed partial class OfflineNoteSynchronizer
             NoteSubmitResult response = await exchange.SubmitAsync(request, cancellationToken)
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (response is null || response.SecuritySpaceId != securitySpaceId ||
+            if (response is null || response.ProtocolVersion != ProtocolVersion ||
+                response.SecuritySpaceId != securitySpaceId ||
                 response.DeviceId != deviceId || response.OperationId != edit.OperationId)
             {
                 throw new InvalidDataException("The receipt does not match the submitted operation.");
