@@ -363,6 +363,17 @@
       "query": "savings proposal",
       "relevant": [],
       "lexicalExpected": []
+    },
+    {
+      "name": "lexical-distractor",
+      "domain": "technical",
+      "query": "triangle mesh",
+      "relevant": [
+        "mesh-loader"
+      ],
+      "lexicalExpected": [
+        "keyword-distractor"
+      ]
     }
   ]
 }
