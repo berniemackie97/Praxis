@@ -161,6 +161,12 @@ public sealed class RecoveryEnrollmentTests : IDisposable
         VerifiedDeviceProof ownerWrite = Prove(registry, ownerSigner, ownerDevice,
             space, SecurityPermission.Write);
         Register(registry, ownerWrite, ownerSigner, recovery);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            registry.SpaceKeys.DownloadOwnerRecovery(Prove(registry, memberSigner,
+                memberDevice, space, SecurityPermission.Read)));
+        Assert.Null(registry.SpaceKeys.DownloadOwnerRecovery(Prove(registry, ownerSigner,
+            ownerDevice, space, SecurityPermission.Read)));
+
         SpaceKeyPublication pub = ClientSpaceKeys.Protect(registry.InstallationId,
             space, 1, ownerDevice, ownerSigner, registry.SpaceKeys.Recipients(ownerWrite),
             Trusted((ownerDevice, ownerSigner), (memberDevice, memberSigner)),
