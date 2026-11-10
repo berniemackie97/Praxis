@@ -6,7 +6,7 @@
 
 Praxis already preserves Markdown histories (ADR 0004) and original binary attachments (ADR 0005). Neither archive represents concurrent writers, tombstones, offline replay, device authorization or a durable change cursor. Client timestamps, filenames and file modification times cannot establish causal order across devices.
 
-The host and encryption/trust choices in #50 remain unresolved. This contract must therefore work for an authorized processing service or an opaque encrypted-payload service without pretending those modes offer identical server-side validation.
+Owner decisions in completed #50 select local-only, client-held encrypted sync and trusted-host processing as **distinct collection security boundaries**; [ADR 0003](0003-processing-trust-boundaries.md) defines their key, identity and disclosure constraints. This protocol remains mode-neutral in its revisions and receipts, not in its server-side ability to validate hidden plaintext. Local-only collections have no remote change log. Client-held ciphertext relays must not pretend to inspect contents; trusted processors must not claim end-to-end encryption.
 
 ## Decision
 
@@ -72,7 +72,7 @@ ADR 0005 archives the **current** link set but does not version historical links
 - A UUID, sequence or operation key is never an authorization token (RFC 9562).
 - Operational diagnostics use safe reason codes, correlation and sequence metadata. Do not log note text, attachment bytes, secrets or unrestricted conflict payloads.
 
-The selected plaintext-versus-ciphertext processing model determines which validation can happen server-side. This ADR cannot approve remote writes while #50 and authentication/recovery gates remain open.
+An authorized trusted processor may check visible plaintext paths, links and permitted derivatives. A client-held ciphertext relay may only check authenticated identity, collection membership, visible opaque record/version/change metadata and bounded transport; enrolled decrypting clients validate hidden plaintext path/link constraints, encrypted-object integrity, key epochs and rollback against durable client state. The server cannot infer missing decrypted metadata, guarantee content-based conflict correctness or run a plaintext index over opaque ciphertext. A remote client must reject a mismatched class/epoch and preserve pending local writes through rebootstrap; collection class changes require a separately approved migration, not wire-version fallback. This ADR cannot approve remotely accessible writes until #13's threat contract and #15/#19/#40/#41 identity, transport and recovery gates are implemented and verified.
 
 ### Alternatives rejected
 
