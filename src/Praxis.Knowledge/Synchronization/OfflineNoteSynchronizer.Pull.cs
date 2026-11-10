@@ -17,7 +17,8 @@ public sealed partial class OfflineNoteSynchronizer
                 new NotePullRequest(ProtocolVersion, securitySpaceId, epoch,
                     deviceId, cursor, PageLimit), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            if (page is null || page.SecuritySpaceId != securitySpaceId ||
+            if (page is null || page.ProtocolVersion != ProtocolVersion ||
+                page.SecuritySpaceId != securitySpaceId || page.DeviceId != deviceId ||
                 page.RequestedCursor != cursor || page.Changes is null ||
                 page.Changes.Count > PageLimit)
             {
@@ -95,7 +96,8 @@ public sealed partial class OfflineNoteSynchronizer
         NoteSnapshotResult restored = await exchange.SnapshotAsync(
             securitySpaceId, epoch, deviceId, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (restored is null || restored.SecuritySpaceId != securitySpaceId ||
+        if (restored is null || restored.ProtocolVersion != ProtocolVersion ||
+            restored.SecuritySpaceId != securitySpaceId || restored.DeviceId != deviceId ||
             restored.Snapshot is null || restored.Snapshot.CollectionEpoch != epoch ||
             restored.Snapshot.Cursor < cursor)
         {
