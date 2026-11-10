@@ -276,18 +276,27 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
             space, source, SecurityPermission.Read);
         int executions = 0;
         int value = registry.ProtectedData.Execute(identity, read, source,
-            SecurityPermission.Read, 1, () => { executions++; return 42; });
+            SecurityPermission.Read, 1, validated =>
+            {
+                Assert.Equal(owner, validated.PrincipalId);
+                Assert.Equal(ownerDevice, validated.DeviceId);
+                Assert.Equal(space, validated.SpaceId);
+                Assert.Equal(source, validated.SourceId);
+                Assert.Equal(1, validated.ContentEpoch);
+                executions++;
+                return 42;
+            });
         Assert.Equal(42, value);
         Assert.Equal(1, executions);
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.ProtectedData.Execute(identity, read, foreign,
-                SecurityPermission.Read, 1, () => { executions++; return 7; }));
+                SecurityPermission.Read, 1, scope => { executions++; return 7; }));
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.ProtectedData.Execute(identity, read, source,
-                SecurityPermission.Write, 1, () => { executions++; return 7; }));
+                SecurityPermission.Write, 1, scope => { executions++; return 7; }));
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.ProtectedData.Execute(identity, read, source,
-                SecurityPermission.Read, 2, () => { executions++; return 7; }));
+                SecurityPermission.Read, 2, scope => { executions++; return 7; }));
         Assert.Equal(1, executions);
 
         using ECDsa anotherSigner = Signer();
@@ -297,7 +306,7 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
         Assert.NotEqual(Guid.Empty, newOwnerDevice);
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.ProtectedData.Execute(identity, read, source,
-                SecurityPermission.Read, 1, () => { executions++; return 7; }));
+                SecurityPermission.Read, 1, scope => { executions++; return 7; }));
         Assert.Equal(1, executions);
     }
 
