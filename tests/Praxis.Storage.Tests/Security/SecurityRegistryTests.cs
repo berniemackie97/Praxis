@@ -263,6 +263,82 @@ public sealed class SecurityRegistryTests : IDisposable
         Assert.Throws<UnauthorizedAccessException>(() => SecurityRegistry.Open(root));
     }
 
+    [Fact]
+    public void PendingGrantProofCannotBeReanimatedByRevocationAndRegrant()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid member = registry.Operator.CreatePrincipal();
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        using ECDsa key = NewKey();
+        Guid device = registry.Operator.EnrollDevice(member, key.ExportSubjectPublicKeyInfo());
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+
+        DeviceChallenge old = registry.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Read);
+        Assert.True(registry.Operator.RevokeGrant(owner, space, member));
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+
+        Assert.Null(registry.DeviceProofs.Authenticate(old.ChallengeId, Sign(key, old)));
+        DeviceChallenge current = registry.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Read);
+        Assert.NotNull(registry.DeviceProofs.Authenticate(current.ChallengeId, Sign(key, current)));
+    }
+
+    [Fact]
+    public void AuthenticatedProofExpiresAndCannotBeTransferredToAnotherInstallation()
+    {
+        MutableClock clock = new(DateTimeOffset.Parse("2026-11-10T12:00:00Z"));
+        using SecurityRegistry original = SecurityRegistry.Open(root, clock);
+        Guid owner = original.Operator.CreatePrincipal();
+        Guid space = original.Operator.CreateSpace(owner, SecurityProcessingClass.TrustedHost);
+        using ECDsa key = NewKey();
+        Guid device = original.Operator.EnrollDevice(owner, key.ExportSubjectPublicKeyInfo());
+        DeviceChallenge challenge = original.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Read);
+        VerifiedDeviceProof? verified = original.DeviceProofs.Authenticate(challenge.ChallengeId, Sign(key, challenge));
+        Assert.NotNull(verified);
+
+        string anotherRoot = Path.Combine(TestPaths.Temp, "praxis-security-other-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(anotherRoot);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(anotherRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        try
+        {
+            using SecurityRegistry another = SecurityRegistry.Open(anotherRoot, clock);
+            Assert.NotEqual(original.InstallationId, another.InstallationId);
+            Assert.False(another.DeviceProofs.IsCurrent(verified));
+        }
+        finally
+        {
+            Directory.Delete(anotherRoot, recursive: true);
+        }
+
+        clock.Advance(TimeSpan.FromSeconds(31));
+        Assert.False(original.DeviceProofs.IsCurrent(verified));
+    }
+
+    [Fact]
+    public void InvalidPermissionAndNonP256KeysAreRejected()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.TrustedHost);
+        using ECDsa good = NewKey();
+        using ECDsa p384 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        Guid device = registry.Operator.EnrollDevice(owner, good.ExportSubjectPublicKeyInfo());
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            registry.DeviceProofs.IssueChallenge(device, space, null, (SecurityPermission)3));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            registry.Operator.CreateSpace(owner, (SecurityProcessingClass)999));
+        Assert.Throws<ArgumentException>(() =>
+            registry.Operator.AssignSource(owner, space, Guid.Empty));
+        Assert.Throws<ArgumentException>(() =>
+            registry.Operator.EnrollDevice(owner, p384.ExportSubjectPublicKeyInfo()));
+    }
+
     private static ECDsa NewKey() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
     private static byte[] Sign(ECDsa key, DeviceChallenge challenge) =>
