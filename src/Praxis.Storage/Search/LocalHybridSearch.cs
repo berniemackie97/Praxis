@@ -23,14 +23,16 @@ public sealed class LocalHybridSearch(LocalTextSearch lexical, LocalSemanticInde
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        IReadOnlyList<LocalSearchHit> keyword = lexical.Query(query, PoolSize);
         if (model is null)
         {
-            return new HybridSearchResults(keyword.Take(limit).ToArray(), false);
+            return new HybridSearchResults(lexical.Query(query, limit), false);
         }
 
         IReadOnlyList<SemanticSearchHit> vectors =
             await semantic.QueryAsync(query, model, PoolSize, cancellationToken);
+        // A source may be revoked or revised during the awaited model call. Read lexical
+        // evidence only after the await so the fusion never resurrects an earlier result.
+        IReadOnlyList<LocalSearchHit> keyword = lexical.Query(query, PoolSize);
         if (vectors.Count == 0)
         {
             return new HybridSearchResults(keyword.Take(limit).ToArray(), false);
