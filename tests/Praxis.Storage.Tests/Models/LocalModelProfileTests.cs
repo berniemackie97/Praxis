@@ -97,6 +97,44 @@ public sealed class LocalModelProfileTests : IDisposable
         Assert.Equal("qwen:9b", catalog.Models.Get(ModelProfile.LocalEnrichment)!.Model);
     }
 
+    [Fact]
+    public async Task EmbeddingProfileIsOptInAndCannotAuthorizeRemoteInference()
+    {
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalDesktopProtocol protocol = new(catalog);
+        Assert.Null(catalog.Models.Get(ModelProfile.LocalEmbedding));
+
+        using JsonDocument initiallyDenied = await Send(protocol,
+            """{"requestId":"one","action":"semanticIndex","rebuild":false}""");
+        Assert.False(initiallyDenied.RootElement.GetProperty("ok").GetBoolean());
+
+        using JsonDocument saved = await Send(protocol, """
+            {"requestId":"two","action":"embeddingProfileSave","provider":"ollama",
+             "endpoint":"http://127.0.0.1:11434","model":"embeddinggemma",
+             "contextTokens":2048,"enabled":false}
+            """);
+        Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(ModelProfile.LocalEmbedding,
+            saved.RootElement.GetProperty("data").GetProperty("profile").GetProperty("role").GetString());
+        Assert.Null(catalog.Models.Get(ModelProfile.LocalEnrichment));
+
+        using JsonDocument lexical = await Send(protocol,
+            """{"requestId":"three","action":"search","query":"local"}""");
+        Assert.True(lexical.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("lexical", lexical.RootElement.GetProperty("data").GetProperty("mode").GetString());
+        using JsonDocument stillDenied = await Send(protocol,
+            """{"requestId":"four","action":"semanticIndex","rebuild":false}""");
+        Assert.False(stillDenied.RootElement.GetProperty("ok").GetBoolean());
+
+        using JsonDocument remote = await Send(protocol, """
+            {"requestId":"five","action":"embeddingProfileSave","provider":"ollama",
+             "endpoint":"http://192.168.1.2:11434","model":"embeddinggemma",
+             "contextTokens":2048,"enabled":true}
+            """);
+        Assert.False(remote.RootElement.GetProperty("ok").GetBoolean());
+        Assert.False(catalog.Models.Get(ModelProfile.LocalEmbedding)!.Enabled);
+    }
+
     private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string request) =>
         JsonDocument.Parse(await protocol.HandleAsync(request));
 
