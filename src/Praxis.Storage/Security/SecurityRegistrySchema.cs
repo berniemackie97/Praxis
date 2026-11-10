@@ -4,7 +4,7 @@ namespace Praxis.Storage.Security;
 
 internal static class SecurityRegistrySchema
 {
-    internal const int Version = 3;
+    internal const int Version = 4;
 
     internal static void Prepare(SqliteConnection connection)
     {
@@ -182,6 +182,43 @@ internal static class SecurityRegistrySchema
             transaction.Commit();
         }
 
+        if (version <= 3)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText = """
+                CREATE TABLE device_approvals (
+                    device_id TEXT PRIMARY KEY REFERENCES devices(device_id),
+                    space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
+                    approved_by_device_id TEXT NOT NULL REFERENCES devices(device_id),
+                    approved_principal_id TEXT NOT NULL REFERENCES principals(principal_id),
+                    challenge_id TEXT NOT NULL UNIQUE,
+                    nonce BLOB NOT NULL CHECK (length(nonce) = 32),
+                    expires_utc TEXT NOT NULL,
+                    owner_signature BLOB NOT NULL CHECK (length(owner_signature) = 64),
+                    applicant_signature BLOB NOT NULL CHECK (length(applicant_signature) = 64)
+                ) STRICT;
+                CREATE TABLE pending_device_approvals (
+                    challenge_id TEXT PRIMARY KEY,
+                    space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
+                    owner_device_id TEXT NOT NULL REFERENCES devices(device_id),
+                    principal_id TEXT NOT NULL REFERENCES principals(principal_id),
+                    signing_public_key BLOB NOT NULL CHECK (length(signing_public_key) BETWEEN 80 AND 128),
+                    wrapping_public_key BLOB NOT NULL CHECK (length(wrapping_public_key) BETWEEN 350 AND 600),
+                    wrapping_signature BLOB NOT NULL CHECK (length(wrapping_signature) = 64),
+                    nonce BLOB NOT NULL CHECK (length(nonce) = 32),
+                    expires_utc TEXT NOT NULL,
+                    consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
+                ) STRICT;
+                CREATE INDEX pending_device_approvals_owner
+                    ON pending_device_approvals(owner_device_id, expires_utc);
+                PRAGMA user_version=4;
+                """;
+            upgrade.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
         foreach ((string table, string columns) in new (string, string)[]
         {
             ("installation", "singleton, installation_id"),
@@ -194,7 +231,9 @@ internal static class SecurityRegistrySchema
             ("space_key_epochs", "space_id, epoch, commitment, signer_device_id, recovery_nonce, recovery_ciphertext, recovery_signature, created_utc"),
             ("device_key_envelopes", "space_id, epoch, device_id, wrapped_key, signature"),
             ("principal_recovery", "principal_id, public_key, version, registered_utc"),
-            ("recovery_enrollments", "enrollment_id, principal_id, signing_key, wrapping_key, wrapping_signature, recovery_version, nonce, expires_utc, consumed")
+            ("recovery_enrollments", "enrollment_id, principal_id, signing_key, wrapping_key, wrapping_signature, recovery_version, nonce, expires_utc, consumed"),
+            ("device_approvals", "device_id, space_id, approved_by_device_id, approved_principal_id, challenge_id, nonce, expires_utc, owner_signature, applicant_signature"),
+            ("pending_device_approvals", "challenge_id, space_id, owner_device_id, principal_id, signing_public_key, wrapping_public_key, wrapping_signature, nonce, expires_utc, consumed")
         })
         {
             using SqliteCommand check = connection.CreateCommand();
