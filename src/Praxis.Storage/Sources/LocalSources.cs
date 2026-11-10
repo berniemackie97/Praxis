@@ -16,6 +16,10 @@ public sealed record LocalCaptureReceipt(
     string RequestKey, int Revision, string? Route, string? AuthorityBasis,
     string? Scope, DateTimeOffset? RecordedUtc);
 
+public sealed record LocalSourceProcessingState(
+    string ProcessorKey, string State, int Attempt, int TotalAttempts,
+    string? FailureCode, DateTimeOffset UpdatedUtc, bool RetryEligible);
+
 public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
 
 internal sealed record CurrentFileVersion(Guid ItemId, int Revision, string Digest, long Length, string Locator);
@@ -147,6 +151,56 @@ public sealed class LocalSources
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
                     reader.IsDBNull(5) ? null : CatalogValues.ParseTimestamp(reader.GetString(5))));
+            }
+
+            return result;
+        });
+    }
+
+    /// <summary>Versioned processing status for all registered processors of one source.</summary>
+    public IReadOnlyList<LocalSourceProcessingState> ListProcessing(Guid sourceId, int? revision = null, int limit = 100)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (revision is < 1 || limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT j.processor_key, j.state, j.attempt, j.total_attempts,
+                                                                        j.failure_code, j.updated_utc,
+                                                                        CASE WHEN s.status = 'active'
+                                                                          AND j.state IN ('failed', 'canceled')
+                                                                          AND j.revision = (
+                                                                              SELECT MAX(v.revision) FROM item_versions v
+                                                                              WHERE v.item_id = j.item_id)
+                                                                        THEN 1 ELSE 0 END
+                                                                 FROM processing_jobs j
+                                                                 JOIN items i ON i.item_id = j.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE s.source_id = $source
+                                                                   AND j.revision = COALESCE($revision, (
+                                                                       SELECT MAX(v.revision) FROM item_versions v
+                                                                       WHERE v.item_id = j.item_id))
+                                                                 ORDER BY j.updated_utc DESC, j.processor_key LIMIT $limit
+                                                                 """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalSourceProcessingState> result = new();
+            while (reader.Read())
+            {
+                result.Add(new LocalSourceProcessingState(
+                    reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
+                    reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4),
+                    CatalogValues.ParseTimestamp(reader.GetString(5)), reader.GetInt64(6) == 1));
             }
 
             return result;

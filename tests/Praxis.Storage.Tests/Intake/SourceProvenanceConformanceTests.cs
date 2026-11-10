@@ -157,6 +157,15 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Null(invalid.ExtractionOutcome);
         Assert.True(invalid.RetryEligible);
         Assert.False(unknown.RetryEligible);
+        LocalSourceProcessingState failed = Assert.Single(catalog.Sources.ListProcessing(
+            invalid.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+        Assert.Equal("failed", failed.State);
+        Assert.True(failed.RetryEligible);
+        Assert.Equal("invalid_utf8", failed.FailureCode);
+        LocalSourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
+            unsupported.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+        Assert.Equal("unsupported", unsupportedJob.State);
+        Assert.False(unsupportedJob.RetryEligible);
         Assert.Empty(catalog.Search.Query("asset"));
         Assert.Empty(catalog.Search.Query("malformed"));
         await catalog.Originals.VerifyAsync(unsupported.ItemId);
