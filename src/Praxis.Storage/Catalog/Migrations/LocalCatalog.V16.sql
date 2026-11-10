@@ -25,6 +25,7 @@ CREATE TABLE semantic_vectors (
     source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
     dimensions INTEGER NOT NULL CHECK (dimensions BETWEEN 1 AND 4096),
     vector BLOB NOT NULL CHECK (length(vector) = dimensions * 4),
+    segment_text TEXT NOT NULL CHECK (length(segment_text) BETWEEN 1 AND 2000),
     recorded_utc TEXT NOT NULL,
     PRIMARY KEY (item_id, revision, ordinal, model_digest),
     FOREIGN KEY (item_id, revision, ordinal)
@@ -32,6 +33,15 @@ CREATE TABLE semantic_vectors (
 ) STRICT;
 
 CREATE INDEX semantic_vectors_model ON semantic_vectors(model_digest, item_id, revision);
+
+CREATE VIEW eligible_semantic_segments AS
+SELECT g.item_id, g.revision, g.ordinal, v.digest AS source_digest,
+       e.source_id, e.locator, e.content, g.start_offset, g.length
+FROM text_segments g
+JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
+    AND j.processor_key = g.processor_key AND j.state = 'completed'
+JOIN eligible_text_search e ON e.item_id = g.item_id AND e.revision = g.revision
+JOIN item_versions v ON v.item_id = g.item_id AND v.revision = g.revision;
 
 CREATE TRIGGER semantic_vectors_new_version AFTER INSERT ON item_versions
 BEGIN
