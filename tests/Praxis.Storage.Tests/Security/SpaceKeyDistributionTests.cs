@@ -53,7 +53,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         Assert.NotNull(memberView);
         Assert.NotNull(ownerView.OwnerRecovery);
         Assert.Null(memberView.OwnerRecovery);
-        Assert.Single(registry.SpaceKeys.Recipients(ownerWrite).Where(x => x.DeviceId == memberDevice));
+        Assert.Single(registry.SpaceKeys.Recipients(ownerWrite), x => x.DeviceId == memberDevice);
         Assert.Equal(key, ClientSpaceKeys.UnlockForDevice(
             registry.InstallationId, ownerView, ownerRsa, signer, 1));
         Assert.Equal(key, ClientSpaceKeys.UnlockForDevice(
@@ -134,11 +134,12 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         Assert.Throws<UnauthorizedAccessException>(() => registry.SpaceKeys.Publish(write, tampered));
         Assert.Throws<ArgumentException>(() =>
             registry.SpaceKeys.Publish(write, original with { SignerDeviceId = Guid.NewGuid() }));
+        RecoveryKeyEnvelope tamperedRecovery = original.Recovery with
+        {
+            CiphertextAndTag = new byte[48]
+        };
         Assert.Throws<UnauthorizedAccessException>(() =>
-            registry.SpaceKeys.Publish(write, original with { Recovery = original.Recovery with
-            {
-                CiphertextAndTag = new byte[48]
-            } }));
+            registry.SpaceKeys.Publish(write, original with { Recovery = tamperedRecovery }));
 
         registry.SpaceKeys.Publish(write, original);
         AvailableSpaceKey? saved = registry.SpaceKeys.Download(
