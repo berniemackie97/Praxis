@@ -75,6 +75,46 @@ public static class ClientSpaceKeys
     }
 
     public static byte[] UnlockForDevice(Guid installationId, AvailableSpaceKey offered,
+        RSA recipientPrivateKey, ClientDeviceTrustStore trust)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        ArgumentNullException.ThrowIfNull(trust);
+        using ECDsa signer = trust.PinnedOwnerVerifier(installationId, offered.SignerDeviceId);
+        byte[] key = UnlockForDevice(installationId, offered, recipientPrivateKey,
+            signer, trust.MinimumCurrentEpoch(offered.SpaceId));
+        try
+        {
+            trust.RecordVerifiedCurrentEpoch(offered.SpaceId, offered.Epoch);
+            return key;
+        }
+        catch
+        {
+            CryptographicOperations.ZeroMemory(key);
+            throw;
+        }
+    }
+
+    public static byte[] UnlockWithRecovery(Guid installationId, AvailableSpaceKey offered,
+        ReadOnlySpan<byte> recoverySecret, ClientDeviceTrustStore trust)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        ArgumentNullException.ThrowIfNull(trust);
+        using ECDsa signer = trust.PinnedOwnerVerifier(installationId, offered.SignerDeviceId);
+        byte[] key = UnlockWithRecovery(installationId, offered, recoverySecret,
+            signer, trust.MinimumCurrentEpoch(offered.SpaceId));
+        try
+        {
+            trust.RecordVerifiedCurrentEpoch(offered.SpaceId, offered.Epoch);
+            return key;
+        }
+        catch
+        {
+            CryptographicOperations.ZeroMemory(key);
+            throw;
+        }
+    }
+
+    public static byte[] UnlockForDevice(Guid installationId, AvailableSpaceKey offered,
         RSA recipientPrivateKey, ECDsa trustedSignerPublicKey, long minimumEpoch)
     {
         ArgumentNullException.ThrowIfNull(offered);
