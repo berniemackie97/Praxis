@@ -307,11 +307,13 @@ public sealed class SpaceKeyDistributionTests : IDisposable
 
         using (SecurityRegistry reopened = SecurityRegistry.Open(root))
         {
-            Assert.Null(reopened.SpaceKeys.Download(
-                Assert.Throws<UnauthorizedAccessException>(() =>
-                    Prove(reopened, signer, offlineRecovery!.DeviceKey.DeviceId,
-                        space, SecurityPermission.Read))));
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                Prove(reopened, signer, offlineRecovery!.DeviceKey.DeviceId,
+                    space, SecurityPermission.Read));
         }
+
+        Assert.Equal(key, ClientSpaceKeys.UnlockWithRecovery(
+            installation, offlineRecovery!, secret, signer, 1));
     }
 
     [Fact]
