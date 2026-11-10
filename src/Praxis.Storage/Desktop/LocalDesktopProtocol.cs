@@ -175,7 +175,9 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         {
             var failure = new
             {
-                requestId, ok = false, error = exception.Message
+                requestId,
+                ok = false,
+                error = exception.Message
             };
             return JsonSerializer.Serialize(failure, JsonOptions);
         }

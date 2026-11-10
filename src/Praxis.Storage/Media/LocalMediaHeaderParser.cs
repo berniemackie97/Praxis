@@ -112,29 +112,29 @@ internal static class LocalMediaHeaderParser
                 switch (body[0])
                 {
                     case 0:
-                    {
-                        timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(12, 4));
-                        uint rawDuration = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(16, 4));
-                        if (rawDuration == uint.MaxValue)
                         {
-                            return null;
-                        }
+                            timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(12, 4));
+                            uint rawDuration = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(16, 4));
+                            if (rawDuration == uint.MaxValue)
+                            {
+                                return null;
+                            }
 
-                        duration = rawDuration;
-                        break;
-                    }
+                            duration = rawDuration;
+                            break;
+                        }
                     case 1 when body.Length >= 32:
-                    {
-                        timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(20, 4));
-                        ulong rawDuration = BinaryPrimitives.ReadUInt64BigEndian(body.Slice(24, 8));
-                        if (rawDuration == ulong.MaxValue || rawDuration > long.MaxValue)
                         {
-                            return null;
-                        }
+                            timescale = BinaryPrimitives.ReadUInt32BigEndian(body.Slice(20, 4));
+                            ulong rawDuration = BinaryPrimitives.ReadUInt64BigEndian(body.Slice(24, 8));
+                            if (rawDuration == ulong.MaxValue || rawDuration > long.MaxValue)
+                            {
+                                return null;
+                            }
 
-                        duration = (long)rawDuration;
-                        break;
-                    }
+                            duration = (long)rawDuration;
+                            break;
+                        }
                     default:
                         return null;
                 }
