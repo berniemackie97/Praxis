@@ -16,6 +16,10 @@ The trusted first-party process invokes bounded, parameterized catalog methods t
 
 The migration runs transactionally from v1–v5 to v6. Schema validation and coherent backup/restore operate on the upgraded catalog; old v5 backup manifests remain verifiable and upgrade during restore. Downgrade is rejected rather than silently truncating new tables. The current source original-object retention policy is unchanged.
 
+## Privacy and authorization boundary
+
+`source_collections` and `source_collection_memberships` are **organizational views only**, not encryption, tenant, account, synchronization or authorization boundaries. Their many-to-many membership cannot define key custody or the single authoritative owner of an original source. [ADR 0003](0003-processing-trust-boundaries.md) requires a separately enforced **security space** per source/revision for future sharing and encrypted/hosted deployments; a user may organize authorized sources from multiple spaces into one view, but every list, count, search, excerpt, derived fact and action must separately check the caller's actual space/source grant. Adding a denied source to an organizational collection never confers access. This distinction is a future implementation gate (#13/#15/#28), not an assertion that current local SQLite tables already implement multi-user ACLs.
+
 ## Rejected alternatives
 
 - Organizing by disk folder move: would violate watched-source preservation and make rename/path attribution the organization authority.
