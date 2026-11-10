@@ -25,8 +25,12 @@ public sealed class LocalOriginals
         this.dataDirectory = dataDirectory;
     }
 
-    public async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CancellationToken cancellationToken = default)
+    public Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
+        CaptureFileAsync(sourcePath, content, maxBytes, requestKey, CaptureRequestContext.Unattributed, cancellationToken);
+
+    internal async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(capture);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
         ArgumentNullException.ThrowIfNull(content);
@@ -41,9 +45,10 @@ public sealed class LocalOriginals
         }
 
         string locator = Path.GetFullPath(sourcePath);
+        capture.Validate(locator);
         CatalogDirectory.Validate(dataDirectory);
 
-        CapturedOriginal? receipt = database.Execute(connection => ReadReceipt(connection, null, requestKey, locator));
+        CapturedOriginal? receipt = database.Execute(connection => ReadReceipt(connection, null, requestKey, locator, capture));
         if (receipt is not null)
         {
             await objects.VerifyAsync(new OriginalObject(receipt.Sha256, receipt.Length), cancellationToken);
@@ -56,7 +61,7 @@ public sealed class LocalOriginals
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
-            CapturedOriginal? concurrent = ReadReceipt(connection, transaction, requestKey, locator);
+            CapturedOriginal? concurrent = ReadReceipt(connection, transaction, requestKey, locator, capture);
             if (concurrent is not null)
             {
                 if (concurrent.Sha256 != original.Digest || concurrent.Length != original.Length)
@@ -67,13 +72,13 @@ public sealed class LocalOriginals
                 return concurrent;
             }
 
-            CapturedOriginal recorded = CommitOriginal(connection, transaction, locator, requestKey, original);
+            CapturedOriginal recorded = CommitOriginal(connection, transaction, locator, requestKey, original, capture);
             transaction.Commit();
             return recorded;
         });
     }
 
-    private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original)
+    private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original, CaptureRequestContext capture)
     {
         string recordedUtc = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         using (SqliteCommand check = connection.CreateCommand("SELECT byte_length FROM original_objects WHERE digest=$digest"))
@@ -168,27 +173,36 @@ public sealed class LocalOriginals
 
         using SqliteCommand receipt = connection.CreateCommand("""
                                                                INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
-                                                                   VALUES ($key, $source, 'committed', 1, NULL, $revision)
+                                                                   VALUES ($key, $source, 'committed', 1, NULL, $revision);
+                                                               INSERT INTO capture_request_context
+                                                                   (request_key, route, authority_basis, scope, recorded_utc)
+                                                                   VALUES ($key, $route, $basis, $scope, $recorded);
                                                                """);
         receipt.Transaction = transaction;
         receipt.Parameters.AddWithValue("$key", requestKey);
         receipt.Parameters.AddWithValue("$source", sourceId.ToString("D"));
         receipt.Parameters.AddWithValue("$revision", revision);
+        receipt.Parameters.AddWithValue("$route", capture.Route);
+        receipt.Parameters.AddWithValue("$basis", capture.AuthorityBasis);
+        receipt.Parameters.AddWithValue("$scope", (object?)capture.Scope ?? DBNull.Value);
+        receipt.Parameters.AddWithValue("$recorded", recordedUtc);
         receipt.ExecuteNonQuery();
 
         return new CapturedOriginal(sourceId, itemId, revision, original.Digest, original.Length);
     }
 
-    private static CapturedOriginal? ReadReceipt(SqliteConnection connection, SqliteTransaction? transaction, string requestKey, string locator)
+    private static CapturedOriginal? ReadReceipt(SqliteConnection connection, SqliteTransaction? transaction, string requestKey, string locator, CaptureRequestContext capture)
     {
         using SqliteCommand command = connection.CreateCommand("""
                                                                SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
-                                                                      r.revision, o.digest, o.byte_length
+                                                                      r.revision, o.digest, o.byte_length,
+                                                                      c.route, c.authority_basis, c.scope
                                                                FROM ingest_requests r
                                                                JOIN sources s ON s.source_id = r.source_id
                                                                JOIN items i ON i.source_id = s.source_id
                                                                LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
                                                                LEFT JOIN original_objects o ON o.digest = v.digest
+                                                               LEFT JOIN capture_request_context c ON c.request_key = r.request_key
                                                                WHERE r.request_key = $key
                                                                """);
         command.Transaction = transaction;
@@ -202,6 +216,14 @@ public sealed class LocalOriginals
         if (!string.Equals(locator, reader.GetString(0), StringComparison.Ordinal))
         {
             throw new InvalidOperationException("A request key cannot be reused for another source.");
+        }
+
+        if (!reader.IsDBNull(8) &&
+            (reader.GetString(8) != capture.Route ||
+             reader.GetString(9) != capture.AuthorityBasis ||
+             (!reader.IsDBNull(10) ? reader.GetString(10) : null) != capture.Scope))
+        {
+            throw new InvalidOperationException("A request key cannot cross capture routes or authority scopes.");
         }
 
         if (reader.GetString(1) != "active")
