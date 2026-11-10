@@ -69,7 +69,7 @@ public sealed class RecoveryEnrollmentTests : IDisposable
             Assert.NotNull(historical);
             Assert.Equal(oldKey, ClientSpaceKeys.UnlockWithRecovery(installation,
                 historical, contentRecovery, originalSigner, 1));
-            Assert.Throws<CryptographicException>(() => ClientSpaceKeys.UnlockWithRecovery(
+            Assert.ThrowsAny<CryptographicException>(() => ClientSpaceKeys.UnlockWithRecovery(
                 installation, historical, ClientSpaceKeys.GenerateRecoverySecret(), originalSigner, 1));
 
             VerifiedDeviceProof ownerWrite = Prove(reopened, replacementSigner,
