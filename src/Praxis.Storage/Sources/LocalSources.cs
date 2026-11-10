@@ -1,7 +1,15 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
+using Praxis.Storage.Processing;
 
 namespace Praxis.Storage.Sources;
+
+public sealed record LocalSourceProvenance(
+    Guid SourceId, Guid ItemId, string SourceKind, string Locator, string Status,
+    DateTimeOffset CreatedUtc, int Revision, DateTimeOffset ObservedUtc,
+    string OriginalSha256, long OriginalBytes, string? ProcessorKey,
+    string? ProcessingState, string? FailureCode, string? ExtractionOutcome,
+    string? ExtractionReasonCode);
 
 public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
 
@@ -17,6 +25,65 @@ public sealed class LocalSources
     private readonly CatalogDatabase database;
 
     internal LocalSources(CatalogDatabase database) => this.database = database;
+
+    /// <summary>
+    /// Canonical, source-scoped provenance for one recorded revision. Revoked and older
+    /// revisions remain inspectable to the trusted local owner, not searchable evidence.
+    /// </summary>
+    public LocalSourceProvenance? ReadProvenance(Guid sourceId, int? revision = null)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (revision is < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(revision));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
+                                                                        s.created_utc, v.revision, v.observed_utc, v.digest,
+                                                                        o.byte_length, j.processor_key, j.state, j.failure_code,
+                                                                        d.outcome, d.reason_code
+                                                                 FROM sources s
+                                                                 JOIN items i ON i.source_id = s.source_id
+                                                                 JOIN item_versions v ON v.item_id = i.item_id
+                                                                 JOIN original_objects o ON o.digest = v.digest
+                                                                 LEFT JOIN processing_jobs j ON j.item_id = v.item_id
+                                                                     AND j.revision = v.revision AND j.processor_key = $processor
+                                                                 LEFT JOIN text_derivatives d ON d.item_id = v.item_id
+                                                                     AND d.revision = v.revision AND d.processor_key = j.processor_key
+                                                                     AND d.source_digest = v.digest
+                                                                 WHERE s.source_id = $source
+                                                                   AND ($revision IS NULL OR v.revision = $revision)
+                                                                 ORDER BY v.revision DESC LIMIT 1
+                                                                 """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$processor", LocalProcessors.SourceText);
+            using SqliteDataReader reader = query.ExecuteReader();
+            if (!reader.Read())
+            {
+                return null;
+            }
+
+            return new LocalSourceProvenance(
+                Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                reader.GetString(2), reader.GetString(3), reader.GetString(4),
+                CatalogValues.ParseTimestamp(reader.GetString(5)), reader.GetInt32(6),
+                CatalogValues.ParseTimestamp(reader.GetString(7)), reader.GetString(8),
+                reader.GetInt64(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetString(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14));
+        });
+    }
 
     public LocalFileVersion? FindLatestFile(string path)
     {
