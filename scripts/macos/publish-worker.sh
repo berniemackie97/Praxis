@@ -40,6 +40,15 @@ if [[ -z "$dotnet" ]]; then
   exit 1
 fi
 
+for assembly in Praxis.Inference Praxis.Storage Praxis.Worker; do
+  project="$root/src/$assembly/$assembly.csproj"
+  target_file="$("$dotnet" msbuild "$project" -getProperty:TargetFileName -nologo)"
+  if [[ "$target_file" != "$assembly.dll" ]]; then
+    echo "The Xcode environment changed the .NET output identity for $assembly: $target_file" >&2
+    exit 1
+  fi
+done
+
 mkdir -p "$DERIVED_FILE_DIR"
 staging="$(mktemp -d "$DERIVED_FILE_DIR/praxis-worker.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
@@ -48,7 +57,7 @@ trap 'rm -rf "$staging"' EXIT
 "$dotnet" publish "$worker_project" \
   --configuration "$CONFIGURATION" --no-restore --output "$staging"
 
-for required in Praxis.Worker.dll Praxis.Worker.deps.json Praxis.Worker.runtimeconfig.json; do
+for required in Praxis.Worker.dll Praxis.Storage.dll Praxis.Inference.dll Praxis.Worker.deps.json Praxis.Worker.runtimeconfig.json; do
   if [[ ! -f "$staging/$required" ]]; then
     echo "The .NET publish output is missing $required." >&2
     exit 1
