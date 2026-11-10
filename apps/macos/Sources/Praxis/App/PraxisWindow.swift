@@ -41,6 +41,10 @@ struct PraxisWindow: View {
         }
         .padding(20)
         .onAppear {
+            // The Xcode app-hosted test target must never auto-open an owner's saved catalog.
+            guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+                return
+            }
             if configured && !dataRoot.isEmpty && !inbox.isEmpty {
                 model.start(dataRoot: dataRoot, inbox: inbox, initialize: false,
                             dotnetExecutable: dotnetExecutable)
