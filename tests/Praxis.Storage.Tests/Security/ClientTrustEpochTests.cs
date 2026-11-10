@@ -252,7 +252,7 @@ public sealed class ClientTrustEpochTests : IDisposable
         {
             legacy.Open();
             using SqliteCommand downgrade = legacy.CreateCommand();
-            downgrade.CommandText = "DROP TABLE trusted_epochs; PRAGMA user_version=1;";
+            downgrade.CommandText = "DROP TABLE trusted_epochs; DROP TABLE recovery_authority; PRAGMA user_version=1;";
             downgrade.ExecuteNonQuery();
         }
 
