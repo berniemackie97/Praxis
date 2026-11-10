@@ -133,6 +133,25 @@ public sealed class LocalHybridSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task RevocationWhileIndexingCannotCommitAnUnauthorizedVector()
+    {
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal original = await Capture(catalog, "orchard.md",
+            "tangerine orchard harvest", "index-then-revoke");
+        await SegmentNext(catalog);
+        FixtureEmbeddingModel revoking = new(onIndex: () =>
+            Assert.True(catalog.Sources.Revoke(original.SourceId)));
+
+        SemanticIndexUpdate result = await catalog.Embeddings.RefreshAsync(
+            revoking, rebuild: true);
+        Assert.Equal(0, result.Indexed);
+        Assert.Empty(catalog.Search.Query("tangerine"));
+        Assert.False((await catalog.Hybrid.QueryAsync("citrus",
+            new FixtureEmbeddingModel())).UsedEmbeddings);
+        await catalog.Originals.VerifyAsync(original.ItemId);
+    }
+
+    [Fact]
     public async Task RevocationWhileEmbeddingQuestionCannotResurrectLexicalHits()
     {
         using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
@@ -177,7 +196,8 @@ public sealed class LocalHybridSearchTests : IDisposable
     }
 
     private sealed class FixtureEmbeddingModel(
-        string digest = "fixture-embedding-v1", bool invalid = false, Action? onQuery = null) : IEmbeddingModel
+        string digest = "fixture-embedding-v1", bool invalid = false,
+        Action? onQuery = null, Action? onIndex = null) : IEmbeddingModel
     {
         public Task<ModelIdentity> DescribeAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new ModelIdentity("fixture", "fixture", digest, null, null, null));
@@ -188,6 +208,11 @@ public sealed class LocalHybridSearchTests : IDisposable
             if (inputs.Count == 1 && inputs[0] == "violet")
             {
                 onQuery?.Invoke();
+            }
+
+            if (inputs.Any(value => value.Contains("orchard", StringComparison.OrdinalIgnoreCase)))
+            {
+                onIndex?.Invoke();
             }
 
             IReadOnlyList<float[]> result = inputs.Select(text =>
