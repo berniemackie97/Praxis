@@ -62,21 +62,40 @@ public sealed class SecurityRegistryMigrationTests : IDisposable
                 PRAGMA user_version=1;
                 """;
             setup.ExecuteNonQuery();
-            using SqliteCommand seed = legacy.CreateCommand();
-            seed.CommandText = """
-                INSERT INTO installation VALUES (1, $installation);
-                INSERT INTO principals VALUES ($principal, '2026-11-10T00:00:00Z', NULL);
-                INSERT INTO devices VALUES ($device, $principal, $signing,
-                                            '2026-11-10T00:00:00Z', NULL);
-                INSERT INTO security_spaces VALUES ($space, $principal, 'client-held',
-                                                    '2026-11-10T00:00:00Z');
-                """;
-            seed.Parameters.AddWithValue("$installation", Guid.NewGuid().ToString("N"));
-            seed.Parameters.AddWithValue("$principal", principal.ToString("N"));
-            seed.Parameters.AddWithValue("$device", device.ToString("N"));
-            seed.Parameters.AddWithValue("$space", space.ToString("N"));
-            seed.Parameters.AddWithValue("$signing", signer.ExportSubjectPublicKeyInfo());
-            seed.ExecuteNonQuery();
+            using (SqliteCommand seed = legacy.CreateCommand())
+            {
+                seed.CommandText = "INSERT INTO installation VALUES (1, $installation)";
+                seed.Parameters.AddWithValue("$installation", Guid.NewGuid().ToString("N"));
+                seed.ExecuteNonQuery();
+            }
+
+            using (SqliteCommand seed = legacy.CreateCommand())
+            {
+                seed.CommandText = "INSERT INTO principals VALUES ($id, $when, NULL)";
+                seed.Parameters.AddWithValue("$id", principal.ToString("N"));
+                seed.Parameters.AddWithValue("$when", "2026-11-10T00:00:00Z");
+                seed.ExecuteNonQuery();
+            }
+
+            using (SqliteCommand seed = legacy.CreateCommand())
+            {
+                seed.CommandText = "INSERT INTO devices VALUES ($device, $principal, $signing, $when, NULL)";
+                seed.Parameters.AddWithValue("$device", device.ToString("N"));
+                seed.Parameters.AddWithValue("$principal", principal.ToString("N"));
+                seed.Parameters.AddWithValue("$signing", signer.ExportSubjectPublicKeyInfo());
+                seed.Parameters.AddWithValue("$when", "2026-11-10T00:00:00Z");
+                seed.ExecuteNonQuery();
+            }
+
+            using (SqliteCommand seed = legacy.CreateCommand())
+            {
+                seed.CommandText = "INSERT INTO security_spaces VALUES ($space, $owner, $class, $when)";
+                seed.Parameters.AddWithValue("$space", space.ToString("N"));
+                seed.Parameters.AddWithValue("$owner", principal.ToString("N"));
+                seed.Parameters.AddWithValue("$class", "client-held");
+                seed.Parameters.AddWithValue("$when", "2026-11-10T00:00:00Z");
+                seed.ExecuteNonQuery();
+            }
         }
 
         using SecurityRegistry upgraded = SecurityRegistry.Open(root);
