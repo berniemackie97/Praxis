@@ -69,6 +69,7 @@ public sealed class SecurityOperator
 
         byte[] key = subjectPublicKeyInfo.ToArray();
         byte[]? recipientKey = wrappingPublicKey.IsEmpty ? null : wrappingPublicKey.ToArray();
+        byte[]? binding = wrappingBindingSignature.IsEmpty ? null : wrappingBindingSignature.ToArray();
         Guid deviceId = Guid.NewGuid();
         bool inserted = registry.Execute(connection =>
         {
@@ -81,7 +82,7 @@ public sealed class SecurityOperator
                 ("$device", SecurityRegistry.Id(deviceId)),
                 ("$principal", SecurityRegistry.Id(principalId)),
                 ("$key", key), ("$wrapping", recipientKey),
-                ("$binding", wrappingBindingSignature.IsEmpty ? null : wrappingBindingSignature.ToArray()),
+                ("$binding", binding),
                 ("$now", Now()));
             bool created = command.ExecuteNonQuery() == 1;
             if (created)
