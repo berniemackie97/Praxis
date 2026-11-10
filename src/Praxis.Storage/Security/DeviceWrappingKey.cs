@@ -23,7 +23,8 @@ public static class DeviceWrappingKey
 
         using ECDsa signer = ECDsa.Create();
         signer.ImportSubjectPublicKeyInfo(signingPublicKey, out int signingLength);
-        if (signingLength != signingPublicKey.Length || signer.KeySize != 256)
+        if (signingLength != signingPublicKey.Length || signer.KeySize != 256 ||
+            signer.ExportParameters(false).Curve.Oid.Value != "1.2.840.10045.3.1.7")
         {
             return false;
         }
