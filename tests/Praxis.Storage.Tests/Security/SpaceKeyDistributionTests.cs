@@ -375,6 +375,44 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         Assert.Equal(memberDevice, memberView.DeviceKey.DeviceId);
     }
 
+    [Fact]
+    public void HostIntroducedDeviceCannotReceiveAKeyWithoutIndependentOwnerApproval()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid member = registry.Operator.CreatePrincipal();
+        using ECDsa ownerSigner = NewSigner();
+        using ECDsa memberSigner = NewSigner();
+        using ECDsa unapprovedSigner = NewSigner();
+        using RSA ownerRecipient = NewRecipient();
+        using RSA memberRecipient = NewRecipient();
+        using RSA unapprovedRecipient = NewRecipient();
+        Guid ownerDevice = Enroll(registry, owner, ownerSigner, ownerRecipient);
+        Guid memberDevice = Enroll(registry, member, memberSigner, memberRecipient);
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+
+        VerifiedDeviceProof ownerWrite = Prove(registry, ownerSigner, ownerDevice,
+            space, SecurityPermission.Write);
+        IReadOnlyDictionary<Guid, byte[]> approved =
+            Trusted((ownerDevice, ownerSigner), (memberDevice, memberSigner));
+        SpaceKeyPublication first = ClientSpaceKeys.Protect(registry.InstallationId,
+            space, 1, ownerDevice, ownerSigner, registry.SpaceKeys.Recipients(ownerWrite),
+            approved, ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
+        registry.SpaceKeys.Publish(ownerWrite, first);
+
+        Guid unapprovedDevice = Enroll(registry, member, unapprovedSigner, unapprovedRecipient);
+        IReadOnlyList<RecipientWrappingKey> nowPresented = registry.SpaceKeys.Recipients(ownerWrite);
+        Assert.Contains(nowPresented, x => x.DeviceId == unapprovedDevice);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            ClientSpaceKeys.Protect(registry.InstallationId, space, 2, ownerDevice,
+                ownerSigner, nowPresented, approved, ClientSpaceKeys.GenerateContentKey(),
+                ClientSpaceKeys.GenerateRecoverySecret()));
+
+        Assert.Null(registry.SpaceKeys.Download(
+            Prove(registry, ownerSigner, ownerDevice, space, SecurityPermission.Read)));
+    }
+
     private static IReadOnlyDictionary<Guid, byte[]> Trusted(
         params (Guid DeviceId, ECDsa Signer)[] devices) =>
         devices.ToDictionary(x => x.DeviceId, x => x.Signer.ExportSubjectPublicKeyInfo());
