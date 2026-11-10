@@ -123,6 +123,7 @@ internal static class SecurityRegistrySchema
             upgrade.Transaction = transaction;
             upgrade.CommandText = """
                 ALTER TABLE devices ADD COLUMN wrapping_public_key BLOB;
+                ALTER TABLE devices ADD COLUMN wrapping_signature BLOB;
                 ALTER TABLE security_spaces ADD COLUMN rekey_required INTEGER NOT NULL DEFAULT 1 CHECK (rekey_required IN (0, 1));
                 CREATE TABLE space_key_epochs (
                     space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
@@ -154,7 +155,7 @@ internal static class SecurityRegistrySchema
         {
             ("installation", "singleton, installation_id"),
             ("principals", "principal_id, created_utc, disabled_utc"),
-            ("devices", "device_id, principal_id, public_key, enrolled_utc, revoked_utc, wrapping_public_key"),
+            ("devices", "device_id, principal_id, public_key, enrolled_utc, revoked_utc, wrapping_public_key, wrapping_signature"),
             ("security_spaces", "space_id, owner_id, processing_class, created_utc, rekey_required"),
             ("space_grants", "space_id, principal_id, permissions, grant_version, revoked_utc"),
             ("source_spaces", "source_id, space_id"),
