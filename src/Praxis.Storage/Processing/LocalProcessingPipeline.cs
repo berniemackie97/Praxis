@@ -212,7 +212,7 @@ public sealed class LocalProcessingPipeline
         catch (ProcessorUnavailableException unavailable)
         {
             catalog.Processing.Defer(lease);
-            var delay = BackOff(handler);
+            TimeSpan delay = BackOff(handler);
             report($"Processor {handler.ProcessorKey} is waiting for its runtime " +
                 $"({unavailable.Code}); retrying in {delay.TotalSeconds:0} s or on the next wake.");
         }
@@ -229,7 +229,7 @@ public sealed class LocalProcessingPipeline
     {
         lock (backoffGate)
         {
-            return !backoff.TryGetValue(handler.ProcessorKey, out var state) ||
+            return !backoff.TryGetValue(handler.ProcessorKey, out (DateTimeOffset Until, TimeSpan Next) state) ||
                 state.Until <= DateTimeOffset.UtcNow;
         }
     }
@@ -238,8 +238,8 @@ public sealed class LocalProcessingPipeline
     {
         lock (backoffGate)
         {
-            var delay = backoff.TryGetValue(handler.ProcessorKey, out var state) ? state.Next : MinimumBackoff;
-            var next = delay * 2 > MaximumBackoff ? MaximumBackoff : delay * 2;
+            TimeSpan delay = backoff.TryGetValue(handler.ProcessorKey, out (DateTimeOffset Until, TimeSpan Next) state) ? state.Next : MinimumBackoff;
+            TimeSpan next = delay * 2 > MaximumBackoff ? MaximumBackoff : delay * 2;
             backoff[handler.ProcessorKey] = (DateTimeOffset.UtcNow + delay, next);
             return delay;
         }

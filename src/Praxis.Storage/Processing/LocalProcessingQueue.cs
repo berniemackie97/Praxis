@@ -237,22 +237,22 @@ public sealed class LocalProcessingQueue
             throw new ArgumentOutOfRangeException(nameof(extension));
         }
 
-        var time = nowUtc ?? DateTimeOffset.UtcNow;
-        var now = CatalogValues.Timestamp(time);
-        var until = time.ToUniversalTime().Add(extension);
+        DateTimeOffset time = nowUtc ?? DateTimeOffset.UtcNow;
+        string now = CatalogValues.Timestamp(time);
+        DateTimeOffset until = time.ToUniversalTime().Add(extension);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var superseded = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'canceled', lease_key = NULL, lease_until_utc = NULL,
-                    failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (SELECT 1 FROM item_versions newer
-                              WHERE newer.item_id = processing_jobs.item_id
-                                AND newer.revision > processing_jobs.revision)
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand superseded = connection.CreateCommand("""
+                                                                      UPDATE processing_jobs
+                                                                      SET state = 'canceled', lease_key = NULL, lease_until_utc = NULL,
+                                                                          failure_code = NULL, updated_utc = $now
+                                                                      WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                        AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
+                                                                        AND EXISTS (SELECT 1 FROM item_versions newer
+                                                                                    WHERE newer.item_id = processing_jobs.item_id
+                                                                                      AND newer.revision > processing_jobs.revision)
+                                                                      """);
             superseded.Transaction = transaction;
             ProcessingJobKey.BindLease(superseded, lease);
             superseded.Parameters.AddWithValue("$now", now);
@@ -262,20 +262,20 @@ public sealed class LocalProcessingQueue
                 return null;
             }
 
-            using var extend = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET lease_until_utc = $until, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (
-                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
-                """);
+            using SqliteCommand extend = connection.CreateCommand("""
+                                                                  UPDATE processing_jobs
+                                                                  SET lease_until_utc = $until, updated_utc = $now
+                                                                  WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                    AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
+                                                                    AND EXISTS (
+                                                                        SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                        WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                                                                  """);
             extend.Transaction = transaction;
             ProcessingJobKey.BindLease(extend, lease);
             extend.Parameters.AddWithValue("$until", CatalogValues.Timestamp(until));
             extend.Parameters.AddWithValue("$now", now);
-            var renewed = extend.ExecuteNonQuery() == 1;
+            bool renewed = extend.ExecuteNonQuery() == 1;
             transaction.Commit();
             return renewed ? lease with { LeaseUntil = until } : null;
         });
@@ -289,16 +289,16 @@ public sealed class LocalProcessingQueue
     {
         ArgumentNullException.ThrowIfNull(lease);
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'queued', attempt = MAX(attempt - 1, 0),
-                    lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state = 'running' AND lease_key = $lease
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   UPDATE processing_jobs
+                                                                   SET state = 'queued', attempt = MAX(attempt - 1, 0),
+                                                                       lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
+                                                                   WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                     AND state = 'running' AND lease_key = $lease
+                                                                   """);
             ProcessingJobKey.BindLease(command, lease);
             command.Parameters.AddWithValue("$now", now);
             return command.ExecuteNonQuery() == 1;
@@ -368,19 +368,19 @@ public sealed class LocalProcessingQueue
         SqliteConnection connection, SqliteTransaction transaction,
         ProcessingLease lease, string digest, string utc)
     {
-        using var finish = connection.CreateCommand("""
-            UPDATE processing_jobs
-            SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
-                failure_code = NULL, updated_utc = $now
-            WHERE item_id = $item AND revision = $revision
-              AND processor_key = $processor AND state = 'running'
-              AND lease_key = $lease AND lease_until_utc > $now
-              AND EXISTS (
-                  SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                  JOIN item_versions v ON v.item_id = i.item_id
-                  WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
-                    AND v.revision = processing_jobs.revision AND v.digest = $digest)
-            """);
+        using SqliteCommand finish = connection.CreateCommand("""
+                                                              UPDATE processing_jobs
+                                                              SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
+                                                                  failure_code = NULL, updated_utc = $now
+                                                              WHERE item_id = $item AND revision = $revision
+                                                                AND processor_key = $processor AND state = 'running'
+                                                                AND lease_key = $lease AND lease_until_utc > $now
+                                                                AND EXISTS (
+                                                                    SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                    JOIN item_versions v ON v.item_id = i.item_id
+                                                                    WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                                                                      AND v.revision = processing_jobs.revision AND v.digest = $digest)
+                                                              """);
         finish.Transaction = transaction;
         ProcessingJobKey.BindLease(finish, lease);
         finish.Parameters.AddWithValue("$digest", digest);

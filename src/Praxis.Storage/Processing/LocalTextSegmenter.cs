@@ -18,13 +18,13 @@ public sealed class LocalTextSegmenter(LocalCatalog catalog) : ILocalProcessingH
     public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var input = catalog.Text.ReadLeasedInput(lease);
+        LeasedText? input = catalog.Text.ReadLeasedInput(lease);
         if (input is null)
         {
             return Task.CompletedTask;
         }
 
-        var extension = Path.GetExtension(input.Locator).ToLowerInvariant();
+        string extension = Path.GetExtension(input.Locator).ToLowerInvariant();
         IReadOnlyList<TextSegmentSpan> segments;
         try
         {

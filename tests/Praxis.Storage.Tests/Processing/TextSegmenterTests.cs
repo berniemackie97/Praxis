@@ -21,8 +21,8 @@ public sealed class TextSegmenterTests
     [InlineData(5, true)]
     public void SegmentsAreContiguousBoundedAndCoverGeneratedText(int seed, bool markdown)
     {
-        var text = GenerateDocument(new Random(seed));
-        var segments = TextSegmenter.Segment(text, markdown);
+        string text = GenerateDocument(new Random(seed));
+        IReadOnlyList<TextSegmentSpan> segments = TextSegmenter.Segment(text, markdown);
 
         AssertExactCoverage(text, segments);
         Assert.All(segments, segment =>
@@ -32,11 +32,11 @@ public sealed class TextSegmenterTests
     [Fact]
     public void MarkdownSectionsStartAtHeadingsWithTheirPath()
     {
-        var intro = Paragraph('a', 300);
-        var runtime = Paragraph('b', 300);
-        var text = $"# Architecture\n{intro}\n\n## Runtime\n{runtime}\n\n# Operations\nShort.\n";
+        string intro = Paragraph('a', 300);
+        string runtime = Paragraph('b', 300);
+        string text = $"# Architecture\n{intro}\n\n## Runtime\n{runtime}\n\n# Operations\nShort.\n";
 
-        var segments = TextSegmenter.Segment(text, markdown: true);
+        IReadOnlyList<TextSegmentSpan> segments = TextSegmenter.Segment(text, markdown: true);
 
         Assert.Equal(["Architecture", "Architecture > Runtime", "Operations"],
             segments.Select(segment => segment.HeadingPath));
@@ -47,31 +47,31 @@ public sealed class TextSegmenterTests
     [Fact]
     public void FencedCodeIsNeitherHeadingsNorSplitAtBlankLines()
     {
-        var text = "# Build\n" + Paragraph('x', 250) + "\n\n```sh\n# not a heading\n\nmake all\n```\n";
+        string text = "# Build\n" + Paragraph('x', 250) + "\n\n```sh\n# not a heading\n\nmake all\n```\n";
 
-        var segments = TextSegmenter.Segment(text, markdown: true);
+        IReadOnlyList<TextSegmentSpan> segments = TextSegmenter.Segment(text, markdown: true);
 
-        var segment = Assert.Single(segments);
+        TextSegmentSpan segment = Assert.Single(segments);
         Assert.Equal("Build", segment.HeadingPath);
     }
 
     [Fact]
     public void HashLinesInNonMarkdownTextAreNotHeadings()
     {
-        var text = "#region Parsing\n" + Paragraph('c', 300) + "\n#endregion\n";
+        string text = "#region Parsing\n" + Paragraph('c', 300) + "\n#endregion\n";
 
-        var segment = Assert.Single(TextSegmenter.Segment(text, markdown: false));
+        TextSegmentSpan segment = Assert.Single(TextSegmenter.Segment(text, markdown: false));
         Assert.Null(segment.HeadingPath);
     }
 
     [Fact]
     public void OversizedBlocksSplitAtLineBreaksThenAtTheLimitWithoutBreakingSurrogates()
     {
-        var lines = string.Join('\n', Enumerable.Repeat(new string('l', 150), 30));
-        var emoji = string.Concat(Enumerable.Repeat("😀", 1_500));
-        var text = lines + "\n" + emoji;
+        string lines = string.Join('\n', Enumerable.Repeat(new string('l', 150), 30));
+        string emoji = string.Concat(Enumerable.Repeat("😀", 1_500));
+        string text = lines + "\n" + emoji;
 
-        var segments = TextSegmenter.Segment(text, markdown: false);
+        IReadOnlyList<TextSegmentSpan> segments = TextSegmenter.Segment(text, markdown: false);
 
         AssertExactCoverage(text, segments);
         Assert.All(segments, segment =>
@@ -85,8 +85,8 @@ public sealed class TextSegmenterTests
     [Fact]
     public void PathologicalSegmentCountIsRejected()
     {
-        var builder = new StringBuilder();
-        for (var index = 0; index <= TextSegmenter.MaximumSegments; index++)
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index <= TextSegmenter.MaximumSegments; index++)
         {
             builder.Append("# H").Append(index).Append('\n').Append(Paragraph('p', 200)).Append('\n');
         }
@@ -97,8 +97,8 @@ public sealed class TextSegmenterTests
 
     private static void AssertExactCoverage(string text, IReadOnlyList<TextSegmentSpan> segments)
     {
-        var expected = 0;
-        foreach (var segment in segments)
+        int expected = 0;
+        foreach (TextSegmentSpan segment in segments)
         {
             Assert.Equal(expected, segment.Start);
             expected += segment.Length;
@@ -114,9 +114,9 @@ public sealed class TextSegmenterTests
 
     private static string GenerateDocument(Random random)
     {
-        var builder = new StringBuilder();
-        var fenced = false;
-        for (var line = 0; line < 400; line++)
+        StringBuilder builder = new StringBuilder();
+        bool fenced = false;
+        for (int line = 0; line < 400; line++)
         {
             switch (random.Next(10))
             {

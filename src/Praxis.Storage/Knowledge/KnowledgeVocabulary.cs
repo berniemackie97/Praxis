@@ -33,14 +33,14 @@ public static class KnowledgeVocabulary
             return null;
         }
 
-        var collapsed = string.Join(' ', name.Normalize(NormalizationForm.FormKC)
+        string collapsed = string.Join(' ', name.Normalize(NormalizationForm.FormKC)
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).Trim(Enclosing).Trim();
         if (collapsed.StartsWith("the ", StringComparison.OrdinalIgnoreCase))
         {
             collapsed = collapsed[4..];
         }
 
-        foreach (var possessive in new[] { "'s", "’s" })
+        foreach (string possessive in new[] { "'s", "’s" })
         {
             if (collapsed.EndsWith(possessive, StringComparison.OrdinalIgnoreCase))
             {
@@ -48,7 +48,7 @@ public static class KnowledgeVocabulary
             }
         }
 
-        var key = collapsed.Trim().ToUpperInvariant();
+        string key = collapsed.Trim().ToUpperInvariant();
         return key.Length is >= 1 and <= MaximumNameLength && key.Any(char.IsLetterOrDigit) ? key : null;
     }
 }

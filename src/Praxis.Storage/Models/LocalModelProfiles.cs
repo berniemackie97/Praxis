@@ -1,4 +1,6 @@
+using Microsoft.Data.Sqlite;
 using Praxis.Inference;
+using Praxis.Inference.Ollama;
 using Praxis.Storage.Catalog;
 
 namespace Praxis.Storage.Models;
@@ -26,12 +28,12 @@ public sealed class LocalModelProfiles
         ValidateRole(role);
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT provider, endpoint, model, context_tokens, enabled
-                FROM model_profiles WHERE role = $role
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT provider, endpoint, model, context_tokens, enabled
+                                                                 FROM model_profiles WHERE role = $role
+                                                                 """);
             query.Parameters.AddWithValue("$role", role);
-            using var reader = query.ExecuteReader();
+            using SqliteDataReader reader = query.ExecuteReader();
             return reader.Read()
                 ? new ModelProfile(role, reader.GetString(0), reader.GetString(1),
                     reader.GetString(2), reader.GetInt32(3), reader.GetInt64(4) == 1)
@@ -48,8 +50,8 @@ public sealed class LocalModelProfiles
             throw new ArgumentException("The model provider is not supported.", nameof(profile));
         }
 
-        var endpoint = LoopbackEndpoint.Validate(profile.Endpoint).GetLeftPart(UriPartial.Authority) + "/";
-        var model = profile.Model?.Trim() ?? "";
+        string endpoint = LoopbackEndpoint.Validate(profile.Endpoint).GetLeftPart(UriPartial.Authority) + "/";
+        string model = profile.Model?.Trim() ?? "";
         if (model.Length is < 1 or > 200 || model.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)))
         {
             throw new ArgumentException("The model name is invalid.", nameof(profile));
@@ -60,18 +62,18 @@ public sealed class LocalModelProfiles
             throw new ArgumentOutOfRangeException(nameof(profile), "Context must be 2,048 to 262,144 tokens.");
         }
 
-        var saved = profile with { Endpoint = endpoint, Model = model };
+        ModelProfile saved = profile with { Endpoint = endpoint, Model = model };
         database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                INSERT INTO model_profiles
-                    (role, provider, endpoint, model, context_tokens, enabled, updated_utc)
-                VALUES ($role, $provider, $endpoint, $model, $context, $enabled, $now)
-                ON CONFLICT(role) DO UPDATE SET provider = excluded.provider,
-                    endpoint = excluded.endpoint, model = excluded.model,
-                    context_tokens = excluded.context_tokens, enabled = excluded.enabled,
-                    updated_utc = excluded.updated_utc
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   INSERT INTO model_profiles
+                                                                       (role, provider, endpoint, model, context_tokens, enabled, updated_utc)
+                                                                   VALUES ($role, $provider, $endpoint, $model, $context, $enabled, $now)
+                                                                   ON CONFLICT(role) DO UPDATE SET provider = excluded.provider,
+                                                                       endpoint = excluded.endpoint, model = excluded.model,
+                                                                       context_tokens = excluded.context_tokens, enabled = excluded.enabled,
+                                                                       updated_utc = excluded.updated_utc
+                                                                   """);
             command.Parameters.AddWithValue("$role", saved.Role);
             command.Parameters.AddWithValue("$provider", saved.Provider);
             command.Parameters.AddWithValue("$endpoint", saved.Endpoint);

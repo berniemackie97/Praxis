@@ -30,23 +30,23 @@ internal static class SemanticResponseReader
 
         using (document)
         {
-            var root = document.RootElement;
+            JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||
-                !TryArray(root, "topics", out var topics) || !TryArray(root, "entities", out var entities))
+                !TryArray(root, "topics", out JsonElement topics) || !TryArray(root, "entities", out JsonElement entities))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse,
                     "The model response does not match the extraction schema.");
             }
 
-            var reader = new Reading(segmentText, segmentStart);
-            foreach (var topic in Limit(topics, SemanticExtractionPrompt.MaximumTopics, reader))
+            Reading reader = new Reading(segmentText, segmentStart);
+            foreach (JsonElement topic in Limit(topics, SemanticExtractionPrompt.MaximumTopics, reader))
             {
                 reader.AddNamed(topic, "topic", null);
             }
 
-            foreach (var entity in Limit(entities, SemanticExtractionPrompt.MaximumEntities, reader))
+            foreach (JsonElement entity in Limit(entities, SemanticExtractionPrompt.MaximumEntities, reader))
             {
-                var type = Text(entity, "type");
+                string? type = Text(entity, "type");
                 if (type is null || !KnowledgeVocabulary.EntityTypes.Contains(type))
                 {
                     reader.Rejected++;
@@ -56,9 +56,9 @@ internal static class SemanticResponseReader
                 reader.AddNamed(entity, "entity", type);
             }
 
-            if (TryArray(root, "relations", out var relations))
+            if (TryArray(root, "relations", out JsonElement relations))
             {
-                foreach (var relation in Limit(relations, SemanticExtractionPrompt.MaximumRelations, reader))
+                foreach (JsonElement relation in Limit(relations, SemanticExtractionPrompt.MaximumRelations, reader))
                 {
                     reader.AddRelation(relation);
                 }
@@ -78,7 +78,7 @@ internal static class SemanticResponseReader
         root.TryGetProperty(property, out array) && array.ValueKind == JsonValueKind.Array;
 
     private static string? Text(JsonElement item, string property) =>
-        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(property, out var value) &&
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(property, out JsonElement value) &&
         value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static string? Normalize(string? name)
@@ -88,7 +88,7 @@ internal static class SemanticResponseReader
             return null;
         }
 
-        var collapsed = string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        string collapsed = string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return collapsed.Length is >= 1 and <= KnowledgeVocabulary.MaximumNameLength &&
             collapsed.Any(char.IsLetterOrDigit) && !collapsed.Any(char.IsControl)
             ? collapsed : null;
@@ -103,8 +103,8 @@ internal static class SemanticResponseReader
 
         public void AddNamed(JsonElement item, string kind, string? entityType)
         {
-            var name = Normalize(Text(item, "name"));
-            var span = Locate(Text(item, "quote"));
+            string? name = Normalize(Text(item, "name"));
+            (int Offset, int Length)? span = Locate(Text(item, "quote"));
             if (name is null || span is not { } found ||
                 (kind == "entity" && !segmentText.Contains(name, StringComparison.OrdinalIgnoreCase)))
             {
@@ -123,10 +123,10 @@ internal static class SemanticResponseReader
 
         public void AddRelation(JsonElement item)
         {
-            var predicate = Text(item, "predicate");
-            var subject = Resolve(Text(item, "subject"));
-            var obj = Resolve(Text(item, "object"));
-            var span = Locate(Text(item, "quote"));
+            string? predicate = Text(item, "predicate");
+            string? subject = Resolve(Text(item, "subject"));
+            string? obj = Resolve(Text(item, "object"));
+            (int Offset, int Length)? span = Locate(Text(item, "quote"));
             if (predicate is null || !KnowledgeVocabulary.Predicates.Contains(predicate) ||
                 subject is null || obj is null || span is not { } found ||
                 KnowledgeVocabulary.NameKey(subject) == KnowledgeVocabulary.NameKey(obj))
@@ -135,7 +135,7 @@ internal static class SemanticResponseReader
                 return;
             }
 
-            var evidence = segmentText.AsSpan(found.Offset, found.Length);
+            ReadOnlySpan<char> evidence = segmentText.AsSpan(found.Offset, found.Length);
             if (!evidence.Contains(subject, StringComparison.OrdinalIgnoreCase) ||
                 !evidence.Contains(obj, StringComparison.OrdinalIgnoreCase))
             {
@@ -150,7 +150,7 @@ internal static class SemanticResponseReader
         /// <summary>A relation end must be an entity accepted from this same answer.</summary>
         private string? Resolve(string? name) =>
             KnowledgeVocabulary.NameKey(Normalize(name)) is { } key &&
-            entityNames.TryGetValue(key, out var accepted) ? accepted : null;
+            entityNames.TryGetValue(key, out string? accepted) ? accepted : null;
 
         private (int Offset, int Length)? Locate(string? quote) =>
             quote is not null && EvidenceLocator.Find(segmentText, quote) is { } found &&

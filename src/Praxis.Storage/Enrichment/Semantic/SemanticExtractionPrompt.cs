@@ -90,13 +90,13 @@ internal static class SemanticExtractionPrompt
     internal static IReadOnlyList<ChatMessage> Messages(
         string sourceName, string? section, string excerpt, IReadOnlyList<EntityHint> hints)
     {
-        var user = new StringBuilder()
+        StringBuilder user = new StringBuilder()
             .Append("Source: ").Append(sourceName).Append('\n')
             .Append("Section: ").Append(section ?? "(none)").Append('\n');
         if (hints.Count != 0)
         {
             user.Append("Owner's notes about names in this excerpt:\n");
-            foreach (var hint in hints.Take(MaximumHints))
+            foreach (EntityHint hint in hints.Take(MaximumHints))
             {
                 user.Append("- ").Append(hint.Name).Append(": ").Append(hint.Rejected
                     ? "not a valid entity; do not report it"
