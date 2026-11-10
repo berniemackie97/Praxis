@@ -1,6 +1,6 @@
 # Retrieval evaluation — local lexical gold corpus v1
 
-**Status:** A reproducible baseline is implemented in tests; no owner-machine execution or measurements are yet recorded for this branch. This does not establish hybrid retrieval, grounded chat, or intelligent MVP #170 acceptance.
+**Status (November 10, 2026):** The lexical corpus and opt-in local hybrid retrieval implementation are merged (#222/#226/#228/#229), and the owner reports a green post-fix macOS .NET Release build/test/format chain for #28. This evaluation extends the deterministic source judgments, but there are no recorded physical-model results, owner-reviewed quality thresholds or executing three-OS CI jobs. Nothing here establishes grounded answer generation or intelligent MVP #170 acceptance.
 
 ## Scope and expected behavior
 
@@ -57,3 +57,49 @@ The next evaluation under #29 must record a pinned installed embedding model and
 After merged PR #228, the owner ran the fail-fast chain on macOS using .NET SDK 10.0.403: locked restore and a **fresh Release build passed**. The fresh suite executed **575 tests: 566 passed, 9 failed**. Eight historical snapshot/migration tests asserted schema version 14 despite the catalog now being at version 16; the hybrid retrieval revocation/revision test helper mistakenly expected a single processing job for an item and processor **across all revisions**, although its two revisions correctly retained separate job history. The fail-fast chain stopped at test failure, so **formatting was not run in this pass**.
 
 The follow-up to #28 updates those eight assertions to version 16 and scopes the helper's processing-job assertion to the exact claimed item, revision and processor. The patch does not alter catalog migrations, source identity or runtime retrieval behavior. **A fresh post-fix complete test and format result is still required; no final-head pass or cross-OS CI result is claimed.**
+
+## Hybrid evaluation v2 — task #29
+
+The versioned `retrieval-judgments-v2.json` uses the same synthetic `retrieval-corpus-v1.json` source identities. It adds authored relevance judgments across code, Markdown, captions, duplicate originals, contradicting claims, instruction-like source text, explicitly unsupported formats, cross-source evidence and no-answer cases. These are **curated test expectations, not independently owner-reviewed relevance labels**. The corpus deliberately retains unsupported CSV/PDF/video originals as negative cases; it does not pretend that those formats are already extracted or that a caption file is a playable video with verified timestamp links.
+
+`HybridRetrievalEvaluationTests` runs real capture, extraction, segmentation, FTS5 and semantic indexing over a disposable owner-private catalog. A declared deterministic topic-vector fixture makes concept retrieval reproducible across platforms. The evaluator records per-domain lexical, semantic-only and reciprocal-rank-fused recall@5, precision@5 and correct empty-result counts, validates canonical source ID, item ID, revision, original digest, path and text evidence, and explicitly detects inappropriate no-answer hits. It tests partial vector refresh, over-budget atomic rebuild, version supersession, revocation, corrupted vector failure, missing-object verification and rebuild recovery. Deterministic vectors are **not** a measure of real Ollama embedding quality.
+
+`LocalModelRetrievalEvaluationTests` measures the **actual** installed, explicitly chosen local Ollama embedding model against these same judgments. It runs only when `PRAXIS_RETRIEVAL_OLLAMA_MODEL` is set; otherwise it prints `NOT EXECUTED`. A normal green suite without that variable **does not count** as a physical-model benchmark. Only authored synthetic fixtures are embedded; the runner never imports an owner's catalog, downloads a model or enables any remote endpoint.
+
+### Repeatable owner-machine verification
+
+```sh
+dotnet restore Praxis.slnx --locked-mode &&
+dotnet build Praxis.slnx -c Release --no-restore &&
+dotnet test Praxis.slnx -c Release --no-build --no-restore &&
+dotnet format Praxis.slnx --verify-no-changes --no-restore
+```
+
+To isolate the deterministic evaluation and retain full reported metrics:
+
+```sh
+dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release \
+  --no-build --no-restore \
+  --filter 'FullyQualifiedName~RetrievalEvaluationTests|FullyQualifiedName~HybridRetrievalEvaluationTests' \
+  --logger 'console;verbosity=detailed'
+```
+
+For a deliberately authorized **real local Ollama run**, first confirm that the chosen embedding-capable model appears in `ollama list` and that Ollama is available on the same machine. Substitute the actual installed model name; this command does not install or pull anything:
+
+```sh
+PRAXIS_RETRIEVAL_OLLAMA_MODEL=<installed-embedding-model> \
+dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release \
+  --no-build --no-restore \
+  --filter 'FullyQualifiedName~MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments' \
+  --logger 'console;verbosity=detailed'
+```
+
+The endpoint defaults to `http://127.0.0.1:11434`, and an alternate **loopback-only** endpoint can be supplied through `PRAXIS_RETRIEVAL_OLLAMA_ENDPOINT`. Record the main/PR head SHA, OS and hardware, .NET SDK/runtime, Ollama version, model name and digest, fixture version, full query metrics, index/query wall time and database bytes. The logged test-process working set **does not include Ollama's model memory**: record that separately with host tooling. Do not set speed/memory/quality thresholds until observed on a documented target machine.
+
+### What the measurements cannot establish
+
+- **No-answer:** the current semantic exact scan returns top-ranked neighbors without an abstention threshold. Even unknown/unsupported queries can produce semantic hits. The evaluator reports no-answer false positives; it must not interpret them as truthful answers or silently treat a nonempty hit list as an answered question (#29/#33).
+- **Missing originals:** original-object verification fails when physical bytes disappear, but previously extracted text and derived hits can remain queryable. A source digest identifies an original; it is not a live existence proof. Recovery and source-availability state require an explicit later policy rather than silently deleting evidence.
+- **Unsupported inputs:** the current text extractor does not supply PDF text, financial row IDs, or media cue-level citation claims in this lexical fixture. Cross-domain proof still requires #181/#184/#170 and independently judged examples.
+- **CI:** deterministic tests are part of the full `Praxis.slnx` test suite; #137's owner-deferred runners prevent claims that the Linux/macOS/Windows jobs actually executed. Neither a queued check nor a local macOS pass substitutes for the matrix.
+- **Scope:** source/item/revision/digest attribution is source-level retrieval provenance, not statement-level or answer-level citation fidelity (#33). Model relevance, valid no-answer behavior, human judgment review and documented host budgets remain open acceptance work under #29.
