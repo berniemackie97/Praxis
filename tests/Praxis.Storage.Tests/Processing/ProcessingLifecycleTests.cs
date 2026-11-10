@@ -5,6 +5,7 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Processing;
 using Praxis.Storage.Recovery;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Processing;
@@ -12,7 +13,7 @@ namespace Praxis.Storage.Tests.Processing;
 public sealed class ProcessingLifecycleTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-processing-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-processing-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 
     public ProcessingLifecycleTests()

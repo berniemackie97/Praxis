@@ -11,7 +11,7 @@ namespace Praxis.Storage.Tests.Desktop;
 
 public sealed class LocalDesktopProtocolTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-session-" + Guid.NewGuid().ToString("N"));
 
     [Fact]

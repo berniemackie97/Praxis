@@ -3,6 +3,7 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Collections;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Recovery;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Collections;
@@ -10,7 +11,7 @@ namespace Praxis.Storage.Tests.Collections;
 public sealed class LocalCollectionsTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-collections-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-collections-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
 
     public LocalCollectionsTests()

@@ -136,9 +136,10 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         }
 
         bool isDirectory = (attributes & FileAttributes.Directory) != 0;
+        // The leaf is not a link, so canonicalizing only normalizes linked ancestors.
         return isDirectory != expectDirectory
             ? throw new InvalidDataException("The selected source has an unexpected file type.")
-            : full;
+            : CatalogPaths.Canonicalize(full);
     }
 
     private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth, CancellationToken cancellationToken)

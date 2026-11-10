@@ -1,13 +1,14 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Originals;
 
 public sealed class OriginalReceiptTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-receipt-test-" + Guid.NewGuid().ToString("N"));
 
     public OriginalReceiptTests()

@@ -3,13 +3,14 @@ using Praxis.Storage;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Desktop;
 using Praxis.Storage.Models;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Models;
 
 public sealed class LocalModelProfileTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-models-" + Guid.NewGuid().ToString("N"));
 
     public LocalModelProfileTests()

@@ -8,8 +8,8 @@ struct WorkerLaunch {
     static func prepare(
         dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String
     ) throws -> WorkerLaunch {
-        let data = URL(fileURLWithPath: dataRoot).standardizedFileURL.resolvingSymlinksInPath()
-        let source = URL(fileURLWithPath: inbox).standardizedFileURL.resolvingSymlinksInPath()
+        let data = CanonicalPath.of(dataRoot)
+        let source = CanonicalPath.of(inbox)
         guard !data.pathComponents.starts(with: source.pathComponents),
               !source.pathComponents.starts(with: data.pathComponents) else {
             throw LaunchError.overlappingPaths

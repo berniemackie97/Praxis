@@ -13,7 +13,7 @@ namespace Praxis.Storage.Tests.Search;
 public sealed class LocalTextSearchTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-search-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-search-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
 
     public LocalTextSearchTests()
