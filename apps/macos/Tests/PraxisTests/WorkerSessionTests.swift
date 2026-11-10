@@ -5,16 +5,38 @@ import Testing
 /// End-to-end check of the worker transport against the published .NET worker. Runs when
 /// `PRAXIS_WORKER_DLL` names the worker (scripts/macos/test-worker-session.sh sets it).
 enum WorkerFixture {
-    static let workerPath = ProcessInfo.processInfo.environment["PRAXIS_WORKER_DLL"]
-    static let dotnetPath = ProcessInfo.processInfo.environment["PRAXIS_DOTNET"] ?? "/usr/local/share/dotnet/dotnet"
+    static let workerPath: String? = {
+        let files = FileManager.default
+        let explicit = ProcessInfo.processInfo.environment["PRAXIS_WORKER_DLL"]
+        let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("worker/Praxis.Worker.dll").path
+        return [explicit, bundled].compactMap { $0 }
+            .first(where: { files.fileExists(atPath: $0) })
+    }()
+
+    static let dotnetPath: String? = {
+        let files = FileManager.default
+        let environment = ProcessInfo.processInfo.environment
+        let candidates = [
+            environment["PRAXIS_DOTNET"],
+            environment["DOTNET_ROOT"].map { $0 + "/dotnet" },
+            files.homeDirectoryForCurrentUser.appendingPathComponent(".dotnet/dotnet").path,
+            "/usr/local/share/dotnet/dotnet",
+            "/opt/homebrew/bin/dotnet",
+            "/opt/homebrew/opt/dotnet/libexec/dotnet",
+            "/usr/local/bin/dotnet"
+        ].compactMap { $0 }
+        return candidates.first(where: { files.isExecutableFile(atPath: $0) })
+    }()
 }
 
 @MainActor
-@Suite(.enabled(if: WorkerFixture.workerPath != nil, "Set PRAXIS_WORKER_DLL to the published worker"))
+@Suite(.enabled(if: WorkerFixture.workerPath != nil && WorkerFixture.dotnetPath != nil,
+                "A bundled worker and local .NET runtime are required"))
 struct WorkerSessionTests {
     @Test("Capture, search, typed replies, denied requests, restart and malformed responses")
     func workerTransport() async throws {
-        let executable = URL(fileURLWithPath: WorkerFixture.dotnetPath)
+        let executable = URL(fileURLWithPath: try #require(WorkerFixture.dotnetPath))
         let worker = try #require(WorkerFixture.workerPath)
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("praxis-worker-smoke-\(UUID().uuidString)")
