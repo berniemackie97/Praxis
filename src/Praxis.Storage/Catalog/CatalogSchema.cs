@@ -4,7 +4,7 @@ namespace Praxis.Storage.Catalog;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 15;
+    internal const int CurrentVersion = 16;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -36,6 +36,7 @@ internal static class CatalogSchema
         (14, "verification_requests", "request_id, reason, status, provider_id, payload, created_utc, decided_utc, started_utc, completed_utc, retry_after_utc, failure_code, model_name, model_version, input_tokens, output_tokens, duration_ms, lease_key, lease_until_utc"),
         (14, "verification_items", "request_id, ordinal, proposal_id, entity_id, included, verdict, corrected_type, note"),
         (15, "capture_request_context", "request_key, route, authority_basis, scope, recorded_utc"),
+        (16, "semantic_vectors", "item_id, revision, ordinal, model_digest, source_digest, dimensions, vector, segment_text, recorded_utc"),
         (12, "enrichment_runs", "model_provider, model_name, model_digest, input_tokens, output_tokens, duration_ms, segments_examined, segments_total, rejected_count")
     ];
 
@@ -68,6 +69,7 @@ internal static class CatalogSchema
         VerifySchema(database, CurrentVersion);
         VerifySearchSchema(database);
         VerifyEnrichmentView(database);
+        VerifySemanticSchema(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string, "wal", StringComparison.OrdinalIgnoreCase))
         {
             throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
@@ -224,6 +226,25 @@ internal static class CatalogSchema
         catch (SqliteException exception)
         {
             throw new InvalidDataException("The local search index is unavailable.", exception);
+        }
+    }
+
+    private static void VerifySemanticSchema(SqliteConnection database)
+    {
+        foreach ((string kind, string name) in new (string, string)[]
+        {
+            ("view", "eligible_semantic_segments"),
+            ("trigger", "semantic_vectors_new_version"),
+            ("trigger", "semantic_vectors_source_revoked")
+        })
+        {
+            using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type=$kind AND name=$name");
+            command.Parameters.AddWithValue("$kind", kind);
+            command.Parameters.AddWithValue("$name", name);
+            if (command.ExecuteScalar() is not string)
+            {
+                throw new InvalidDataException("The semantic search schema is incomplete.");
+            }
         }
     }
 

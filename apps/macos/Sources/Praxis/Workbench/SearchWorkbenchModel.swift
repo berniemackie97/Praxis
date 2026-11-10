@@ -11,6 +11,9 @@ final class SearchWorkbenchModel: ObservableObject {
     @Published private(set) var hits: [SearchHit] = []
     @Published private(set) var videoClips: [VideoCue] = []
     @Published private(set) var preview = ""
+    @Published private(set) var mode = "Keyword search"
+    @Published private(set) var notice: String?
+    @Published private(set) var indexing = false
     @Published private(set) var error: String?
 
     init(worker: WorkerSession) {
@@ -24,9 +27,32 @@ final class SearchWorkbenchModel: ObservableObject {
 
         request("search", ["query": term]) { model, response in
             model.hits = response.data?.hits ?? []
+            model.mode = response.data?.mode == "hybrid" ? "Hybrid search" : "Keyword search"
+            model.notice = response.data?.notice
         }
         request("mediaCues", ["query": term, "limit": 20]) { model, response in
             model.videoClips = response.data?.clips ?? []
+        }
+    }
+
+    func updateSemanticIndex(rebuild: Bool = false) {
+        guard !indexing else { return }
+        indexing = true
+        do {
+            try worker.send("semanticIndex", fields: ["rebuild": rebuild]) { [weak self] response in
+                guard let self else { return }
+                self.indexing = false
+                guard response.ok else {
+                    self.error = response.error ?? "Semantic indexing failed."
+                    return
+                }
+                if let update = response.data?.index {
+                    self.notice = "Indexed \(update.indexed) segments. \(update.hasMore ? "More remain; update again." : "Index is current.")"
+                }
+            }
+        } catch {
+            indexing = false
+            self.error = error.localizedDescription
         }
     }
 
@@ -59,6 +85,7 @@ final class SearchWorkbenchModel: ObservableObject {
         hits = []
         videoClips = []
         preview = ""
+        notice = nil
         error = nil
     }
 

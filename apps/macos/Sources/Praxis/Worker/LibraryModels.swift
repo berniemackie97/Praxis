@@ -21,6 +21,11 @@ struct LibraryItem: Decodable, Identifiable {
     }
 }
 
+struct SemanticIndexUpdate: Decodable {
+    let indexed: Int
+    let hasMore: Bool
+}
+
 struct SearchHit: Decodable, Identifiable {
     let sourceId: String
     let itemId: String

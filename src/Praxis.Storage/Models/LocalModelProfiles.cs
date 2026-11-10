@@ -10,6 +10,7 @@ public sealed record ModelProfile(
     string Role, string Provider, string Endpoint, string Model, int ContextTokens, bool Enabled)
 {
     public const string LocalEnrichment = "local-enrichment";
+    public const string LocalEmbedding = "local-embedding";
 }
 
 /// <summary>
@@ -88,7 +89,7 @@ public sealed class LocalModelProfiles
 
     private static void ValidateRole(string role)
     {
-        if (role != ModelProfile.LocalEnrichment)
+        if (role is not (ModelProfile.LocalEnrichment or ModelProfile.LocalEmbedding))
         {
             throw new ArgumentException("The model role is not supported.", nameof(role));
         }

@@ -11,6 +11,9 @@ struct WorkerResponseData: Decodable {
     let moves: [SourceMovement]?
     let changed: Bool?
     let hits: [SearchHit]?
+    let mode: String?
+    let notice: String?
+    let index: SemanticIndexUpdate?
     let clips: [VideoCue]?
     let media: MediaInspection?
     let outcome: String?

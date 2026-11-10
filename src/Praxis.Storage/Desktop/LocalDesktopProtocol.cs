@@ -5,6 +5,7 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Models;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Search;
 using Praxis.Storage.Verification;
 
 namespace Praxis.Storage.Desktop;
@@ -45,10 +46,8 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                         fields.IntegerOrDefault("offset", 0, 0, 1_000_000),
                         fields.OptionalGuid("collectionId"))
                 },
-                "search" => new
-                {
-                    hits = catalog.Search.Query(fields.RequireString("query", 256), 30)
-                },
+                "search" => await SearchAsync(fields, cancellationToken),
+                "semanticIndex" => await RefreshSemanticIndexAsync(fields, cancellationToken),
                 "mediaCues" => new
                 {
                     clips = catalog.Media.SearchCues(fields.RequireString("query", 256),
@@ -166,7 +165,9 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                 "verificationApprove" => new { request = ApproveVerification(fields) },
                 "verificationDecline" => new { declined = catalog.Verification.Decline(fields.RequireGuid("verificationId")) },
                 "modelProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEnrichment) },
-                "modelProfileSave" => new { profile = SaveModelProfile(fields) },
+                "modelProfileSave" => new { profile = SaveModelProfile(fields, ModelProfile.LocalEnrichment) },
+                "embeddingProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEmbedding) },
+                "embeddingProfileSave" => new { profile = SaveModelProfile(fields, ModelProfile.LocalEmbedding) },
                 "localModels" => new { models = await ListLocalModelsAsync(fields, cancellationToken) },
                 "revoke" => new
                 {
@@ -225,10 +226,10 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         return new { capture };
     }
 
-    private ModelProfile SaveModelProfile(DesktopRequestFields fields)
+    private ModelProfile SaveModelProfile(DesktopRequestFields fields, string role)
     {
         ModelProfile saved = catalog.Models.Save(new ModelProfile(
-            ModelProfile.LocalEnrichment,
+            role,
             fields.RequireString("provider", 32),
             fields.RequireString("endpoint", 256),
             fields.RequireString("model", 200),
@@ -237,6 +238,50 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         // A model change applies to the next job; waking clears any runtime backoff.
         processing?.Wake();
         return saved;
+    }
+
+    private async Task<object> SearchAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
+    {
+        string query = fields.RequireString("query", 256);
+        ModelProfile? profile = catalog.Models.Get(ModelProfile.LocalEmbedding);
+        if (profile is not { Enabled: true })
+        {
+            return new { hits = catalog.Search.Query(query, 30), mode = "lexical", notice = (string?)null };
+        }
+
+        try
+        {
+            using OllamaRuntime runtime = new(profile.Endpoint, TimeSpan.FromSeconds(30));
+            HybridSearchResults result = await catalog.Hybrid.QueryAsync(
+                query, runtime.CreateEmbeddingModel(profile.Model), 30, cancellationToken);
+            return new
+            {
+                hits = result.Hits,
+                mode = result.UsedEmbeddings ? "hybrid" : "lexical",
+                notice = result.UsedEmbeddings ? null : "No indexed embeddings for this model. Update the local semantic index to enable hybrid results."
+            };
+        }
+        catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new { hits = catalog.Search.Query(query, 30), mode = "lexical",
+                notice = "The local embedding runtime is unavailable; showing keyword results." };
+        }
+    }
+
+    private async Task<object> RefreshSemanticIndexAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
+    {
+        ModelProfile profile = catalog.Models.Get(ModelProfile.LocalEmbedding)
+            ?? throw new InvalidOperationException("Configure a local embedding model first.");
+        if (!profile.Enabled)
+        {
+            throw new InvalidOperationException("Enable local embeddings before updating the index.");
+        }
+
+        using OllamaRuntime runtime = new(profile.Endpoint);
+        SemanticIndexUpdate updated = await catalog.Embeddings.RefreshAsync(
+            runtime.CreateEmbeddingModel(profile.Model), fields.RequireBoolean("rebuild"),
+            maxSegments: 512, cancellationToken);
+        return new { index = updated };
     }
 
     private static async Task<IReadOnlyList<InstalledModel>> ListLocalModelsAsync(

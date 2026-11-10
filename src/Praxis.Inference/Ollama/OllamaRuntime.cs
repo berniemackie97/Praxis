@@ -53,6 +53,8 @@ public sealed class OllamaRuntime : IDisposable
 
     public IChatModel CreateChatModel(string model) => new OllamaChatModel(this, model);
 
+    public IEmbeddingModel CreateEmbeddingModel(string model) => new OllamaEmbeddingModel(this, model);
+
     internal async Task<JsonDocument> SendAsync(HttpMethod method, string path, byte[]? body, CancellationToken cancellationToken)
     {
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
