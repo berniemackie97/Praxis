@@ -1,6 +1,6 @@
 namespace Praxis.Storage.Security;
 
-public sealed record RecipientWrappingKey(Guid DeviceId, byte[] PublicKey);
+public sealed record RecipientWrappingKey(Guid DeviceId, byte[] SigningPublicKey, byte[] PublicKey, byte[] BindingSignature);
 public sealed record DeviceKeyEnvelope(Guid DeviceId, byte[] WrappedKey, byte[] Signature);
 public sealed record RecoveryKeyEnvelope(byte[] Nonce, byte[] CiphertextAndTag, byte[] Signature);
 
