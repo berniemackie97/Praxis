@@ -4,7 +4,7 @@ namespace Praxis.Storage.Security;
 
 internal static class SecurityRegistrySchema
 {
-    internal const int Version = 1;
+    internal const int Version = 2;
 
     internal static void Prepare(SqliteConnection connection)
     {
@@ -116,15 +116,51 @@ internal static class SecurityRegistrySchema
             transaction.Commit();
         }
 
+        if (version <= 1)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText = """
+                ALTER TABLE devices ADD COLUMN wrapping_public_key BLOB;
+                ALTER TABLE security_spaces ADD COLUMN rekey_required INTEGER NOT NULL DEFAULT 1 CHECK (rekey_required IN (0, 1));
+                CREATE TABLE space_key_epochs (
+                    space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
+                    epoch INTEGER NOT NULL CHECK (epoch >= 1),
+                    commitment BLOB NOT NULL CHECK (length(commitment) = 32),
+                    signer_device_id TEXT NOT NULL REFERENCES devices(device_id),
+                    recovery_nonce BLOB NOT NULL CHECK (length(recovery_nonce) = 12),
+                    recovery_ciphertext BLOB NOT NULL CHECK (length(recovery_ciphertext) = 48),
+                    recovery_signature BLOB NOT NULL CHECK (length(recovery_signature) = 64),
+                    created_utc TEXT NOT NULL,
+                    PRIMARY KEY (space_id, epoch)
+                ) STRICT;
+                CREATE TABLE device_key_envelopes (
+                    space_id TEXT NOT NULL,
+                    epoch INTEGER NOT NULL,
+                    device_id TEXT NOT NULL REFERENCES devices(device_id),
+                    wrapped_key BLOB NOT NULL CHECK (length(wrapped_key) = 384),
+                    signature BLOB NOT NULL CHECK (length(signature) = 64),
+                    PRIMARY KEY (space_id, epoch, device_id),
+                    FOREIGN KEY (space_id, epoch) REFERENCES space_key_epochs(space_id, epoch)
+                ) STRICT;
+                PRAGMA user_version=2;
+                """;
+            upgrade.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
         foreach ((string table, string columns) in new (string, string)[]
         {
             ("installation", "singleton, installation_id"),
             ("principals", "principal_id, created_utc, disabled_utc"),
-            ("devices", "device_id, principal_id, public_key, enrolled_utc, revoked_utc"),
-            ("security_spaces", "space_id, owner_id, processing_class, created_utc"),
+            ("devices", "device_id, principal_id, public_key, enrolled_utc, revoked_utc, wrapping_public_key"),
+            ("security_spaces", "space_id, owner_id, processing_class, created_utc, rekey_required"),
             ("space_grants", "space_id, principal_id, permissions, grant_version, revoked_utc"),
             ("source_spaces", "source_id, space_id"),
-            ("proof_challenges", "challenge_id, device_id, space_id, source_id, permission, grant_version, nonce, expires_utc, consumed")
+            ("proof_challenges", "challenge_id, device_id, space_id, source_id, permission, grant_version, nonce, expires_utc, consumed"),
+            ("space_key_epochs", "space_id, epoch, commitment, signer_device_id, recovery_nonce, recovery_ciphertext, recovery_signature, created_utc"),
+            ("device_key_envelopes", "space_id, epoch, device_id, wrapped_key, signature")
         })
         {
             using SqliteCommand check = connection.CreateCommand();
