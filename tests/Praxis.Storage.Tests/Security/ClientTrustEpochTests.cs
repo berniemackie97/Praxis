@@ -123,6 +123,117 @@ public sealed class ClientTrustEpochTests : IDisposable
     }
 
     [Fact]
+    public void LastDeviceRecoveryTransfersPersistedOwnerTrustWithoutHostEscrow()
+    {
+        string hostDirectory = DirectoryFor("recover-host");
+        string ownerDirectory = DirectoryFor("recover-client");
+        using ECDsa originalSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa recoverySigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa attackerSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa replacementSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using RSA originalRecipient = RSA.Create(3072);
+        using RSA replacementRecipient = RSA.Create(3072);
+        byte[] originalKey = ClientSpaceKeys.GenerateContentKey();
+        byte[] newKey = ClientSpaceKeys.GenerateContentKey();
+        byte[] contentRecoverySecret = ClientSpaceKeys.GenerateRecoverySecret();
+        Guid installation, owner, space, originalDevice, replacementDevice;
+        byte[] originalPublicKey = originalSigner.ExportSubjectPublicKeyInfo();
+        byte[] recoveryPublicKey = recoverySigner.ExportSubjectPublicKeyInfo();
+        byte[] replacementPublicKey = replacementSigner.ExportSubjectPublicKeyInfo();
+
+        using (SecurityRegistry registry = SecurityRegistry.Open(hostDirectory))
+        {
+            installation = registry.InstallationId;
+            owner = registry.Operator.CreatePrincipal();
+            originalDevice = Enroll(registry, owner, originalSigner, originalRecipient);
+            space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+            VerifiedDeviceProof proof = Prove(registry, originalSigner, originalDevice,
+                space, SecurityPermission.Write);
+
+            byte[] registered = RecoveryEnrollment.RegistrationMessage(installation,
+                owner, originalDevice, 1, recoveryPublicKey);
+            registry.Recovery.Register(proof, recoveryPublicKey,
+                Sign(originalSigner, registered), Sign(recoverySigner, registered));
+
+            using (ClientDeviceTrustStore pinned = ClientDeviceTrustStore.Open(ownerDirectory,
+                installation, originalDevice, originalPublicKey))
+            {
+                byte[] recoveryMessage = ClientDeviceTrustStore.RecoveryAuthorityMessage(
+                    installation, originalDevice, 1, recoveryPublicKey);
+                pinned.RegisterRecoveryAuthority(recoveryPublicKey,
+                    Sign(originalSigner, recoveryMessage),
+                    Sign(recoverySigner, recoveryMessage));
+                SpaceKeyPublication published = ClientSpaceKeys.Protect(installation, space, 1,
+                    originalDevice, originalSigner, registry.SpaceKeys.Recipients(proof),
+                    pinned.TrustedRecipients(space), originalKey, contentRecoverySecret);
+                registry.SpaceKeys.Publish(proof, published);
+                AvailableSpaceKey? envelope = registry.SpaceKeys.Download(
+                    Prove(registry, originalSigner, originalDevice, space, SecurityPermission.Read));
+                Assert.NotNull(envelope);
+                Assert.Equal(originalKey, ClientSpaceKeys.UnlockForDevice(
+                    installation, envelope, originalRecipient, pinned));
+            }
+
+            Assert.True(registry.Operator.RevokeDevice(originalDevice));
+        }
+
+        using (SecurityRegistry registry = SecurityRegistry.Open(hostDirectory))
+        {
+            byte[] applicantSigning = replacementSigner.ExportSubjectPublicKeyInfo();
+            byte[] applicantWrapping = replacementRecipient.ExportSubjectPublicKeyInfo();
+            byte[] binding = Sign(replacementSigner,
+                DeviceWrappingKey.BindingMessage(applicantSigning, applicantWrapping));
+            ReplacementChallenge pending = registry.Recovery.Begin(owner, applicantSigning,
+                applicantWrapping, binding) ??
+                throw new InvalidOperationException("The recovery challenge was unavailable.");
+            replacementDevice = registry.Recovery.Complete(pending.EnrollmentId,
+                Sign(recoverySigner, pending.Message), Sign(replacementSigner, pending.Message)) ??
+                throw new InvalidOperationException("Recovery enrollment did not complete.");
+
+            VerifiedDeviceProof read = Prove(registry, replacementSigner, replacementDevice,
+                space, SecurityPermission.Read);
+            OwnerRecoveryArchive? archive = registry.SpaceKeys.DownloadOwnerRecovery(read);
+            Assert.NotNull(archive);
+            Assert.Equal(originalKey, ClientSpaceKeys.UnlockWithRecovery(
+                installation, archive, contentRecoverySecret, originalSigner, 1));
+
+            using (ClientDeviceTrustStore stored = ClientDeviceTrustStore.Open(ownerDirectory,
+                installation, originalDevice, originalPublicKey))
+            {
+                byte[] transfer = ClientDeviceTrustStore.OwnerTransferMessage(
+                    installation, originalDevice, originalPublicKey,
+                    replacementDevice, replacementPublicKey, 1);
+                Assert.Throws<UnauthorizedAccessException>(() => stored.TransferOwner(
+                    replacementDevice, replacementPublicKey,
+                    Sign(attackerSigner, transfer), Sign(replacementSigner, transfer)));
+                stored.TransferOwner(replacementDevice, replacementPublicKey,
+                    Sign(recoverySigner, transfer), Sign(replacementSigner, transfer));
+                Assert.Single(stored.TrustedRecipients(space));
+                Assert.Contains(replacementDevice, stored.TrustedRecipients(space).Keys);
+                Assert.Equal(1, stored.MinimumCurrentEpoch(space));
+            }
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                ClientDeviceTrustStore.Open(ownerDirectory, installation,
+                    originalDevice, originalPublicKey));
+            using ClientDeviceTrustStore recovered = ClientDeviceTrustStore.Open(ownerDirectory,
+                installation, replacementDevice, replacementPublicKey);
+            VerifiedDeviceProof write = Prove(registry, replacementSigner,
+                replacementDevice, space, SecurityPermission.Write);
+            SpaceKeyPublication rotated = ClientSpaceKeys.Protect(installation, space, 2,
+                replacementDevice, replacementSigner, registry.SpaceKeys.Recipients(write),
+                recovered.TrustedRecipients(space), newKey, ClientSpaceKeys.GenerateRecoverySecret());
+            registry.SpaceKeys.Publish(write, rotated);
+            AvailableSpaceKey? newOffer = registry.SpaceKeys.Download(Prove(registry,
+                replacementSigner, replacementDevice, space, SecurityPermission.Read));
+            Assert.NotNull(newOffer);
+            Assert.Equal(newKey, ClientSpaceKeys.UnlockForDevice(installation, newOffer,
+                replacementRecipient, recovered));
+            Assert.Equal(2, recovered.MinimumCurrentEpoch(space));
+        }
+    }
+
+    [Fact]
     public void LegacyClientTrustDatabaseUpgradesWithoutReplacingPinnedIdentity()
     {
         string directory = DirectoryFor("client");
