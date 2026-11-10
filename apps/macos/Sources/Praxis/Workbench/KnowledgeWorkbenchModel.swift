@@ -30,6 +30,12 @@ final class KnowledgeWorkbenchModel: ObservableObject {
         if let selected { load(selected.summary.entityId) }
     }
 
+    func setTypeFilter(_ filter: String) {
+        guard typeFilter != filter else { return }
+        typeFilter = filter
+        refresh()
+    }
+
     func select(_ entity: EntitySummary) {
         selected = nil
         load(entity.entityId)
