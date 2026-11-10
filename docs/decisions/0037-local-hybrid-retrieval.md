@@ -28,11 +28,13 @@ The first-party Search screen exposes explicit **Update semantic index** and **R
 
 `LocalHybridSearchTests` checks nonlexical conceptual recall, source attribution, duplicate ownership, revocation, revision replacement, a missing derived index, bounded failed rebuild, model digest changes, and revocation during a query-embedding call. `OllamaEmbeddingTests` verifies the actual /api/embed request contract, response order, normalization, malformed responses and input bounds. `LocalModelProfileTests` validates opt-in/denied desktop paths. Existing catalog upgrade/recovery and lexical golden-corpus tests remain part of the suite.
 
+Run the commands as one chain; a passing `--no-build` test run after a failed build may have executed stale test assemblies.
+
 ```bash
-dotnet restore Praxis.slnx --locked-mode
-dotnet build Praxis.slnx -c Release --no-restore
-dotnet test Praxis.slnx -c Release --no-build --no-restore
+dotnet restore Praxis.slnx --locked-mode &&
+dotnet build Praxis.slnx -c Release --no-restore &&
+dotnet test Praxis.slnx -c Release --no-build --no-restore &&
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 ```
 
-No .NET test result, local embedding model performance or green 3-OS Actions run is claimed here. GitHub Actions #137 awaits eligible owner-operated runners. #29 must add measured semantic-vs-lexical retrieval quality, true missing-answer and contradictory-match cases, model/corpus hardware budgets and exact citation scoring. #33 owns grounded answer synthesis and abstention, not this retrieval index.
+The owner's initial post-merge run after PR #226 observed two build diagnostics (missing `CapturedOriginal` import and xUnit2031) and a formatting failure in desktop fallback. These are addressed in the follow-up to #28, but a fresh, passing post-fix test run and measured embedding performance are not yet recorded. GitHub Actions #137 awaits eligible owner-operated runners. #29 must add measured semantic-vs-lexical retrieval quality, true missing-answer and contradictory-match cases, model/corpus hardware budgets and exact citation scoring. #33 owns grounded answer synthesis and abstention, not this retrieval index.
