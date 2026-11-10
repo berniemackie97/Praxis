@@ -4,6 +4,7 @@ using Praxis.Inference;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Search;
 using Praxis.Storage.Tests.Support;
 using Xunit;
 
