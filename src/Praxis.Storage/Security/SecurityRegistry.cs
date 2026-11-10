@@ -20,6 +20,7 @@ public sealed class SecurityRegistry : IDisposable
     public SecurityOperator Operator { get; }
     public DeviceProofVerifier DeviceProofs { get; }
     public SpaceKeyDistribution SpaceKeys { get; }
+    public RecoveryEnrollment Recovery { get; }
 
     private SecurityRegistry(FileStream lease, SqliteConnection connection, TimeProvider clock)
     {
@@ -33,6 +34,7 @@ public sealed class SecurityRegistry : IDisposable
         Operator = new SecurityOperator(this);
         DeviceProofs = new DeviceProofVerifier(this);
         SpaceKeys = new SpaceKeyDistribution(this);
+        Recovery = new RecoveryEnrollment(this);
     }
 
     public static SecurityRegistry Open(string dataDirectory, TimeProvider? timeProvider = null)
