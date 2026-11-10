@@ -1,6 +1,6 @@
 # Threat model and trust boundaries
 
-**Status:** Security design baseline; deployment and data-processing mode pending [#50](https://github.com/berniemackie97/Praxis/issues/50).  
+**Status:** Security design baseline and mode-specific threat contract for #13. Owner product choices are complete in [#50](https://github.com/berniemackie97/Praxis/issues/50); identity, key lifecycle, remote processing, recovery and deployment controls remain **unimplemented and unverified**.  
 **Applies to:** Praxis server, Obsidian adapter, first-party clients, synchronization, ingestion, retrieval and authorized actions.  
 **Scope:** Security requirements and verification obligations, not claims of implemented protection.
 
@@ -25,36 +25,40 @@ Consider a stolen or compromised device, an unauthorized network peer, an untrus
 
 A local-first interface is **not** an encryption guarantee. HTTPS and encryption at rest are **not** end-to-end encryption. Server-side indexing or inference over plaintext means the server can access that plaintext at processing time.
 
-## Processing-mode decision
+## Selected processing and placement boundaries — #50 / ADR 0003
 
-Two supported architectural modes are feasible, but neither should be claimed implemented until validated.
+Deployment and collection protection are different axes: the owner chooses fully offline/local, self-hosted reachable on expressly selected networks, or remote-hosted Praxis; **per-collection security** determines what may leave a device and what the receiving processor can decrypt. Owner choices in #50 establish **three** mandatory policy classes; the [security decision](../decisions/0003-processing-trust-boundaries.md) is the normative design, not proof of implemented controls.
 
-| Mode | Server visibility | Retrieval and automation | Primary tradeoff |
+| Collection class | Local client | Remote service / operator | Permitted inference and derived indexes |
 | --- | --- | --- | --- |
-| Trusted processing service | Authorized service can read plaintext; transport and stored media are protected separately | Server may index permitted collections and run authorized workflows | Host compromise or operator access may reveal plaintext; not end-to-end encrypted |
-| Client-held encrypted collection | Service stores opaque ciphertext; keys remain on authorized clients | Search, embedding and inference on clients, unless the user explicitly exports/decrypts selected content | Recovery, multiple-device key distribution and server-side intelligence become harder |
+| Local-only | Retains originals, key/OS-local authority, excerpts and derivatives | No private content or source metadata; absence of explicit placement grant means no upload | Owner-local authorized processing only; present data and snapshots are plaintext |
+| Client-held encrypted sync | Keeps content-decrypting collection keys, validates ciphertext and indexes locally | Only opaque ciphertext and minimal visible routing/event metadata, subject to authenticated owner/device/collection scopes | Local authorized devices only; untrusted host cannot independently search plaintext or run private agents |
+| Trusted-host processing | Explicitly approves particular host(s), collection keys and processor authority | Authorized host/operator can read plaintext and derived content; host trust and backup key custody matter | Host-local background agents only within collection and tool grants; external provider disclosure separately approved |
 
-A collection-scoped hybrid may be considered later; it requires distinct processing states, key ownership and testable prevention of cross-mode leakage. Do not introduce an unimplemented encryption-mode flag or imply that a future mode already works.
+**Trust-flow boundaries:** local-only capture must never cross a network merely because a remote installation exists; ciphertext must never be decrypted by the opaque relay, and user-shared collection membership must never make arbitrary household knowledge visible to all users. Authorized local inference, trusted-host processing, and a separately approved external provider each cross different trust boundaries; consent for one is not consent for another. Denied membership or revoked source IDs cannot remain visible in search indexes, embeddings, excerpts, cached answers, exports or agent tool results.
 
-### Effective policy until a mode is selected
+**Transition rule:** changing any collection's plaintext/ciphertext authority requires an authenticated owner-approved migration, explicit destination and key handling, reindex/revocation of old derivatives, audit and awareness that historic plaintext disclosures and offline copies cannot be recalled. A mode field on a request cannot authorize a transition; no silent server-side downgrade or implicit backup upload. Missing/unknown mode/version fails closed.
 
-1. Local file editing is permitted; **no remote storage of private content or public sync endpoint is authorized yet**.
-2. No private note, attachment or excerpt may be sent to an external inference provider by default.
-3. No connector receives third-party credentials or sync data until separately authorized.
-4. Agent/tool actions are read-only by default; all mutations and external side effects require independently enforced scope and approval.
-5. The current unauthenticated `/health/live` endpoint is liveness-only. It must never disclose collections, storage state, user identity, secrets or readiness details.
-6. A service reachable beyond loopback needs an approved host/network boundary and authentication design first; an encrypted transport alone is insufficient.
+**Metadata and malicious-relay limits:** ciphertext still reveals some traffic, account/device, size and timing metadata; a storage host can suppress responses or replay older authenticated objects. Client rollback/freshness checks require durable trusted state and explicit recovery/rebootstrap handling; encrypted bytes alone do not prevent a malicious host from withholding updates.
 
-This default is intentionally restrictive so missing configuration cannot silently enable sharing. [#50](https://github.com/berniemackie97/Praxis/issues/50) must resolve hosting, privacy, data-processing and recovery preferences before enabling remote synchronization.
+### Default policy while implementations are incomplete
+
+1. Existing first-party local capture/search operates within its documented **plaintext owner-local** boundary; no remotely accessible private-data service is enabled by #50 or this threat model.
+2. No private note, attachment, excerpt, model prompt or export is sent to an external provider by default; explicit locally approved subscription-CLI verification is bounded to its approved payload and does not grant generalized cloud inference.
+3. Every remotely reachable private operation must have real authenticated principal + enrolled device + resource/scope grant, TLS and the selected collection class enforced before route activation (#15/#19/#41). No unchecked host or tenant-supplied metadata creates authority.
+4. Agent/tool actions remain denied unless independently approved and enforced by execution permissions (#32). Prompt text, retrieved source contents and model responses cannot grant capability.
+5. `/health/live` is liveness-only. Its present in-process negative tests do not prove actual network binding or future authorization.
+
+The completed [#50](https://github.com/berniemackie97/Praxis/issues/50) resolves the *product policy*, not the security implementation or tested operational topology. See the [remote boundary negative-test matrix](../testing/remote-trust-security.md) for exact evidence owners.
 
 ## Identity, credentials and key custody
 
-- Prefer a proven OpenID Connect identity service rather than implementing a password or OAuth authorization server in Praxis. For native clients, use browser-based authorization code flow with PKCE when OAuth is selected. Embedded client secrets are not secrets.
-- Public clients must use refresh-token rotation or sender-constrained refresh tokens, as applicable; avoid long-lived bearer tokens in vault files, URL parameters, logs or browser-accessible storage.
-- Enrollment creates an explicit device identity and authorization scope. Revocation denies future server access; it cannot erase copies already downloaded to a disconnected device.
-- If client-held encryption is selected, clients own encryption keys; the server must not receive decrypting keys. Define enrollment, recovery material, rotation, lost-device handling, and loss-of-all-keys behavior before implementation.
-- If trusted server processing is selected, document where decrypting keys are held, who can access them, how they are rotated and restored, and what backups contain. Disk encryption alone does not restrict the running service from reading records.
-- Never invent application-specific cryptographic algorithms or treat key rotation as guaranteed secure deletion from all historical backups.
+- **Principal vs device vs agent:** a remote account identifies a person; an enrolled device proves possession of its own authentication key; agents and integrations use **separate scoped caller identities**. Require authenticated issuer, session audience, collection membership, resource/action scopes and revocation checked on every protected request. Source/collection IDs and replay receipts are not credentials. Use a no-mandatory-paid-provider standards-based authentication path; OAuth/OIDC public clients use authorization-code/PKCE with proper issuer/audience checks and token replay defenses (RFC 9700). Exact provider/device proof details, token/revocation tests and OS keystore support are selected and proved in #15.
+- **Client-held encryption:** content-decrypting collection keys remain with approved devices, plus independently protected owner recovery material. The remote relay may hold only authenticated ciphertext, nonsecret protocol state and key envelopes it cannot unwrap. Device loss, newly shared recipients, key-epoch rotation, key tampering, revoked members and all-keys-loss must be tested. A server-side identity reset cannot independently recover or decrypt this collection.
+- **Trusted-host encryption:** an explicitly authorized host may decrypt permitted collections; it must protect service credentials and keys independently from ordinary data, use least-privilege operator roles, encrypt/authenticate backups, rotate compromised keys and verify restore. This is **not E2EE**. Its ability to see collection plaintext cannot imply permission for an external inference provider.
+- **Recovery:** independent, verified recovery material is required for client-held content; if every valid client key and recovery factor is lost, no remote server can restore plaintext without violating the design. No hidden escrow or weakened recovery bypass. Local-only snapshots and portable archives are currently plaintext; hashes prove accidental integrity, not hostile-key authenticity or secrecy. Measure supported deployment RPO/RTO and crash/media faults under #40/#41, not by promising zero loss for a single device.
+- **Sharing and revocation:** sharing requires explicit principal grants and recipient-wrapped keys where relevant. Removing someone blocks future service access and new encryption epochs but cannot destroy old offline copies. Index and cache authorization must observe revocation even for byte-identical content shared by other sources.
+- **Compatibility:** #14 portable record IDs and #17 versioned sync semantics still apply. An opaque host cannot truthfully validate plaintext path/link conflicts it cannot inspect; enrolled decrypting clients perform those checks. No unreviewed cryptographic constructions, irreversible automatic class conversions, or claims that rotation securely deletes every historical backup.
 
 ## Threat register
 
@@ -77,11 +81,19 @@ Priority indicates what must be blocked before private remote data is accepted; 
 | T13 | High | Human error, malicious update or lost device creates unrecoverable destruction | Audit, immutable/versioned restore points, tested revoke and restore operations. [#40](https://github.com/berniemackie97/Praxis/issues/40), [#46](https://github.com/berniemackie97/Praxis/issues/46) |
 | T14 | Medium | Encrypted collections still expose timing, sizes, endpoints or device associations | Minimize metadata and log retention; document residual leakage. [#13](https://github.com/berniemackie97/Praxis/issues/13), [#50](https://github.com/berniemackie97/Praxis/issues/50) |
 
+| T15 | Critical | Household/shared knowledge leaks private information across principals via membership, content-deduplicated originals, search, logs or old caches | Deny-by-default principal/device/collection/resource evaluation; revoked membership and same-byte distinct-owner cases S02/S05/S17/S22. #15/#28/#32 |
+| T16 | Critical | Client-held ciphertext is silently uploaded/decrypted in a trusted-host class or a model/provider receives unapproved content after migration | Owner-authorized class transition, no implicit provider fallback, explicit key transfer and derived-data purge; S01/S06/S08/S09/S18/S21. #15/#19/#31/#32 |
+| T17 | Critical | Server-side password reset, insecure key escrow or loss of all recovery factors defeats confidentiality or destroys the sole decrypting copy | Independent owner recovery material, compartmentalized keys, no privileged bypass, explicit irrecoverability; S10/S11/S12. #15/#40 |
+| T18 | High | Malicious relay replays valid old encrypted state, swaps envelopes or suppresses events to trigger rollback, resurrection or false sync | Authenticated object context and key epochs, client durable freshness/epoch validation, reset with pending edits preserved; S06/S07/S14. #15/#19/#21 |
+| T19 | High | SwiftUI-to-.NET child worker assumes secure caller/IPC and a different OS user or forged helper gains local authority | Real-process peer/handle and owner-private root validation; document limits of same-user malware; S19. #107/#215 |
+| T20 | High | Unapproved account/collection policy or stale token lets remote host or agent run unattended, including unexpected cloud provider escalation | Independently scoped principal/device/agent grants, audience/issuer validation, consent-to-destination, safe revocation; S03/S04/S08/S16/S18. #15/#31/#32 |
+| T21 | High | Claimed near-zero data loss hides asynchronous replication, incomplete ciphertext backup, or missing recovery keys | Explicit RPO/RTO and acknowledgment semantics, measured crash/restore/rekey faults; S10–S13/S20/S21. #40/#41/#46 |
+
 ## Approved owner-local caller architecture — #129
 
 The owner-approved decisions in [ADR 0021](../decisions/0021-owner-local-caller-security.md) select direct trusted first-party application calls (in-process initially), a **separate authenticated loopback boundary only for future integrations**, no ordinary-browser API access, future individually paired capture-only extensions, future separately authorized source-scoped read-only MCP agents, short-lived renewable and revocable credentials, and one isolated private store/runtime per OS user. The [security verification matrix](../testing/owner-local-caller-security.md) distinguishes the currently testable liveness-only API from the unimplemented listener, credential and OS isolation tests.
 
-This local policy does not grant remote hosting, account sharing, third-party data access, model inference, encrypted-at-rest protection, or recovery/key-custody decisions. Those remain open in #13/#50. The present `Praxis.Api` host still has only liveness and no implemented authentication; existing plaintext catalog permissions do not protect against same-user compromise, and Windows ACL and real OS-peer isolation need verification before private endpoints can ship.
+ADR 0021 is a separately accepted **owner-local** caller policy; it does not authorize remotely reachable private content, cross-user sharing, third-party data access, encrypted-at-rest claims or unapproved model inference. The SwiftUI macOS UI actually launches a .NET child worker over inherited pipes (ADR 0036), rather than an in-process C# host. Its OS-user, inherited-handle/worker execution and filesystem trust must be verified on the real device (#215/#107); a same-user process boundary is not isolation from malware running as that same user. The remote product requirements in #50 do not supersede the owner-local integration permission model. Those remain open in #13/#50. The present `Praxis.Api` host still has only liveness and no implemented authentication; existing plaintext catalog permissions do not protect against same-user compromise, and Windows ACL and real OS-peer isolation need verification before private endpoints can ship.
 
 ## Additional local capture, browser, voice and agent boundaries (planned)
 
@@ -153,3 +165,9 @@ Failures in these gates block the feature, not just its release announcement.
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet) — exclude secrets and private content from logs.
 
 These are design and verification sources; they do not certify Praxis as compliant. Review applicable requirements per shipped feature instead of claiming blanket adherence.
+
+## #13 spike exit versus release evidence
+
+This threat model selects and reconciles the **design** of principal/device/grant, collection class, content-key ownership, backup/recovery and user-sharing controls with accepted ADR 0003 and ADR 0006. The completed [#50](https://github.com/berniemackie97/Praxis/issues/50) authorizes that product direction. The [S01–S22 security scenarios](../testing/remote-trust-security.md) are executable acceptance **contracts** for #15, #19, #32, #40, #41 and other owners; no nonexistent remote implementation can pass them today.
+
+For the #13 spike, design review must verify that every cross-principal, class-transition, inference, key-loss, replay and recovery threat has a mitigation owner and a negative test. **Do not require #15's not-yet-built remote implementation to pass S01–S22 before closing #13**—that would deadlock its native dependency graph. Conversely, closing #13 does not waive a single later runtime gate. Retain current real API denial tests as baseline only; execute full suites and physical/VM proof when the respective implementation ships and CI runners operate (#137).
