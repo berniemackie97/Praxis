@@ -28,6 +28,14 @@ dotnet run --project src/Praxis.Api
 
 `GET /health/live` checks only that the process responds. It does not validate readiness, databases, or external services.
 
+### Native macOS app in Xcode
+
+The macOS front end is a **version-controlled Xcode Application target**, not a Swift Package executable. Only the app and native tests are Swift; the canonical intake, storage, inference, knowledge processing and desktop worker remain **.NET 10**. Open `apps/macos/Praxis.xcodeproj`, select the shared **Praxis** scheme and **My Mac**, then use **Run (⌘R)** or **Test (⌘U)**.
+
+The Xcode app target publishes the .NET worker into `Praxis.app/Contents/Resources/worker` as part of its build. A local .NET 10 SDK is required **to build**, and the framework-dependent worker requires a .NET 10 runtime **to run**. If Finder-launched Xcode cannot locate your SDK, set the user-defined target build setting `PRAXIS_DOTNET_EXECUTABLE` to its absolute path. The first-run UI separately locates the installed runtime used to execute the worker. No .NET application is rewritten in Swift.
+
+For a command-line build of the **same Xcode app**, use `bash scripts/macos/build-desktop.sh`. To run the hosted Swift tests, including the published worker connection, use `bash scripts/macos/test-worker-session.sh` after packaging. Existing `.artifacts/Praxis.app` is intentionally not overwritten; move it aside before rebuilding. See [the Xcode workflow and acceptance guide](docs/delivery/macos-workbench.md) and [ADR 0036](docs/decisions/0036-native-macos-xcode-application.md).
+
 ### Local note archive
 
 `NoteRecord.Create(path, markdown)` creates a stable UUID and first revision. `record.Revise(newPath, markdown)` creates the next immutable revision, keeping the original snapshot. `NoteArchive.Write(stream, records)` exports a versioned ZIP with JSON manifest and separate Markdown revision entries; `NoteArchive.Read(stream)` validates and restores the records.
