@@ -32,9 +32,17 @@ internal sealed record CaptureRequestContext(string Route, string AuthorityBasis
             return;
         }
 
-        if (Scope is null || Scope.Length > 4096 || !Path.IsPathFullyQualified(Scope))
+        string requiredBasis = Route switch
         {
-            throw new ArgumentException("The capture scope is invalid.");
+            "selected_file" or "selected_folder" => "owner_selected",
+            "watched_folder" => "owner_configured",
+            "quick_note" => "owner_submitted",
+            _ => throw new ArgumentException("The capture route is invalid.")
+        };
+        if (AuthorityBasis != requiredBasis || Scope is null || Scope.Length > 4096
+            || !Path.IsPathFullyQualified(Scope))
+        {
+            throw new ArgumentException("The capture scope or authority basis is invalid.");
         }
 
         bool allowed = Route == "selected_file"

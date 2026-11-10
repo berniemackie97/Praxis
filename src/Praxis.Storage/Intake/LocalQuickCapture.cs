@@ -27,6 +27,8 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
         byte[] bytes = EncodeNote(heading, text);
         string root = intake.ValidateSourcePath(intakeDirectory, expectDirectory: true);
         string destination = ResolveDestination(root, heading, captureId);
+        CaptureRequestContext capture = CaptureRequestContext.QuickNote(root);
+        capture.Validate(destination);
 
         if (!File.Exists(destination))
         {
@@ -35,7 +37,7 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
 
         await VerifyPublishedAsync(destination, bytes, cancellationToken);
         using MemoryStream content = new(bytes, writable: false);
-        CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), CaptureRequestContext.QuickNote(root), cancellationToken);
+        CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), capture, cancellationToken);
         return new LocalQuickCaptureReceipt(destination, original);
     }
 
