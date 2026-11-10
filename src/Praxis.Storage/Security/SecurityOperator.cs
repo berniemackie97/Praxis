@@ -74,13 +74,15 @@ public sealed class SecurityOperator
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
-                INSERT INTO devices (device_id, principal_id, public_key, wrapping_public_key, enrolled_utc)
-                SELECT $device, principal_id, $key, $wrapping, $now FROM principals
+                INSERT INTO devices (device_id, principal_id, public_key, wrapping_public_key, wrapping_signature, enrolled_utc)
+                SELECT $device, principal_id, $key, $wrapping, $binding, $now FROM principals
                 WHERE principal_id = $principal AND disabled_utc IS NULL
                 """,
                 ("$device", SecurityRegistry.Id(deviceId)),
                 ("$principal", SecurityRegistry.Id(principalId)),
-                ("$key", key), ("$wrapping", recipientKey), ("$now", Now()));
+                ("$key", key), ("$wrapping", recipientKey),
+                ("$binding", wrappingBindingSignature.IsEmpty ? null : wrappingBindingSignature.ToArray()),
+                ("$now", Now()));
             bool created = command.ExecuteNonQuery() == 1;
             if (created)
             {
@@ -129,9 +131,9 @@ public sealed class SecurityOperator
             }
 
             using (SqliteCommand update = SecurityRegistry.Command(connection, transaction, """
-                UPDATE devices SET wrapping_public_key=$wrapping
+                UPDATE devices SET wrapping_public_key=$wrapping, wrapping_signature=$signature
                 WHERE device_id=$device AND revoked_utc IS NULL AND wrapping_public_key IS NULL
-                """, ("$device", SecurityRegistry.Id(deviceId)), ("$wrapping", key)))
+                """, ("$device", SecurityRegistry.Id(deviceId)), ("$wrapping", key), ("$signature", signature)))
             {
                 if (update.ExecuteNonQuery() != 1)
                 {
