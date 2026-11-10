@@ -22,6 +22,7 @@ public sealed class SecurityRegistry : IDisposable
     public SpaceKeyDistribution SpaceKeys { get; }
     public RecoveryEnrollment Recovery { get; }
     public DeviceCertificateIdentity Certificates { get; }
+    public DeviceCertificateIssuer CertificateIssuer { get; }
     public ApprovedDeviceEnrollment Enrollment { get; }
     public AuthenticatedDataAccess ProtectedData { get; }
 
@@ -39,6 +40,7 @@ public sealed class SecurityRegistry : IDisposable
         SpaceKeys = new SpaceKeyDistribution(this);
         Recovery = new RecoveryEnrollment(this);
         Certificates = new DeviceCertificateIdentity(this);
+        CertificateIssuer = new DeviceCertificateIssuer(this);
         Enrollment = new ApprovedDeviceEnrollment(this);
         ProtectedData = new AuthenticatedDataAccess(this);
     }

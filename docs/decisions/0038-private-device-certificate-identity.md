@@ -1,6 +1,6 @@
 # ADR 0038: Self-hosted certificate issuer and enrolled-device transport identity
 
-**Status:** Proposed implementation contract under [#15](https://github.com/berniemackie97/Praxis/issues/15); not a deployed, externally reachable authentication service. Completes neither #15 nor [feature #53](https://github.com/berniemackie97/Praxis/issues/53) until actual TLS, operator approval, recovery and end-to-end authorization tests pass.
+**Status:** Implemented registry-level certificate admission and offline operator-held PKCS#10 certificate issuance under [#15](https://github.com/berniemackie97/Praxis/issues/15); not a deployed, externally reachable authentication service. Completes neither #15 nor [feature #53](https://github.com/berniemackie97/Praxis/issues/53) until actual TLS, operator approval, recovery and end-to-end authorization tests pass.
 
 ## Context
 
@@ -32,8 +32,8 @@ Lost-all-device recovery uses a separate P-256 recovery signer for authorized re
 
 ## Scope and release evidence
 
-- **Implemented library surface:** chained pinned-X.509 certificate inspection, enrolled-device/identity matching, proof/session binding, issuer/client-usage/validity denial cases. No private API route is exposed by this PR.
-- **Not implemented:** public/private listener separation, actual mTLS handshake, certificate issuance/renewal UX, CA lifecycle, external identity issuance audit, persisted client pin and epoch storage, protected OIDC sign-in, or cross-process two-client network sync. These require #15/#19/#41 deliverables and real-device tests, not just a passing in-process X509Chain fixture.
+- **Implemented library surface:** chained pinned-X.509 certificate inspection, enrolled-device/identity matching, proof/session binding, issuer/client-usage/validity denial cases. An operator holding a P-256 signing CA may issue a **24-hour, client-auth-only certificate** from a verified PKCS#10 request, only when its P-256 key exactly matches a currently authorized owner device or a household device with a signed owner-approval receipt. The CA private key is passed in memory, never persisted by Praxis. No private API route is exposed.
+- **Not implemented:** public/private listener separation, actual mTLS handshake, certificate issuance/renewal UX, CA lifecycle and operational audit, protected OIDC human sign-in, or cross-process two-client network sync. Persisted client recipient pins and verified key-epoch floors now exist, but an actual OS-level private-key custody and approved enrollment UI still require release evidence. These require #15/#19/#41 deliverables and real-device tests, not just a passing in-process X509Chain fixture.
 - **No MFA claim:** short-lived mTLS and one-use signatures use the **same enrolled P-256 private key** for leaf certificate and operation proof; those two verifications do not constitute independent factors.
 
 Before #15/#53 completion, test enrollment, expired/revoked CA/device, stolen/foreign certificate, wrong signing key, client key trust pinning, disabled account, proof replay, last-device recovery and owner approval across independently persisted clients. Before exposing #19, verify actual TLS and operational CA/CRL/OCSP behavior on the owner's Mac plus the supported host environment.

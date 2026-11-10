@@ -124,6 +124,117 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
             secondCertificate, issuer, secondDevice));
     }
 
+    [Fact]
+    public void EnrolledOwnerCanReceiveShortLivedCertificateFromSignedRequest()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        using X509Certificate2 issuer = IssueRoot();
+        using ECDsa ownerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid device = registry.Operator.EnrollDevice(owner, ownerKey.ExportSubjectPublicKeyInfo());
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        VerifiedDeviceProof proof = Prove(registry, ownerKey, device, space, SecurityPermission.Read);
+        byte[] csr = new CertificateRequest("CN=Praxis Client", ownerKey,
+            HashAlgorithmName.SHA256).CreateSigningRequest();
+
+        using X509Certificate2 issued = registry.CertificateIssuer.Issue(proof, csr, issuer);
+        Assert.False(issued.HasPrivateKey);
+        Assert.True(issued.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(2));
+        VerifiedCertificateIdentity? identity = registry.Certificates.AuthenticateForTest(
+            issued, issuer, device);
+        Assert.NotNull(identity);
+        Assert.Equal(owner, identity.PrincipalId);
+        Assert.True(registry.Certificates.MatchesOperation(identity, proof));
+    }
+
+    [Fact]
+    public void CertificateIssuerRejectsSubstitutedRequestAndUnapprovedHouseholdDevice()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        using X509Certificate2 issuer = IssueRoot();
+        using ECDsa ownerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa memberKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa intruder = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid member = registry.Operator.CreatePrincipal();
+        Guid ownerDevice = registry.Operator.EnrollDevice(owner, ownerKey.ExportSubjectPublicKeyInfo());
+        Guid memberDevice = registry.Operator.EnrollDevice(member, memberKey.ExportSubjectPublicKeyInfo());
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+
+        VerifiedDeviceProof ownerProof = Prove(registry, ownerKey, ownerDevice, space, SecurityPermission.Write);
+        VerifiedDeviceProof memberProof = Prove(registry, memberKey, memberDevice, space, SecurityPermission.Read);
+        byte[] intruderCsr = new CertificateRequest("CN=Praxis Client", intruder,
+            HashAlgorithmName.SHA256).CreateSigningRequest();
+        byte[] memberCsr = new CertificateRequest("CN=Praxis Client", memberKey,
+            HashAlgorithmName.SHA256).CreateSigningRequest();
+
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            registry.CertificateIssuer.Issue(ownerProof, intruderCsr, issuer));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            registry.CertificateIssuer.Issue(memberProof, memberCsr, issuer));
+
+        using RSA memberWrapping = RSA.Create(3072);
+        byte[] memberWrapped = memberWrapping.ExportSubjectPublicKeyInfo();
+        using ECDsa newMemberKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        byte[] applicantSigning = newMemberKey.ExportSubjectPublicKeyInfo();
+        byte[] applicantBinding = Sign(newMemberKey,
+            DeviceWrappingKey.BindingMessage(applicantSigning, memberWrapped));
+        DeviceApprovalChallenge challenge = registry.Enrollment.Begin(ownerProof, member,
+            applicantSigning, memberWrapped, applicantBinding);
+        ApprovedDeviceIdentity? approval = registry.Enrollment.Complete(ownerProof,
+            challenge.ChallengeId, Sign(ownerKey, challenge.Message),
+            Sign(newMemberKey, challenge.Message));
+        Assert.NotNull(approval);
+        VerifiedDeviceProof approvedProof = Prove(registry, newMemberKey, approval.DeviceId,
+            space, SecurityPermission.Read);
+        byte[] approvedCsr = new CertificateRequest("CN=Praxis Client", newMemberKey,
+            HashAlgorithmName.SHA256).CreateSigningRequest();
+        using X509Certificate2 issued = registry.CertificateIssuer.Issue(approvedProof,
+            approvedCsr, issuer);
+        Assert.NotNull(registry.Certificates.AuthenticateForTest(
+            issued, issuer, approval.DeviceId));
+        Assert.True(registry.Operator.RevokeDevice(approval.DeviceId));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            registry.CertificateIssuer.Issue(approvedProof, approvedCsr, issuer));
+    }
+
+    [Fact]
+    public void CertificateIssuerDoesNotAcceptExpiredCaOrMalformedCsr()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        using X509Certificate2 issuer = IssueRoot();
+        using ECDsa ownerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid device = registry.Operator.EnrollDevice(owner, ownerKey.ExportSubjectPublicKeyInfo());
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        VerifiedDeviceProof proof = Prove(registry, ownerKey, device, space, SecurityPermission.Read);
+        Assert.ThrowsAny<CryptographicException>(() =>
+            registry.CertificateIssuer.Issue(proof, RandomNumberGenerator.GetBytes(160), issuer));
+
+        using ECDsa shortKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        CertificateRequest shortRequest = new("CN=Short CA", shortKey, HashAlgorithmName.SHA256);
+        shortRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        shortRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign, true));
+        using X509Certificate2 shortCa = shortRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddMinutes(30));
+        byte[] csr = new CertificateRequest("CN=Praxis Client", ownerKey,
+            HashAlgorithmName.SHA256).CreateSigningRequest();
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            registry.CertificateIssuer.Issue(proof, csr, shortCa));
+    }
+
+    private static VerifiedDeviceProof Prove(SecurityRegistry registry, ECDsa signer,
+        Guid device, Guid space, SecurityPermission permission)
+    {
+        DeviceChallenge challenge = registry.DeviceProofs.IssueChallenge(
+            device, space, null, permission);
+        return registry.DeviceProofs.Authenticate(challenge.ChallengeId,
+            Sign(signer, challenge.Message)) ??
+            throw new UnauthorizedAccessException("Device proof was rejected.");
+    }
+
     private static X509Certificate2 IssueRoot()
     {
         using ECDsa signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
