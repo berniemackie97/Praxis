@@ -9,8 +9,20 @@ namespace Praxis.Storage.Security;
 /// configured private CA and whose public signing key matches an enrolled device.
 /// Only a real authenticated TLS connection may supply the certificate.
 /// </summary>
-public sealed record VerifiedCertificateIdentity(
-    Guid PrincipalId, Guid DeviceId, DateTimeOffset CertificateExpiresUtc);
+public sealed class VerifiedCertificateIdentity
+{
+    internal VerifiedCertificateIdentity(Guid principalId, Guid deviceId,
+        DateTimeOffset certificateExpiresUtc)
+    {
+        PrincipalId = principalId;
+        DeviceId = deviceId;
+        CertificateExpiresUtc = certificateExpiresUtc;
+    }
+
+    public Guid PrincipalId { get; }
+    public Guid DeviceId { get; }
+    public DateTimeOffset CertificateExpiresUtc { get; }
+}
 
 /// <summary>
 /// Verifies X.509 client-authentication certificates against a separately pinned CA.
