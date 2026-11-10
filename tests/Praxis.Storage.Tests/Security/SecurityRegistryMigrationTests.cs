@@ -119,7 +119,48 @@ public sealed class SecurityRegistryMigrationTests : IDisposable
         inspect.Open();
         using SqliteCommand version = inspect.CreateCommand();
         version.CommandText = "PRAGMA user_version";
-        Assert.Equal(3L, Convert.ToInt64(version.ExecuteScalar()));
+        Assert.Equal(4L, Convert.ToInt64(version.ExecuteScalar()));
+    }
+
+    [Fact]
+    public void ExistingVersion3RecoveryCredentialUpgradesWithoutLosingPrincipal()
+    {
+        Guid installation, principal, device, space;
+        using ECDsa signing = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using (SecurityRegistry first = SecurityRegistry.Open(root))
+        {
+            installation = first.InstallationId;
+            principal = first.Operator.CreatePrincipal();
+            device = first.Operator.EnrollDevice(principal, signing.ExportSubjectPublicKeyInfo());
+            space = first.Operator.CreateSpace(principal, SecurityProcessingClass.ClientHeld);
+        }
+
+        string path = Path.Combine(root, "identity.sqlite");
+        using (SqliteConnection downgrade = new($"Data Source={path};Pooling=False"))
+        {
+            downgrade.Open();
+            using SqliteCommand command = downgrade.CreateCommand();
+            command.CommandText = """
+                DROP TABLE device_approvals;
+                DROP TABLE pending_device_approvals;
+                PRAGMA user_version=3;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        using SecurityRegistry restored = SecurityRegistry.Open(root);
+        Assert.Equal(installation, restored.InstallationId);
+        DeviceChallenge challenge = restored.DeviceProofs.IssueChallenge(
+            device, space, null, SecurityPermission.Read);
+        byte[] signature = signing.SignData(challenge.Message, HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        Assert.NotNull(restored.DeviceProofs.Authenticate(challenge.ChallengeId, signature));
+
+        using SqliteConnection inspect = new($"Data Source={path};Pooling=False");
+        inspect.Open();
+        using SqliteCommand version = inspect.CreateCommand();
+        version.CommandText = "PRAGMA user_version";
+        Assert.Equal(4L, Convert.ToInt64(version.ExecuteScalar()));
     }
 
     [Fact]
