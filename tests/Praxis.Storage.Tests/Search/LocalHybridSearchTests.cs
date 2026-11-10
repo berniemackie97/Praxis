@@ -183,8 +183,8 @@ public sealed class LocalHybridSearchTests : IDisposable
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromMinutes(1), processorKey: LocalProcessors.TextSegments));
         await new LocalTextSegmenter(catalog).ProcessAsync(lease, CancellationToken.None);
-        Assert.Equal("completed", Assert.Single(catalog.Processing.List()
-            .Where(job => job.ItemId == lease.ItemId && job.ProcessorKey == LocalProcessors.TextSegments)).State);
+        Assert.Equal("completed", Assert.Single(catalog.Processing.List(),
+            job => job.ItemId == lease.ItemId && job.ProcessorKey == LocalProcessors.TextSegments).State);
     }
 
     public void Dispose()

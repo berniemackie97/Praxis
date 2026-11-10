@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
 using Praxis.Storage.Sources;
 using Praxis.Storage.Tests.Support;
 using Xunit;
