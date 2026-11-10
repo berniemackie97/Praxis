@@ -225,7 +225,8 @@
         130,
         146,
         161,
-        166
+        166,
+        215
       ]
     },
     {
@@ -348,6 +349,10 @@
     },
     {
       "issue": 73,
+      "epic": 2
+    },
+    {
+      "issue": 219,
       "epic": 2
     }
   ],
@@ -574,7 +579,8 @@
       113,
       129,
       146,
-      166
+      166,
+      215
     ],
     "143": [
       115,
@@ -712,6 +718,9 @@
       102,
       103,
       129
+    ],
+    "215": [
+      108
     ]
   },
   "priorities": {
@@ -811,7 +820,9 @@
     "178": "P1",
     "179": "P1",
     "181": "P1",
-    "184": "P1"
+    "184": "P1",
+    "215": "P1",
+    "219": "P2"
   },
   "area_overrides": {
     "99": "knowledge",
@@ -1021,6 +1032,7 @@
         146,
         113,
         166,
+        215,
         130
       ],
       "exit": "On the owner's Mac, launch a trusted local Praxis workbench, automatically capture approved inputs, preserve exact originals, inspect/search supported data, organize collections, restore and verify after interruption, and deny unauthorized access. Passing this gate does not establish the complete agent-powered Praxis MVP (#170)."
