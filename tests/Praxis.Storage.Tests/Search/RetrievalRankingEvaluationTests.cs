@@ -46,7 +46,7 @@ public sealed class RetrievalRankingEvaluationTests(ITestOutputHelper output)
         Assert.Equal(1, ranked.RecallAtFive);
         Assert.Equal(0, ranked.PrecisionAtOne);
         Assert.Equal(2d / 3, ranked.PrecisionAtThree);
-        Assert.Equal(2d / 3, ranked.PrecisionAtFive);
+        Assert.Equal(2d / 5, ranked.PrecisionAtFive);
         Assert.Equal(0.5, ranked.ReciprocalRank);
         Assert.False(ranked.NoAnswerCorrect);
 
