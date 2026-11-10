@@ -252,7 +252,8 @@
       "domain": "video",
       "query": "vertex buffer before drawing",
       "relevant": [
-        "render-caption"
+        "render-caption",
+        "vertex-buffer"
       ],
       "lexicalExpected": [
         "render-caption"
@@ -263,7 +264,8 @@
       "domain": "video",
       "query": "material textures",
       "relevant": [
-        "shader-caption"
+        "shader-caption",
+        "terrain-tile"
       ],
       "lexicalExpected": [
         "shader-caption"
