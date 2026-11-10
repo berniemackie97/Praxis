@@ -220,6 +220,33 @@ internal static class SecurityRegistrySchema
             transaction.Commit();
         }
 
+        VerifySchema(connection);
+
+        using (SqliteCommand journal = connection.CreateCommand())
+        {
+            journal.CommandText = "PRAGMA journal_mode=WAL";
+            if (journal.ExecuteScalar() is not string mode || !mode.Equals("wal", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new NotSupportedException("The security registry requires SQLite WAL.");
+            }
+        }
+
+        using (SqliteCommand durability = connection.CreateCommand())
+        {
+            durability.CommandText = "PRAGMA synchronous=FULL";
+            durability.ExecuteNonQuery();
+        }
+        using (SqliteCommand check = connection.CreateCommand())
+        {
+            check.CommandText = "PRAGMA synchronous";
+            if (Convert.ToInt32(check.ExecuteScalar()) != 2)
+            {
+                throw new InvalidDataException("The security registry requires full commit durability.");
+            }
+        }
+    }
+    internal static void VerifySchema(SqliteConnection connection)
+    {
         foreach ((string table, string columns) in new (string, string)[]
         {
             ("installation", "singleton, installation_id"),
@@ -268,27 +295,6 @@ internal static class SecurityRegistrySchema
             }
         }
 
-        using (SqliteCommand journal = connection.CreateCommand())
-        {
-            journal.CommandText = "PRAGMA journal_mode=WAL";
-            if (journal.ExecuteScalar() is not string mode || !mode.Equals("wal", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new NotSupportedException("The security registry requires SQLite WAL.");
-            }
-        }
-
-        using (SqliteCommand durability = connection.CreateCommand())
-        {
-            durability.CommandText = "PRAGMA synchronous=FULL";
-            durability.ExecuteNonQuery();
-        }
-        using (SqliteCommand check = connection.CreateCommand())
-        {
-            check.CommandText = "PRAGMA synchronous";
-            if (Convert.ToInt32(check.ExecuteScalar()) != 2)
-            {
-                throw new InvalidDataException("The security registry requires full commit durability.");
-            }
-        }
     }
+
 }
