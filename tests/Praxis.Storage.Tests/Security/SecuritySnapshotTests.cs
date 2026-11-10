@@ -153,8 +153,8 @@ public sealed class SecuritySnapshotTests : IDisposable
         await Assert.ThrowsAsync<IOException>(() =>
             SecurityRegistrySnapshots.RestoreAsync(Backup, Restored, Budget));
         Assert.Equal("unchanged", File.ReadAllText(Path.Combine(Restored, "owner.txt")));
-        Assert.Equal(0, Directory.GetDirectories(root, ".restored.incomplete-*").Length);
-        Assert.Equal(0, Directory.GetDirectories(root, ".backup.incomplete-*").Length);
+        Assert.Empty(Directory.GetDirectories(root, ".restored.incomplete-*"));
+        Assert.Empty(Directory.GetDirectories(root, ".backup.incomplete-*"));
     }
 
     [Fact]
