@@ -96,11 +96,23 @@ internal static class SecurityRegistrySchema
                     consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
                 ) STRICT;
                 CREATE INDEX proof_challenges_device ON proof_challenges(device_id, expires_utc);
-                INSERT INTO installation VALUES (1, $installation);
-                PRAGMA user_version=1;
                 """;
-            create.Parameters.AddWithValue("$installation", Guid.NewGuid().ToString("N"));
             create.ExecuteNonQuery();
+            using (SqliteCommand identity = connection.CreateCommand())
+            {
+                identity.Transaction = transaction;
+                identity.CommandText = "INSERT INTO installation VALUES (1, $installation)";
+                identity.Parameters.AddWithValue("$installation", Guid.NewGuid().ToString("N"));
+                identity.ExecuteNonQuery();
+            }
+
+            using (SqliteCommand versionUpdate = connection.CreateCommand())
+            {
+                versionUpdate.Transaction = transaction;
+                versionUpdate.CommandText = "PRAGMA user_version=1";
+                versionUpdate.ExecuteNonQuery();
+            }
+
             transaction.Commit();
         }
 
