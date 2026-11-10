@@ -81,6 +81,11 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
             installation, ownerDevice, ownerSigner.ExportSubjectPublicKeyInfo()))
         {
             Assert.Equal(memberSigningKey, reopened.TrustedRecipients(space)[memberDevice]);
+            using ECDsa publicOnly = ECDsa.Create();
+            publicOnly.ImportSubjectPublicKeyInfo(ownerSigner.ExportSubjectPublicKeyInfo(), out _);
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                reopened.Revoke(space, memberDevice, publicOnly, DateTimeOffset.UtcNow));
+            Assert.Contains(memberDevice, reopened.TrustedRecipients(space).Keys);
             Assert.True(reopened.Revoke(space, memberDevice, ownerSigner, DateTimeOffset.UtcNow));
             Assert.DoesNotContain(memberDevice, reopened.TrustedRecipients(space).Keys);
         }
