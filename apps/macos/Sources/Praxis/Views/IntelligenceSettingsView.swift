@@ -92,6 +92,10 @@ private struct ProviderSettings: View {
     @State private var dailyLimit = 20
     @State private var enabled = false
 
+    private var saved: VerificationProvider? {
+        model.providers.first { $0.providerId == providerId }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
