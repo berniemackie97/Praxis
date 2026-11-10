@@ -80,7 +80,8 @@ public sealed class LocalRecoverySetTests : IDisposable
         }
 
         Assert.Equal(checkpoint, await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
-        Assert.Equal(2, Directory.GetDirectories(Restored).Length);
+        Assert.Equal(new[] { "catalog", "identity" },
+            Directory.GetDirectories(Restored).Select(Path.GetFileName).Order().ToArray());
         Assert.False(File.Exists(Path.Combine(Restored, "manifest.json")));
 
         using (LocalCatalog catalog = LocalCatalog.Open(Path.Combine(Restored, "catalog")))
