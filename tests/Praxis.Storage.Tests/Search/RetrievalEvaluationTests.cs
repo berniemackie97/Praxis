@@ -48,9 +48,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
             byDomain[query.Domain] = (score.Queries + 1,
                 score.Recall + recall, score.Precision + precision);
 
-            Assert.True(expected.SequenceEqual(actual),
-                $"{query.Name}: expected [{string.Join(", ", query.Expected)}] but got " +
-                $"[{string.Join(", ", hits.Select(hit => hit.Title))}]");
+            Assert.Equal(expected, actual);
             foreach (LocalSearchHit hit in hits)
             {
                 CapturedOriginal original = originals.Values.Single(entry => entry.ItemId == hit.ItemId);
@@ -65,9 +63,11 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
 
         clock.Stop();
         long allocations = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        foreach ((string domain, var score) in byDomain.OrderBy(pair => pair.Key))
+        foreach (KeyValuePair<string, (int Queries, double Recall, double Precision)> entry in
+            byDomain.OrderBy(pair => pair.Key))
         {
-            output.WriteLine($"domain={domain} queries={score.Queries} " +
+            var score = entry.Value;
+            output.WriteLine($"domain={entry.Key} queries={score.Queries} " +
                 $"recall@5={score.Recall / score.Queries:F3} " +
                 $"precision@5={score.Precision / score.Queries:F3}");
         }
