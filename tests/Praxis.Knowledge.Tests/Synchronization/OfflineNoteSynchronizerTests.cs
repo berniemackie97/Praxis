@@ -320,6 +320,75 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         Assert.Equal(132, journal.Cursor);
     }
 
+    [Fact]
+    public async Task MismatchedReceiptKeepsOriginalOperationForIdempotentRetry()
+    {
+        JournalSyncExchangeFixture server = new(Space, Epoch);
+        using LocalNoteJournal journal = Open(DeviceA);
+        OfflineNoteSynchronizer sync = new(journal, Space, server);
+        PendingNoteEdit pending = journal.Queue(Guid.NewGuid(), LocalNoteAction.Upsert,
+            "journal.md", "original contribution");
+        server.AlterNextSubmit = result => result with { OperationId = Guid.NewGuid() };
+        await Assert.ThrowsAsync<InvalidDataException>(() => sync.ReconcileAsync());
+        Assert.Equal(1, server.Server.HeadSequence);
+        Assert.Equal(pending.OperationId, Assert.Single(journal.Pending).OperationId);
+        Assert.Equal(0, journal.Cursor);
+
+        await sync.ReconcileAsync();
+        Assert.Equal(1, server.Server.HeadSequence);
+        Assert.Equal(1, journal.Cursor);
+        Assert.Empty(journal.Pending);
+        Assert.Empty(journal.AcknowledgedChanges);
+    }
+
+    [Fact]
+    public async Task SnapshotCannotRollBackAnAlreadyDurablyAppliedRecord()
+    {
+        JournalSyncExchangeFixture server = new(Space, Epoch);
+        using LocalNoteJournal first = Open(DeviceA);
+        using LocalNoteJournal second = Open(DeviceB);
+        OfflineNoteSynchronizer firstSync = new(first, Space, server);
+        OfflineNoteSynchronizer secondSync = new(second, Space, server);
+        Guid note = Guid.NewGuid();
+
+        first.Queue(note, LocalNoteAction.Upsert, "record.md", "revision one");
+        await firstSync.ReconcileAsync();
+        await secondSync.ReconcileAsync();
+        first.Queue(note, LocalNoteAction.Upsert, "record.md", "revision two");
+        await firstSync.ReconcileAsync();
+        first.Queue(note, LocalNoteAction.Upsert, "record.md", "revision three");
+        await firstSync.ReconcileAsync();
+
+        server.Server.PruneThrough(2);
+        server.AlterNextSnapshot = reply => reply with
+        {
+            Snapshot = new LocalNoteSnapshot(Epoch, 3,
+                [new LocalNoteState(note, 0, "record.md", "rolled back", false)])
+        };
+        await Assert.ThrowsAsync<InvalidDataException>(() => secondSync.ReconcileAsync());
+        Assert.Equal(1, second.Cursor);
+        Assert.Equal("revision one", Assert.Single(second.Records).Markdown);
+        await secondSync.ReconcileAsync();
+        Assert.Equal(3, second.Cursor);
+        Assert.Equal("revision three", Assert.Single(second.Records).Markdown);
+    }
+
+    [Fact]
+    public async Task UnauthorizedPullWithPrivateMetadataIsRejectedWithoutCheckpointMutation()
+    {
+        JournalSyncExchangeFixture server = new(Space, Epoch);
+        using LocalNoteJournal journal = Open(DeviceA);
+        OfflineNoteSynchronizer sync = new(journal, Space, server);
+        server.AlterNextPull = response => response with
+        {
+            Status = NotePullStatus.Unauthorized, HeadSequence = 42, Changes = []
+        };
+        await Assert.ThrowsAsync<InvalidDataException>(() => sync.ReconcileAsync());
+        Assert.Equal(0, journal.Cursor);
+        Assert.Empty(journal.Records);
+        Assert.Equal(NoteSyncState.UpToDate, (await sync.ReconcileAsync()).State);
+    }
+
     private LocalNoteJournal Open(Guid deviceId) =>
         LocalNoteJournal.Open(Path.Combine(directory, deviceId.ToString("N")), Epoch, deviceId);
 
