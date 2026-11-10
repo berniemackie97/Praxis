@@ -96,6 +96,28 @@ public sealed class CaptureRequestContractTests : IDisposable
     }
 
     [Fact]
+    public async Task FolderRequestKeyCannotBeReusedWithAChangedApprovedScope()
+    {
+        string nestedRoot = Path.Combine(selectedRoot, "nested");
+        Directory.CreateDirectory(nestedRoot);
+        string path = Path.Combine(nestedRoot, "source.md");
+        File.WriteAllText(path, "first approved scope");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        LocalSourceIntake intake = new(catalog);
+
+        LocalImportedFile first = Assert.Single(await intake.ImportFolderAsync(
+            selectedRoot, "same-batch", 10, 1, 100, 100));
+        Assert.Equal(selectedRoot,
+            Assert.Single(catalog.Sources.ListCaptureReceipts(first.Original.SourceId)).Scope);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => intake.ImportFolderAsync(
+            nestedRoot, "same-batch", 10, 0, 100, 100));
+        Assert.Single(catalog.Sources.ListCaptureReceipts(first.Original.SourceId));
+        Assert.Equal(1, catalog.Sources.ReadProvenance(first.Original.SourceId)!.Revision);
+        await catalog.Originals.VerifyAsync(first.Original.ItemId);
+    }
+
+    [Fact]
     public async Task ADeclaredWatchScopeCannotReadOutsideItsApprovedDirectory()
     {
         string path = Path.Combine(selectedRoot, "source.md");
@@ -141,6 +163,30 @@ public sealed class CaptureRequestContractTests : IDisposable
         Assert.Equal("running", catalog.Sources.ReadProvenance(second.SourceId)!.ProcessingState);
         Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(10),
             processorKey: LocalProcessors.SourceText));
+    }
+
+    [Fact]
+    public async Task LeasedOldRevisionCannotFinishOrScheduleDownstreamProcessing()
+    {
+        string path = Path.Combine(selectedRoot, "leased.md");
+        File.WriteAllText(path, "first revision");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        LocalSourceIntake intake = new(catalog);
+        CapturedOriginal first = await intake.ImportFileAsync(path, 100, "lease-first");
+        ProcessingLease older = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.SourceText));
+        Assert.Equal(first.ItemId, older.ItemId);
+
+        File.WriteAllText(path, "second revision");
+        CapturedOriginal newer = await intake.ImportFileAsync(path, 100, "lease-second");
+        Assert.Equal(2, newer.Revision);
+        Assert.False(catalog.Processing.Finish(older, ProcessingCompletion.Completed));
+        Assert.False(catalog.Processing.Defer(older));
+        Assert.Null(catalog.Processing.Renew(older, TimeSpan.FromSeconds(10)));
+        Assert.Equal("canceled", catalog.Sources.ReadProvenance(first.SourceId, 1)!.ProcessingState);
+        ProcessingLease current = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.SourceText));
+        Assert.Equal(newer.Revision, current.Revision);
     }
 
     [Fact]
