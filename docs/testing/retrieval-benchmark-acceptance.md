@@ -64,6 +64,41 @@ Use this source-relevance rubric:
 
 Do not modify fixture labels until the owner resolves these judgments. For the other cases, owner approval of the exported, complete review TSV is sufficient; the list above is **not** a substitute for reviewing all rows.
 
+### Capture actual Ollama host memory (Apple Silicon)
+
+Use the built-in macOS `footprint` utility for kernel-accounted **physical footprint**, which is more informative than only the `ps` RSS field. `vmmap -summary` provides region-level details. To estimate model-related *incremental* host usage, measure the same Ollama server process after stopping only EmbeddingGemma, then after explicitly loading it, while keeping other workload constant. `lsof` identifies the process actually listening on the local API port; `ps` lists any additional Ollama/llama runner PIDs that need separate capture. Preserve raw output; never call the displayed `ollama ps` model size a measured memory footprint.
+
+```bash
+OUT="$HOME/Desktop/Praxis-29-evidence"
+mkdir -p "$OUT"
+capture_ollama_memory() {
+  phase="$1"
+  pid="$(lsof -nP -tiTCP:11434 -sTCP:LISTEN | head -n 1)"
+  if [[ -z "$pid" ]]; then echo "Ollama is not listening on port 11434"; return 1; fi
+  {
+    date -u '+UTC %Y-%m-%dT%H:%M:%SZ'
+    sw_vers
+    sysctl hw.memsize
+    ollama --version
+    ollama ps
+    ps -axo pid,ppid,rss,%mem,command | grep -E '[o]llama|[l]lama|[g]gml'
+    echo "Ollama listener PID: $pid"
+  } > "$OUT/ollama-$phase-environment.txt"
+  footprint -p "$pid" > "$OUT/ollama-$phase-footprint.txt" 2>&1
+  vmmap -summary "$pid" > "$OUT/ollama-$phase-vmmap.txt" 2>&1
+}
+
+ollama stop embeddinggemma:latest
+capture_ollama_memory idle
+curl --fail --silent --show-error http://127.0.0.1:11434/api/embed \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"embeddinggemma:latest","input":"Praxis memory measurement","keep_alive":"15m"}' \
+  > /dev/null
+capture_ollama_memory loaded
+```
+
+If `footprint` or `vmmap` cannot inspect the process, capture their error and use **Activity Monitor → Memory**, choosing the **Ollama server process** (plus any runner), recording its PID and Memory/Real Memory while loaded and the system memory-pressure graph. For deeper **Metal** allocation attribution, Xcode Instruments' **Game Memory** template offers VM Tracker and Metal Resource Events, but requires Xcode tooling and does not make a single universal per-process GPU-memory figure from every allocation. Apple's documentation distinguishes allocated resources from resident/physical footprint. Report each measured category and an idle-versus-loaded change; do not sum RSS, model bytes and graphics allocations because they can overlap.
+
 ### Generate and return review materials
 
 From the repository root on current `main`:
@@ -88,7 +123,7 @@ Edit both TSVs and provide them as evidence. Empty `corrected_relevant_sources` 
 
 ## Required final verification
 
-The GitHub workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) already performs locked restore, Release build and **`dotnet test Praxis.slnx`** on named Linux, macOS and Windows jobs, which includes the deterministic retrieval suites without contacting Ollama. This establishes **configuration coverage**, not actual CI execution. Its jobs currently request three owner-operated self-hosted runners; #137 documents the owner's refusal to provision runners and refusal to pay for GitHub Actions. An explicit **owner waiver of the executed-CI acceptance gate** can allow #29 to close as an evaluation task *with an exception recorded*, but it cannot be described as CI passing. Otherwise, #29 stays open until executing job IDs and a three-OS result are recorded.
+The GitHub workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) already performs locked restore, Release build and **`dotnet test Praxis.slnx`** on named Linux, macOS and Windows jobs, which includes the deterministic retrieval suites without contacting Ollama. This establishes **configuration coverage**, not actual CI execution. Its jobs currently request three owner-operated self-hosted runners; #137 documents the owner's refusal to provision runners and refusal to pay for GitHub Actions. **Owner decision (November 10, 2026): the owner explicitly approved deferring the three-OS execution requirement for #29**, with no new paid compute or runner provisioning. #29 may close with a **documented exception** after independent judgment review, final current-head local verification and the remaining resource evidence. CI has **not executed or passed**; keep the original execution checkbox unchecked or mark it explicitly waived, and leave #137 open for future cross-platform execution. This waiver is limited to the #29 evaluation closure and is not a claim that other security/release CI gates passed.
 
 Local macOS verification on the **final candidate SHA**, not the earlier baseline:
 
@@ -111,6 +146,6 @@ To rerun the **optional physical local benchmark**, first verify `curl --fail -s
 - [ ] Owner reviews v2 (14) and v3 (36) source labels, resolves disputed judgments, and accepts the documented metric interpretation.
 - [ ] Final candidate SHA has local restore/build/tests/format validation (and model rerun if judgments or evaluation code change).
 - [ ] Owner measures/records model-host memory or explicitly accepts the listed memory-measurement limitation.
-- [ ] Either all three GitHub CI jobs actually run and pass, **or** an explicit owner-approved CI exception is recorded and execution stays tracked under #137 (not marked green).
+- [x] **Owner-approved exception:** #29 may close without executed Linux/macOS/Windows CI; all jobs remain queued, #137 stays open, and CI is not represented as green (approved November 10, 2026).
 
 When these close, #29 may be resolved with the exact evidence and exception status. Parent #60 stays open for separate authorization, evidence sufficiency and answer-quality acceptance.
