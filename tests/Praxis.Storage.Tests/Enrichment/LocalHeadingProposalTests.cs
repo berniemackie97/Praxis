@@ -1,9 +1,14 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Recovery;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Enrichment;
 
 public sealed class LocalHeadingProposalTests : IDisposable
 {
@@ -17,7 +22,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         Directory.CreateDirectory(root);
         if (!OperatingSystem.IsWindows())
         {
-            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
             File.SetUnixFileMode(workspace, mode);
             File.SetUnixFileMode(root, mode);
         }
@@ -27,17 +32,17 @@ public sealed class LocalHeadingProposalTests : IDisposable
     public async Task MarkdownHeadingsAreGroundedBoundedAndReviewedWithoutEditingTheOriginal()
     {
         const string content = "# Architecture\nSystem overview\n## Runtime\n~~~csharp\n# Not a heading\n~~~\n";
-        using var catalog = LocalCatalog.Open(root);
-        var captured = await Capture(catalog, "topic.md", content, "one");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal captured = await Capture(catalog, "topic.md", content, "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-        var proposer = ProcessingDriver.Topics(catalog);
+        ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
         Assert.Equal("generated", catalog.Proposals.Outcome(captured.SourceId));
 
-        var proposals = catalog.Proposals.List(captured.SourceId);
+        IReadOnlyList<LocalProposal> proposals = catalog.Proposals.List(captured.SourceId);
         Assert.Equal(new[] { "Architecture", "Runtime" }, proposals.Select(p => p.Value).ToArray());
-        foreach (var proposal in proposals)
+        foreach (LocalProposal proposal in proposals)
         {
             Assert.Equal(captured.ItemId, proposal.ItemId);
             Assert.Equal(captured.Sha256, proposal.SourceSha256);
@@ -63,14 +68,14 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task RevisedOrRevokedSourcesNeverExposeOrAcceptStaleSuggestions()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var old = Assert.Single(catalog.Proposals.List(first.SourceId));
+        LocalProposal old = Assert.Single(catalog.Proposals.List(first.SourceId));
         Assert.True(catalog.Proposals.Review(old.ProposalId, "accepted"));
 
-        var revised = await Capture(catalog, "topic.md", "# Updated\nRevised body", "two");
+        CapturedOriginal revised = await Capture(catalog, "topic.md", "# Updated\nRevised body", "two");
         Assert.Equal(first.ItemId, revised.ItemId);
         Assert.Equal(2, revised.Revision);
         Assert.Empty(catalog.Proposals.List(first.SourceId));
@@ -78,7 +83,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         Assert.False(catalog.Proposals.Review(old.ProposalId, "rejected"));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var current = Assert.Single(catalog.Proposals.List(first.SourceId));
+        LocalProposal current = Assert.Single(catalog.Proposals.List(first.SourceId));
         Assert.Equal("Updated", current.Value);
         Assert.NotEqual(old.ProposalId, current.ProposalId);
         Assert.Equal("pending", current.Status);
@@ -95,12 +100,12 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task RevocationBetweenReadAndCommitPublishesNoProposals()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var source = await Capture(catalog, "fenced.md", "# Fenced topic\n", "fenced");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal source = await Capture(catalog, "fenced.md", "# Fenced topic\n", "fenced");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-        var lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+        ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromMinutes(1), processorKey: LocalProcessors.MarkdownHeadings));
-        var candidate = Assert.IsType<LeasedText>(catalog.Text.ReadLeasedInput(lease));
+        LeasedText candidate = Assert.IsType<LeasedText>(catalog.Text.ReadLeasedInput(lease));
 
         Assert.True(catalog.Sources.Revoke(source.SourceId));
 
@@ -115,18 +120,18 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task UnsupportedTextAndEmptyMarkdownAbstainWithoutInventingTopics()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var empty = await Capture(catalog, "empty.md",
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal empty = await Capture(catalog, "empty.md",
             "No heading.\n~~~\n# Fake heading\n~~~\n", "one");
-        var plain = await Capture(catalog, "plain.txt", "# Document", "two");
+        CapturedOriginal plain = await Capture(catalog, "plain.txt", "# Document", "two");
         await Capture(catalog, "document.pdf", "# Fiction", "three");
-        var processor = ProcessingDriver.Text(catalog);
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         // Heading jobs exist only for completed extractions: the Markdown and the text file,
         // not the unsupported PDF.
-        var proposer = ProcessingDriver.Topics(catalog);
+        ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
@@ -142,29 +147,29 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task SeparateSourcesAndRecoveryRetainIndependentReviewHistory()
     {
-        var backup = Path.Combine(workspace, "backup");
-        var target = Path.Combine(workspace, "restore");
+        string backup = Path.Combine(workspace, "backup");
+        string target = Path.Combine(workspace, "restore");
         CapturedOriginal first;
         CapturedOriginal second;
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             first = await Capture(catalog, "one.md", "# Shared Topic\nBody", "one");
             second = await Capture(catalog, "two.md", "# Shared Topic\nBody", "two");
-            var processor = ProcessingDriver.Text(catalog);
+            ProcessingDriver processor = ProcessingDriver.Text(catalog);
             Assert.True(await processor.ProcessNextAsync());
             Assert.True(await processor.ProcessNextAsync());
-            var proposer = ProcessingDriver.Topics(catalog);
+            ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
             Assert.True(proposer.ProcessNext());
             Assert.True(proposer.ProcessNext());
-            var firstProposal = Assert.Single(catalog.Proposals.List(first.SourceId));
-            var secondProposal = Assert.Single(catalog.Proposals.List(second.SourceId));
+            LocalProposal firstProposal = Assert.Single(catalog.Proposals.List(first.SourceId));
+            LocalProposal secondProposal = Assert.Single(catalog.Proposals.List(second.SourceId));
             Assert.NotEqual(firstProposal.ProposalId, secondProposal.ProposalId);
             Assert.True(catalog.Proposals.Review(firstProposal.ProposalId, "accepted"));
             await catalog.Recovery.BackupAsync(backup, 20_000_000);
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
-        using var restored = LocalCatalog.Open(target);
+        using LocalCatalog restored = LocalCatalog.Open(target);
         Assert.Equal(13, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Proposals.List(first.SourceId)).Status);
@@ -178,8 +183,8 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public void ExistingVersionSixCatalogMigratesWithoutLosingUserCollections()
     {
-        var databasePath = Path.Combine(root, "catalog.sqlite");
-        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        string databasePath = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
@@ -187,19 +192,19 @@ public sealed class LocalHeadingProposalTests : IDisposable
         }.ToString()))
         {
             connection.Open();
-            foreach (var version in new[]
+            foreach (string version in new[]
                 { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql",
                   "LocalCatalog.V4.sql", "LocalCatalog.V5.sql", "LocalCatalog.V6.sql" })
             {
-                using var resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                using Stream resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
                     "Praxis.Storage." + version)!;
-                using var reader = new StreamReader(resource);
-                using var command = connection.CreateCommand();
+                using StreamReader reader = new(resource);
+                using SqliteCommand command = connection.CreateCommand();
                 command.CommandText = reader.ReadToEnd();
                 command.ExecuteNonQuery();
             }
 
-            using var insert = connection.CreateCommand();
+            using SqliteCommand insert = connection.CreateCommand();
             insert.CommandText = """
                 INSERT INTO source_collections
                     (collection_id, name, name_key, created_utc)
@@ -209,7 +214,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
             insert.ExecuteNonQuery();
         }
 
-        using var upgraded = LocalCatalog.Open(root);
+        using LocalCatalog upgraded = LocalCatalog.Open(root);
         Assert.Equal(13, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
@@ -220,8 +225,8 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public void MissingEligibilityViewIsRejectedWithoutRewritingTheCatalog()
     {
-        using (var catalog = LocalCatalog.Open(root)) { }
-        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        using (LocalCatalog catalog = LocalCatalog.Open(root)) { }
+        using (SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(root, "catalog.sqlite"),
             Mode = SqliteOpenMode.ReadWrite,
@@ -229,7 +234,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         }.ToString()))
         {
             connection.Open();
-            using var command = connection.CreateCommand();
+            using SqliteCommand command = connection.CreateCommand();
             command.CommandText = "DROP VIEW eligible_enrichment_proposals";
             command.ExecuteNonQuery();
         }
@@ -242,11 +247,11 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task ReviewRejectsInvalidDecisionsCorrectionsAndUnknownSources()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var candidate = Assert.Single(catalog.Proposals.List(item.SourceId));
+        LocalProposal candidate = Assert.Single(catalog.Proposals.List(item.SourceId));
         Assert.Throws<ArgumentException>(() =>
             catalog.Proposals.Review(candidate.ProposalId, "approved"));
         Assert.Throws<ArgumentException>(() =>
@@ -262,21 +267,21 @@ public sealed class LocalHeadingProposalTests : IDisposable
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, string contents, string key)
     {
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(contents));
+        using MemoryStream stream = new(Encoding.UTF8.GetBytes(contents));
         return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, filename), stream, 20_000, key);
     }
 
     private object? Scalar(string sql)
     {
-        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        using SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(root, "catalog.sqlite"),
             Mode = SqliteOpenMode.ReadOnly,
             Pooling = false
         }.ToString());
         connection.Open();
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return command.ExecuteScalar();
     }

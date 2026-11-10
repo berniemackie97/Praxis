@@ -1,6 +1,10 @@
 using Praxis.Inference;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment.Semantic;
+using Praxis.Storage.Knowledge;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment;
 
 public sealed record LocalProposal(
     Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string SourceSha256,

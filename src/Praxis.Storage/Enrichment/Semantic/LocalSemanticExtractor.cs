@@ -1,6 +1,11 @@
 using Praxis.Inference;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Knowledge;
+using Praxis.Storage.Models;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>
 /// Proposes topics, typed entities and relations for each segment of a revision using the

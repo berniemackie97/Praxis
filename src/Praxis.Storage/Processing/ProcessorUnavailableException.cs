@@ -1,4 +1,4 @@
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Raised by a handler whose required runtime is not available (for example, the local model

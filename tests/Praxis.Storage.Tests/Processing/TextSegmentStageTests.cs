@@ -1,9 +1,13 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Processing;
 
 public sealed class TextSegmentStageTests : IDisposable
 {

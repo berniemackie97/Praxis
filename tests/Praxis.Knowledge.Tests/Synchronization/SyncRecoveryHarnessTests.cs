@@ -1,21 +1,21 @@
 using Xunit;
-using static Praxis.Knowledge.Tests.SyncHarnessInputs;
+using static Praxis.Knowledge.Tests.Synchronization.SyncHarnessInputs;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Synchronization;
 
 public sealed class SyncRecoveryHarnessTests
 {
     [Fact]
     public void LostAcknowledgementAndRestartRetainOperationUntilIdenticalReplay()
     {
-        var server = new SyncContractFixture(Epoch);
-        var device = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var operation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica device = OfflineSyncReplica.Start(Epoch, FirstDevice);
+        SyncMutation operation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "first.md", "local content");
         device.Queue(operation);
-        var durable = device.Checkpoint();
+        ReplicaCheckpoint durable = device.Checkpoint();
 
-        var receipt = server.Apply(operation);
+        SyncReply receipt = server.Apply(operation);
         Assert.Equal(ApplyStatus.Applied, receipt.Status);
         device = OfflineSyncReplica.Restart(durable);
 
@@ -34,24 +34,24 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void DroppedPullAndRestartBeforeCheckpointReplaysWithoutDataLoss()
     {
-        var server = new SyncContractFixture(Epoch);
-        var client = OfflineSyncReplica.Start(Epoch, SecondDevice);
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, SecondDevice);
         Assert.Equal(ApplyStatus.Applied,
             server.Apply(NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
                 SyncAction.Upsert, "content.md", "body")).Status);
-        var delivered = server.Pull(Epoch, 0, 10);
-        var durable = client.Checkpoint();
+        SyncPage delivered = server.Pull(Epoch, 0, 10);
+        ReplicaCheckpoint durable = client.Checkpoint();
 
         client = OfflineSyncReplica.Restart(durable);
         Assert.Equal(0, client.Cursor);
         client.CommitPage(delivered);
 
-        var uncheckpointed = client;
+        OfflineSyncReplica uncheckpointed = client;
         client = OfflineSyncReplica.Restart(durable);
         Assert.Equal(0, client.Cursor);
         Assert.Empty(client.Checkpoint().Records);
 
-        var retried = server.Pull(Epoch, client.Cursor, 10);
+        SyncPage retried = server.Pull(Epoch, client.Cursor, 10);
         client.CommitPage(retried);
         client.CommitPage(delivered);
 
@@ -63,28 +63,28 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void OutOfOrderAndMissingPageEventsCannotPartiallyCommitAReplica()
     {
-        var server = new SyncContractFixture(Epoch);
-        var client = OfflineSyncReplica.Start(Epoch, SecondDevice);
-        for (var index = 0; index < 3; index++)
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, SecondDevice);
+        for (int index = 0; index < 3; index++)
         {
-            var record = Guid.Parse($"00000000-0000-4000-8000-{index + 1:D12}");
-            var mutation = NewMutation(FirstDevice, TestOperationId(index + 1), record, 0,
+            Guid record = Guid.Parse($"00000000-0000-4000-8000-{index + 1:D12}");
+            SyncMutation mutation = NewMutation(FirstDevice, TestOperationId(index + 1), record, 0,
                 SyncAction.Upsert, $"note-{index}.md", $"{index}");
             Assert.Equal(ApplyStatus.Applied, server.Apply(mutation).Status);
         }
 
-        var later = server.Pull(Epoch, 2, 1);
+        SyncPage later = server.Pull(Epoch, 2, 1);
         Assert.Throws<InvalidDataException>(() => client.CommitPage(later));
         Assert.Equal(0, client.Cursor);
 
-        var valid = server.Pull(Epoch, 0, 3);
-        var corrupted = valid with
+        SyncPage valid = server.Pull(Epoch, 0, 3);
+        SyncPage corrupted = valid with
         {
-            Changes = new[]
-            {
+            Changes =
+            [
                 valid.Changes[0],
                 valid.Changes[2]
-            }
+            ]
         };
         Assert.Throws<InvalidDataException>(() => client.CommitPage(corrupted));
         Assert.Equal(0, client.Cursor);
@@ -99,12 +99,12 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void InvalidAcceptedReceiptCannotRemoveAnUnacknowledgedOperation()
     {
-        var client = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var mutation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, FirstDevice);
+        SyncMutation mutation = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "note.md", "pending data");
         client.Queue(mutation);
 
-        var mismatched = new SyncReply(ApplyStatus.Applied, 1,
+        SyncReply mismatched = new(ApplyStatus.Applied, 1,
             new SyncRecord(Guid.Empty, 1, "note.md", "wrong identity", false));
 
         Assert.Throws<InvalidDataException>(() => client.Acknowledge(mutation, mismatched));
@@ -115,8 +115,8 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void EmptyPageCannotAdvanceTheAppliedCursor()
     {
-        var client = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var forged = new SyncPage(PullStatus.Ok, 1, 1, []);
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, FirstDevice);
+        SyncPage forged = new(PullStatus.Ok, 1, 1, []);
 
         Assert.Throws<InvalidDataException>(() => client.CommitPage(forged));
         Assert.Equal(0, client.Cursor);
@@ -126,17 +126,17 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void CompactedHistoryForcesSnapshotButKeepsPendingOfflineEdit()
     {
-        var server = new SyncContractFixture(Epoch);
-        var client = OfflineSyncReplica.Start(Epoch, SecondDevice);
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, SecondDevice);
         Assert.Equal(ApplyStatus.Applied,
             server.Apply(NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
                 SyncAction.Upsert, "note.md", "original")).Status);
         client.CommitPage(server.Pull(Epoch, 0, 5));
 
-        var pending = NewMutation(SecondDevice, TestOperationId(2), SharedRecord, 1,
+        SyncMutation pending = NewMutation(SecondDevice, TestOperationId(2), SharedRecord, 1,
             SyncAction.Upsert, "note.md", "my offline contribution");
         client.Queue(pending);
-        var checkpoint = client.Checkpoint();
+        ReplicaCheckpoint checkpoint = client.Checkpoint();
         Assert.Equal(ApplyStatus.Applied,
             server.Apply(NewMutation(FirstDevice, TestOperationId(3), SharedRecord, 1,
                 SyncAction.Delete, null, null)).Status);
@@ -152,7 +152,7 @@ public sealed class SyncRecoveryHarnessTests
         Assert.True(Assert.Single(client.Checkpoint().Records).Deleted);
         Assert.Equal(pending, Assert.Single(client.Pending));
 
-        var rejected = server.Apply(pending);
+        SyncReply rejected = server.Apply(pending);
         Assert.Equal(ApplyStatus.StaleRevision, rejected.Status);
         client.Acknowledge(pending, rejected);
         Assert.Equal("my offline contribution", Assert.Single(client.Conflicts).Mutation.Body);
@@ -163,13 +163,13 @@ public sealed class SyncRecoveryHarnessTests
     [Fact]
     public void ChangedCollectionEpochCannotImportAnOldSnapshotOrPullPage()
     {
-        var server = new SyncContractFixture(Epoch);
-        var client = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var pending = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica client = OfflineSyncReplica.Start(Epoch, FirstDevice);
+        SyncMutation pending = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "offline.md", "not uploaded");
         client.Queue(pending);
-        var durable = client.Checkpoint();
-        var different = new SyncContractFixture(Guid.Parse("eeeeeeee-1111-4111-8111-111111111111"));
+        ReplicaCheckpoint durable = client.Checkpoint();
+        SyncContractFixture different = new(Guid.Parse("eeeeeeee-1111-4111-8111-111111111111"));
 
         Assert.Equal(PullStatus.WrongCollectionEpoch,
             different.Pull(Epoch, 0, 10).Status);

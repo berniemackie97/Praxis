@@ -1,6 +1,6 @@
 using Praxis.Inference;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Support;
 
 /// <summary>A deterministic chat model that answers each request with a scripted response.</summary>
 internal sealed class ScriptedChatModel(Func<ChatRequest, string> respond) : IChatModel

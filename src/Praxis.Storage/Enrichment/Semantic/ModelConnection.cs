@@ -1,6 +1,7 @@
 using Praxis.Inference;
+using Praxis.Storage.Models;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>A chat model bound to its runtime for the duration of one job.</summary>
 public sealed class ModelConnection(IChatModel model, IDisposable? runtime = null) : IDisposable

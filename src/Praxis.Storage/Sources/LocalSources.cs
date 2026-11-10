@@ -1,13 +1,13 @@
-namespace Praxis.Storage;
+using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
 
-public sealed record LocalFileVersion(
-    Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
+namespace Praxis.Storage.Sources;
 
-internal sealed record CurrentFileVersion(
-    Guid ItemId, int Revision, string Digest, long Length, string Locator);
+public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
 
-public sealed record LocalSourceMovement(
-    Guid SourceId, string PreviousPath, string CurrentPath, string Sha256, DateTimeOffset RecordedUtc);
+internal sealed record CurrentFileVersion(Guid ItemId, int Revision, string Digest, long Length, string Locator);
+
+public sealed record LocalSourceMovement(Guid SourceId, string PreviousPath, string CurrentPath, string Sha256, DateTimeOffset RecordedUtc);
 
 /// <summary>
 /// Identity and lifecycle of captured sources: path lookup, observed relocations and revocation.
@@ -28,18 +28,17 @@ public sealed class LocalSources
 
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_id, i.item_id, v.revision, v.digest, s.status
-                FROM sources s
-                JOIN items i ON i.source_id = s.source_id
-                JOIN item_versions v ON v.item_id = i.item_id
-                WHERE s.source_kind = 'file' AND s.locator = $path
-                ORDER BY v.revision DESC LIMIT 1
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT s.source_id, i.item_id, v.revision, v.digest, s.status
+                                                                   FROM sources s
+                                                                   JOIN items i ON i.source_id = s.source_id
+                                                                   JOIN item_versions v ON v.item_id = i.item_id
+                                                                   WHERE s.source_kind = 'file' AND s.locator = $path
+                                                                   ORDER BY v.revision DESC LIMIT 1
+                                                                   """);
             command.Parameters.AddWithValue("$path", Path.GetFullPath(path));
-            using var reader = command.ExecuteReader();
-            return !reader.Read() ? null : new LocalFileVersion(
-                Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+            using SqliteDataReader reader = command.ExecuteReader();
+            return !reader.Read() ? null : new LocalFileVersion(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                 reader.GetInt32(2), reader.GetString(3), reader.GetString(4));
         });
     }
@@ -47,22 +46,21 @@ public sealed class LocalSources
     /// <summary>Latest revision of an active file source, or null when unavailable.</summary>
     internal CurrentFileVersion? CurrentFile(Guid sourceId) => database.Execute(connection =>
     {
-        using var query = connection.CreateCommand("""
-            SELECT i.item_id, v.revision, v.digest, o.byte_length, s.locator
-            FROM sources s
-            JOIN items i ON i.source_id = s.source_id
-            JOIN item_versions v ON v.item_id = i.item_id
-            JOIN original_objects o ON o.digest = v.digest
-            WHERE s.source_id = $source AND s.status = 'active' AND s.source_kind = 'file'
-              AND v.revision = (SELECT MAX(latest.revision)
-                                FROM item_versions latest WHERE latest.item_id = v.item_id)
-            LIMIT 1
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT i.item_id, v.revision, v.digest, o.byte_length, s.locator
+                                                             FROM sources s
+                                                             JOIN items i ON i.source_id = s.source_id
+                                                             JOIN item_versions v ON v.item_id = i.item_id
+                                                             JOIN original_objects o ON o.digest = v.digest
+                                                             WHERE s.source_id = $source AND s.status = 'active' AND s.source_kind = 'file'
+                                                               AND v.revision = (SELECT MAX(latest.revision)
+                                                                                 FROM item_versions latest WHERE latest.item_id = v.item_id)
+                                                             LIMIT 1
+                                                             """);
         query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-        using var reader = query.ExecuteReader();
+        using SqliteDataReader reader = query.ExecuteReader();
         return reader.Read()
-            ? new CurrentFileVersion(Guid.Parse(reader.GetString(0)), reader.GetInt32(1),
-                reader.GetString(2), reader.GetInt64(3), reader.GetString(4))
+            ? new CurrentFileVersion(Guid.Parse(reader.GetString(0)), reader.GetInt32(1), reader.GetString(2), reader.GetInt64(3), reader.GetString(4))
             : null;
     });
 
@@ -79,11 +77,11 @@ public sealed class LocalSources
 
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var source = connection.CreateCommand("""
-                UPDATE sources SET status = 'revoked'
-                WHERE source_id = $source AND status = 'active'
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand source = connection.CreateCommand("""
+                                                                  UPDATE sources SET status = 'revoked'
+                                                                  WHERE source_id = $source AND status = 'active'
+                                                                  """);
             source.Transaction = transaction;
             source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             if (source.ExecuteNonQuery() == 0)
@@ -91,13 +89,13 @@ public sealed class LocalSources
                 return false;
             }
 
-            using var jobs = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
-                    lease_until_utc = NULL, updated_utc = $now
-                WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
-                  AND state IN ('queued', 'running', 'failed')
-                """);
+            using SqliteCommand jobs = connection.CreateCommand("""
+                                                                UPDATE processing_jobs
+                                                                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
+                                                                    lease_until_utc = NULL, updated_utc = $now
+                                                                WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
+                                                                  AND state IN ('queued', 'running', 'failed')
+                                                                """);
             jobs.Transaction = transaction;
             jobs.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             jobs.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
@@ -121,17 +119,17 @@ public sealed class LocalSources
 
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc
-                FROM source_locator_moves m
-                JOIN sources s ON s.source_id = m.source_id
-                WHERE s.status = 'active' AND s.source_id = $source
-                ORDER BY m.recorded_utc DESC, m.move_id DESC LIMIT $limit
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc
+                                                                 FROM source_locator_moves m
+                                                                 JOIN sources s ON s.source_id = m.source_id
+                                                                 WHERE s.status = 'active' AND s.source_id = $source
+                                                                 ORDER BY m.recorded_utc DESC, m.move_id DESC LIMIT $limit
+                                                                 """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);
-            using var reader = query.ExecuteReader();
-            var moves = new List<LocalSourceMovement>();
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalSourceMovement> moves = new();
             while (reader.Read())
             {
                 moves.Add(new LocalSourceMovement(
@@ -149,28 +147,24 @@ public sealed class LocalSources
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand(
-                "SELECT COUNT(*) FROM source_locator_moves WHERE old_locator = $path");
+            using SqliteCommand command = connection.CreateCommand("SELECT COUNT(*) FROM source_locator_moves WHERE old_locator = $path");
             command.Parameters.AddWithValue("$path", Path.GetFullPath(previousPath));
             return (long)command.ExecuteScalar()!;
         });
     }
 
-    internal bool RelocateObservedFile(
-        string previousPath, string currentPath, string verifiedDigest)
+    internal bool RelocateObservedFile(string previousPath, string currentPath, string verifiedDigest)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(currentPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(verifiedDigest);
-        if (!Path.IsPathFullyQualified(previousPath) || !Path.IsPathFullyQualified(currentPath) ||
-            verifiedDigest.Length != 64 || verifiedDigest.Any(c =>
-                c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (!Path.IsPathFullyQualified(previousPath) || !Path.IsPathFullyQualified(currentPath) || verifiedDigest.Length != 64 || verifiedDigest.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
         {
             throw new ArgumentException("The relocation has invalid path or digest evidence.");
         }
 
-        var old = Path.GetFullPath(previousPath);
-        var current = Path.GetFullPath(currentPath);
+        string old = Path.GetFullPath(previousPath);
+        string current = Path.GetFullPath(currentPath);
         if (old == current)
         {
             return false;
@@ -178,18 +172,18 @@ public sealed class LocalSources
 
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var eligible = connection.CreateCommand("""
-                SELECT s.source_id
-                FROM sources s JOIN items i ON i.source_id = s.source_id
-                JOIN item_versions v ON v.item_id = i.item_id
-                WHERE s.source_kind = 'file' AND s.status = 'active'
-                  AND s.locator = $old AND v.digest = $digest
-                  AND v.revision = (SELECT MAX(latest.revision)
-                      FROM item_versions latest WHERE latest.item_id = i.item_id)
-                  AND NOT EXISTS (SELECT 1 FROM sources occupied
-                      WHERE occupied.source_kind = 'file' AND occupied.locator = $new)
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand eligible = connection.CreateCommand("""
+                                                                    SELECT s.source_id
+                                                                    FROM sources s JOIN items i ON i.source_id = s.source_id
+                                                                    JOIN item_versions v ON v.item_id = i.item_id
+                                                                    WHERE s.source_kind = 'file' AND s.status = 'active'
+                                                                      AND s.locator = $old AND v.digest = $digest
+                                                                      AND v.revision = (SELECT MAX(latest.revision)
+                                                                          FROM item_versions latest WHERE latest.item_id = i.item_id)
+                                                                      AND NOT EXISTS (SELECT 1 FROM sources occupied
+                                                                          WHERE occupied.source_kind = 'file' AND occupied.locator = $new)
+                                                                    """);
             eligible.Transaction = transaction;
             eligible.Parameters.AddWithValue("$old", old);
             eligible.Parameters.AddWithValue("$new", current);
@@ -199,10 +193,10 @@ public sealed class LocalSources
                 return false;
             }
 
-            using var move = connection.CreateCommand("""
-                UPDATE sources SET locator = $new
-                WHERE source_id = $source AND locator = $old AND status = 'active'
-                """);
+            using SqliteCommand move = connection.CreateCommand("""
+                                                                UPDATE sources SET locator = $new
+                                                                WHERE source_id = $source AND locator = $old AND status = 'active'
+                                                                """);
             move.Transaction = transaction;
             move.Parameters.AddWithValue("$new", current);
             move.Parameters.AddWithValue("$source", sourceId);
@@ -212,11 +206,11 @@ public sealed class LocalSources
                 throw new InvalidDataException("The observed source changed during relocation.");
             }
 
-            using var history = connection.CreateCommand("""
-                INSERT INTO source_locator_moves
-                    (move_id, source_id, old_locator, new_locator, digest, recorded_utc)
-                VALUES ($id, $source, $old, $new, $digest, $at)
-                """);
+            using SqliteCommand history = connection.CreateCommand("""
+                                                                   INSERT INTO source_locator_moves
+                                                                       (move_id, source_id, old_locator, new_locator, digest, recorded_utc)
+                                                                   VALUES ($id, $source, $old, $new, $digest, $at)
+                                                                   """);
             history.Transaction = transaction;
             history.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
             history.Parameters.AddWithValue("$source", sourceId);

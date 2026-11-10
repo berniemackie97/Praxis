@@ -1,4 +1,4 @@
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 internal readonly record struct TextSegmentSpan(int Start, int Length, string? HeadingPath);
 

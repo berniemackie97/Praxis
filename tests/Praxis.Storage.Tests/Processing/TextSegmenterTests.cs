@@ -1,8 +1,9 @@
 using System.Text;
 using Praxis.Storage;
+using Praxis.Storage.Processing;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Processing;
 
 public sealed class TextSegmenterTests
 {

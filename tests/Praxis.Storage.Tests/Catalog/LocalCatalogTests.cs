@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Catalog;
 
 public sealed class LocalCatalogTests : IDisposable
 {
@@ -22,10 +22,10 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
-        using var catalog = LocalCatalog.Open(root);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
         Assert.Equal(13, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
-        using var reader = Connect(catalog.DatabasePath);
+        using SqliteConnection reader = Connect(catalog.DatabasePath);
         Assert.Equal(13L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
@@ -39,14 +39,14 @@ public sealed class LocalCatalogTests : IDisposable
     public void TransactionRollbackAndReopenPreserveCommittedSource()
     {
         string path;
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             path = catalog.DatabasePath;
-            using var connection = Connect(path);
+            using SqliteConnection connection = Connect(path);
             InsertSource(connection, "committed", "note.md");
-            using (var transaction = connection.BeginTransaction())
+            using (SqliteTransaction transaction = connection.BeginTransaction())
             {
-                using var command = connection.CreateCommand();
+                using SqliteCommand command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = """
                     INSERT INTO sources(source_id, source_kind, locator, created_utc)
@@ -58,8 +58,8 @@ public sealed class LocalCatalogTests : IDisposable
             Assert.Throws<IOException>(() => LocalCatalog.Open(root));
         }
 
-        using var reopened = LocalCatalog.Open(root);
-        using var connection2 = Connect(path);
+        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteConnection connection2 = Connect(path);
         Assert.Equal(1L, Scalar(connection2, "SELECT COUNT(*) FROM sources"));
         Assert.Equal("committed", Scalar(connection2, "SELECT source_id FROM sources"));
     }
@@ -67,8 +67,8 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void SharedContentKeepsIndependentSourceIdentityAndForeignKeys()
     {
-        using var catalog = LocalCatalog.Open(root);
-        using var connection = Connect(catalog.DatabasePath);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteConnection connection = Connect(catalog.DatabasePath);
         const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         Execute(connection, """
             INSERT INTO original_objects VALUES
@@ -78,7 +78,7 @@ public sealed class LocalCatalogTests : IDisposable
         InsertSource(connection, "first", "a.md");
         InsertSource(connection, "second", "b.md");
         Execute(connection, "INSERT INTO items VALUES ('item-a', 'first'), ('item-b', 'second')");
-        using (var command = connection.CreateCommand())
+        using (SqliteCommand command = connection.CreateCommand())
         {
             command.CommandText = """
                 INSERT INTO item_versions VALUES
@@ -101,15 +101,15 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void CorruptAndUnknownCatalogsAreRejectedWithoutOverwriting()
     {
-        using (var catalog = LocalCatalog.Open(root)) { }
-        var path = Path.Combine(root, "catalog.sqlite");
-        using (var connection = Connect(path))
+        using (LocalCatalog catalog = LocalCatalog.Open(root)) { }
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection connection = Connect(path))
         {
             Execute(connection, "PRAGMA user_version = 14");
         }
 
         Assert.Throws<NotSupportedException>(() => LocalCatalog.Open(root));
-        using (var connection = Connect(path))
+        using (SqliteConnection connection = Connect(path))
         {
             Assert.Equal(14L, Scalar(connection, "PRAGMA user_version"));
         }
@@ -123,12 +123,12 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
-        var path = Path.Combine(root, "catalog.sqlite");
-        using (var connection = Connect(path))
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection connection = Connect(path))
         {
-            using var resource = typeof(LocalCatalog).Assembly
+            using Stream resource = typeof(LocalCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Storage.LocalCatalog.sql")!;
-            using var reader = new StreamReader(resource);
+            using StreamReader reader = new(resource);
             Execute(connection, reader.ReadToEnd());
             InsertSource(connection, "old-source", "source.md");
             Execute(connection, """
@@ -146,10 +146,10 @@ public sealed class LocalCatalogTests : IDisposable
             Assert.Equal(1L, Scalar(connection, "PRAGMA user_version"));
         }
 
-        using (var upgraded = LocalCatalog.Open(root))
+        using (LocalCatalog upgraded = LocalCatalog.Open(root))
         {
             Assert.Equal(13, upgraded.SchemaVersion);
-            using var connection = Connect(upgraded.DatabasePath);
+            using SqliteConnection connection = Connect(upgraded.DatabasePath);
             Assert.Equal(13L, Scalar(connection, "PRAGMA user_version"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
@@ -157,8 +157,8 @@ public sealed class LocalCatalogTests : IDisposable
                 "SELECT COUNT(*) FROM ingest_requests WHERE revision IS NULL AND state='queued'"));
         }
 
-        using var reopened = LocalCatalog.Open(root);
-        using var verified = Connect(reopened.DatabasePath);
+        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteConnection verified = Connect(reopened.DatabasePath);
         Assert.Equal(13L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
@@ -168,13 +168,13 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void UnversionedForeignTablesAreNotAdopted()
     {
-        var path = Path.Combine(root, "catalog.sqlite");
-        using (var connection = Connect(path))
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection connection = Connect(path))
         {
             Execute(connection, "CREATE TABLE unrelated (id INTEGER)");
         }
         Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
-        using var reopened = Connect(path);
+        using SqliteConnection reopened = Connect(path);
         Assert.Equal(0L, Scalar(reopened, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reopened,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'unrelated'"));
@@ -183,8 +183,8 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void FalselyVersionedCatalogWithIncompatibleColumnsIsRejected()
     {
-        var path = Path.Combine(root, "catalog.sqlite");
-        using (var connection = Connect(path))
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection connection = Connect(path))
         {
             Execute(connection, """
                 CREATE TABLE original_objects (placeholder INTEGER) STRICT;
@@ -197,7 +197,7 @@ public sealed class LocalCatalogTests : IDisposable
         }
 
         Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
-        using var reopened = Connect(path);
+        using SqliteConnection reopened = Connect(path);
         Assert.Equal(1L, Scalar(reopened, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reopened,
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sources'"));
@@ -223,7 +223,7 @@ public sealed class LocalCatalogTests : IDisposable
     [Fact]
     public void SymlinkedAndUnknownDataRootEntriesAreRejected()
     {
-        var unrelated = Path.Combine(root, "my-notes.md");
+        string unrelated = Path.Combine(root, "my-notes.md");
         File.WriteAllText(unrelated, "Do not modify user files");
         Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
         Assert.Equal("Do not modify user files", File.ReadAllText(unrelated));
@@ -234,11 +234,11 @@ public sealed class LocalCatalogTests : IDisposable
             return;
         }
 
-        var other = Path.Combine(Path.GetTempPath(), "praxis-other-" + Guid.NewGuid().ToString("N"));
+        string other = Path.Combine(Path.GetTempPath(), "praxis-other-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(other);
         try
         {
-            var link = Path.Combine(root, "objects");
+            string link = Path.Combine(root, "objects");
             Directory.CreateSymbolicLink(link, other);
             Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
             Directory.Delete(link);
@@ -251,14 +251,14 @@ public sealed class LocalCatalogTests : IDisposable
 
     private static SqliteConnection Connect(string path)
     {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = false
         }.ToString());
         connection.Open();
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "PRAGMA foreign_keys = ON";
         command.ExecuteNonQuery();
         return connection;
@@ -266,7 +266,7 @@ public sealed class LocalCatalogTests : IDisposable
 
     private static void InsertSource(SqliteConnection connection, string id, string locator)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO sources(source_id, source_kind, locator, created_utc)
             VALUES ($id, 'file', $locator, '2026-11-08T00:00:00Z')
@@ -278,14 +278,14 @@ public sealed class LocalCatalogTests : IDisposable
 
     private static object? Scalar(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return command.ExecuteScalar();
     }
 
     private static void Execute(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         command.ExecuteNonQuery();
     }

@@ -1,68 +1,59 @@
 using System.Security.Cryptography;
+using Praxis.Knowledge.Archives;
+using Praxis.Knowledge.Model;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Vaults;
 
 public static partial class LocalVaultExchange
 {
-    public static void CaptureArchive(string vaultDirectory, string archivePath,
-        bool trackLinks = false)
+    public static void CaptureArchive(string vaultDirectory, string archivePath, bool trackLinks = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-        var source = Path.GetFullPath(vaultDirectory);
-        var destination = Path.GetFullPath(archivePath);
+        string source = Path.GetFullPath(vaultDirectory);
+        string destination = Path.GetFullPath(archivePath);
         if (IsWithin(source, destination))
         {
             throw new ArgumentException("The archive output must be outside the source vault.", nameof(archivePath));
         }
 
-        var collection = Capture(source);
+        KnowledgeCollection collection = Capture(source);
         WriteArchive(trackLinks ? LocalVaultAttachmentLinks.Track(collection) : collection, destination);
     }
 
-    public static VaultUpdate PlanUpdate(
-        string vaultDirectory, string previousArchivePath,
-        IReadOnlyList<VaultRename>? renames = null,
-        bool trackLinks = false)
+    public static VaultUpdate PlanUpdate(string vaultDirectory, string previousArchivePath, IReadOnlyList<VaultRename>? renames = null, bool trackLinks = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(previousArchivePath);
-        var source = Path.GetFullPath(vaultDirectory);
-        var previousPath = Path.GetFullPath(previousArchivePath);
+        string source = Path.GetFullPath(vaultDirectory);
+        string previousPath = Path.GetFullPath(previousArchivePath);
         if (IsWithin(source, previousPath))
         {
             throw new ArgumentException("The prior archive must be outside the source vault.", nameof(previousArchivePath));
         }
 
-        using var input = new FileStream(previousPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var previous = NoteArchive.ReadCollection(input);
-        return LocalVaultReconciler.Reconcile(previous, Capture(source), renames,
-            trackLinks, previewLinkRemovals: true);
+        using FileStream input = new(previousPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        KnowledgeCollection previous = NoteArchive.ReadCollection(input);
+        return LocalVaultReconciler.Reconcile(previous, Capture(source), renames, trackLinks, previewLinkRemovals: true);
     }
 
-    public static VaultUpdate UpdateArchive(
-        string vaultDirectory, string previousArchivePath, string newArchivePath,
-        IReadOnlyList<VaultRename>? renames = null,
-        bool trackLinks = false,
-        IReadOnlyList<AttachmentReference>? approvedLinkRemovals = null)
+    public static VaultUpdate UpdateArchive(string vaultDirectory, string previousArchivePath, string newArchivePath, IReadOnlyList<VaultRename>? renames = null,
+        bool trackLinks = false, IReadOnlyList<AttachmentReference>? approvedLinkRemovals = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(newArchivePath);
-        var destination = Path.GetFullPath(newArchivePath);
+        string destination = Path.GetFullPath(newArchivePath);
         if (IsWithin(Path.GetFullPath(vaultDirectory), destination))
         {
             throw new ArgumentException("The new archive must be outside the source vault.", nameof(newArchivePath));
         }
 
-        var update = PlanUpdate(vaultDirectory, previousArchivePath, renames, trackLinks);
-        var approved = approvedLinkRemovals ?? [];
-        var distinct = approved.ToHashSet();
-        if (distinct.Count != approved.Count ||
-            distinct.Count != update.RemovedLinks ||
-            !distinct.SetEquals(update.RemovedLinkPairs ?? []))
+        VaultUpdate update = PlanUpdate(vaultDirectory, previousArchivePath, renames, trackLinks);
+        IReadOnlyList<AttachmentReference> approved = approvedLinkRemovals ?? [];
+        HashSet<AttachmentReference> distinct = approved.ToHashSet();
+        if (distinct.Count != approved.Count || distinct.Count != update.RemovedLinks || !distinct.SetEquals(update.RemovedLinkPairs ?? []))
         {
-            throw new InvalidOperationException(
-                "Approval must list exactly the disappearing vault attachment reference pairs.");
+            throw new InvalidOperationException("Approval must list exactly the disappearing vault attachment reference pairs.");
         }
 
         WriteArchive(update.Collection, destination);
@@ -71,18 +62,17 @@ public static partial class LocalVaultExchange
 
     private static void WriteArchive(KnowledgeCollection collection, string destination)
     {
-        var parent = Path.GetDirectoryName(destination)!;
+        string parent = Path.GetDirectoryName(destination)!;
         if (!Directory.Exists(parent) || Path.Exists(destination))
         {
             throw new IOException("The archive parent must exist and the destination must not exist.");
         }
 
         CheckLink(parent);
-        var temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.pending");
+        string temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.pending");
         try
         {
-            using (var output = new FileStream(temporary, FileMode.CreateNew,
-                       FileAccess.Write, FileShare.None))
+            using (FileStream output = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 NoteArchive.WriteCollection(output, collection);
                 output.Flush(flushToDisk: true);
@@ -99,7 +89,7 @@ public static partial class LocalVaultExchange
     public static void RestoreArchive(string archivePath, string destinationDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using FileStream stream = new(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         RestoreCollection(NoteArchive.ReadCollection(stream), destinationDirectory);
     }
 
@@ -107,25 +97,24 @@ public static partial class LocalVaultExchange
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationDirectory);
-        var destination = Path.GetFullPath(destinationDirectory);
-        var parent = Path.GetDirectoryName(destination)!;
+        string destination = Path.GetFullPath(destinationDirectory);
+        string parent = Path.GetDirectoryName(destination)!;
         if (!Directory.Exists(parent) || Path.Exists(destination))
         {
             throw new IOException("Restore requires an existing parent and a new destination directory.");
         }
 
         CheckLink(parent);
-        var planned = Prepare(collection);
-        var temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.restore");
+        IReadOnlyList<(string Path, byte[] Bytes)> planned = Prepare(collection);
+        string temporary = Path.Combine(parent, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.restore");
         Directory.CreateDirectory(temporary);
         try
         {
-            foreach (var (path, bytes) in planned)
+            foreach ((string path, byte[] bytes) in planned)
             {
-                var target = Path.Combine(temporary, path.Replace('/', Path.DirectorySeparatorChar));
+                string target = Path.Combine(temporary, path.Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                using var stream = new FileStream(target, FileMode.CreateNew,
-                    FileAccess.Write, FileShare.None);
+                using FileStream stream = new(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 stream.Write(bytes);
                 stream.Flush(flushToDisk: true);
             }
@@ -148,23 +137,20 @@ public static partial class LocalVaultExchange
             throw new InvalidDataException("The collection contains too many vault files.");
         }
 
-        var result = new List<(string Path, byte[] Bytes)>(
-            collection.Notes.Count + collection.Attachments.Count);
-        var allPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        List<(string Path, byte[] Bytes)> result = new(collection.Notes.Count + collection.Attachments.Count);
+        HashSet<string> allPaths = new(StringComparer.OrdinalIgnoreCase);
         long totalBytes = 0;
 
-        foreach (var note in collection.Notes)
+        foreach (NoteRecord note in collection.Notes)
         {
-            var bytes = Utf8.GetBytes(note.Current.Markdown);
+            byte[] bytes = Utf8.GetBytes(note.Current.Markdown);
             Add(note.Current.Path, bytes, MaxNoteBytes);
         }
 
-        foreach (var attachment in collection.Attachments)
+        foreach (AttachmentRecord attachment in collection.Attachments)
         {
-            var bytes = attachment.ReadContent();
-            if (!string.Equals(
-                Convert.ToHexStringLower(SHA256.HashData(bytes)),
-                attachment.Sha256, StringComparison.Ordinal))
+            byte[] bytes = attachment.ReadContent();
+            if (!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)), attachment.Sha256, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("The original attachment failed integrity verification.");
             }
@@ -172,16 +158,15 @@ public static partial class LocalVaultExchange
             Add(attachment.Path, bytes, MaxAttachmentBytes);
         }
 
-        var ordered = result.OrderBy(item => item.Path, StringComparer.Ordinal).ToArray();
-        var directories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (path, _) in ordered)
+        (string Path, byte[] Bytes)[] ordered = result.OrderBy(item => item.Path, StringComparer.Ordinal).ToArray();
+        Dictionary<string, string> directories = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string path, byte[] _) in ordered)
         {
-            var index = path.IndexOf('/');
+            int index = path.IndexOf('/');
             while (index >= 0)
             {
-                var parent = path[..index];
-                if (allPaths.Contains(parent) ||
-                    directories.TryGetValue(parent, out var existing) && existing != parent)
+                string parent = path[..index];
+                if (allPaths.Contains(parent) || directories.TryGetValue(parent, out string? existing) && existing != parent)
                 {
                     throw new InvalidDataException("The collection contains conflicting directory paths.");
                 }
@@ -196,8 +181,7 @@ public static partial class LocalVaultExchange
         void Add(string path, byte[] bytes, int maximum)
         {
             PortablePath.Validate(path, markdown: maximum == MaxNoteBytes);
-            if (!allPaths.Add(path) || bytes.Length > maximum ||
-                (totalBytes += bytes.Length) > MaxTotalBytes)
+            if (!allPaths.Add(path) || bytes.Length > maximum || (totalBytes += bytes.Length) > MaxTotalBytes)
             {
                 throw new InvalidDataException("The collection contains conflicting paths or excessive data.");
             }
@@ -208,10 +192,7 @@ public static partial class LocalVaultExchange
 
     private static bool IsWithin(string root, string candidate)
     {
-        var relative = Path.GetRelativePath(root, candidate);
-        return relative == "." ||
-            relative != ".." &&
-            !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
-            !Path.IsPathRooted(relative);
+        string relative = Path.GetRelativePath(root, candidate);
+        return relative == "." || relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !Path.IsPathRooted(relative);
     }
 }

@@ -1,4 +1,4 @@
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Versioned identities of the processors that produce catalog evidence, and the stage graph
@@ -22,5 +22,5 @@ public static class LocalProcessors
 
     /// <summary>Processors that consume the completed output of <paramref name="processorKey"/>.</summary>
     public static IReadOnlyList<string> DependentsOf(string processorKey) =>
-        Dependents.TryGetValue(processorKey, out var dependents) ? dependents : [];
+        Dependents.TryGetValue(processorKey, out string[]? dependents) ? dependents : [];
 }

@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Originals;
 
 public sealed class LocalOriginalExportTests : IDisposable
 {
@@ -30,12 +31,12 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task ExportsExactBinaryOriginalAfterWatchedSourceDisappearsAndRestart()
     {
-        var bytes = Enumerable.Range(0, 256_000).Select(x => (byte)(x % 251)).ToArray();
+        byte[] bytes = Enumerable.Range(0, 256_000).Select(x => (byte)(x % 251)).ToArray();
         CapturedOriginal captured;
-        using (var catalog = LocalCatalog.Open(catalogRoot))
+        using (LocalCatalog catalog = LocalCatalog.Open(catalogRoot))
         {
             captured = await Capture(catalog, "offline.bin", bytes, "one");
-            var exported = await catalog.Originals.ExportAsync(
+            LocalOriginalExport exported = await catalog.Originals.ExportAsync(
                 captured.ItemId, captured.Revision, Path.Combine(exportRoot, "copy.bin"));
             Assert.Equal(captured.ItemId, exported.ItemId);
             Assert.Equal(captured.Sha256, exported.Sha256);
@@ -45,7 +46,7 @@ public sealed class LocalOriginalExportTests : IDisposable
             Assert.Empty(Directory.EnumerateFiles(exportRoot, "*.part"));
         }
 
-        using var reopened = LocalCatalog.Open(catalogRoot);
+        using LocalCatalog reopened = LocalCatalog.Open(catalogRoot);
         await reopened.Originals.ExportAsync(
             captured.ItemId, captured.Revision, Path.Combine(exportRoot, "recovered.bin"));
         Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(exportRoot, "recovered.bin")));
@@ -54,9 +55,9 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task ExistingDestinationsAreNeverOverwrittenOrDeleted()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var captured = await Capture(catalog, "note.txt", [2, 3, 4], "one");
-        var destination = Path.Combine(exportRoot, "keep.txt");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal captured = await Capture(catalog, "note.txt", [2, 3, 4], "one");
+        string destination = Path.Combine(exportRoot, "keep.txt");
         File.WriteAllBytes(destination, [9, 8, 7]);
 
         await Assert.ThrowsAsync<IOException>(() =>
@@ -69,8 +70,8 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task StaleRevokedAndUnknownItemsCannotExport()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var initial = await Capture(catalog, "revised.md", [1], "one");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal initial = await Capture(catalog, "revised.md", [1], "one");
         await Capture(catalog, "revised.md", [2], "two");
         await Assert.ThrowsAsync<ArgumentException>(() =>
             catalog.Originals.ExportAsync(Guid.Empty, 1,
@@ -95,9 +96,9 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task CorruptOriginalFailsVerificationWithoutPublishingAFile()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var captured = await Capture(catalog, "file.bin", [1, 2, 3, 4], "one");
-        var path = Path.Combine(catalogRoot, "objects",
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal captured = await Capture(catalog, "file.bin", [1, 2, 3, 4], "one");
+        string path = Path.Combine(catalogRoot, "objects",
             captured.Sha256[..2], captured.Sha256[2..4], captured.Sha256);
         File.WriteAllBytes(path, [1, 2, 3, 5]);
 
@@ -111,8 +112,8 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task ExportRejectsCatalogPathsAndSymbolicLinkRedirection()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var captured = await Capture(catalog, "file.bin", [1, 2, 3], "one");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal captured = await Capture(catalog, "file.bin", [1, 2, 3], "one");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.Originals.ExportAsync(captured.ItemId, 1,
                 Path.Combine(catalogRoot, "illegal.bin")));
@@ -121,7 +122,7 @@ public sealed class LocalOriginalExportTests : IDisposable
         if (OperatingSystem.IsMacOS() &&
             catalogRoot.StartsWith("/var/", StringComparison.Ordinal))
         {
-            var alternateRoot = "/private" + catalogRoot;
+            string alternateRoot = "/private" + catalogRoot;
             if (Directory.Exists(alternateRoot))
             {
                 await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -136,23 +137,23 @@ public sealed class LocalOriginalExportTests : IDisposable
             return;
         }
 
-        var linked = Path.Combine(workspace, "linked");
+        string linked = Path.Combine(workspace, "linked");
         Directory.CreateSymbolicLink(linked, catalogRoot);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.Originals.ExportAsync(captured.ItemId, 1,
                 Path.Combine(linked, "redirected.bin")));
         Assert.False(File.Exists(Path.Combine(catalogRoot, "redirected.bin")));
 
-        var chained = Path.Combine(workspace, "chained");
+        string chained = Path.Combine(workspace, "chained");
         Directory.CreateSymbolicLink(chained, linked);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.Originals.ExportAsync(captured.ItemId, 1,
                 Path.Combine(chained, "nested.bin")));
         Assert.False(File.Exists(Path.Combine(catalogRoot, "nested.bin")));
 
-        var permittedLink = Path.Combine(workspace, "permitted-link");
+        string permittedLink = Path.Combine(workspace, "permitted-link");
         Directory.CreateSymbolicLink(permittedLink, exportRoot);
-        var receipt = await catalog.Originals.ExportAsync(captured.ItemId, 1,
+        LocalOriginalExport receipt = await catalog.Originals.ExportAsync(captured.ItemId, 1,
             Path.Combine(permittedLink, "safe.bin"));
         Assert.Equal(captured.Sha256, receipt.Sha256);
         Assert.Equal(new byte[] { 1, 2, 3 },
@@ -162,9 +163,9 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task CancellationLeavesOnlyOriginalBytes()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var captured = await Capture(catalog, "original.bin", new byte[300_000], "one");
-        using var cancellation = new CancellationTokenSource();
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal captured = await Capture(catalog, "original.bin", new byte[300_000], "one");
+        using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -177,11 +178,11 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task EmptyOriginalCanBeExportedAndVerified()
     {
-        using var catalog = LocalCatalog.Open(catalogRoot);
-        var captured = await Capture(catalog, "empty.txt", [], "one");
-        var destination = Path.Combine(exportRoot, "empty.txt");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal captured = await Capture(catalog, "empty.txt", [], "one");
+        string destination = Path.Combine(exportRoot, "empty.txt");
 
-        var exported = await catalog.Originals.ExportAsync(captured.ItemId, 1, destination);
+        LocalOriginalExport exported = await catalog.Originals.ExportAsync(captured.ItemId, 1, destination);
         Assert.Equal(0, exported.Length);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Array.Empty<byte>())), exported.Sha256);
         Assert.Empty(File.ReadAllBytes(destination));
@@ -191,7 +192,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string name, byte[] bytes, string key)
     {
-        using var stream = new MemoryStream(bytes);
+        using MemoryStream stream = new(bytes);
         return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "missing", name),
             stream, 1_000_000, key);
     }

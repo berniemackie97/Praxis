@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 public enum ProcessingCompletion
 {
@@ -9,12 +10,9 @@ public enum ProcessingCompletion
     Failed
 }
 
-public sealed record ProcessingJob(
-    Guid ItemId, int Revision, string ProcessorKey, string State,
-    int Attempt, int TotalAttempts, DateTimeOffset? LeaseUntil, string? FailureCode);
+public sealed record ProcessingJob(Guid ItemId, int Revision, string ProcessorKey, string State, int Attempt, int TotalAttempts, DateTimeOffset? LeaseUntil, string? FailureCode);
 
-public sealed record ProcessingLease(
-    Guid ItemId, int Revision, string ProcessorKey, Guid LeaseKey, DateTimeOffset LeaseUntil);
+public sealed record ProcessingLease(Guid ItemId, int Revision, string ProcessorKey, Guid LeaseKey, DateTimeOffset LeaseUntil);
 
 /// <summary>
 /// Durable, leased processing jobs keyed by immutable item revision and processor.
@@ -35,20 +33,19 @@ public sealed class LocalProcessingQueue
 
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT item_id, revision, processor_key, state, attempt, total_attempts,
-                       lease_until_utc, failure_code
-                FROM processing_jobs
-                ORDER BY created_utc, item_id, revision, processor_key
-                LIMIT $limit
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT item_id, revision, processor_key, state, attempt, total_attempts,
+                                                                        lease_until_utc, failure_code
+                                                                 FROM processing_jobs
+                                                                 ORDER BY created_utc, item_id, revision, processor_key
+                                                                 LIMIT $limit
+                                                                 """);
             query.Parameters.AddWithValue("$limit", limit);
-            using var reader = query.ExecuteReader();
-            var jobs = new List<ProcessingJob>();
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<ProcessingJob> jobs = new();
             while (reader.Read())
             {
-                jobs.Add(new ProcessingJob(
-                    Guid.Parse(reader.GetString(0)), reader.GetInt32(1), reader.GetString(2),
+                jobs.Add(new ProcessingJob(Guid.Parse(reader.GetString(0)), reader.GetInt32(1), reader.GetString(2),
                     reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5),
                     reader.IsDBNull(6) ? null : CatalogValues.ParseTimestamp(reader.GetString(6)),
                     reader.IsDBNull(7) ? null : reader.GetString(7)));
@@ -61,32 +58,29 @@ public sealed class LocalProcessingQueue
     public bool Queue(Guid itemId, int revision, string processorKey)
     {
         ProcessingJobKey.Validate(itemId, revision, processorKey);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                INSERT INTO processing_jobs
-                    (item_id, revision, processor_key, state, attempt, total_attempts,
-                     created_utc, updated_utc)
-                SELECT v.item_id, v.revision, $processor, 'queued', 0, 0, $now, $now
-                FROM item_versions v
-                JOIN items i ON i.item_id = v.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE v.item_id = $item AND v.revision = $revision AND s.status = 'active'
-                ON CONFLICT(item_id, revision, processor_key) DO NOTHING
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   INSERT INTO processing_jobs
+                                                                       (item_id, revision, processor_key, state, attempt, total_attempts,
+                                                                        created_utc, updated_utc)
+                                                                   SELECT v.item_id, v.revision, $processor, 'queued', 0, 0, $now, $now
+                                                                   FROM item_versions v
+                                                                   JOIN items i ON i.item_id = v.item_id
+                                                                   JOIN sources s ON s.source_id = i.source_id
+                                                                   WHERE v.item_id = $item AND v.revision = $revision AND s.status = 'active'
+                                                                   ON CONFLICT(item_id, revision, processor_key) DO NOTHING
+                                                                   """);
             ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             command.Parameters.AddWithValue("$now", now);
             return command.ExecuteNonQuery() != 0;
         });
     }
 
-    public ProcessingLease? TryClaim(
-        TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null,
-        string? processorKey = null)
+    public ProcessingLease? TryClaim(TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null, string? processorKey = null)
     {
-        if (leaseDuration < TimeSpan.FromSeconds(1) ||
-            leaseDuration > TimeSpan.FromHours(1))
+        if (leaseDuration < TimeSpan.FromSeconds(1) || leaseDuration > TimeSpan.FromHours(1))
         {
             throw new ArgumentOutOfRangeException(nameof(leaseDuration));
         }
@@ -101,26 +95,26 @@ public sealed class LocalProcessingQueue
             ProcessingJobKey.ValidateProcessor(processorKey);
         }
 
-        var time = nowUtc ?? DateTimeOffset.UtcNow;
-        var now = CatalogValues.Timestamp(time);
-        var leaseUntil = time.ToUniversalTime().Add(leaseDuration);
+        DateTimeOffset time = nowUtc ?? DateTimeOffset.UtcNow;
+        string now = CatalogValues.Timestamp(time);
+        DateTimeOffset leaseUntil = time.ToUniversalTime().Add(leaseDuration);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
+            using SqliteTransaction transaction = connection.BeginTransaction();
             ExpireAttemptLimitedJobs(connection, transaction, now, maxAttempts, processorKey);
-            using var select = connection.CreateCommand("""
-                SELECT j.item_id, j.revision, j.processor_key
-                FROM processing_jobs j
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE s.status = 'active'
-                  AND ($processor IS NULL OR j.processor_key = $processor)
-                  AND j.attempt < $maximum
-                  AND (j.state = 'queued' OR
-                       (j.state = 'running' AND j.lease_until_utc <= $now))
-                ORDER BY j.priority DESC, j.created_utc, j.item_id, j.revision, j.processor_key
-                LIMIT 1
-                """);
+            using SqliteCommand select = connection.CreateCommand("""
+                                                                  SELECT j.item_id, j.revision, j.processor_key
+                                                                  FROM processing_jobs j
+                                                                  JOIN items i ON i.item_id = j.item_id
+                                                                  JOIN sources s ON s.source_id = i.source_id
+                                                                  WHERE s.status = 'active'
+                                                                    AND ($processor IS NULL OR j.processor_key = $processor)
+                                                                    AND j.attempt < $maximum
+                                                                    AND (j.state = 'queued' OR
+                                                                         (j.state = 'running' AND j.lease_until_utc <= $now))
+                                                                  ORDER BY j.priority DESC, j.created_utc, j.item_id, j.revision, j.processor_key
+                                                                  LIMIT 1
+                                                                  """);
             select.Transaction = transaction;
             select.Parameters.AddWithValue("$maximum", maxAttempts);
             select.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);
@@ -128,7 +122,7 @@ public sealed class LocalProcessingQueue
             Guid itemId;
             int revision;
             string processor;
-            using (var reader = select.ExecuteReader())
+            using (SqliteDataReader reader = select.ExecuteReader())
             {
                 if (!reader.Read())
                 {
@@ -141,14 +135,14 @@ public sealed class LocalProcessingQueue
                 processor = reader.GetString(2);
             }
 
-            var lease = new ProcessingLease(itemId, revision, processor, Guid.NewGuid(), leaseUntil);
-            using var claim = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'running', attempt = attempt + 1,
-                    total_attempts = total_attempts + 1, lease_key = $lease,
-                    lease_until_utc = $until, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                """);
+            ProcessingLease lease = new(itemId, revision, processor, Guid.NewGuid(), leaseUntil);
+            using SqliteCommand claim = connection.CreateCommand("""
+                                                                 UPDATE processing_jobs
+                                                                 SET state = 'running', attempt = attempt + 1,
+                                                                     total_attempts = total_attempts + 1, lease_key = $lease,
+                                                                     lease_until_utc = $until, updated_utc = $now
+                                                                 WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                 """);
             claim.Transaction = transaction;
             ProcessingJobKey.BindLease(claim, lease);
             claim.Parameters.AddWithValue("$until", CatalogValues.Timestamp(leaseUntil));
@@ -163,9 +157,7 @@ public sealed class LocalProcessingQueue
         });
     }
 
-    public bool Finish(
-        ProcessingLease lease, ProcessingCompletion completion,
-        string? failureCode = null, DateTimeOffset? nowUtc = null)
+    public bool Finish(ProcessingLease lease, ProcessingCompletion completion, string? failureCode = null, DateTimeOffset? nowUtc = null)
     {
         ArgumentNullException.ThrowIfNull(lease);
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
@@ -174,7 +166,7 @@ public sealed class LocalProcessingQueue
             throw new ArgumentException("A processing lease key is required.", nameof(lease));
         }
 
-        var state = completion switch
+        string state = completion switch
         {
             ProcessingCompletion.Completed => "completed",
             ProcessingCompletion.Unsupported => "unsupported",
@@ -194,21 +186,21 @@ public sealed class LocalProcessingQueue
             throw new ArgumentException("Only failed processing accepts a failure code.", nameof(failureCode));
         }
 
-        var now = CatalogValues.Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var command = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = $state, lease_key = NULL, lease_until_utc = NULL,
-                    failure_code = $failure, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = $processor AND state = 'running'
-                  AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (
-                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   UPDATE processing_jobs
+                                                                   SET state = $state, lease_key = NULL, lease_until_utc = NULL,
+                                                                       failure_code = $failure, updated_utc = $now
+                                                                   WHERE item_id = $item AND revision = $revision
+                                                                     AND processor_key = $processor AND state = 'running'
+                                                                     AND lease_key = $lease AND lease_until_utc > $now
+                                                                     AND EXISTS (
+                                                                         SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                                                                   """);
             command.Transaction = transaction;
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$failure", (object?)failureCode ?? DBNull.Value);
@@ -318,16 +310,16 @@ public sealed class LocalProcessingQueue
         ProcessingJobKey.Validate(itemId, revision, processorKey);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'queued', attempt = 0, failure_code = NULL,
-                    lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state IN ('failed', 'canceled')
-                  AND EXISTS (
-                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   UPDATE processing_jobs
+                                                                   SET state = 'queued', attempt = 0, failure_code = NULL,
+                                                                       lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
+                                                                   WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                     AND state IN ('failed', 'canceled')
+                                                                     AND EXISTS (
+                                                                         SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                                                                   """);
             command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
@@ -339,13 +331,13 @@ public sealed class LocalProcessingQueue
         ProcessingJobKey.Validate(itemId, revision, processorKey);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
-                    lease_until_utc = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state IN ('queued', 'running', 'failed')
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   UPDATE processing_jobs
+                                                                   SET state = 'canceled', failure_code = NULL, lease_key = NULL,
+                                                                       lease_until_utc = NULL, updated_utc = $now
+                                                                   WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+                                                                     AND state IN ('queued', 'running', 'failed')
+                                                                   """);
             command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             ProcessingJobKey.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
@@ -353,16 +345,14 @@ public sealed class LocalProcessingQueue
     }
 
     /// <summary>Schedules a newly committed revision inside the caller's capture transaction.</summary>
-    internal static void QueueVersion(
-        SqliteConnection connection, SqliteTransaction transaction,
-        Guid itemId, int revision, string processor, string utc)
+    internal static void QueueVersion(SqliteConnection connection, SqliteTransaction transaction, Guid itemId, int revision, string processor, string utc)
     {
-        using var command = connection.CreateCommand("""
-            INSERT INTO processing_jobs
-                (item_id, revision, processor_key, state, attempt, total_attempts,
-                 created_utc, updated_utc)
-            VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
-            """);
+        using SqliteCommand command = connection.CreateCommand("""
+                                                               INSERT INTO processing_jobs
+                                                                   (item_id, revision, processor_key, state, attempt, total_attempts,
+                                                                    created_utc, updated_utc)
+                                                               VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
+                                                               """);
         command.Transaction = transaction;
         ProcessingJobKey.Bind(command, itemId, revision, processor);
         command.Parameters.AddWithValue("$now", utc);
@@ -408,19 +398,17 @@ public sealed class LocalProcessingQueue
     /// Schedules the processors that consume a just-completed stage, inside the transaction
     /// that records the completion. Existing jobs for the same revision are left untouched.
     /// </summary>
-    internal static void QueueDependents(
-        SqliteConnection connection, SqliteTransaction transaction,
-        Guid itemId, int revision, string completedProcessor, string utc)
+    internal static void QueueDependents(SqliteConnection connection, SqliteTransaction transaction, Guid itemId, int revision, string completedProcessor, string utc)
     {
-        foreach (var dependent in LocalProcessors.DependentsOf(completedProcessor))
+        foreach (string dependent in LocalProcessors.DependentsOf(completedProcessor))
         {
-            using var command = connection.CreateCommand("""
-                INSERT INTO processing_jobs
-                    (item_id, revision, processor_key, state, attempt, total_attempts,
-                     created_utc, updated_utc)
-                VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
-                ON CONFLICT(item_id, revision, processor_key) DO NOTHING
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   INSERT INTO processing_jobs
+                                                                       (item_id, revision, processor_key, state, attempt, total_attempts,
+                                                                        created_utc, updated_utc)
+                                                                   VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
+                                                                   ON CONFLICT(item_id, revision, processor_key) DO NOTHING
+                                                                   """);
             command.Transaction = transaction;
             ProcessingJobKey.Bind(command, itemId, revision, dependent);
             command.Parameters.AddWithValue("$now", utc);
@@ -428,17 +416,15 @@ public sealed class LocalProcessingQueue
         }
     }
 
-    private static void ExpireAttemptLimitedJobs(
-        SqliteConnection connection, SqliteTransaction transaction,
-        string now, int maxAttempts, string? processorKey)
+    private static void ExpireAttemptLimitedJobs(SqliteConnection connection, SqliteTransaction transaction, string now, int maxAttempts, string? processorKey)
     {
-        using var command = connection.CreateCommand("""
-            UPDATE processing_jobs
-            SET state = 'failed', failure_code = 'attempt_limit',
-                lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
-            WHERE attempt >= $maximum AND ($processor IS NULL OR processor_key = $processor)
-                AND (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
-            """);
+        using SqliteCommand command = connection.CreateCommand("""
+                                                               UPDATE processing_jobs
+                                                               SET state = 'failed', failure_code = 'attempt_limit',
+                                                                   lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
+                                                               WHERE attempt >= $maximum AND ($processor IS NULL OR processor_key = $processor)
+                                                                   AND (state = 'queued' OR (state = 'running' AND lease_until_utc <= $now))
+                                                               """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$maximum", maxAttempts);
         command.Parameters.AddWithValue("$processor", (object?)processorKey ?? DBNull.Value);

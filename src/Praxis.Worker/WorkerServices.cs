@@ -6,11 +6,10 @@ namespace Praxis.Worker;
 /// </summary>
 internal static class WorkerServices
 {
-    internal static async Task RunAsync(
-        CancellationToken cancellationToken, params Func<CancellationToken, Task>[] services)
+    internal static async Task RunAsync(CancellationToken cancellationToken, params Func<CancellationToken, Task>[] services)
     {
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var running = services.Select(service => service(lifetime.Token)).ToArray();
+        using CancellationTokenSource lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task[] running = services.Select(service => service(lifetime.Token)).ToArray();
         await Task.WhenAny(running);
         await lifetime.CancelAsync();
         await Task.WhenAll(running);

@@ -1,6 +1,7 @@
 using System.Text.Json;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Intake;
 
 /// <summary>
 /// Owner-approved watched folder. Runs filesystem notifications plus periodic rescans,
@@ -9,8 +10,7 @@ namespace Praxis.Storage;
 /// </summary>
 public sealed class LocalWatchedIntake
 {
-    private const string OfflineProblem =
-        "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
+    private const string OfflineProblem = "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
 
     private readonly string root;
     private readonly TimeSpan rescanInterval;
@@ -24,10 +24,7 @@ public sealed class LocalWatchedIntake
     private int wakePending;
     private int watcherFaulted;
 
-    public LocalWatchedIntake(
-        LocalCatalog catalog, string intakeDirectory,
-        TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null,
-        Action<string>? status = null, Action? onCaptured = null)
+    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);
@@ -36,7 +33,7 @@ public sealed class LocalWatchedIntake
             throw new ArgumentException("The intake directory must be absolute.", nameof(intakeDirectory));
         }
 
-        var quiet = quietPeriod ?? TimeSpan.FromSeconds(3);
+        TimeSpan quiet = quietPeriod ?? TimeSpan.FromSeconds(3);
         if (quiet < TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(quietPeriod));
@@ -51,10 +48,9 @@ public sealed class LocalWatchedIntake
         root = Path.GetFullPath(intakeDirectory);
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
-        var intake = new LocalSourceIntake(catalog);
+        LocalSourceIntake intake = new(catalog);
         renames = new ObservedRenameCorrelator(catalog, intake, root, report, Signal);
-        reconciler = new WatchedFileReconciler(
-            catalog, intake, root, quiet, renames, this.status, report);
+        reconciler = new WatchedFileReconciler(catalog, intake, root, quiet, renames, this.status, report);
     }
 
     public LocalIntakeStatus Snapshot() => status.Snapshot();
@@ -78,7 +74,7 @@ public sealed class LocalWatchedIntake
         await scanLock.WaitAsync(cancellationToken);
         try
         {
-            var result = await reconciler.ReconcileAsync(now, cancellationToken);
+            WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
             if (result.Imported != 0)
             {
                 notifyCaptured();
@@ -127,8 +123,7 @@ public sealed class LocalWatchedIntake
         }
     }
 
-    internal void QueueRename(string previousPath, string currentPath) =>
-        renames.Queue(previousPath, currentPath);
+    internal void QueueRename(string previousPath, string currentPath) => renames.Queue(previousPath, currentPath);
 
     /// <summary>
     /// Keeps a notification watcher matched to the folder's availability: dropped while the
@@ -139,12 +134,14 @@ public sealed class LocalWatchedIntake
         if (!Directory.Exists(root))
         {
             status.SetState("offline", OfflineProblem);
-            if (watcher is not null)
+            if (watcher is null)
             {
-                watcher.Dispose();
-                renames.Clear();
-                report("Watched directory is offline; captured originals are retained.");
+                return null;
             }
+
+            watcher.Dispose();
+            renames.Clear();
+            report("Watched directory is offline; captured originals are retained.");
 
             return null;
         }
@@ -164,7 +161,7 @@ public sealed class LocalWatchedIntake
             }
 
             Interlocked.Exchange(ref watcherFaulted, 0);
-            var created = CreateWatcher();
+            FileSystemWatcher created = CreateWatcher();
             status.SetState("resuming");
             report("Watching the approved directory: " + JsonSerializer.Serialize(root));
             return created;
@@ -197,9 +194,8 @@ public sealed class LocalWatchedIntake
         }
         catch (IOException exception)
         {
-            var offline = !Directory.Exists(root);
-            status.SetState(offline ? "offline" : "degraded",
-                offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
+            bool offline = !Directory.Exists(root);
+            status.SetState(offline ? "offline" : "degraded", offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
             report("Intake scan will retry: " + JsonSerializer.Serialize(exception.Message));
         }
         catch (UnauthorizedAccessException exception)
@@ -218,11 +214,10 @@ public sealed class LocalWatchedIntake
 
     private FileSystemWatcher CreateWatcher()
     {
-        var watcher = new FileSystemWatcher(root)
+        FileSystemWatcher watcher = new(root)
         {
             IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
-                           NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime
         };
         watcher.Created += (_, _) => Signal();
         watcher.Changed += (_, _) => Signal();

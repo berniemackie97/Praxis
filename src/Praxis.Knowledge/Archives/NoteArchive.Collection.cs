@@ -1,7 +1,8 @@
 using System.IO.Compression;
 using System.Text.Json;
+using Praxis.Knowledge.Model;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Archives;
 
 public static partial class NoteArchive
 {
@@ -21,13 +22,13 @@ public static partial class NoteArchive
     private static void WriteCore(Stream destination, NoteRecord[] notes, KnowledgeCollection? collection)
     {
         long totalBytes = 0;
-        var manifest = new ArchiveManifest
+        ArchiveManifest manifest = new()
         {
             FormatVersion = collection is null ? 1 : collection.VaultReferences is null ? 2 : 3,
             Notes = DescribeNotes(notes, ref totalBytes)
         };
 
-        var payloads = new SortedDictionary<string, AttachmentRecord>(StringComparer.Ordinal);
+        SortedDictionary<string, AttachmentRecord> payloads = new(StringComparer.Ordinal);
         if (collection is not null)
         {
             if (collection.Attachments.Count > MaxAttachments ||
@@ -37,14 +38,14 @@ public static partial class NoteArchive
             }
 
             manifest.Attachments = [];
-            foreach (var attachment in collection.Attachments.OrderBy(item => item.Id))
+            foreach (AttachmentRecord attachment in collection.Attachments.OrderBy(item => item.Id))
             {
                 if (attachment.Length > MaxAttachmentBytes)
                 {
                     throw new InvalidDataException("An attachment exceeds the archive size limit.");
                 }
 
-                var blobName = $"attachments/{attachment.Sha256}";
+                string blobName = $"attachments/{attachment.Sha256}";
                 if (payloads.TryAdd(blobName, attachment) &&
                     (totalBytes += attachment.Length) > MaxTotalBytes)
                 {
@@ -68,27 +69,26 @@ public static partial class NoteArchive
             }
         }
 
-        var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
+        byte[] manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions);
         if (manifestBytes.Length > MaxManifestBytes || totalBytes + manifestBytes.Length > MaxTotalBytes)
         {
             throw new InvalidDataException("The archive manifest exceeds size limits.");
         }
 
-        using var archive = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
+        using ZipArchive archive = new(destination, ZipArchiveMode.Create, leaveOpen: true);
         WriteNotes(archive, notes, manifest.Notes);
-        foreach (var (name, attachment) in payloads)
+        foreach ((string name, AttachmentRecord attachment) in payloads)
         {
-            using var payload = archive.CreateEntry(name, CompressionLevel.Optimal).Open();
+            using Stream payload = archive.CreateEntry(name, CompressionLevel.Optimal).Open();
             payload.Write(attachment.ContentSpan);
         }
 
-        using var manifestStream = archive.CreateEntry("manifest.json", CompressionLevel.Optimal).Open();
+        using Stream manifestStream = archive.CreateEntry("manifest.json", CompressionLevel.Optimal).Open();
         manifestStream.Write(manifestBytes);
     }
 
     private static List<AttachmentReference> OrderReferences(IReadOnlyList<AttachmentReference> values)
-        => values.OrderBy(reference => reference.NoteId)
-            .ThenBy(reference => reference.AttachmentId).ToList();
+        => values.OrderBy(reference => reference.NoteId).ThenBy(reference => reference.AttachmentId).ToList();
 
     private static KnowledgeCollection ReadCore(Stream source, bool acceptAttachments)
     {
@@ -103,29 +103,24 @@ public static partial class NoteArchive
             throw new InvalidDataException("The archive file exceeds size limits.");
         }
 
-        using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
-        var manifest = ReadManifest(archive, acceptAttachments, out var entries, out var totalBytes);
+        using ZipArchive archive = new(source, ZipArchiveMode.Read, leaveOpen: true);
+        ArchiveManifest manifest = ReadManifest(archive, acceptAttachments, out Dictionary<string, ZipArchiveEntry> entries, out long totalBytes);
 
-        if (manifest.FormatVersion == 1 &&
-            (manifest.Attachments is not null || manifest.References is not null ||
-             manifest.VaultReferences is not null))
+        if (manifest.FormatVersion == 1 && (manifest.Attachments is not null || manifest.References is not null || manifest.VaultReferences is not null))
         {
             throw new InvalidDataException("The version one manifest has unexpected attachment metadata.");
         }
 
-        var consumed = new HashSet<string>(StringComparer.Ordinal) { "manifest.json" };
-        var notes = ReadNotes(manifest, entries, consumed, ref totalBytes);
-        var attachments = new List<AttachmentRecord>();
-        var references = new List<AttachmentReference>();
+        HashSet<string> consumed = new(StringComparer.Ordinal) { "manifest.json" };
+        List<NoteRecord> notes = ReadNotes(manifest, entries, consumed, ref totalBytes);
+        List<AttachmentRecord> attachments = new();
+        List<AttachmentReference>? references = new();
         List<AttachmentReference>? vaultReferences = null;
         if (manifest.FormatVersion is 2 or 3)
         {
-            if (manifest.Attachments is null || manifest.References is null ||
-                manifest.Attachments.Count > MaxAttachments ||
-                manifest.References.Count > MaxReferences ||
-                (manifest.FormatVersion == 2 && manifest.VaultReferences is not null) ||
-                (manifest.FormatVersion == 3 && manifest.VaultReferences is null) ||
-                manifest.References.Count + (manifest.VaultReferences?.Count ?? 0) > MaxReferences)
+            if (manifest.Attachments is null || manifest.References is null || manifest.Attachments.Count > MaxAttachments
+                || manifest.References.Count > MaxReferences || (manifest.FormatVersion == 2 && manifest.VaultReferences is not null)
+                || (manifest.FormatVersion == 3 && manifest.VaultReferences is null) || manifest.References.Count + (manifest.VaultReferences?.Count ?? 0) > MaxReferences)
             {
                 throw new InvalidDataException("The attachment metadata is invalid.");
             }
@@ -150,18 +145,14 @@ public static partial class NoteArchive
         }
     }
 
-    private static List<AttachmentRecord> ReadAttachments(
-        IEnumerable<ArchiveAttachment> metadata, IReadOnlyDictionary<string, ZipArchiveEntry> entries,
-        HashSet<string> consumed, ref long totalBytes)
+    private static List<AttachmentRecord> ReadAttachments(IEnumerable<ArchiveAttachment> metadata, IReadOnlyDictionary<string, ZipArchiveEntry> entries, HashSet<string> consumed, ref long totalBytes)
     {
-        var attachments = new List<AttachmentRecord>();
-        var blobs = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        List<AttachmentRecord> attachments = new();
+        Dictionary<string, byte[]> blobs = new(StringComparer.Ordinal);
 
-        foreach (var item in metadata)
+        foreach (ArchiveAttachment? item in metadata)
         {
-            if (item is null || item.Id == Guid.Empty ||
-                item.Path is null || item.Entry is null || item.Sha256 is null ||
-                item.Length < 0 || item.Length > MaxAttachmentBytes)
+            if (item is null || item.Id == Guid.Empty || item.Path is null || item.Entry is null || item.Sha256 is null || item.Length < 0 || item.Length > MaxAttachmentBytes)
             {
                 throw new InvalidDataException("The archive contains invalid attachment metadata.");
             }
@@ -175,15 +166,13 @@ public static partial class NoteArchive
                 throw new InvalidDataException("The attachment path is invalid.", exception);
             }
 
-            var expectedEntry = $"attachments/{item.Sha256}";
-            if (!string.Equals(item.Entry, expectedEntry, StringComparison.Ordinal) ||
-                !entries.TryGetValue(expectedEntry, out var payload) ||
-                payload.Length != item.Length)
+            string expectedEntry = $"attachments/{item.Sha256}";
+            if (!string.Equals(item.Entry, expectedEntry, StringComparison.Ordinal) || !entries.TryGetValue(expectedEntry, out ZipArchiveEntry? payload) || payload.Length != item.Length)
             {
                 throw new InvalidDataException("An attachment is missing or has an invalid size.");
             }
 
-            if (!blobs.TryGetValue(expectedEntry, out var bytes))
+            if (!blobs.TryGetValue(expectedEntry, out byte[]? bytes))
             {
                 if ((totalBytes += item.Length) > MaxTotalBytes)
                 {

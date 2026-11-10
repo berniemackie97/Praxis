@@ -1,4 +1,6 @@
-namespace Praxis.Storage;
+using Praxis.Storage.Catalog;
+
+namespace Praxis.Storage.Processing;
 
 public sealed record TextSegment(
     Guid SourceId, Guid ItemId, int Revision, string SourceSha256,

@@ -1,8 +1,10 @@
 using Praxis.Inference;
 using Praxis.Storage;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Enrichment.Semantic;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Enrichment;
 
 public sealed class SemanticEvidenceTests
 {

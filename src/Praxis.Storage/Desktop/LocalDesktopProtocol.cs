@@ -1,16 +1,17 @@
 using System.Text.Json;
 using Praxis.Inference;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Models;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Desktop;
 
-public sealed class LocalDesktopProtocol(
-    LocalCatalog catalog, LocalQuickCapture? quickCapture = null,
-    LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null)
+public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
-    private static readonly JsonSerializerOptions JsonOptions =
-        new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public bool StopRequested { get; private set; }
 
@@ -24,16 +25,16 @@ public sealed class LocalDesktopProtocol(
                 throw new ArgumentException("The desktop request exceeds its size limit.");
             }
 
-            using var document = JsonDocument.Parse(request);
-            var root = document.RootElement;
+            using JsonDocument document = JsonDocument.Parse(request);
+            JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
                 throw new ArgumentException("A request object is required.");
             }
 
-            var fields = new DesktopRequestFields(root);
+            DesktopRequestFields fields = new(root);
             requestId = fields.RequireString("requestId", 64);
-            var action = fields.RequireString("action", 32);
+            string action = fields.RequireString("action", 32);
             object result = action switch
             {
                 "library" => new
@@ -48,21 +49,17 @@ public sealed class LocalDesktopProtocol(
                 },
                 "mediaCues" => new
                 {
-                    clips = catalog.Media.SearchCues(
-                        fields.RequireString("query", 256),
+                    clips = catalog.Media.SearchCues(fields.RequireString("query", 256),
                         fields.IntegerOrDefault("limit", 20, 1, 50))
                 },
                 "mediaInspection" => new
                 {
-                    media = await catalog.Media.InspectAsync(
-                        fields.RequireGuid("sourceId"),
-                        fields.OptionalInteger("revision", 1, int.MaxValue),
-                        cancellationToken)
+                    media = await catalog.Media.InspectAsync(fields.RequireGuid("sourceId"),
+                        fields.OptionalInteger("revision", 1, int.MaxValue), cancellationToken)
                 },
                 "collections" => new
                 {
-                    collections = catalog.Collections.List(
-                        fields.IntegerOrDefault("limit", 100, 1, 200),
+                    collections = catalog.Collections.List(fields.IntegerOrDefault("limit", 100, 1, 200),
                         fields.IntegerOrDefault("offset", 0, 0, 1_000_000))
                 },
                 "collectionCreate" => new
@@ -80,23 +77,19 @@ public sealed class LocalDesktopProtocol(
                 },
                 "collectionAdd" => new
                 {
-                    changed = catalog.Collections.AddSource(
-                        fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
+                    changed = catalog.Collections.AddSource(fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
                 },
                 "collectionRemove" => new
                 {
-                    changed = catalog.Collections.RemoveSource(
-                        fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
+                    changed = catalog.Collections.RemoveSource(fields.RequireGuid("collectionId"), fields.RequireGuid("sourceId"))
                 },
                 "sourceCollections" => new
                 {
-                    collectionIds = catalog.Collections.ListForSource(
-                        fields.RequireGuid("sourceId"))
+                    collectionIds = catalog.Collections.ListForSource(fields.RequireGuid("sourceId"))
                 },
                 "sourceMoves" => new
                 {
-                    moves = catalog.Sources.ListMovements(
-                        fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 20, 1, 100))
+                    moves = catalog.Sources.ListMovements(fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 20, 1, 100))
                 },
                 "noteCapture" => await CaptureNoteAsync(fields, cancellationToken),
                 "topics" => new
@@ -116,11 +109,8 @@ public sealed class LocalDesktopProtocol(
                 },
                 "exportOriginal" => new
                 {
-                    exported = await catalog.Originals.ExportAsync(
-                        fields.RequireGuid("itemId"),
-                        fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
-                        fields.RequireString("destinationPath", 4_096),
-                        cancellationToken)
+                    exported = await catalog.Originals.ExportAsync(fields.RequireGuid("itemId"), fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
+                        fields.RequireString("destinationPath", 4_096), cancellationToken)
                 },
                 "intakeStatus" => new
                 {
@@ -182,26 +172,27 @@ public sealed class LocalDesktopProtocol(
             or InvalidDataException or UnauthorizedAccessException
             or KeyNotFoundException or NotSupportedException or InferenceException)
         {
-            var failure = new { requestId, ok = false, error = exception.Message };
+            var failure = new
+            {
+                requestId, ok = false, error = exception.Message
+            };
             return JsonSerializer.Serialize(failure, JsonOptions);
         }
     }
 
-    private LocalWatchedIntake RequireMonitor() =>
-        monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+    private LocalWatchedIntake RequireMonitor() => monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
 
     private object Preview(DesktopRequestFields fields)
     {
-        var itemId = fields.RequireGuid("itemId");
-        var revision = fields.IntegerOrDefault("revision", 1, 1, int.MaxValue);
-        var derivative = catalog.Text.Read(itemId, revision);
+        Guid itemId = fields.RequireGuid("itemId");
+        int revision = fields.IntegerOrDefault("revision", 1, 1, int.MaxValue);
+        TextDerivative? derivative = catalog.Text.Read(itemId, revision);
         return derivative is null
             ? new { outcome = "unavailable", content = (string?)null, reasonCode = (string?)null }
             : new
             {
                 outcome = derivative.Outcome,
-                content = derivative.Content is { } text
-                    ? text[..Math.Min(text.Length, 12_000)] : null,
+                content = derivative.Content is { } text ? text[..Math.Min(text.Length, 12_000)] : null,
                 reasonCode = derivative.ReasonCode
             };
     }
@@ -212,15 +203,11 @@ public sealed class LocalDesktopProtocol(
         return new { verified = true };
     }
 
-    private async Task<object> CaptureNoteAsync(
-        DesktopRequestFields fields, CancellationToken cancellationToken)
+    private async Task<object> CaptureNoteAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
     {
-        var capture = await (quickCapture ??
-            throw new InvalidOperationException("Quick capture is not configured."))
-            .CaptureAsync(fields.RequireGuid("captureId"),
-                fields.OptionalText("title", 80, "The note title is invalid."),
-                fields.RequireString("text", 8_000),
-                cancellationToken);
+        LocalQuickCaptureReceipt capture = await (quickCapture ?? throw new InvalidOperationException("Quick capture is not configured."))
+            .CaptureAsync(fields.RequireGuid("captureId"), fields.OptionalText("title", 80, "The note title is invalid."),
+                fields.RequireString("text", 8_000), cancellationToken);
         processing?.Wake();
         return new { capture };
     }
@@ -248,9 +235,7 @@ public sealed class LocalDesktopProtocol(
 
     private object Retry(DesktopRequestFields fields)
     {
-        var queued = catalog.Processing.Retry(fields.RequireGuid("itemId"),
-            fields.IntegerOrDefault("revision", 1, 1, int.MaxValue),
-            LocalProcessors.SourceText);
+        bool queued = catalog.Processing.Retry(fields.RequireGuid("itemId"), fields.IntegerOrDefault("revision", 1, 1, int.MaxValue), LocalProcessors.SourceText);
         if (queued)
         {
             processing?.Wake();

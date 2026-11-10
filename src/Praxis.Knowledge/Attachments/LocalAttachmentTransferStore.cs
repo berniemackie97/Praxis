@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Attachments;
 
 public sealed record AttachmentTransferStatus(string Sha256, int Length, int Uploaded);
 
@@ -18,7 +18,7 @@ public sealed class LocalAttachmentTransferStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
-        var root = Path.GetFullPath(directory);
+        string root = Path.GetFullPath(directory);
         stagingDirectory = Path.Combine(root, "staging");
         contentDirectory = Path.Combine(root, "content");
         Directory.CreateDirectory(stagingDirectory);
@@ -31,8 +31,7 @@ public sealed class LocalAttachmentTransferStore
         ValidateDigest(sha256);
         ValidateLength(length);
 
-        using var stream = new FileStream(StagingPath(transferId),
-            FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        using FileStream stream = new(StagingPath(transferId), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         if (stream.Length == 0)
         {
             Span<byte> header = stackalloc byte[HeaderLength];
@@ -43,7 +42,7 @@ public sealed class LocalAttachmentTransferStore
             stream.Flush(flushToDisk: true);
         }
 
-        var status = ReadStatus(stream);
+        AttachmentTransferStatus status = ReadStatus(stream);
         if (status.Sha256 != sha256 || status.Length != length)
         {
             throw new InvalidOperationException("The transfer identity is assigned to different content.");
@@ -54,7 +53,7 @@ public sealed class LocalAttachmentTransferStore
 
     public AttachmentTransferStatus Status(Guid transferId)
     {
-        using var stream = OpenStaging(transferId);
+        using FileStream stream = OpenStaging(transferId);
         return ReadStatus(stream);
     }
 
@@ -65,8 +64,8 @@ public sealed class LocalAttachmentTransferStore
             throw new ArgumentOutOfRangeException(nameof(chunk), "A transfer chunk must contain 1 to 1048576 bytes at a nonnegative offset.");
         }
 
-        using var stream = OpenStaging(transferId);
-        var status = ReadStatus(stream);
+        using FileStream stream = OpenStaging(transferId);
+        AttachmentTransferStatus status = ReadStatus(stream);
         if (offset > status.Uploaded || (long)offset + chunk.Length > status.Length)
         {
             throw new InvalidOperationException("The chunk is outside the expected upload range.");
@@ -79,7 +78,7 @@ public sealed class LocalAttachmentTransferStore
                 throw new InvalidOperationException("A partially overlapping retry must resume from the current offset.");
             }
 
-            var previous = new byte[chunk.Length];
+            byte[] previous = new byte[chunk.Length];
             stream.Position = HeaderLength + offset;
             stream.ReadExactly(previous);
             if (!chunk.SequenceEqual(previous))
@@ -98,11 +97,11 @@ public sealed class LocalAttachmentTransferStore
 
     public string Commit(Guid transferId)
     {
-        var stagingPath = StagingPath(transferId);
+        string stagingPath = StagingPath(transferId);
         string digest;
-        using (var staging = OpenStaging(transferId))
+        using (FileStream staging = OpenStaging(transferId))
         {
-            var status = ReadStatus(staging);
+            AttachmentTransferStatus status = ReadStatus(staging);
             if (status.Uploaded != status.Length)
             {
                 throw new InvalidOperationException("The transfer has not received all declared bytes.");
@@ -110,27 +109,23 @@ public sealed class LocalAttachmentTransferStore
 
             digest = status.Sha256;
             staging.Position = HeaderLength;
-            if (!CryptographicOperations.FixedTimeEquals(
-                SHA256.HashData(staging), Convert.FromHexString(digest)))
+            if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(staging), Convert.FromHexString(digest)))
             {
                 throw new InvalidDataException("The staged attachment failed integrity verification.");
             }
 
             if (!IsCommitted(status.Sha256, status.Length))
             {
-                var temporary = Path.Combine(contentDirectory, $"{Guid.NewGuid():N}.pending");
+                string temporary = Path.Combine(contentDirectory, $"{Guid.NewGuid():N}.pending");
                 try
                 {
-                    using (var destination = new FileStream(temporary,
-                        FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                    using (FileStream destination = new(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                     {
                         staging.Position = HeaderLength;
                         staging.CopyTo(destination);
                         destination.Flush(flushToDisk: true);
                         destination.Position = 0;
-                        if (destination.Length != status.Length ||
-                            !CryptographicOperations.FixedTimeEquals(
-                                SHA256.HashData(destination), Convert.FromHexString(digest)))
+                        if (destination.Length != status.Length || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(destination), Convert.FromHexString(digest)))
                         {
                             throw new InvalidDataException("The attachment content failed integrity verification.");
                         }
@@ -164,16 +159,14 @@ public sealed class LocalAttachmentTransferStore
         ValidateDigest(sha256);
         ValidateLength(length);
 
-        var path = ContentPath(sha256);
+        string path = ContentPath(sha256);
         if (!File.Exists(path))
         {
             return false;
         }
 
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (stream.Length != length ||
-            !CryptographicOperations.FixedTimeEquals(
-                SHA256.HashData(stream), Convert.FromHexString(sha256)))
+        using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (stream.Length != length || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(stream), Convert.FromHexString(sha256)))
         {
             throw new InvalidDataException("The stored attachment failed integrity verification.");
         }
@@ -184,29 +177,23 @@ public sealed class LocalAttachmentTransferStore
     public byte[] ReadVerified(string sha256)
     {
         ValidateDigest(sha256);
-        using var stream = new FileStream(ContentPath(sha256),
-            FileMode.Open, FileAccess.Read, FileShare.Read);
+        using FileStream stream = new(ContentPath(sha256), FileMode.Open, FileAccess.Read, FileShare.Read);
         if (stream.Length > MaxAttachmentBytes)
         {
             throw new InvalidDataException("The stored attachment exceeds the size limit.");
         }
 
-        var content = new byte[(int)stream.Length];
+        byte[] content = new byte[(int)stream.Length];
         stream.ReadExactly(content);
-        if (!CryptographicOperations.FixedTimeEquals(
-            SHA256.HashData(content), Convert.FromHexString(sha256)))
-        {
-            throw new InvalidDataException("The stored attachment failed integrity verification.");
-        }
-
-        return content;
+        return !CryptographicOperations.FixedTimeEquals(SHA256.HashData(content), Convert.FromHexString(sha256))
+            ? throw new InvalidDataException("The stored attachment failed integrity verification.")
+            : content;
     }
 
     private FileStream OpenStaging(Guid transferId)
     {
         ValidateId(transferId);
-        return new FileStream(StagingPath(transferId),
-            FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        return new FileStream(StagingPath(transferId), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
     }
 
     private static AttachmentTransferStatus ReadStatus(FileStream stream)
@@ -224,14 +211,13 @@ public sealed class LocalAttachmentTransferStore
             throw new InvalidDataException("The transfer header is not recognized.");
         }
 
-        var length = BinaryPrimitives.ReadInt32LittleEndian(header[4..8]);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(header[4..8]);
         if (length is < 0 or > MaxAttachmentBytes || stream.Length - HeaderLength > length)
         {
             throw new InvalidDataException("The transfer length is invalid.");
         }
 
-        return new AttachmentTransferStatus(
-            Convert.ToHexStringLower(header[8..]), length, (int)(stream.Length - HeaderLength));
+        return new AttachmentTransferStatus(Convert.ToHexStringLower(header[8..]), length, (int)(stream.Length - HeaderLength));
     }
 
     private string StagingPath(Guid transferId) => Path.Combine(stagingDirectory, $"{transferId:N}.part");
@@ -257,8 +243,7 @@ public sealed class LocalAttachmentTransferStore
     private static void ValidateDigest(string sha256)
     {
         ArgumentNullException.ThrowIfNull(sha256);
-        if (sha256.Length != 64 || sha256.Any(character =>
-            character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+        if (sha256.Length != 64 || sha256.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
         {
             throw new ArgumentException("The content digest must be lowercase SHA-256 hexadecimal.", nameof(sha256));
         }

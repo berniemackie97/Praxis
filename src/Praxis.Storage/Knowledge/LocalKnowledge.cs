@@ -1,6 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment.Semantic;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Knowledge;
 
 /// <summary>
 /// An entity and its visible evidence. <see cref="TypeConflict"/> marks an unresolved entity

@@ -1,6 +1,7 @@
 using Praxis.Inference;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Models;
 
 /// <summary>Owner-selected local model for one processing role.</summary>
 public sealed record ModelProfile(

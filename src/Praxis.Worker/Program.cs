@@ -1,7 +1,8 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Worker;
+using Praxis.Worker.Intake;
+using Praxis.Worker.Recovery;
 
-using var cancellation = new CancellationTokenSource();
+using CancellationTokenSource cancellation = new();
 ConsoleCancelEventHandler stop = (_, eventArgs) =>
 {
     eventArgs.Cancel = true;
@@ -9,7 +10,7 @@ ConsoleCancelEventHandler stop = (_, eventArgs) =>
 };
 Console.CancelKeyPress += stop;
 
-var recovery = args is ["recovery", ..];
+bool recovery = args is ["recovery", ..];
 try
 {
     return recovery
@@ -26,9 +27,8 @@ catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 
     return 0;
 }
-catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-    or InvalidDataException or InvalidOperationException or ArgumentException
-    or NotSupportedException or SqliteException)
+catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException
+                                      or ArgumentException or NotSupportedException or SqliteException)
 {
     Console.Error.WriteLine("Praxis worker failed: " + exception.Message);
     return 1;

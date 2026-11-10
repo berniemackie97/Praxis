@@ -1,8 +1,8 @@
 using System.Text;
-using Praxis.Knowledge;
+using Praxis.Knowledge.Vaults;
 using Xunit;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Vaults;
 
 public sealed class LocalVaultComparisonTests : IDisposable
 {
@@ -14,18 +14,18 @@ public sealed class LocalVaultComparisonTests : IDisposable
     [Fact]
     public void RestoredArchiveMatchesOriginalNotesAttachmentsAndHiddenConfiguration()
     {
-        var source = Path.Combine(root, "source");
+        string source = Path.Combine(root, "source");
         Directory.CreateDirectory(source);
         Write(source, "Notes/entry.md", [0xef, 0xbb, 0xbf, .. Encoding.UTF8.GetBytes("# Café\r\n")]);
         Write(source, "media/image.png", [0, 255, 19, 4]);
         Write(source, ".obsidian/app.json", Encoding.UTF8.GetBytes("{\"theme\":\"dark\"}"));
-        var archive = Path.Combine(root, "snapshot.zip");
+        string archive = Path.Combine(root, "snapshot.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
 
-        var destination = Path.Combine(root, "restored");
+        string destination = Path.Combine(root, "restored");
         LocalVaultExchange.RestoreArchive(archive, destination);
 
-        var report = LocalVaultComparison.CompareArchive(archive, destination);
+        VaultComparison report = LocalVaultComparison.CompareArchive(archive, destination);
         Assert.True(report.IsMatch);
         Assert.Equal(3, report.MatchedFiles);
         Assert.Empty(report.Differences);
@@ -36,16 +36,16 @@ public sealed class LocalVaultComparisonTests : IDisposable
     [Fact]
     public void ChangedNoteAndAttachmentAreDetectedWithoutChangingTheFolder()
     {
-        var source = Path.Combine(root, "source");
+        string source = Path.Combine(root, "source");
         Directory.CreateDirectory(source);
         Write(source, "note.md", Encoding.UTF8.GetBytes("before"));
         Write(source, "image.png", [1, 2, 3]);
-        var archive = Path.Combine(root, "snapshot.zip");
+        string archive = Path.Combine(root, "snapshot.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
 
         Write(source, "note.md", Encoding.UTF8.GetBytes("after"));
         Write(source, "image.png", [1, 2, 4]);
-        var report = LocalVaultComparison.CompareArchive(archive, source);
+        VaultComparison report = LocalVaultComparison.CompareArchive(archive, source);
 
         Assert.False(report.IsMatch);
         Assert.Equal(0, report.MatchedFiles);
@@ -60,16 +60,16 @@ public sealed class LocalVaultComparisonTests : IDisposable
     [Fact]
     public void MissingAndUnexpectedFilesAreListedInStablePathOrder()
     {
-        var source = Path.Combine(root, "source");
+        string source = Path.Combine(root, "source");
         Directory.CreateDirectory(source);
         Write(source, "Notes/one.md", Encoding.UTF8.GetBytes("one"));
         Write(source, "Notes/two.md", Encoding.UTF8.GetBytes("two"));
-        var archive = Path.Combine(root, "snapshot.zip");
+        string archive = Path.Combine(root, "snapshot.zip");
         LocalVaultExchange.CaptureArchive(source, archive);
 
         File.Delete(Path.Combine(source, "Notes", "two.md"));
         Write(source, "Notes/three.md", Encoding.UTF8.GetBytes("three"));
-        var report = LocalVaultComparison.CompareArchive(archive, source);
+        VaultComparison report = LocalVaultComparison.CompareArchive(archive, source);
 
         Assert.Equal(1, report.MatchedFiles);
         Assert.Equal([
@@ -81,10 +81,10 @@ public sealed class LocalVaultComparisonTests : IDisposable
     [Fact]
     public void CorruptedArchiveIsRejectedBeforeFilesystemComparison()
     {
-        var directory = Path.Combine(root, "source");
+        string directory = Path.Combine(root, "source");
         Directory.CreateDirectory(directory);
         Write(directory, "note.md", Encoding.UTF8.GetBytes("original"));
-        var archive = Path.Combine(root, "corrupt.zip");
+        string archive = Path.Combine(root, "corrupt.zip");
         File.WriteAllBytes(archive, [1, 2, 3]);
 
         Assert.Throws<InvalidDataException>(() =>
@@ -95,12 +95,12 @@ public sealed class LocalVaultComparisonTests : IDisposable
     [Fact]
     public void MissingDirectoryIsRejectedWithoutCreatingIt()
     {
-        var directory = Path.Combine(root, "source");
+        string directory = Path.Combine(root, "source");
         Directory.CreateDirectory(directory);
         Write(directory, "note.md", Encoding.UTF8.GetBytes("note"));
-        var archive = Path.Combine(root, "snapshot.zip");
+        string archive = Path.Combine(root, "snapshot.zip");
         LocalVaultExchange.CaptureArchive(directory, archive);
-        var missing = Path.Combine(root, "missing");
+        string missing = Path.Combine(root, "missing");
 
         Assert.Throws<DirectoryNotFoundException>(() =>
             LocalVaultComparison.CompareArchive(archive, missing));
@@ -115,10 +115,10 @@ public sealed class LocalVaultComparisonTests : IDisposable
             return;
         }
 
-        var directory = Path.Combine(root, "source");
+        string directory = Path.Combine(root, "source");
         Directory.CreateDirectory(directory);
         Write(directory, "note.md", Encoding.UTF8.GetBytes("note"));
-        var archive = Path.Combine(root, "snapshot.zip");
+        string archive = Path.Combine(root, "snapshot.zip");
         LocalVaultExchange.CaptureArchive(directory, archive);
         File.CreateSymbolicLink(Path.Combine(directory, "alias.md"),
             Path.Combine(directory, "note.md"));
@@ -129,7 +129,7 @@ public sealed class LocalVaultComparisonTests : IDisposable
 
     private static void Write(string directory, string relative, byte[] content)
     {
-        var path = Path.Combine(directory, relative.Replace('/', Path.DirectorySeparatorChar));
+        string path = Path.Combine(directory, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, content);
     }

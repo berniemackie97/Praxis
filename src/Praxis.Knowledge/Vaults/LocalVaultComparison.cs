@@ -1,4 +1,7 @@
-namespace Praxis.Knowledge;
+using Praxis.Knowledge.Archives;
+using Praxis.Knowledge.Model;
+
+namespace Praxis.Knowledge.Vaults;
 
 public sealed record VaultFileDifference(string Path, string Reason);
 
@@ -12,19 +15,19 @@ public static class LocalVaultComparison
     public static VaultComparison CompareArchive(string archivePath, string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var expected = NoteArchive.ReadCollection(stream);
-        var actual = LocalVaultExchange.Capture(directory);
+        using FileStream stream = new(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        KnowledgeCollection expected = NoteArchive.ReadCollection(stream);
+        KnowledgeCollection actual = LocalVaultExchange.Capture(directory);
 
-        var actualNotes = actual.Notes.ToDictionary(note => note.Current.Path, StringComparer.Ordinal);
-        var actualAttachments = actual.Attachments.ToDictionary(item => item.Path, StringComparer.Ordinal);
-        var differences = new List<VaultFileDifference>();
-        var matched = 0;
+        Dictionary<string, NoteRecord> actualNotes = actual.Notes.ToDictionary(note => note.Current.Path, StringComparer.Ordinal);
+        Dictionary<string, AttachmentRecord> actualAttachments = actual.Attachments.ToDictionary(item => item.Path, StringComparer.Ordinal);
+        List<VaultFileDifference> differences = new();
+        int matched = 0;
 
-        foreach (var note in expected.Notes)
+        foreach (NoteRecord note in expected.Notes)
         {
-            var path = note.Current.Path;
-            if (!actualNotes.Remove(path, out var observed))
+            string path = note.Current.Path;
+            if (!actualNotes.Remove(path, out NoteRecord? observed))
             {
                 differences.Add(new VaultFileDifference(path, "missing"));
             }
@@ -38,9 +41,9 @@ public static class LocalVaultComparison
             }
         }
 
-        foreach (var attachment in expected.Attachments)
+        foreach (AttachmentRecord attachment in expected.Attachments)
         {
-            if (!actualAttachments.Remove(attachment.Path, out var observed))
+            if (!actualAttachments.Remove(attachment.Path, out AttachmentRecord? observed))
             {
                 differences.Add(new VaultFileDifference(attachment.Path, "missing"));
             }
@@ -58,7 +61,7 @@ public static class LocalVaultComparison
         differences.AddRange(actualAttachments.Keys.Select(path => new VaultFileDifference(path, "unexpected")));
         differences.Sort((a, b) =>
         {
-            var path = StringComparer.Ordinal.Compare(a.Path, b.Path);
+            int path = StringComparer.Ordinal.Compare(a.Path, b.Path);
             return path != 0 ? path : StringComparer.Ordinal.Compare(a.Reason, b.Reason);
         });
 

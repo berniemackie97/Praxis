@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using Praxis.Inference;
+using Praxis.Storage.Knowledge;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>Owner-governed knowledge about a name that appears in the excerpt.</summary>
 internal sealed record EntityHint(string Name, string? EntityType, bool Rejected);

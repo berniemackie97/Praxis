@@ -1,7 +1,9 @@
 using Praxis.Storage;
+using Praxis.Storage.Enrichment.Semantic;
+using Praxis.Storage.Knowledge;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Knowledge;
 
 public sealed class KnowledgeRulesTests
 {

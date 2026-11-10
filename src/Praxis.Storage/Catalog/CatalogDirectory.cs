@@ -1,4 +1,4 @@
-namespace Praxis.Storage;
+namespace Praxis.Storage.Catalog;
 
 /// <summary>Layout and access rules for the private catalog data directory.</summary>
 internal static class CatalogDirectory
@@ -26,18 +26,16 @@ internal static class CatalogDirectory
 
         if (!OperatingSystem.IsWindows())
         {
-            const UnixFileMode publicAccess = UnixFileMode.GroupRead | UnixFileMode.GroupWrite |
-                UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite |
-                UnixFileMode.OtherExecute;
+            const UnixFileMode publicAccess = UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
             if ((File.GetUnixFileMode(root) & publicAccess) != 0)
             {
                 throw new UnauthorizedAccessException("The catalog directory must be private to its owner.");
             }
         }
 
-        foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+        foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
-            var name = Path.GetFileName(entry);
+            string name = Path.GetFileName(entry);
             if (!AllowedEntries.Contains(name) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
             {
                 throw new InvalidDataException("The catalog directory contains an unexpected or linked entry.");

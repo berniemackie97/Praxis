@@ -1,4 +1,4 @@
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Synchronization;
 
 internal static class SyncHarnessInputs
 {
@@ -19,16 +19,16 @@ internal static class SyncHarnessInputs
 
     internal static Guid NextGuid(Random random)
     {
-        var bytes = new byte[16];
+        byte[] bytes = new byte[16];
         random.NextBytes(bytes);
         return new Guid(bytes);
     }
 
     internal static void Shuffle<T>(IList<T> items, Random random)
     {
-        for (var index = items.Count - 1; index > 0; index--)
+        for (int index = items.Count - 1; index > 0; index--)
         {
-            var other = random.Next(index + 1);
+            int other = random.Next(index + 1);
             (items[index], items[other]) = (items[other], items[index]);
         }
     }

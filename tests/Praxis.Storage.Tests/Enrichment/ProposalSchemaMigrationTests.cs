@@ -1,8 +1,10 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Processing;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Enrichment;
 
 public sealed class ProposalSchemaMigrationTests : IDisposable
 {

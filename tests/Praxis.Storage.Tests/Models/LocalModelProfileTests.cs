@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Desktop;
+using Praxis.Storage.Models;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Models;
 
 public sealed class LocalModelProfileTests : IDisposable
 {

@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Originals;
 
 internal readonly record struct OriginalObject(string Digest, long Length);
 
@@ -12,13 +12,10 @@ internal sealed class OriginalFileStore
     public OriginalFileStore(string dataDirectory) => this.dataDirectory = dataDirectory;
 
     private const int BufferLength = 64 * 1024;
-    private static readonly UnixFileMode PrivateDirectoryMode =
-        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-    private static readonly UnixFileMode PrivateFileMode =
-        UnixFileMode.UserRead | UnixFileMode.UserWrite;
+    private static readonly UnixFileMode PrivateDirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+    private static readonly UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 
-    public async Task<OriginalObject> PublishAsync(
-        Stream input, long maxBytes, CancellationToken cancellationToken)
+    public async Task<OriginalObject> PublishAsync(Stream input, long maxBytes, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
         if (!input.CanRead)
@@ -26,28 +23,25 @@ internal sealed class OriginalFileStore
             throw new ArgumentException("The original content stream must be readable.", nameof(input));
         }
 
-        if (maxBytes < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBytes);
 
-        var staging = EnsureDirectory(Path.Combine(dataDirectory, "staging"));
-        var objects = EnsureDirectory(Path.Combine(dataDirectory, "objects"));
-        var pending = Path.Combine(staging, $"{Guid.NewGuid():N}.part");
+        string staging = EnsureDirectory(Path.Combine(dataDirectory, "staging"));
+        string objects = EnsureDirectory(Path.Combine(dataDirectory, "objects"));
+        string pending = Path.Combine(staging, $"{Guid.NewGuid():N}.part");
         try
         {
-            var length = 0L;
+            long length = 0L;
             string digest;
-            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+            using (IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                await using (var output = CreatePrivateFile(pending))
+                await using (FileStream output = CreatePrivateFile(pending))
                 {
-                    var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
                     try
                     {
                         while (true)
                         {
-                            var count = await input.ReadAsync(buffer.AsMemory(0, BufferLength), cancellationToken);
+                            int count = await input.ReadAsync(buffer.AsMemory(0, BufferLength), cancellationToken);
                             if (count == 0)
                             {
                                 break;
@@ -77,9 +71,9 @@ internal sealed class OriginalFileStore
             }
 
             await VerifyAsync(pending, digest, length, cancellationToken);
-            var directory = EnsureDirectory(Path.Combine(objects, digest[..2]));
+            string directory = EnsureDirectory(Path.Combine(objects, digest[..2]));
             directory = EnsureDirectory(Path.Combine(directory, digest[2..4]));
-            var published = Path.Combine(directory, digest);
+            string published = Path.Combine(directory, digest);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (!File.Exists(published))
@@ -112,12 +106,10 @@ internal sealed class OriginalFileStore
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        await VerifyAsync(ExistingObjectPath(original.Digest),
-            original.Digest, original.Length, cancellationToken);
+        await VerifyAsync(ExistingObjectPath(original.Digest), original.Digest, original.Length, cancellationToken);
     }
 
-    internal async Task<byte[]> ReadVerifiedBytesAsync(
-        OriginalObject original, int maxBytes, CancellationToken cancellationToken)
+    internal async Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken)
     {
         ValidateDigest(original.Digest);
         if (original.Length < 0 || original.Length > maxBytes)
@@ -125,28 +117,22 @@ internal sealed class OriginalFileStore
             throw new InvalidDataException("The original exceeds the extraction byte budget.");
         }
 
-        await using var input = OpenOriginal(original);
-        var bytes = new byte[(int)original.Length];
+        await using FileStream input = OpenOriginal(original);
+        byte[] bytes = new byte[(int)original.Length];
         await input.ReadExactlyAsync(bytes, cancellationToken);
         if (input.Length != original.Length)
         {
             throw new InvalidDataException("An original object changed during extraction.");
         }
 
-        if (!CryptographicOperations.FixedTimeEquals(
-            SHA256.HashData(bytes), Convert.FromHexString(original.Digest)))
-        {
-            throw new InvalidDataException("An original object failed integrity verification.");
-        }
-
-        return bytes;
+        return !CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes), Convert.FromHexString(original.Digest))
+            ? throw new InvalidDataException("An original object failed integrity verification.")
+            : bytes;
     }
 
-    internal async Task<byte[]> ReadVerifiedPrefixAsync(
-        OriginalObject original, int prefixBytes, long maxBytes,
-        CancellationToken cancellationToken)
+    internal async Task<byte[]> ReadVerifiedPrefixAsync(OriginalObject original, int prefixBytes, long maxBytes, CancellationToken cancellationToken)
     {
-        if (prefixBytes < 1 || prefixBytes > 64 * 1024)
+        if (prefixBytes is < 1 or > 64 * 1024)
         {
             throw new ArgumentOutOfRangeException(nameof(prefixBytes));
         }
@@ -156,14 +142,12 @@ internal sealed class OriginalFileStore
             throw new InvalidDataException("The original exceeds the media inspection byte budget.");
         }
 
-        var prefix = new byte[(int)Math.Min(original.Length, prefixBytes)];
+        byte[] prefix = new byte[(int)Math.Min(original.Length, prefixBytes)];
         await CopyVerifiedAsync(original, Stream.Null, cancellationToken, prefix);
         return prefix;
     }
 
-    internal async Task CopyVerifiedAsync(
-        OriginalObject original, Stream destination, CancellationToken cancellationToken,
-        Memory<byte> prefix = default)
+    internal async Task CopyVerifiedAsync(OriginalObject original, Stream destination, CancellationToken cancellationToken, Memory<byte> prefix = default)
     {
         ValidateDigest(original.Digest);
         ArgumentNullException.ThrowIfNull(destination);
@@ -172,23 +156,21 @@ internal sealed class OriginalFileStore
             throw new ArgumentException("The original requires a writable export stream.");
         }
 
-        await using var input = OpenOriginal(original);
+        await using FileStream input = OpenOriginal(original);
         await CopyVerifiedAsync(input, original, destination, prefix, cancellationToken);
     }
 
-    private static async Task CopyVerifiedAsync(
-        FileStream input, OriginalObject original, Stream destination,
-        Memory<byte> prefix, CancellationToken cancellationToken)
+    private static async Task CopyVerifiedAsync(FileStream input, OriginalObject original, Stream destination, Memory<byte> prefix, CancellationToken cancellationToken)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferLength);
         try
         {
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            var copied = 0L;
+            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            long copied = 0L;
             while (copied < original.Length)
             {
-                var amount = (int)Math.Min(BufferLength, original.Length - copied);
-                var read = await input.ReadAsync(buffer.AsMemory(0, amount), cancellationToken);
+                int amount = (int)Math.Min(BufferLength, original.Length - copied);
+                int read = await input.ReadAsync(buffer.AsMemory(0, amount), cancellationToken);
                 if (read == 0)
                 {
                     throw new InvalidDataException("An original object ended before its recorded length.");
@@ -197,7 +179,7 @@ internal sealed class OriginalFileStore
                 hash.AppendData(buffer, 0, read);
                 if (copied < prefix.Length)
                 {
-                    var length = (int)Math.Min(read, prefix.Length - copied);
+                    int length = (int)Math.Min(read, prefix.Length - copied);
                     buffer.AsMemory(0, length).CopyTo(prefix.Slice((int)copied, length));
                 }
 
@@ -205,9 +187,7 @@ internal sealed class OriginalFileStore
                 copied += read;
             }
 
-            if (input.ReadByte() != -1 ||
-                !CryptographicOperations.FixedTimeEquals(hash.GetHashAndReset(),
-                    Convert.FromHexString(original.Digest)))
+            if (input.ReadByte() != -1 || !CryptographicOperations.FixedTimeEquals(hash.GetHashAndReset(), Convert.FromHexString(original.Digest)))
             {
                 throw new InvalidDataException("An original object failed integrity verification.");
             }
@@ -218,9 +198,7 @@ internal sealed class OriginalFileStore
         }
     }
 
-    internal async Task CopyVerifiedToStoreAsync(
-        OriginalObject original, OriginalFileStore destination,
-        CancellationToken cancellationToken)
+    internal async Task CopyVerifiedToStoreAsync(OriginalObject original, OriginalFileStore destination, CancellationToken cancellationToken)
     {
         ValidateDigest(original.Digest);
         if (original.Length < 0)
@@ -228,11 +206,11 @@ internal sealed class OriginalFileStore
             throw new ArgumentOutOfRangeException(nameof(original));
         }
 
-        await using var input = OpenOriginal(original);
-        var objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
-        var first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
-        var second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
-        await using var output = CreatePrivateFile(Path.Combine(second, original.Digest));
+        await using FileStream input = OpenOriginal(original);
+        string objects = EnsureDirectory(Path.Combine(destination.dataDirectory, "objects"));
+        string first = EnsureDirectory(Path.Combine(objects, original.Digest[..2]));
+        string second = EnsureDirectory(Path.Combine(first, original.Digest[2..4]));
+        await using FileStream output = CreatePrivateFile(Path.Combine(second, original.Digest));
         await CopyVerifiedAsync(input, original, output, default, cancellationToken);
         await output.FlushAsync(cancellationToken);
         output.Flush(flushToDisk: true);
@@ -240,15 +218,12 @@ internal sealed class OriginalFileStore
 
     private FileStream OpenOriginal(OriginalObject original)
     {
-        var input = OpenRead(ExistingObjectPath(original.Digest));
+        FileStream input = OpenRead(ExistingObjectPath(original.Digest));
         try
         {
-            if (input.Length != original.Length)
-            {
-                throw new InvalidDataException("An original object has a conflicting length.");
-            }
-
-            return input;
+            return input.Length != original.Length
+                ? throw new InvalidDataException("An original object has a conflicting length.")
+                : input;
         }
         catch
         {
@@ -259,18 +234,14 @@ internal sealed class OriginalFileStore
 
     private static FileStream OpenRead(string path)
     {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidDataException("An original object path is a symbolic link.");
-        }
-
-        return new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0
+            ? throw new InvalidDataException("An original object path is a symbolic link.")
+            : new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferLength, FileOptions.Asynchronous | FileOptions.SequentialScan);
     }
 
     private static FileStream CreatePrivateFile(string path)
     {
-        var options = new FileStreamOptions
+        FileStreamOptions options = new()
         {
             Mode = FileMode.CreateNew,
             Access = FileAccess.Write,
@@ -288,39 +259,37 @@ internal sealed class OriginalFileStore
 
     private string ExistingObjectPath(string digest)
     {
-        var objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
-        var first = CheckDirectory(Path.Combine(objects, digest[..2]));
-        var second = CheckDirectory(Path.Combine(first, digest[2..4]));
+        string objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));
+        string first = CheckDirectory(Path.Combine(objects, digest[..2]));
+        string second = CheckDirectory(Path.Combine(first, digest[2..4]));
         return Path.Combine(second, digest);
     }
 
     public IEnumerable<string> EnumeratePublishedDigests()
     {
-        var root = Path.Combine(dataDirectory, "objects");
+        string root = Path.Combine(dataDirectory, "objects");
         if (!Directory.Exists(root) && !File.Exists(root))
         {
             yield break;
         }
 
         CheckDirectory(root);
-        foreach (var first in Directory.EnumerateFileSystemEntries(root))
+        foreach (string first in Directory.EnumerateFileSystemEntries(root))
         {
             CheckDirectory(first);
-            foreach (var second in Directory.EnumerateFileSystemEntries(first))
+            foreach (string second in Directory.EnumerateFileSystemEntries(first))
             {
                 CheckDirectory(second);
-                foreach (var file in Directory.EnumerateFileSystemEntries(second))
+                foreach (string file in Directory.EnumerateFileSystemEntries(second))
                 {
-                    if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0 ||
-                        !File.Exists(file))
+                    if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0 || !File.Exists(file))
                     {
                         throw new InvalidDataException("The object inventory contains an unexpected file.");
                     }
 
-                    var digest = Path.GetFileName(file);
+                    string digest = Path.GetFileName(file);
                     ValidateDigest(digest);
-                    if (digest[..2] != Path.GetFileName(first) ||
-                        digest[2..4] != Path.GetFileName(second))
+                    if (digest[..2] != Path.GetFileName(first) || digest[2..4] != Path.GetFileName(second))
                     {
                         throw new InvalidDataException("An object is outside its expected digest directory.");
                     }
@@ -333,19 +302,17 @@ internal sealed class OriginalFileStore
 
     public int CountStagedFiles()
     {
-        var staging = Path.Combine(dataDirectory, "staging");
+        string staging = Path.Combine(dataDirectory, "staging");
         if (!Directory.Exists(staging) && !File.Exists(staging))
         {
             return 0;
         }
 
         CheckDirectory(staging);
-        var count = 0;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(staging))
+        int count = 0;
+        foreach (string entry in Directory.EnumerateFileSystemEntries(staging))
         {
-            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
-                !File.Exists(entry) ||
-                Path.GetExtension(entry) != ".part")
+            if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 || !File.Exists(entry) || Path.GetExtension(entry) != ".part")
             {
                 throw new InvalidDataException("The staging inventory contains an unexpected entry.");
             }
@@ -356,14 +323,10 @@ internal sealed class OriginalFileStore
         return count;
     }
 
-    private static async Task VerifyAsync(
-        string path, string digest, long length, CancellationToken cancellationToken)
+    private static async Task VerifyAsync(string path, string digest, long length, CancellationToken cancellationToken)
     {
-        await using var stream = OpenRead(path);
-        if (stream.Length != length ||
-            !CryptographicOperations.FixedTimeEquals(
-                await SHA256.HashDataAsync(stream, cancellationToken),
-                Convert.FromHexString(digest)))
+        await using FileStream stream = OpenRead(path);
+        if (stream.Length != length || !CryptographicOperations.FixedTimeEquals(await SHA256.HashDataAsync(stream, cancellationToken), Convert.FromHexString(digest)))
         {
             throw new InvalidDataException("An original object failed integrity verification.");
         }
@@ -395,8 +358,7 @@ internal sealed class OriginalFileStore
             throw new DirectoryNotFoundException(path);
         }
 
-        if (!OperatingSystem.IsWindows() &&
-            (File.GetUnixFileMode(path) & ~PrivateDirectoryMode) != 0)
+        if (!OperatingSystem.IsWindows() && (File.GetUnixFileMode(path) & ~PrivateDirectoryMode) != 0)
         {
             throw new UnauthorizedAccessException("Original storage directories must be private.");
         }
@@ -404,9 +366,9 @@ internal sealed class OriginalFileStore
         return path;
     }
 
-    internal static bool IsValidDigest(string? digest) =>
-        digest is { Length: 64 } && digest.All(c =>
-            c is >= '0' and <= '9' or >= 'a' and <= 'f');
+    internal static bool IsValidDigest(string? digest)
+        => digest is { Length: 64 } && digest.All(c
+            => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static void ValidateDigest(string digest)
     {

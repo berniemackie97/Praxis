@@ -1,6 +1,17 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Storage.Collections;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Knowledge;
+using Praxis.Storage.Library;
+using Praxis.Storage.Media;
+using Praxis.Storage.Models;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Recovery;
+using Praxis.Storage.Search;
+using Praxis.Storage.Sources;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Catalog;
 
 /// <summary>
 /// Owner-local catalog session. Owns the exclusive directory lock and database connection,
@@ -35,7 +46,7 @@ public sealed class LocalCatalog : IDisposable
         DatabasePath = Path.Combine(dataDirectory, CatalogDirectory.DatabaseFile);
         this.lockFile = lockFile;
         database = new CatalogDatabase(connection);
-        var objects = new OriginalFileStore(dataDirectory);
+        OriginalFileStore objects = new(dataDirectory);
 
         Sources = new LocalSources(database);
         Processing = new LocalProcessingQueue(database);
@@ -52,11 +63,9 @@ public sealed class LocalCatalog : IDisposable
         Models = new LocalModelProfiles(database);
     }
 
-    public static LocalCatalog Open(string dataDirectory) =>
-        Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
+    public static LocalCatalog Open(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
 
-    internal static LocalCatalog OpenReadOnly(string dataDirectory) =>
-        Open(dataDirectory, SqliteOpenMode.ReadOnly);
+    internal static LocalCatalog OpenReadOnly(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadOnly);
 
     private static LocalCatalog Open(string dataDirectory, SqliteOpenMode mode)
     {
@@ -66,16 +75,16 @@ public sealed class LocalCatalog : IDisposable
             throw new ArgumentException("The catalog data directory must be absolute.", nameof(dataDirectory));
         }
 
-        var root = Path.GetFullPath(dataDirectory);
+        string root = Path.GetFullPath(dataDirectory);
         CatalogDirectory.Validate(root);
-        var databasePath = Path.Combine(root, CatalogDirectory.DatabaseFile);
+        string databasePath = Path.Combine(root, CatalogDirectory.DatabaseFile);
         if (mode == SqliteOpenMode.ReadOnly && !File.Exists(databasePath))
         {
             throw new FileNotFoundException("The source catalog does not exist.", databasePath);
         }
 
-        var lockPath = Path.Combine(root, CatalogDirectory.LockFile);
-        var lockOptions = new FileStreamOptions
+        string lockPath = Path.Combine(root, CatalogDirectory.LockFile);
+        FileStreamOptions lockOptions = new()
         {
             Mode = FileMode.OpenOrCreate,
             Access = FileAccess.ReadWrite,
@@ -86,7 +95,7 @@ public sealed class LocalCatalog : IDisposable
             lockOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         }
 
-        var fileLock = new FileStream(lockPath, lockOptions);
+        FileStream fileLock = new(lockPath, lockOptions);
         SqliteConnection? connection = null;
         try
         {
@@ -97,15 +106,19 @@ public sealed class LocalCatalog : IDisposable
                 Pooling = false
             }.ToString());
             connection.Open();
-            if (mode != SqliteOpenMode.ReadOnly)
+            if (mode == SqliteOpenMode.ReadOnly)
             {
-                CatalogSchema.Prepare(connection);
-                if (!OperatingSystem.IsWindows())
-                {
-                    File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                    File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-                }
+                return new LocalCatalog(root, fileLock, connection);
             }
+
+            CatalogSchema.Prepare(connection);
+            if (OperatingSystem.IsWindows())
+            {
+                return new LocalCatalog(root, fileLock, connection);
+            }
+
+            File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
             return new LocalCatalog(root, fileLock, connection);
         }

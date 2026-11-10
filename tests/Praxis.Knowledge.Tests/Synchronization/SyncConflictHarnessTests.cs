@@ -1,7 +1,7 @@
 using Xunit;
-using static Praxis.Knowledge.Tests.SyncHarnessInputs;
+using static Praxis.Knowledge.Tests.Synchronization.SyncHarnessInputs;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Synchronization;
 
 public sealed class SyncConflictHarnessTests
 {
@@ -20,42 +20,42 @@ public sealed class SyncConflictHarnessTests
     [InlineData(11)]
     public void SeededConcurrentRenameEditAndDeleteRetainLosingContributions(int seed)
     {
-        var server = new SyncContractFixture(Epoch);
-        var clients = new[]
-        {
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica[] clients =
+        [
             OfflineSyncReplica.Start(Epoch, FirstDevice),
             OfflineSyncReplica.Start(Epoch, SecondDevice),
             OfflineSyncReplica.Start(Epoch, ThirdDevice)
-        };
-        var created = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
+        ];
+        SyncMutation created = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "original.md", "original");
         Assert.Equal(ApplyStatus.Applied, server.Apply(created).Status);
-        foreach (var client in clients)
+        foreach (OfflineSyncReplica client in clients)
         {
             client.CommitPage(server.Pull(Epoch, 0, 10));
         }
 
-        var random = new Random(seed);
-        var attempted = new[]
-        {
+        Random random = new(seed);
+        SyncMutation[] attempted =
+        [
             NewMutation(FirstDevice, NextGuid(random), SharedRecord, 1,
                 SyncAction.Upsert, "renamed.md", "original"),
             NewMutation(SecondDevice, NextGuid(random), SharedRecord, 1,
                 SyncAction.Upsert, "original.md", "offline edit"),
             NewMutation(ThirdDevice, NextGuid(random), SharedRecord, 1,
                 SyncAction.Delete, null, null)
-        };
-        var deliveries = clients.Zip(attempted).ToList();
-        foreach (var (client, mutation) in deliveries)
+        ];
+        List<(OfflineSyncReplica First, SyncMutation Second)> deliveries = clients.Zip(attempted).ToList();
+        foreach ((OfflineSyncReplica client, SyncMutation mutation) in deliveries)
         {
             client.Queue(mutation);
         }
 
         Shuffle(deliveries, random);
-        var accepted = 0;
-        foreach (var (client, mutation) in deliveries)
+        int accepted = 0;
+        foreach ((OfflineSyncReplica client, SyncMutation mutation) in deliveries)
         {
-            var response = server.Apply(mutation);
+            SyncReply response = server.Apply(mutation);
             if (response.Status == ApplyStatus.Applied)
             {
                 accepted++;
@@ -70,22 +70,22 @@ public sealed class SyncConflictHarnessTests
 
         Assert.Equal(1, accepted);
         Assert.Equal(2, server.HeadSequence);
-        var rejected = clients.SelectMany(client => client.Conflicts).ToArray();
+        SyncConflict[] rejected = clients.SelectMany(client => client.Conflicts).ToArray();
         Assert.Equal(2, rejected.Length);
         Assert.Equal(2, rejected.Select(item => item.Mutation.OperationId).Distinct().Count());
         Assert.All(rejected, conflict => Assert.Equal(ApplyStatus.StaleRevision, conflict.Reply.Status));
         Assert.Empty(clients.SelectMany(client => client.Pending));
 
-        var current = Assert.Single(server.Snapshot().Records);
-        var resolution = NewMutation(SecondDevice, NextGuid(random), SharedRecord,
+        SyncRecord current = Assert.Single(server.Snapshot().Records);
+        SyncMutation resolution = NewMutation(SecondDevice, NextGuid(random), SharedRecord,
             current.Revision, current.Deleted ? SyncAction.Restore : SyncAction.Upsert,
             "resolved.md", "explicitly resolved");
         clients[1].Queue(resolution);
-        var receipt = server.Apply(resolution);
+        SyncReply receipt = server.Apply(resolution);
         Assert.Equal(ApplyStatus.Applied, receipt.Status);
         clients[1].Acknowledge(resolution, receipt);
 
-        foreach (var client in clients)
+        foreach (OfflineSyncReplica client in clients)
         {
             client.CommitPage(server.Pull(Epoch, client.Cursor, 10));
             Assert.True(server.Snapshot().Records.SequenceEqual(client.Checkpoint().Records),
@@ -99,19 +99,19 @@ public sealed class SyncConflictHarnessTests
     [Fact]
     public void ConcurrentSamePathCreatesPreserveRejectedOperationForResolution()
     {
-        var server = new SyncContractFixture(Epoch);
-        var first = OfflineSyncReplica.Start(Epoch, FirstDevice);
-        var second = OfflineSyncReplica.Start(Epoch, SecondDevice);
-        var a = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica first = OfflineSyncReplica.Start(Epoch, FirstDevice);
+        OfflineSyncReplica second = OfflineSyncReplica.Start(Epoch, SecondDevice);
+        SyncMutation a = NewMutation(FirstDevice, TestOperationId(1), SharedRecord, 0,
             SyncAction.Upsert, "shared.md", "A");
-        var b = NewMutation(SecondDevice, TestOperationId(2),
+        SyncMutation b = NewMutation(SecondDevice, TestOperationId(2),
             Guid.Parse("ffffffff-ffff-4fff-8fff-ffffffffffff"), 0,
             SyncAction.Upsert, "SHARED.md", "B");
         first.Queue(a);
         second.Queue(b);
 
-        var accepted = server.Apply(a);
-        var conflict = server.Apply(b);
+        SyncReply accepted = server.Apply(a);
+        SyncReply conflict = server.Apply(b);
         first.Acknowledge(a, accepted);
         second.Acknowledge(b, conflict);
 
@@ -119,7 +119,7 @@ public sealed class SyncConflictHarnessTests
         Assert.Equal("B", Assert.Single(second.Conflicts).Mutation.Body);
         Assert.Equal(1, server.HeadSequence);
 
-        var resolved = b with { OperationId = TestOperationId(3), Path = "second.md" };
+        SyncMutation resolved = b with { OperationId = TestOperationId(3), Path = "second.md" };
         second.Queue(resolved);
         second.Acknowledge(resolved, server.Apply(resolved));
 

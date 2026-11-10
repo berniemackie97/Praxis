@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Search;
 
-public sealed record LocalSearchHit(
-    Guid SourceId, Guid ItemId, int Revision, string Title,
-    string SourceLocator, string OriginalSha256, string Snippet);
+public sealed record LocalSearchHit(Guid SourceId, Guid ItemId, int Revision, string Title, string SourceLocator, string OriginalSha256, string Snippet);
 
 /// <summary>
 /// Rebuildable FTS5 index over the latest verified text of active sources. Query-time joins
@@ -24,51 +24,50 @@ public sealed class LocalTextSearch
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        var expression = BuildTextQuery(query);
+        string expression = BuildTextQuery(query);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
-                       snippet(text_search, -1, '⟦', '⟧', '…', 24)
-                FROM text_search
-                JOIN search_index_keys k ON k.rowid = text_search.rowid
-                JOIN item_versions v
-                    ON v.item_id = k.item_id AND v.revision = k.revision
-                JOIN items i ON i.item_id = v.item_id
-                JOIN sources s
-                    ON s.source_id = i.source_id AND s.source_id = k.source_id
-                JOIN text_derivatives d
-                    ON d.item_id = v.item_id AND d.revision = v.revision
-                    AND d.source_digest = v.digest AND d.outcome = 'completed'
-                    AND d.processor_key = 'source-text-v1'
-                JOIN processing_jobs j
-                    ON j.item_id = d.item_id AND j.revision = d.revision
-                    AND j.processor_key = d.processor_key AND j.state = 'completed'
-                WHERE text_search MATCH $query
-                  AND s.status = 'active'
-                  AND v.revision = (
-                      SELECT MAX(latest.revision) FROM item_versions latest
-                      WHERE latest.item_id = v.item_id)
-                ORDER BY bm25(text_search), s.locator COLLATE BINARY,
-                         v.item_id, v.revision
-                LIMIT $limit
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
+                                                                          snippet(text_search, -1, '⟦', '⟧', '…', 24)
+                                                                   FROM text_search
+                                                                   JOIN search_index_keys k ON k.rowid = text_search.rowid
+                                                                   JOIN item_versions v
+                                                                       ON v.item_id = k.item_id AND v.revision = k.revision
+                                                                   JOIN items i ON i.item_id = v.item_id
+                                                                   JOIN sources s
+                                                                       ON s.source_id = i.source_id AND s.source_id = k.source_id
+                                                                   JOIN text_derivatives d
+                                                                       ON d.item_id = v.item_id AND d.revision = v.revision
+                                                                       AND d.source_digest = v.digest AND d.outcome = 'completed'
+                                                                       AND d.processor_key = 'source-text-v1'
+                                                                   JOIN processing_jobs j
+                                                                       ON j.item_id = d.item_id AND j.revision = d.revision
+                                                                       AND j.processor_key = d.processor_key AND j.state = 'completed'
+                                                                   WHERE text_search MATCH $query
+                                                                     AND s.status = 'active'
+                                                                     AND v.revision = (
+                                                                         SELECT MAX(latest.revision) FROM item_versions latest
+                                                                         WHERE latest.item_id = v.item_id)
+                                                                   ORDER BY bm25(text_search), s.locator COLLATE BINARY,
+                                                                            v.item_id, v.revision
+                                                                   LIMIT $limit
+                                                                   """);
             command.CommandTimeout = 5;
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$limit", limit);
-            using var reader = command.ExecuteReader();
-            var hits = new List<LocalSearchHit>();
+            using SqliteDataReader reader = command.ExecuteReader();
+            List<LocalSearchHit> hits = new();
             while (reader.Read())
             {
-                var locator = reader.GetString(3);
-                var snippet = reader.IsDBNull(5) ? "" : reader.GetString(5);
+                string locator = reader.GetString(3);
+                string snippet = reader.IsDBNull(5) ? "" : reader.GetString(5);
                 if (snippet.Length > 480)
                 {
                     snippet = snippet[..480];
                 }
 
-                hits.Add(new LocalSearchHit(
-                    Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                hits.Add(new LocalSearchHit(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                     Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture),
                     Path.GetFileName(locator), locator, reader.GetString(4), snippet));
             }
@@ -77,8 +76,7 @@ public sealed class LocalTextSearch
         });
     }
 
-    public int Rebuild(
-        int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
+    public int Rebuild(int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
     {
         if (maxDocuments is < 1 or > 100_000)
         {
@@ -92,18 +90,18 @@ public sealed class LocalTextSearch
 
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var count = connection.CreateCommand("""
-                SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
-                FROM eligible_text_search
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand count = connection.CreateCommand("""
+                                                                 SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
+                                                                 FROM eligible_text_search
+                                                                 """);
             count.Transaction = transaction;
             count.CommandTimeout = 30;
             int eligible;
-            using (var reader = count.ExecuteReader())
+            using (SqliteDataReader reader = count.ExecuteReader())
             {
                 reader.Read();
-                var documentCount = reader.GetInt64(0);
+                long documentCount = reader.GetInt64(0);
                 if (documentCount > maxDocuments || reader.GetInt64(1) > maxTextBytes)
                 {
                     throw new InvalidOperationException("The rebuild exceeds its data budget.");
@@ -112,33 +110,33 @@ public sealed class LocalTextSearch
                 eligible = (int)documentCount;
             }
 
-            using var clear = connection.CreateCommand("DELETE FROM text_search");
+            using SqliteCommand clear = connection.CreateCommand("DELETE FROM text_search");
             clear.Transaction = transaction;
             clear.CommandTimeout = 30;
             clear.ExecuteNonQuery();
 
-            using var removeKeys = connection.CreateCommand("DELETE FROM search_index_keys");
+            using SqliteCommand removeKeys = connection.CreateCommand("DELETE FROM search_index_keys");
             removeKeys.Transaction = transaction;
             removeKeys.CommandTimeout = 30;
             removeKeys.ExecuteNonQuery();
 
-            using var insertKeys = connection.CreateCommand("""
-                INSERT INTO search_index_keys (item_id, revision, source_id)
-                SELECT item_id, revision, source_id
-                FROM eligible_text_search ORDER BY item_id, revision
-                """);
+            using SqliteCommand insertKeys = connection.CreateCommand("""
+                                                                      INSERT INTO search_index_keys (item_id, revision, source_id)
+                                                                      SELECT item_id, revision, source_id
+                                                                      FROM eligible_text_search ORDER BY item_id, revision
+                                                                      """);
             insertKeys.Transaction = transaction;
             insertKeys.CommandTimeout = 30;
             insertKeys.ExecuteNonQuery();
 
-            using var populate = connection.CreateCommand("""
-                INSERT INTO text_search (rowid, locator, content)
-                SELECT k.rowid, e.locator, e.content
-                FROM eligible_text_search e
-                JOIN search_index_keys k
-                    ON k.item_id = e.item_id AND k.revision = e.revision
-                ORDER BY e.item_id, e.revision
-                """);
+            using SqliteCommand populate = connection.CreateCommand("""
+                                                                    INSERT INTO text_search (rowid, locator, content)
+                                                                    SELECT k.rowid, e.locator, e.content
+                                                                    FROM eligible_text_search e
+                                                                    JOIN search_index_keys k
+                                                                        ON k.item_id = e.item_id AND k.revision = e.revision
+                                                                    ORDER BY e.item_id, e.revision
+                                                                    """);
             populate.Transaction = transaction;
             populate.CommandTimeout = 30;
             populate.ExecuteNonQuery();
@@ -155,9 +153,9 @@ public sealed class LocalTextSearch
             throw new ArgumentException("Search queries must be bounded printable text.", nameof(query));
         }
 
-        var terms = new List<string>();
-        var token = new StringBuilder();
-        foreach (var character in query)
+        List<string> terms = new();
+        StringBuilder token = new();
+        foreach (char character in query)
         {
             if (char.IsLetterOrDigit(character))
             {
@@ -179,11 +177,8 @@ public sealed class LocalTextSearch
             terms.Add(token.ToString());
         }
 
-        if (terms.Count is < 1 or > 16)
-        {
-            throw new ArgumentException("Search queries must contain one to sixteen terms.", nameof(query));
-        }
-
-        return string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
+        return terms.Count is < 1 or > 16
+            ? throw new ArgumentException("Search queries must contain one to sixteen terms.", nameof(query))
+            : string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
     }
 }

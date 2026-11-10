@@ -1,4 +1,8 @@
-namespace Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Enrichment.Semantic;
+
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Runs leased processing jobs for registered handlers, independently of source intake.
@@ -25,19 +29,16 @@ public sealed class LocalProcessingPipeline
     private int wakePending;
     private int nextHandler;
 
-    public LocalProcessingPipeline(
-        LocalCatalog catalog, IReadOnlyList<ILocalProcessingHandler> handlers,
-        TimeSpan? idlePoll = null, Action<string>? status = null)
+    public LocalProcessingPipeline(LocalCatalog catalog, IReadOnlyList<ILocalProcessingHandler> handlers, TimeSpan? idlePoll = null, Action<string>? status = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(handlers);
-        if (handlers.Count == 0 ||
-            handlers.Select(handler => handler.ProcessorKey).Distinct(StringComparer.Ordinal).Count() != handlers.Count)
+        if (handlers.Count == 0 || handlers.Select(handler => handler.ProcessorKey).Distinct(StringComparer.Ordinal).Count() != handlers.Count)
         {
             throw new ArgumentException("Register at least one handler, each for a distinct processor.", nameof(handlers));
         }
 
-        foreach (var handler in handlers)
+        foreach (ILocalProcessingHandler handler in handlers)
         {
             ProcessingJobKey.ValidateProcessor(handler.ProcessorKey);
             if (handler.MaxConcurrency is < 1 or > 16)
@@ -91,7 +92,7 @@ public sealed class LocalProcessingPipeline
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var claimed = TryClaimNext(IsAvailable) ?? (ReopenWork() ? TryClaimNext(IsAvailable) : null);
+        (ILocalProcessingHandler Handler, ProcessingLease Lease)? claimed = TryClaimNext(IsAvailable) ?? (ReopenWork() ? TryClaimNext(IsAvailable) : null);
         if (claimed is not { } job)
         {
             return false;
@@ -104,9 +105,9 @@ public sealed class LocalProcessingPipeline
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        var active = handlers.ToDictionary(handler => handler, _ => 0);
+        Dictionary<ILocalProcessingHandler, int> active = handlers.ToDictionary(handler => handler, _ => 0);
         // Not keyed by Task: runs that finish synchronously share the runtime's cached task.
-        var running = new List<(Task Run, ILocalProcessingHandler Handler)>();
+        List<(Task Run, ILocalProcessingHandler Handler)> running = new();
         Task? wake = null;
         try
         {
@@ -130,12 +131,12 @@ public sealed class LocalProcessingPipeline
                 await Task.WhenAny(running.Select(entry => entry.Run).Append(wake));
                 if (wake.IsCompleted)
                 {
-                    var signaled = wake;
+                    Task signaled = wake;
                     wake = null;
                     await signaled;
                 }
 
-                foreach (var finished in running.Where(entry => entry.Run.IsCompleted).ToArray())
+                foreach ((Task Run, ILocalProcessingHandler Handler) finished in running.Where(entry => entry.Run.IsCompleted).ToArray())
                 {
                     running.Remove(finished);
                     active[finished.Handler]--;
@@ -153,20 +154,18 @@ public sealed class LocalProcessingPipeline
         }
     }
 
-    private (ILocalProcessingHandler Handler, ProcessingLease Lease)? TryClaimNext(
-        Func<ILocalProcessingHandler, bool> hasCapacity)
+    private (ILocalProcessingHandler Handler, ProcessingLease Lease)? TryClaimNext(Func<ILocalProcessingHandler, bool> hasCapacity)
     {
-        for (var tried = 0; tried < handlers.Count; tried++)
+        for (int tried = 0; tried < handlers.Count; tried++)
         {
-            var handler = handlers[nextHandler];
+            ILocalProcessingHandler handler = handlers[nextHandler];
             nextHandler = (nextHandler + 1) % handlers.Count;
             if (!hasCapacity(handler))
             {
                 continue;
             }
 
-            var lease = catalog.Processing.TryClaim(
-                handler.LeaseDuration, MaximumAttempts, processorKey: handler.ProcessorKey);
+            ProcessingLease? lease = catalog.Processing.TryClaim(handler.LeaseDuration, MaximumAttempts, processorKey: handler.ProcessorKey);
             if (lease is not null)
             {
                 return (handler, lease);
@@ -178,8 +177,8 @@ public sealed class LocalProcessingPipeline
 
     private bool ReopenWork()
     {
-        var reopened = false;
-        foreach (var handler in handlers)
+        bool reopened = false;
+        foreach (ILocalProcessingHandler handler in handlers)
         {
             if (reopenExhausted.Contains(handler.ProcessorKey))
             {
@@ -199,8 +198,7 @@ public sealed class LocalProcessingPipeline
         return reopened;
     }
 
-    private async Task ExecuteAsync(
-        ILocalProcessingHandler handler, ProcessingLease lease, CancellationToken cancellationToken)
+    private async Task ExecuteAsync(ILocalProcessingHandler handler, ProcessingLease lease, CancellationToken cancellationToken)
     {
         try
         {
@@ -223,8 +221,7 @@ public sealed class LocalProcessingPipeline
             // Isolation boundary: a defective handler fails its own job, durably and without
             // persisting exception text, rather than stopping every other processor.
             catalog.Processing.Finish(lease, ProcessingCompletion.Failed, FaultCode);
-            report($"Processor {handler.ProcessorKey} faulted on item {lease.ItemId:D} " +
-                $"revision {lease.Revision}: {exception.GetType().Name}");
+            report($"Processor {handler.ProcessorKey} faulted on item {lease.ItemId:D} revision {lease.Revision}: {exception.GetType().Name}");
         }
     }
 

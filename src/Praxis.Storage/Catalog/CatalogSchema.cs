@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Catalog;
 
 internal static class CatalogSchema
 {
@@ -41,23 +41,19 @@ internal static class CatalogSchema
         Execute(database, "PRAGMA busy_timeout = 5000");
         VerifyIntegrity(database);
 
-        var version = ReadVersion(database);
-        if (version is < 0 or > CurrentVersion)
+        int version = ReadVersion(database);
+        switch (version)
         {
-            throw new NotSupportedException("The catalog schema version is not supported.");
-        }
-
-        if (version == 0 && Convert.ToInt64(Scalar(database, """
-            SELECT COUNT(*) FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-            """)) != 0)
-        {
-            throw new InvalidDataException("An unversioned database already contains user tables.");
-        }
-
-        if (version is >= 1 and < CurrentVersion)
-        {
-            VerifySchema(database, version);
+            case < 0 or > CurrentVersion:
+                throw new NotSupportedException("The catalog schema version is not supported.");
+            case 0 when Convert.ToInt64(Scalar(database, """
+                                                         SELECT COUNT(*) FROM sqlite_master
+                                                         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                                                         """)) != 0:
+                throw new InvalidDataException("An unversioned database already contains user tables.");
+            case >= 1 and < CurrentVersion:
+                VerifySchema(database, version);
+                break;
         }
 
         if (version < CurrentVersion)
@@ -68,15 +64,13 @@ internal static class CatalogSchema
         VerifySchema(database, CurrentVersion);
         VerifySearchSchema(database);
         VerifyEnrichmentView(database);
-        if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string,
-            "wal", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string, "wal", StringComparison.OrdinalIgnoreCase))
         {
             throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
         }
 
         Execute(database, "PRAGMA synchronous = FULL");
-        if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 ||
-            Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
+        if (Convert.ToInt32(Scalar(database, "PRAGMA synchronous")) != 2 || Convert.ToInt32(Scalar(database, "PRAGMA foreign_keys")) != 1)
         {
             throw new InvalidDataException("The SQLite durability or foreign key configuration is invalid.");
         }
@@ -132,14 +126,13 @@ internal static class CatalogSchema
 
     internal static void VerifyIntegrity(SqliteConnection database)
     {
-        if (!string.Equals(Scalar(database, "PRAGMA integrity_check") as string,
-                "ok", StringComparison.Ordinal))
+        if (!string.Equals(Scalar(database, "PRAGMA integrity_check") as string, "ok", StringComparison.Ordinal))
         {
             throw new InvalidDataException("The catalog failed SQLite integrity verification.");
         }
 
-        using var foreignKeys = database.CreateCommand("PRAGMA foreign_key_check");
-        using var badReference = foreignKeys.ExecuteReader();
+        using SqliteCommand foreignKeys = database.CreateCommand("PRAGMA foreign_key_check");
+        using SqliteDataReader badReference = foreignKeys.ExecuteReader();
         if (badReference.Read())
         {
             throw new InvalidDataException("The catalog contains invalid foreign key references.");
@@ -148,29 +141,25 @@ internal static class CatalogSchema
 
     internal static void VerifySchema(SqliteConnection database, int version)
     {
-        foreach (var (since, name, columns) in Tables)
+        foreach ((int since, string name, string columns) in Tables)
         {
             if (version < since)
             {
                 continue;
             }
 
-            using var command = database.CreateCommand(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
+            using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type='table' AND name=$name");
             command.Parameters.AddWithValue("$name", name);
-            if (command.ExecuteScalar() is not string definition ||
-                !definition.TrimEnd().EndsWith("STRICT", StringComparison.OrdinalIgnoreCase))
+            if (command.ExecuteScalar() is not string definition || !definition.TrimEnd().EndsWith("STRICT", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("The catalog schema is incompatible.");
             }
 
-            var requiredColumns = version >= 2 && name == "ingest_requests"
-                ? $"{columns}, revision"
-                : columns;
-            using var projection = database.CreateCommand($"SELECT {requiredColumns} FROM {name} LIMIT 0");
+            string requiredColumns = version >= 2 && name == "ingest_requests" ? $"{columns}, revision" : columns;
+            using SqliteCommand projection = database.CreateCommand($"SELECT {requiredColumns} FROM {name} LIMIT 0");
             try
             {
-                using var reader = projection.ExecuteReader();
+                using SqliteDataReader reader = projection.ExecuteReader();
             }
             catch (SqliteException exception)
             {
@@ -181,20 +170,19 @@ internal static class CatalogSchema
 
     private static void VerifyEnrichmentView(SqliteConnection database)
     {
-        using var definition = database.CreateCommand("""
-            SELECT sql FROM sqlite_master WHERE type = 'view'
-              AND name = 'eligible_enrichment_proposals'
-            """);
+        using SqliteCommand definition = database.CreateCommand("""
+                                                                SELECT sql FROM sqlite_master WHERE type = 'view'
+                                                                  AND name = 'eligible_enrichment_proposals'
+                                                                """);
         if (definition.ExecuteScalar() is not string)
         {
             throw new InvalidDataException("The enrichment eligibility view is missing.");
         }
 
-        using var projection = database.CreateCommand(
-            "SELECT source_id, proposal_id FROM eligible_enrichment_proposals LIMIT 0");
+        using SqliteCommand projection = database.CreateCommand("SELECT source_id, proposal_id FROM eligible_enrichment_proposals LIMIT 0");
         try
         {
-            using var reader = projection.ExecuteReader();
+            using SqliteDataReader reader = projection.ExecuteReader();
         }
         catch (SqliteException exception)
         {
@@ -204,7 +192,7 @@ internal static class CatalogSchema
 
     private static void VerifySearchSchema(SqliteConnection database)
     {
-        foreach (var (kind, name) in new (string Kind, string Name)[]
+        foreach ((string kind, string name) in new (string Kind, string Name)[]
         {
             ("table", "text_search"),
             ("view", "eligible_text_search"),
@@ -213,24 +201,21 @@ internal static class CatalogSchema
             ("trigger", "text_search_job_completed")
         })
         {
-            using var command = database.CreateCommand("""
-                SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
-                """);
+            using SqliteCommand command = database.CreateCommand("""
+                                                                 SELECT sql FROM sqlite_master WHERE type = $type AND name = $name
+                                                                 """);
             command.Parameters.AddWithValue("$type", kind);
             command.Parameters.AddWithValue("$name", name);
-            if (command.ExecuteScalar() is not string definition ||
-                (name == "text_search" &&
-                 !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase)))
+            if (command.ExecuteScalar() is not string definition || (name == "text_search" && !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase)))
             {
                 throw new InvalidDataException("The local search schema is incompatible.");
             }
         }
 
-        using var projection = database.CreateCommand(
-            "SELECT locator, content FROM text_search LIMIT 0");
+        using SqliteCommand projection = database.CreateCommand("SELECT locator, content FROM text_search LIMIT 0");
         try
         {
-            using var reader = projection.ExecuteReader();
+            using SqliteDataReader reader = projection.ExecuteReader();
         }
         catch (SqliteException exception)
         {
@@ -240,22 +225,21 @@ internal static class CatalogSchema
 
     private static string ReadSchema(string fileName)
     {
-        using var stream = typeof(CatalogSchema).Assembly
-            .GetManifestResourceStream($"Praxis.Storage.{fileName}")
-            ?? throw new InvalidOperationException("The catalog migration resource is missing.");
-        using var reader = new StreamReader(stream);
+        using Stream stream = typeof(CatalogSchema).Assembly.GetManifestResourceStream($"Praxis.Storage.{fileName}")
+                              ?? throw new InvalidOperationException("The catalog migration resource is missing.");
+        using StreamReader reader = new(stream);
         return reader.ReadToEnd();
     }
 
     private static object? Scalar(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand(sql);
+        using SqliteCommand command = connection.CreateCommand(sql);
         return command.ExecuteScalar();
     }
 
     private static void Execute(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand(sql);
+        using SqliteCommand command = connection.CreateCommand(sql);
         command.ExecuteNonQuery();
     }
 }

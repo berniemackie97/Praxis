@@ -1,4 +1,6 @@
-namespace Praxis.Storage;
+using Praxis.Storage.Catalog;
+
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Segments each revision's completed text so later processors can work on bounded,

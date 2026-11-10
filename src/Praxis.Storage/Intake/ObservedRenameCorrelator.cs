@@ -1,6 +1,7 @@
 using System.Text.Json;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Intake;
 
 /// <summary>
 /// Turns filesystem rename notifications inside the approved folder into source relocations
@@ -8,9 +9,7 @@ namespace Praxis.Storage;
 /// re-hashed and match the source's current revision. The event queue is bounded; overflow
 /// falls back to ordinary capture of the scanned paths.
 /// </summary>
-internal sealed class ObservedRenameCorrelator(
-    LocalCatalog catalog, LocalSourceIntake intake, string root,
-    Action<string> report, Action signal)
+internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSourceIntake intake, string root, Action<string> report, Action signal)
 {
     private const int MaximumPending = 128;
     private static readonly TimeSpan MaximumEventAge = TimeSpan.FromMinutes(1);
@@ -52,8 +51,7 @@ internal sealed class ObservedRenameCorrelator(
     }
 
     /// <summary>Applies queued renames within the hash budget; returns the bytes hashed.</summary>
-    internal async Task<long> ReconcileAsync(
-        IReadOnlyList<LocalObservedFile> files, long hashBudget, CancellationToken cancellationToken)
+    internal async Task<long> ReconcileAsync(IReadOnlyList<LocalObservedFile> files, long hashBudget, CancellationToken cancellationToken)
     {
         bool overflow;
         lock (gate)
@@ -72,8 +70,8 @@ internal sealed class ObservedRenameCorrelator(
             return 0;
         }
 
-        var byPath = files.ToDictionary(file => file.SourcePath, StringComparer.Ordinal);
-        var remaining = hashBudget;
+        Dictionary<string, LocalObservedFile> byPath = files.ToDictionary(file => file.SourcePath, StringComparer.Ordinal);
+        long remaining = hashBudget;
         while (TryPeek() is { } entry)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -83,7 +81,7 @@ internal sealed class ObservedRenameCorrelator(
                 continue;
             }
 
-            if (!byPath.TryGetValue(entry.Current, out var file))
+            if (!byPath.TryGetValue(entry.Current, out LocalObservedFile? file))
             {
                 // The destination no longer exists: a later event superseded this one.
                 Dequeue();
@@ -97,9 +95,7 @@ internal sealed class ObservedRenameCorrelator(
 
             Dequeue();
             remaining -= file.Length;
-            if (File.Exists(entry.Previous) || Directory.Exists(entry.Current) ||
-                IntakeFileRules.IsTemporaryName(entry.Current) ||
-                file.Length > IntakeFileRules.MaximumFileBytes)
+            if (File.Exists(entry.Previous) || Directory.Exists(entry.Current) || IntakeFileRules.IsTemporaryName(entry.Current) || file.Length > IntakeFileRules.MaximumFileBytes)
             {
                 continue;
             }
@@ -110,8 +106,7 @@ internal sealed class ObservedRenameCorrelator(
         return hashBudget - remaining;
     }
 
-    private async Task RelocateAsync(
-        PendingRename entry, LocalObservedFile file, CancellationToken cancellationToken)
+    private async Task RelocateAsync(PendingRename entry, LocalObservedFile file, CancellationToken cancellationToken)
     {
         try
         {
@@ -121,17 +116,15 @@ internal sealed class ObservedRenameCorrelator(
                 return;
             }
 
-            var digest = await IntakeFileRules.HashAsync(entry.Current, cancellationToken);
-            if (IntakeFileRules.IsStable(file) &&
-                catalog.Sources.RelocateObservedFile(entry.Previous, entry.Current, digest))
+            string digest = await IntakeFileRules.HashAsync(entry.Current, cancellationToken);
+            if (IntakeFileRules.IsStable(file) && catalog.Sources.RelocateObservedFile(entry.Previous, entry.Current, digest))
             {
                 report("Preserved file source identity after observed rename: " +
                     JsonSerializer.Serialize(entry.Previous) + " -> " +
                     JsonSerializer.Serialize(entry.Current));
             }
         }
-        catch (Exception exception) when (exception is IOException or
-            UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
         {
             report("Observed file move could not preserve identity: " +
                 JsonSerializer.Serialize(entry.Current) + ": " +
@@ -162,10 +155,8 @@ internal sealed class ObservedRenameCorrelator(
             return false;
         }
 
-        var relative = Path.GetRelativePath(root, Path.GetFullPath(path));
-        return relative != "." && !Path.IsPathRooted(relative) &&
-            relative != ".." &&
-            !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
-            !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+        string relative = Path.GetRelativePath(root, Path.GetFullPath(path));
+        return relative != "." && !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+               && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 }

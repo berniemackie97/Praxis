@@ -1,6 +1,7 @@
 using System.Text;
+using Praxis.Storage.Catalog;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Extracts strictly decoded UTF-8 text from verified originals with a supported text
@@ -30,7 +31,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingH
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var source = catalog.Text.ReadLeasedSource(lease);
+        LeasedTextSource? source = catalog.Text.ReadLeasedSource(lease);
         if (source is null)
         {
             return;
@@ -43,11 +44,10 @@ public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingH
             return;
         }
 
-        var extension = Path.GetExtension(source.Locator).ToLowerInvariant();
+        string extension = Path.GetExtension(source.Locator).ToLowerInvariant();
         if (!SupportedExtensions.Contains(extension, StringComparer.Ordinal))
         {
-            catalog.Text.CommitResult(lease, null,
-                extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
+            catalog.Text.CommitResult(lease, null, extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
             return;
         }
 
@@ -59,8 +59,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingH
 
         try
         {
-            var original = await catalog.Originals.ReadVerifiedBytesAsync(
-                source.Original, MaximumTextBytes, cancellationToken);
+            byte[] original = await catalog.Originals.ReadVerifiedBytesAsync(source.Original, MaximumTextBytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (HasNonTextSignature(original))
             {
@@ -68,9 +67,10 @@ public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingH
                 return;
             }
 
-            var offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
-                ? Encoding.UTF8.Preamble.Length : 0;
-            var text = StrictUtf8.GetString(original, offset, original.Length - offset);
+            int offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
+                ? Encoding.UTF8.Preamble.Length
+                : 0;
+            string text = StrictUtf8.GetString(original, offset, original.Length - offset);
             if (text.Any(c => (c < 0x20 && c is not ('\n' or '\r' or '\t')) ||
                 c == 0x7f))
             {
@@ -112,13 +112,7 @@ public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingH
         ReadOnlySpan<byte> machBigEndian = [0xfe, 0xed, 0xfa, 0xcf];
         ReadOnlySpan<byte> machUniversal = [0xca, 0xfe, 0xba, 0xbe];
 
-        return input.StartsWith("%PDF-"u8) ||
-               input.StartsWith(png) ||
-               input.StartsWith(zip) ||
-               input.StartsWith(elf) ||
-               input.StartsWith(gzip) ||
-               input.StartsWith(machLittleEndian) ||
-               input.StartsWith(machBigEndian) ||
-               input.StartsWith(machUniversal);
+        return input.StartsWith("%PDF-"u8) || input.StartsWith(png) || input.StartsWith(zip) || input.StartsWith(elf) || input.StartsWith(gzip)
+               || input.StartsWith(machLittleEndian) || input.StartsWith(machBigEndian) || input.StartsWith(machUniversal);
     }
 }

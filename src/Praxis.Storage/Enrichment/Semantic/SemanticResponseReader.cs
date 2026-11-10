@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Praxis.Inference;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Knowledge;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>
 /// Converts a model's structured answer for one segment into proposal candidates. An item is

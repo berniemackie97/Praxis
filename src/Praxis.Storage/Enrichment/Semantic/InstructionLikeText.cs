@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>
 /// Flags evidence whose sentence reads like an instruction to an AI model ("ignore previous

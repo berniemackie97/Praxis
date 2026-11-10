@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Enrichment.Semantic;
 
 /// <summary>
 /// Finds a model-quoted passage in the text it was given. An exact ordinal match wins;

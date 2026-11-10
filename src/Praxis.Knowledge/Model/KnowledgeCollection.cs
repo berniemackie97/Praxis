@@ -1,39 +1,29 @@
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Model;
 
 public sealed class KnowledgeCollection
 {
-    public KnowledgeCollection(
-        IEnumerable<NoteRecord> notes,
-        IEnumerable<AttachmentRecord> attachments,
-        IEnumerable<AttachmentReference> references,
-        IEnumerable<AttachmentReference>? vaultReferences = null)
+    public KnowledgeCollection(IEnumerable<NoteRecord> notes, IEnumerable<AttachmentRecord> attachments, IEnumerable<AttachmentReference> references, IEnumerable<AttachmentReference>? vaultReferences = null)
     {
         ArgumentNullException.ThrowIfNull(notes);
         ArgumentNullException.ThrowIfNull(attachments);
         ArgumentNullException.ThrowIfNull(references);
 
-        var noteArray = notes.ToArray();
-        var attachmentArray = attachments.ToArray();
-        var referenceArray = references.ToArray();
-        var vaultReferenceArray = vaultReferences?.ToArray();
+        NoteRecord[] noteArray = notes.ToArray();
+        AttachmentRecord[] attachmentArray = attachments.ToArray();
+        AttachmentReference[] referenceArray = references.ToArray();
+        AttachmentReference[]? vaultReferenceArray = vaultReferences?.ToArray();
 
-        var noteIds = new HashSet<Guid>();
-        var attachmentIds = new HashSet<Guid>();
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var note in noteArray)
+        HashSet<Guid> noteIds = new();
+        HashSet<Guid> attachmentIds = new();
+        HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
+        if (noteArray.Any(note => !noteIds.Add(note.Id) || !paths.Add(note.Current.Path)))
         {
-            if (note is null || !noteIds.Add(note.Id) || !paths.Add(note.Current.Path))
-            {
-                throw new ArgumentException("The collection contains duplicate or invalid notes.", nameof(notes));
-            }
+            throw new ArgumentException("The collection contains duplicate or invalid notes.", nameof(notes));
         }
 
-        foreach (var attachment in attachmentArray)
+        if (attachmentArray.Any(attachment => !attachmentIds.Add(attachment.Id) || !paths.Add(attachment.Path)))
         {
-            if (attachment is null || !attachmentIds.Add(attachment.Id) || !paths.Add(attachment.Path))
-            {
-                throw new ArgumentException("The collection contains duplicate or invalid attachments.", nameof(attachments));
-            }
+            throw new ArgumentException("The collection contains duplicate or invalid attachments.", nameof(attachments));
         }
 
         ValidateReferences(referenceArray, nameof(references));
@@ -44,16 +34,10 @@ public sealed class KnowledgeCollection
 
         void ValidateReferences(AttachmentReference[] values, string parameter)
         {
-            var links = new HashSet<AttachmentReference>();
-            foreach (var reference in values)
+            HashSet<AttachmentReference> links = new();
+            if (values.Any(reference => !noteIds.Contains(reference.NoteId) || !attachmentIds.Contains(reference.AttachmentId) || !links.Add(reference)))
             {
-                if (reference is null ||
-                    !noteIds.Contains(reference.NoteId) ||
-                    !attachmentIds.Contains(reference.AttachmentId) ||
-                    !links.Add(reference))
-                {
-                    throw new ArgumentException("An attachment reference must resolve exactly once.", parameter);
-                }
+                throw new ArgumentException("An attachment reference must resolve exactly once.", parameter);
             }
         }
 

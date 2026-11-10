@@ -1,8 +1,10 @@
 using System.Text;
-using Praxis.Knowledge;
+using Praxis.Knowledge.Archives;
+using Praxis.Knowledge.Model;
+using Praxis.Knowledge.Vaults;
 using Xunit;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Vaults;
 
 public sealed class VaultTrackedReferencesTests : IDisposable
 {
@@ -14,15 +16,15 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void VersionThreeRoundTripSeparatesExplicitAndVaultReferences()
     {
-        var note = NoteRecord.Create("note.md", "![[image.png]]");
-        var image = AttachmentRecord.Create("image.png", [1]);
-        var reference = new AttachmentReference(note.Id, image.Id);
-        var collection = new KnowledgeCollection([note], [image], [reference], [reference]);
-        using var stream = new MemoryStream();
+        NoteRecord note = NoteRecord.Create("note.md", "![[image.png]]");
+        AttachmentRecord image = AttachmentRecord.Create("image.png", [1]);
+        AttachmentReference reference = new(note.Id, image.Id);
+        KnowledgeCollection collection = new([note], [image], [reference], [reference]);
+        using MemoryStream stream = new();
 
         NoteArchive.WriteCollection(stream, collection);
         stream.Position = 0;
-        var result = NoteArchive.ReadCollection(stream);
+        KnowledgeCollection result = NoteArchive.ReadCollection(stream);
 
         Assert.Equal(reference, Assert.Single(result.References));
         Assert.Equal(reference, Assert.Single(result.VaultReferences!));
@@ -32,12 +34,12 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void VersionTwoArchiveRemainsUntrackedAfterRoundTrip()
     {
-        var collection = new KnowledgeCollection([NoteRecord.Create("note.md", "body")], [], []);
-        using var stream = new MemoryStream();
+        KnowledgeCollection collection = new([NoteRecord.Create("note.md", "body")], [], []);
+        using MemoryStream stream = new();
 
         NoteArchive.WriteCollection(stream, collection);
         stream.Position = 0;
-        var result = NoteArchive.ReadCollection(stream);
+        KnowledgeCollection result = NoteArchive.ReadCollection(stream);
 
         Assert.Null(result.VaultReferences);
     }
@@ -45,14 +47,14 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void InitialTrackedCaptureWritesNoSidecarAndKeepsSourceUntouched()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[assets/image.png]]");
         Put(source, "assets/image.png", "binary");
-        var baseline = Path.Combine(root, "first.zip");
-        var before = File.ReadAllBytes(Path.Combine(source, "note.md"));
+        string baseline = Path.Combine(root, "first.zip");
+        byte[] before = File.ReadAllBytes(Path.Combine(source, "note.md"));
 
         LocalVaultExchange.CaptureArchive(source, baseline, trackLinks: true);
-        var result = Read(baseline);
+        KnowledgeCollection result = Read(baseline);
 
         Assert.Single(result.VaultReferences!);
         Assert.Empty(result.References);
@@ -63,12 +65,12 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void UnchangedRescanRetainsTrackedPairsAndHistory()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[image.png]]");
         Put(source, "image.png", "binary");
-        var previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
+        KnowledgeCollection previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
 
-        var result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source));
+        VaultUpdate result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source));
 
         Assert.Empty(result.Changes);
         Assert.Equal(0, result.AddedLinks);
@@ -81,13 +83,13 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void AddingAnEmbedCreatesATrackedReferenceWithoutOptingInAgain()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "plain");
         Put(source, "a.png", "one");
-        var previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
+        KnowledgeCollection previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
         Put(source, "note.md", "![[a.png]]");
 
-        var result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source));
+        VaultUpdate result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source));
 
         Assert.Equal(1, result.AddedLinks);
         Assert.Equal(0, result.RemovedLinks);
@@ -98,28 +100,28 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void RemovingEmbedRequiresExplicitApprovalBeforePublishing()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[image.png]]");
         Put(source, "image.png", "data");
-        var firstPath = Path.Combine(root, "first.zip");
+        string firstPath = Path.Combine(root, "first.zip");
         LocalVaultExchange.CaptureArchive(source, firstPath, trackLinks: true);
-        var before = File.ReadAllBytes(firstPath);
+        byte[] before = File.ReadAllBytes(firstPath);
         Put(source, "note.md", "# Updated");
-        var nextPath = Path.Combine(root, "next.zip");
+        string nextPath = Path.Combine(root, "next.zip");
 
         Assert.Throws<InvalidOperationException>(() =>
             LocalVaultExchange.UpdateArchive(source, firstPath, nextPath));
         Assert.False(File.Exists(nextPath));
         Assert.Equal(before, File.ReadAllBytes(firstPath));
 
-        var plan = LocalVaultExchange.PlanUpdate(source, firstPath);
+        VaultUpdate plan = LocalVaultExchange.PlanUpdate(source, firstPath);
         Assert.Equal(1, plan.RemovedLinks);
         Assert.Empty(plan.Collection.VaultReferences!);
         Assert.False(File.Exists(nextPath));
 
         LocalVaultExchange.UpdateArchive(source, firstPath, nextPath,
             approvedLinkRemovals: plan.RemovedLinkPairs);
-        var updated = Read(nextPath);
+        KnowledgeCollection updated = Read(nextPath);
         Assert.NotNull(updated.VaultReferences);
         Assert.Empty(updated.VaultReferences);
         Assert.Equal(2, Assert.Single(updated.Notes).Revisions.Count);
@@ -128,16 +130,16 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void ExplicitReferenceRemainsAfterApprovedRemovalOfSameTrackedPair()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[image.png]]");
         Put(source, "image.png", "data");
-        var captured = LocalVaultExchange.Capture(source);
-        var reference = new AttachmentReference(captured.Notes[0].Id, captured.Attachments[0].Id);
-        var previous = LocalVaultAttachmentLinks.Track(new KnowledgeCollection(
+        KnowledgeCollection captured = LocalVaultExchange.Capture(source);
+        AttachmentReference reference = new(captured.Notes[0].Id, captured.Attachments[0].Id);
+        KnowledgeCollection previous = LocalVaultAttachmentLinks.Track(new KnowledgeCollection(
             captured.Notes, captured.Attachments, [reference]));
         Put(source, "note.md", "no embed");
 
-        var result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source),
+        VaultUpdate result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source),
             previewLinkRemovals: true);
 
         Assert.Empty(result.Collection.VaultReferences!);
@@ -148,17 +150,17 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void ApprovalMustExactlyMatchRemovedPairIdentifiers()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[first.png]]\n![[second.png]]");
         Put(source, "first.png", "one");
         Put(source, "second.png", "two");
-        var first = Path.Combine(root, "baseline.zip");
+        string first = Path.Combine(root, "baseline.zip");
         LocalVaultExchange.CaptureArchive(source, first, trackLinks: true);
         Put(source, "note.md", "no embeds");
-        var plan = LocalVaultExchange.PlanUpdate(source, first);
+        VaultUpdate plan = LocalVaultExchange.PlanUpdate(source, first);
         Assert.Equal(2, plan.RemovedLinks);
 
-        var output = Path.Combine(root, "incorrect.zip");
+        string output = Path.Combine(root, "incorrect.zip");
         Assert.Throws<InvalidOperationException>(() =>
             LocalVaultExchange.UpdateArchive(source, first, output,
                 approvedLinkRemovals: [plan.RemovedLinkPairs![0]]));
@@ -169,7 +171,7 @@ public sealed class VaultTrackedReferencesTests : IDisposable
                 approvedLinkRemovals: [plan.RemovedLinkPairs![0], plan.RemovedLinkPairs[0]]));
         Assert.False(File.Exists(output));
 
-        var alien = new AttachmentReference(Guid.NewGuid(), Guid.NewGuid());
+        AttachmentReference alien = new(Guid.NewGuid(), Guid.NewGuid());
         Assert.Throws<InvalidOperationException>(() =>
             LocalVaultExchange.UpdateArchive(source, first, output,
                 approvedLinkRemovals: [plan.RemovedLinkPairs![0], alien]));
@@ -183,18 +185,18 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void StaleApprovalCannotRemoveNewlyDisappearedReferences()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[first.png]]\n![[second.png]]");
         Put(source, "first.png", "one");
         Put(source, "second.png", "two");
-        var first = Path.Combine(root, "baseline.zip");
+        string first = Path.Combine(root, "baseline.zip");
         LocalVaultExchange.CaptureArchive(source, first, trackLinks: true);
 
         Put(source, "note.md", "![[second.png]]");
-        var plan = LocalVaultExchange.PlanUpdate(source, first);
+        VaultUpdate plan = LocalVaultExchange.PlanUpdate(source, first);
         Assert.Single(plan.RemovedLinkPairs!);
         Put(source, "note.md", "no embeds");
-        var output = Path.Combine(root, "changed-after-plan.zip");
+        string output = Path.Combine(root, "changed-after-plan.zip");
 
         Assert.Throws<InvalidOperationException>(() =>
             LocalVaultExchange.UpdateArchive(source, first, output,
@@ -205,15 +207,15 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void RenamingAttachmentAndUpdatingMarkdownPreservesTrackedIdentity()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[old.png]]");
         Put(source, "old.png", "data");
-        var previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
-        var priorId = Assert.Single(previous.Attachments).Id;
+        KnowledgeCollection previous = LocalVaultAttachmentLinks.Track(LocalVaultExchange.Capture(source));
+        Guid priorId = Assert.Single(previous.Attachments).Id;
         File.Move(Path.Combine(source, "old.png"), Path.Combine(source, "new.png"));
         Put(source, "note.md", "![[new.png]]");
 
-        var result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source),
+        VaultUpdate result = LocalVaultReconciler.Reconcile(previous, LocalVaultExchange.Capture(source),
             [new VaultRename("old.png", "new.png")]);
 
         Assert.Equal(priorId, Assert.Single(result.Collection.Attachments).Id);
@@ -225,15 +227,15 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void RenamedAttachmentWithStaleMarkdownCannotPublish()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[old.png]]");
         Put(source, "old.png", "data");
-        var first = Path.Combine(root, "first.zip");
+        string first = Path.Combine(root, "first.zip");
         LocalVaultExchange.CaptureArchive(source, first, trackLinks: true);
         File.Move(Path.Combine(source, "old.png"), Path.Combine(source, "new.png"));
-        var destination = Path.Combine(root, "second.zip");
+        string destination = Path.Combine(root, "second.zip");
 
-        var error = Assert.Throws<InvalidDataException>(() =>
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
             LocalVaultExchange.UpdateArchive(source, first, destination,
                 [new VaultRename("old.png", "new.png")]));
         Assert.Contains("old.png", error.Message);
@@ -244,13 +246,13 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void AmbiguousTrackedCaptureDoesNotPublishArchive()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[image.png]]");
         Put(source, "a/image.png", "one");
         Put(source, "b/image.png", "two");
-        var output = Path.Combine(root, "ambiguous.zip");
+        string output = Path.Combine(root, "ambiguous.zip");
 
-        var error = Assert.Throws<InvalidDataException>(() =>
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
             LocalVaultExchange.CaptureArchive(source, output, trackLinks: true));
 
         Assert.Contains("Multiple attachments match", error.Message);
@@ -260,25 +262,25 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void VersionTwoBaselineCanOptInWithoutLosingHistoryOrExplicitReferences()
     {
-        var source = Vault();
+        string source = Vault();
         Put(source, "note.md", "![[image.png]]");
         Put(source, "image.png", "data");
-        var first = Path.Combine(root, "legacy.zip");
+        string first = Path.Combine(root, "legacy.zip");
         LocalVaultExchange.CaptureArchive(source, first);
-        var baseline = Read(first);
+        KnowledgeCollection baseline = Read(first);
         Assert.Null(baseline.VaultReferences);
-        var reference = new AttachmentReference(baseline.Notes[0].Id, baseline.Attachments[0].Id);
-        var withExplicit = Path.Combine(root, "explicit.zip");
-        using (var output = File.Create(withExplicit))
+        AttachmentReference reference = new(baseline.Notes[0].Id, baseline.Attachments[0].Id);
+        string withExplicit = Path.Combine(root, "explicit.zip");
+        using (FileStream output = File.Create(withExplicit))
         {
             NoteArchive.WriteCollection(output, new KnowledgeCollection(
                 baseline.Notes, baseline.Attachments, [reference]));
         }
 
         Put(source, "note.md", "![[image.png]]\nsecond line");
-        var next = Path.Combine(root, "tracked.zip");
+        string next = Path.Combine(root, "tracked.zip");
         LocalVaultExchange.UpdateArchive(source, withExplicit, next, trackLinks: true);
-        var result = Read(next);
+        KnowledgeCollection result = Read(next);
 
         Assert.Equal(reference, Assert.Single(result.References));
         Assert.Equal(reference, Assert.Single(result.VaultReferences!));
@@ -290,9 +292,9 @@ public sealed class VaultTrackedReferencesTests : IDisposable
     [Fact]
     public void InvalidVaultReferencesAreRejectedBeforeArchivePublication()
     {
-        var note = NoteRecord.Create("note.md", "body");
-        var other = AttachmentRecord.Create("other.png", [1]);
-        var invalid = new AttachmentReference(note.Id, Guid.NewGuid());
+        NoteRecord note = NoteRecord.Create("note.md", "body");
+        AttachmentRecord other = AttachmentRecord.Create("other.png", [1]);
+        AttachmentReference invalid = new(note.Id, Guid.NewGuid());
         Assert.Throws<ArgumentException>(() =>
             new KnowledgeCollection([note], [other], [], [invalid]));
         Assert.Throws<ArgumentException>(() =>
@@ -303,21 +305,21 @@ public sealed class VaultTrackedReferencesTests : IDisposable
 
     private string Vault()
     {
-        var path = Path.Combine(root, "vault");
+        string path = Path.Combine(root, "vault");
         Directory.CreateDirectory(path);
         return path;
     }
 
     private static void Put(string directory, string relative, string content)
     {
-        var path = Path.Combine(directory, relative.Replace('/', Path.DirectorySeparatorChar));
+        string path = Path.Combine(directory, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, Encoding.UTF8.GetBytes(content));
     }
 
     private static KnowledgeCollection Read(string path)
     {
-        using var input = File.OpenRead(path);
+        using FileStream input = File.OpenRead(path);
         return NoteArchive.ReadCollection(input);
     }
 

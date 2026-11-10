@@ -3,9 +3,17 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Inference;
 using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Desktop;
+using Praxis.Storage.Enrichment.Semantic;
+using Praxis.Storage.Knowledge;
+using Praxis.Storage.Models;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Knowledge;
 
 public sealed class KnowledgeLayerTests : IDisposable
 {

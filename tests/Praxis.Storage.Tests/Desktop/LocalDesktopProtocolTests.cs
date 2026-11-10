@@ -1,8 +1,13 @@
 using System.Text.Json;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Desktop;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Library;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Desktop;
 
 public sealed class LocalDesktopProtocolTests : IDisposable
 {
@@ -12,8 +17,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Fact]
     public async Task LibrarySearchPreviewAndVerificationSharePreservedSources()
     {
-        var data = Path.Combine(root, "data");
-        var inbox = Path.Combine(root, "inbox");
+        string data = Path.Combine(root, "data");
+        string inbox = Path.Combine(root, "inbox");
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(inbox);
         if (!OperatingSystem.IsWindows())
@@ -24,41 +29,41 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         File.WriteAllText(Path.Combine(inbox, "memory.md"), "# project violet memory");
         File.WriteAllBytes(Path.Combine(inbox, "unknown.bin"), [0, 255, 17]);
-        using var catalog = LocalCatalog.Open(data);
-        var watcher = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
+        using LocalCatalog catalog = LocalCatalog.Open(data);
+        IntakeHarness watcher = new(catalog, inbox, TimeSpan.Zero);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow.AddSeconds(1));
-        var protocol = new LocalDesktopProtocol(catalog);
+        LocalDesktopProtocol protocol = new(catalog);
 
-        using var library = await Send(protocol,
+        using JsonDocument library = await Send(protocol,
             """{"requestId":"one","action":"library","limit":10}""");
         Assert.True(library.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(2, library.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
 
-        var text = Assert.Single(catalog.Library.List(), item =>
+        LocalLibraryItem text = Assert.Single(catalog.Library.List(), item =>
             item.SourceLocator.EndsWith("memory.md", StringComparison.Ordinal));
-        using var search = await Send(protocol,
+        using JsonDocument search = await Send(protocol,
             """{"requestId":"two","action":"search","query":"violet"}""");
         Assert.Equal(text.ItemId.ToString("D"), search.RootElement.GetProperty("data")
             .GetProperty("hits")[0].GetProperty("itemId").GetString());
 
-        using var preview = await Send(protocol,
+        using JsonDocument preview = await Send(protocol,
             $$"""{"requestId":"three","action":"preview","itemId":"{{text.ItemId:D}}","revision":1}""");
         Assert.Contains("violet", preview.RootElement.GetProperty("data")
             .GetProperty("content").GetString());
 
-        using var verified = await Send(protocol,
+        using JsonDocument verified = await Send(protocol,
             $$"""{"requestId":"four","action":"verify","itemId":"{{text.ItemId:D}}"}""");
         Assert.True(verified.RootElement.GetProperty("data")
             .GetProperty("verified").GetBoolean());
 
-        using var unsupported = await Send(protocol,
+        using JsonDocument unsupported = await Send(protocol,
             $$"""{"requestId":"five","action":"preview","itemId":"{{Assert.Single(catalog.Library.List(), item => item.SourceLocator.EndsWith("unknown.bin", StringComparison.Ordinal)).ItemId:D}}","revision":1}""");
         Assert.Equal("unsupported", unsupported.RootElement.GetProperty("data")
             .GetProperty("outcome").GetString());
 
-        using var removed = await Send(protocol,
+        using JsonDocument removed = await Send(protocol,
             $$"""{"requestId":"six","action":"revoke","sourceId":"{{text.SourceId:D}}"}""");
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("revoked").GetBoolean());
         Assert.Empty(catalog.Search.Query("violet"));
@@ -75,42 +80,42 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        using var original = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
-        var saved = await catalog.Originals.CaptureFileAsync(
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using MemoryStream original = new(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
+        CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "source.txt"), original, 100, "source");
-        var protocol = new LocalDesktopProtocol(catalog);
+        LocalDesktopProtocol protocol = new(catalog);
 
-        using var created = await Send(protocol,
+        using JsonDocument created = await Send(protocol,
             """{"requestId":"one","action":"collectionCreate","name":"Project"}""");
         Assert.True(created.RootElement.GetProperty("ok").GetBoolean());
-        var collectionId = created.RootElement.GetProperty("data")
+        string collectionId = created.RootElement.GetProperty("data")
             .GetProperty("collection").GetProperty("collectionId").GetString()!;
-        using var added = await Send(protocol,
+        using JsonDocument added = await Send(protocol,
             $$"""{"requestId":"two","action":"collectionAdd","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(added.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
-        using var filtered = await Send(protocol,
+        using JsonDocument filtered = await Send(protocol,
             $$"""{"requestId":"three","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(saved.ItemId.ToString("D"), filtered.RootElement
             .GetProperty("data").GetProperty("items")[0].GetProperty("itemId").GetString());
 
-        using var memberships = await Send(protocol,
+        using JsonDocument memberships = await Send(protocol,
             $$"""{"requestId":"four","action":"sourceCollections","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.Equal(collectionId, memberships.RootElement.GetProperty("data")
             .GetProperty("collectionIds")[0].GetString());
 
-        using var renamed = await Send(protocol,
+        using JsonDocument renamed = await Send(protocol,
             $$"""{"requestId":"five","action":"collectionRename","collectionId":"{{collectionId}}","name":"Archived Research"}""");
         Assert.True(renamed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
-        using var listed = await Send(protocol,
+        using JsonDocument listed = await Send(protocol,
             """{"requestId":"six","action":"collections"}""");
         Assert.Equal("Archived Research", listed.RootElement.GetProperty("data")
             .GetProperty("collections")[0].GetProperty("name").GetString());
 
-        using var removed = await Send(protocol,
+        using JsonDocument removed = await Send(protocol,
             $$"""{"requestId":"seven","action":"collectionRemove","collectionId":"{{collectionId}}","sourceId":"{{saved.SourceId:D}}"}""");
         Assert.True(removed.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
-        using var empty = await Send(protocol,
+        using JsonDocument empty = await Send(protocol,
             $$"""{"requestId":"eight","action":"library","collectionId":"{{collectionId}}"}""");
         Assert.Equal(0, empty.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
@@ -120,8 +125,8 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Fact]
     public async Task PrivateQuickCaptureProtocolPreservesAndIndexesTheSubmittedNote()
     {
-        var data = Path.Combine(root, "data");
-        var inbox = Path.Combine(root, "inbox");
+        string data = Path.Combine(root, "data");
+        string inbox = Path.Combine(root, "inbox");
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(inbox);
         if (!OperatingSystem.IsWindows())
@@ -132,23 +137,23 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(data);
-        var service = new LocalDesktopProtocol(catalog, new LocalQuickCapture(catalog, inbox));
-        var captureId = Guid.NewGuid();
-        var payload =
+        using LocalCatalog catalog = LocalCatalog.Open(data);
+        LocalDesktopProtocol service = new(catalog, new LocalQuickCapture(catalog, inbox));
+        Guid captureId = Guid.NewGuid();
+        string payload =
             $$"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";
-        using var saved = await Send(service, payload);
+        using JsonDocument saved = await Send(service, payload);
         Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
-        var source = saved.RootElement.GetProperty("data")
+        JsonElement source = saved.RootElement.GetProperty("data")
             .GetProperty("capture").GetProperty("original");
-        var itemId = source.GetProperty("itemId").GetString();
-        var originalDigest = source.GetProperty("sha256").GetString();
-        var filename = saved.RootElement.GetProperty("data")
+        string? itemId = source.GetProperty("itemId").GetString();
+        string? originalDigest = source.GetProperty("sha256").GetString();
+        string? filename = saved.RootElement.GetProperty("data")
             .GetProperty("capture").GetProperty("sourcePath").GetString();
         Assert.Equal("# Inbox Thought\n\nA violet first thought.", File.ReadAllText(filename!));
         Assert.Equal(itemId, Assert.Single(catalog.Library.List()).ItemId.ToString("D"));
 
-        using var retried = await Send(service, payload);
+        using JsonDocument retried = await Send(service, payload);
         Assert.Equal(itemId, retried.RootElement.GetProperty("data")
             .GetProperty("capture").GetProperty("original")
             .GetProperty("itemId").GetString());
@@ -156,7 +161,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal(originalDigest, Assert.Single(catalog.Search.Query("violet")).OriginalSha256);
 
-        using var mismatch = await Send(service,
+        using JsonDocument mismatch = await Send(service,
             $$"""{"requestId":"mismatch","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"Another body"}""");
         Assert.False(mismatch.RootElement.GetProperty("ok").GetBoolean());
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
@@ -172,9 +177,9 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        var protocol = new LocalDesktopProtocol(catalog);
-        using var response = await Send(protocol,
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalDesktopProtocol protocol = new(catalog);
+        using JsonDocument response = await Send(protocol,
             $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
         Assert.Empty(catalog.Library.List());
@@ -183,7 +188,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Fact]
     public async Task ReviewTopicsThroughTrustedSessionWithoutChangingCanonicalSources()
     {
-        var data = Path.Combine(root, "catalog");
+        string data = Path.Combine(root, "catalog");
         Directory.CreateDirectory(data);
         if (!OperatingSystem.IsWindows())
         {
@@ -191,45 +196,45 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(data);
-        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using MemoryStream stream = new(System.Text.Encoding.UTF8.GetBytes(
             "# Evidence Topic\nOriginal retained"));
-        var captured = await catalog.Originals.CaptureFileAsync(
+        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "topic.md"), stream, 4_096, "topic");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        var protocol = new LocalDesktopProtocol(catalog);
+        LocalDesktopProtocol protocol = new(catalog);
 
-        using var listing = await Send(protocol,
+        using JsonDocument listing = await Send(protocol,
             $$"""{"requestId":"topics","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
         Assert.True(listing.RootElement.GetProperty("ok").GetBoolean());
-        var proposal = listing.RootElement.GetProperty("data").GetProperty("proposals")[0];
-        var id = proposal.GetProperty("proposalId").GetString()!;
+        JsonElement proposal = listing.RootElement.GetProperty("data").GetProperty("proposals")[0];
+        string id = proposal.GetProperty("proposalId").GetString()!;
         Assert.Equal("Evidence Topic", proposal.GetProperty("value").GetString());
         Assert.Equal(captured.Sha256, proposal.GetProperty("sourceSha256").GetString());
         Assert.Equal("markdown-heading-v1", proposal.GetProperty("producer").GetString());
         Assert.Equal("generated", listing.RootElement.GetProperty("data")
             .GetProperty("outcome").GetString());
 
-        using var approved = await Send(protocol,
+        using JsonDocument approved = await Send(protocol,
             $$"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");
         Assert.True(approved.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
-        using var correction = await Send(protocol,
+        using JsonDocument correction = await Send(protocol,
             $$"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
         Assert.True(correction.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         Assert.Equal("Verified owner topic",
             Assert.Single(catalog.Proposals.List(captured.SourceId)).Correction);
 
-        using var invalid = await Send(protocol,
+        using JsonDocument invalid = await Send(protocol,
             $$"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
 
         Assert.True(catalog.Sources.Revoke(captured.SourceId));
-        using var withheld = await Send(protocol,
+        using JsonDocument withheld = await Send(protocol,
             $$"""{"requestId":"withheld","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
         Assert.Equal(0, withheld.RootElement.GetProperty("data")
             .GetProperty("proposals").GetArrayLength());
-        using var stale = await Send(protocol,
+        using JsonDocument stale = await Send(protocol,
             $$"""{"requestId":"stale","action":"topicReview","proposalId":"{{id}}","decision":"rejected"}""");
         Assert.False(stale.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         await catalog.Originals.VerifyAsync(captured.ItemId);
@@ -238,24 +243,24 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Fact]
     public async Task PrivateDesktopExportsVerifiedBinaryWithoutExposingCatalogPaths()
     {
-        var data = Path.Combine(root, "data");
-        var exports = Path.Combine(root, "exports");
+        string data = Path.Combine(root, "data");
+        string exports = Path.Combine(root, "exports");
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(exports);
         if (!OperatingSystem.IsWindows())
         {
-            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
             File.SetUnixFileMode(data, mode);
             File.SetUnixFileMode(exports, mode);
         }
 
-        using var catalog = LocalCatalog.Open(data);
-        using var input = new MemoryStream(new byte[] { 0, 255, 17, 42, 99 });
-        var captured = await catalog.Originals.CaptureFileAsync(
+        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using MemoryStream input = new([0, 255, 17, 42, 99]);
+        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "missing", "binary.bin"), input, 100, "original");
-        var protocol = new LocalDesktopProtocol(catalog);
-        var destination = Path.Combine(exports, "recovered.bin");
-        var request = JsonSerializer.Serialize(new
+        LocalDesktopProtocol protocol = new(catalog);
+        string destination = Path.Combine(exports, "recovered.bin");
+        string request = JsonSerializer.Serialize(new
         {
             requestId = "export",
             action = "exportOriginal",
@@ -264,19 +269,19 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             destinationPath = destination
         });
 
-        using var response = await Send(protocol, request);
+        using JsonDocument response = await Send(protocol, request);
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
-        var receipt = response.RootElement.GetProperty("data").GetProperty("exported");
+        JsonElement receipt = response.RootElement.GetProperty("data").GetProperty("exported");
         Assert.Equal(captured.Sha256, receipt.GetProperty("sha256").GetString());
         Assert.Equal(captured.Length, receipt.GetProperty("length").GetInt64());
         Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
 
-        using var repeated = await Send(protocol, request);
+        using JsonDocument repeated = await Send(protocol, request);
         Assert.False(repeated.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(new byte[] { 0, 255, 17, 42, 99 }, File.ReadAllBytes(destination));
 
         Assert.True(catalog.Sources.Revoke(captured.SourceId));
-        var revokedRequest = JsonSerializer.Serialize(new
+        string revokedRequest = JsonSerializer.Serialize(new
         {
             requestId = "denied",
             action = "exportOriginal",
@@ -284,7 +289,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             revision = 1,
             destinationPath = Path.Combine(exports, "blocked.bin")
         });
-        using var revoked = await Send(protocol, revokedRequest);
+        using JsonDocument revoked = await Send(protocol, revokedRequest);
         Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
         Assert.False(File.Exists(Path.Combine(exports, "blocked.bin")));
     }
@@ -299,38 +304,38 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        var intake = new IntakeHarness(catalog,
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        IntakeHarness intake = new(catalog,
             Path.Combine(root, "not-started"), TimeSpan.Zero);
-        var service = new LocalDesktopProtocol(catalog, monitor: intake.Monitor, processing: intake.Processing);
+        LocalDesktopProtocol service = new(catalog, monitor: intake.Monitor, processing: intake.Processing);
 
-        using var initial = await Send(service,
+        using JsonDocument initial = await Send(service,
             """{"requestId":"initial","action":"intakeStatus"}""");
         Assert.Equal("starting", initial.RootElement.GetProperty("data")
             .GetProperty("status").GetProperty("state").GetString());
 
-        using var paused = await Send(service,
+        using JsonDocument paused = await Send(service,
             """{"requestId":"pause","action":"intakePause","paused":true}""");
         Assert.True(paused.RootElement.GetProperty("ok").GetBoolean());
         Assert.True(paused.RootElement.GetProperty("data")
             .GetProperty("status").GetProperty("paused").GetBoolean());
 
-        using var retried = await Send(service,
+        using JsonDocument retried = await Send(service,
             """{"requestId":"retry","action":"intakeRescan"}""");
         Assert.Equal("paused", retried.RootElement.GetProperty("data")
             .GetProperty("status").GetProperty("state").GetString());
 
-        using var resumed = await Send(service,
+        using JsonDocument resumed = await Send(service,
             """{"requestId":"resume","action":"intakePause","paused":false}""");
         Assert.False(resumed.RootElement.GetProperty("data")
             .GetProperty("status").GetProperty("paused").GetBoolean());
 
-        using var malformed = await Send(service,
+        using JsonDocument malformed = await Send(service,
             """{"requestId":"malformed","action":"intakePause","paused":"true"}""");
         Assert.False(malformed.RootElement.GetProperty("ok").GetBoolean());
 
-        var unconfigured = new LocalDesktopProtocol(catalog);
-        using var denied = await Send(unconfigured,
+        LocalDesktopProtocol unconfigured = new(catalog);
+        using JsonDocument denied = await Send(unconfigured,
             """{"requestId":"denied","action":"intakeStatus"}""");
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
     }
@@ -338,47 +343,47 @@ public sealed class LocalDesktopProtocolTests : IDisposable
     [Fact]
     public async Task DesktopShowsSourceMovementEvidenceOnlyWhileSourceIsActive()
     {
-        var data = Path.Combine(root, "data");
-        var inbox = Path.Combine(root, "inbox");
+        string data = Path.Combine(root, "data");
+        string inbox = Path.Combine(root, "inbox");
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(inbox);
         if (!OperatingSystem.IsWindows())
         {
-            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
             File.SetUnixFileMode(data, mode);
             File.SetUnixFileMode(inbox, mode);
         }
 
-        var previous = Path.Combine(inbox, "original.md");
-        var current = Path.Combine(inbox, "renamed.md");
+        string previous = Path.Combine(inbox, "original.md");
+        string current = Path.Combine(inbox, "renamed.md");
         File.WriteAllText(previous, "# Rename evidence");
-        using var catalog = LocalCatalog.Open(data);
-        var monitor = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
-        var time = DateTimeOffset.UtcNow;
+        using LocalCatalog catalog = LocalCatalog.Open(data);
+        IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(time);
         await monitor.ReconcileAsync(time.AddSeconds(1));
-        var source = Assert.Single(catalog.Library.List());
+        LocalLibraryItem source = Assert.Single(catalog.Library.List());
 
         File.Move(previous, current);
         monitor.Monitor.QueueRename(previous, current);
         await monitor.ReconcileAsync(time.AddSeconds(2));
 
-        var protocol = new LocalDesktopProtocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
-        using var listed = await Send(protocol,
+        LocalDesktopProtocol protocol = new(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
+        using JsonDocument listed = await Send(protocol,
             $$"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.True(listed.RootElement.GetProperty("ok").GetBoolean());
-        var move = listed.RootElement.GetProperty("data").GetProperty("moves")[0];
+        JsonElement move = listed.RootElement.GetProperty("data").GetProperty("moves")[0];
         Assert.Equal(previous, move.GetProperty("previousPath").GetString());
         Assert.Equal(current, move.GetProperty("currentPath").GetString());
         Assert.Equal(source.Sha256, move.GetProperty("sha256").GetString());
 
         Assert.True(catalog.Sources.Revoke(source.SourceId));
-        using var revoked = await Send(protocol,
+        using JsonDocument revoked = await Send(protocol,
             $$"""{"requestId":"revoked","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.Equal(0, revoked.RootElement.GetProperty("data")
             .GetProperty("moves").GetArrayLength());
 
-        using var invalid = await Send(protocol,
+        using JsonDocument invalid = await Send(protocol,
             """{"requestId":"invalid","action":"sourceMoves","sourceId":"bad"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
         await catalog.Originals.VerifyAsync(source.ItemId);
@@ -404,9 +409,9 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        var protocol = new LocalDesktopProtocol(catalog);
-        using var response = await Send(protocol, payload);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalDesktopProtocol protocol = new(catalog);
+        using JsonDocument response = await Send(protocol, payload);
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
     }
 
@@ -422,11 +427,11 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        var protocol = new LocalDesktopProtocol(catalog);
-        using var result = await Send(protocol, $$"""
-            {"requestId":"retired","action":"{{action}}"}
-            """);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalDesktopProtocol protocol = new(catalog);
+        using JsonDocument result = await Send(protocol, $$"""
+                                                           {"requestId":"retired","action":"{{action}}"}
+                                                           """);
         Assert.False(result.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("The desktop action is not supported.",
             result.RootElement.GetProperty("error").GetString());

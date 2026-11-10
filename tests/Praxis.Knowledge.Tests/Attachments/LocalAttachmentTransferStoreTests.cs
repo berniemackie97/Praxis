@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
-using Praxis.Knowledge;
+using Praxis.Knowledge.Attachments;
+using Praxis.Knowledge.Model;
 using Xunit;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Attachments;
 
 public sealed class LocalAttachmentTransferStoreTests : IDisposable
 {
@@ -17,15 +18,15 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void InterruptedTransferResumesFromOnDiskOffsetAndPublishesExactBytes()
     {
-        var content = new byte[] { 0, 255, 1, 2, 0, 42, 19 };
-        var digest = Hash(content);
-        var transferId = TransferId(1);
+        byte[] content = [0, 255, 1, 2, 0, 42, 19];
+        string digest = Hash(content);
+        Guid transferId = TransferId(1);
 
         Assert.Equal(new AttachmentTransferStatus(digest, content.Length, 0),
             store.Begin(transferId, digest, content.Length));
         Assert.Equal(3, store.Append(transferId, 0, content.AsSpan(0, 3)));
 
-        var reopened = new LocalAttachmentTransferStore(root);
+        LocalAttachmentTransferStore reopened = new(root);
         Assert.Equal(3, reopened.Status(transferId).Uploaded);
         Assert.Equal(3, reopened.Begin(transferId, digest, content.Length).Uploaded);
         Assert.Equal(content.Length, reopened.Append(transferId, 3, content.AsSpan(3)));
@@ -39,13 +40,13 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void RepeatedAcknowledgedChunkCannotDuplicateOrAlterBytes()
     {
-        var content = new byte[] { 1, 2, 3, 4, 5 };
-        var transferId = TransferId(2);
+        byte[] content = [1, 2, 3, 4, 5];
+        Guid transferId = TransferId(2);
         store.Begin(transferId, Hash(content), content.Length);
         Assert.Equal(3, store.Append(transferId, 0, content.AsSpan(0, 3)));
 
         Assert.Equal(3, store.Append(transferId, 0, content.AsSpan(0, 3)));
-        Assert.Throws<InvalidDataException>(() => store.Append(transferId, 0, new byte[] { 1, 2, 9 }));
+        Assert.Throws<InvalidDataException>(() => store.Append(transferId, 0, [1, 2, 9]));
         Assert.Throws<InvalidOperationException>(() => store.Append(transferId, 2, content.AsSpan(2, 2)));
         Assert.Equal(3, store.Status(transferId).Uploaded);
 
@@ -56,15 +57,15 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void LostCommitAcknowledgementCanCheckVerifiedPublishedContent()
     {
-        var content = new byte[] { 20, 30, 40 };
-        var digest = Hash(content);
-        var transferId = TransferId(3);
+        byte[] content = [20, 30, 40];
+        string digest = Hash(content);
+        Guid transferId = TransferId(3);
 
         store.Begin(transferId, digest, content.Length);
         store.Append(transferId, 0, content);
         store.Commit(transferId);
 
-        var restarted = new LocalAttachmentTransferStore(root);
+        LocalAttachmentTransferStore restarted = new(root);
         Assert.True(restarted.IsCommitted(digest, content.Length));
         Assert.Equal(content, restarted.ReadVerified(digest));
         Assert.Throws<FileNotFoundException>(() => restarted.Status(transferId));
@@ -73,9 +74,9 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void IncompleteTransferCannotBePublished()
     {
-        var content = new byte[] { 1, 2, 3 };
-        var digest = Hash(content);
-        var transferId = TransferId(4);
+        byte[] content = [1, 2, 3];
+        string digest = Hash(content);
+        Guid transferId = TransferId(4);
         store.Begin(transferId, digest, content.Length);
         store.Append(transferId, 0, content.AsSpan(0, 1));
 
@@ -87,9 +88,9 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void WrongDigestRetainsUncommittedBytesForInspection()
     {
-        var content = new byte[] { 1, 2, 3, 4 };
-        var wrongDigest = Hash(new byte[] { 9, 8, 7, 6 });
-        var transferId = TransferId(5);
+        byte[] content = [1, 2, 3, 4];
+        string wrongDigest = Hash([9, 8, 7, 6]);
+        Guid transferId = TransferId(5);
         store.Begin(transferId, wrongDigest, content.Length);
         store.Append(transferId, 0, content);
 
@@ -102,13 +103,13 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void StagedBytesChangedAfterAcknowledgementAreNotPublished()
     {
-        var content = new byte[] { 1, 2, 3, 4 };
-        var digest = Hash(content);
-        var transferId = TransferId(6);
+        byte[] content = [1, 2, 3, 4];
+        string digest = Hash(content);
+        Guid transferId = TransferId(6);
         store.Begin(transferId, digest, content.Length);
         store.Append(transferId, 0, content);
 
-        using (var corrupted = new FileStream(StagingPath(transferId),
+        using (FileStream corrupted = new(StagingPath(transferId),
             FileMode.Open, FileAccess.Write, FileShare.None))
         {
             corrupted.Position = 40 + 2;
@@ -123,9 +124,9 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void CorruptPublishedContentIsRejectedAndNeverOverwrittenByAnotherTransfer()
     {
-        var content = new byte[] { 1, 2, 3, 4 };
-        var digest = Hash(content);
-        var first = TransferId(7);
+        byte[] content = [1, 2, 3, 4];
+        string digest = Hash(content);
+        Guid first = TransferId(7);
         store.Begin(first, digest, content.Length);
         store.Append(first, 0, content);
         store.Commit(first);
@@ -134,7 +135,7 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
         Assert.Throws<InvalidDataException>(() => store.ReadVerified(digest));
         Assert.Throws<InvalidDataException>(() => store.IsCommitted(digest, content.Length));
 
-        var second = TransferId(8);
+        Guid second = TransferId(8);
         store.Begin(second, digest, content.Length);
         store.Append(second, 0, content);
         Assert.Throws<InvalidDataException>(() => store.Commit(second));
@@ -145,14 +146,14 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void ExistingPublishedBlobDoesNotMaskCorruptedNewStagingBytes()
     {
-        var content = new byte[] { 1, 2, 3 };
-        var digest = Hash(content);
-        var first = TransferId(17);
+        byte[] content = [1, 2, 3];
+        string digest = Hash(content);
+        Guid first = TransferId(17);
         store.Begin(first, digest, content.Length);
         store.Append(first, 0, content);
         store.Commit(first);
 
-        var second = TransferId(18);
+        Guid second = TransferId(18);
         store.Begin(second, digest, content.Length);
         store.Append(second, 0, [1, 2, 99]);
 
@@ -164,12 +165,12 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void TwoAttachmentIdentitiesCanShareOneCommittedPayload()
     {
-        var bytes = new byte[] { 5, 6, 7 };
-        var first = AttachmentRecord.Create("assets/a.bin", bytes);
-        var second = AttachmentRecord.Create("assets/b.bin", bytes);
-        var digest = first.Sha256;
-        var transferA = TransferId(9);
-        var transferB = TransferId(10);
+        byte[] bytes = [5, 6, 7];
+        AttachmentRecord first = AttachmentRecord.Create("assets/a.bin", bytes);
+        AttachmentRecord second = AttachmentRecord.Create("assets/b.bin", bytes);
+        string digest = first.Sha256;
+        Guid transferA = TransferId(9);
+        Guid transferB = TransferId(10);
 
         store.Begin(transferA, digest, bytes.Length);
         store.Begin(transferB, digest, bytes.Length);
@@ -188,9 +189,9 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void EmptyContentIsACompleteVerifiableTransfer()
     {
-        var digest = Hash([]);
-        var transferId = TransferId(11);
-        var status = store.Begin(transferId, digest, 0);
+        string digest = Hash([]);
+        Guid transferId = TransferId(11);
+        AttachmentTransferStatus status = store.Begin(transferId, digest, 0);
 
         Assert.Equal(0, status.Uploaded);
         Assert.Equal(digest, store.Commit(transferId));
@@ -201,9 +202,9 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void ExistingTransferCannotBeReassignedToAnotherDigestOrLength()
     {
-        var content = new byte[] { 1, 2 };
-        var digest = Hash(content);
-        var transferId = TransferId(12);
+        byte[] content = [1, 2];
+        string digest = Hash(content);
+        Guid transferId = TransferId(12);
         store.Begin(transferId, digest, content.Length);
         store.Append(transferId, 0, content.AsSpan(0, 1));
 
@@ -215,7 +216,7 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void CorruptStagingHeaderFailsExplicitlyInsteadOfBeingReset()
     {
-        var transferId = TransferId(13);
+        Guid transferId = TransferId(13);
         File.WriteAllBytes(StagingPath(transferId), [0x00, 0x01]);
 
         Assert.Throws<InvalidDataException>(() => store.Status(transferId));
@@ -226,8 +227,8 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void MissingOrOversizedChunksAndOffsetsAreRejected()
     {
-        var transferId = TransferId(14);
-        var bytes = new byte[LocalAttachmentTransferStore.MaxChunkBytes + 1];
+        Guid transferId = TransferId(14);
+        byte[] bytes = new byte[LocalAttachmentTransferStore.MaxChunkBytes + 1];
         store.Begin(transferId, Hash(bytes), bytes.Length);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => store.Append(transferId, 0, []));
@@ -240,7 +241,7 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void InvalidIdsDigestsAndSizesAreRejectedBeforeCreatingStagingData()
     {
-        var sha = Hash([1]);
+        string sha = Hash([1]);
         Assert.Throws<ArgumentException>(() => store.Begin(Guid.Empty, sha, 1));
         Assert.Throws<ArgumentException>(() => store.Begin(TransferId(15), "../escape", 1));
         Assert.Throws<ArgumentException>(() => store.Begin(TransferId(15), sha.ToUpperInvariant(), 1));
@@ -253,20 +254,20 @@ public sealed class LocalAttachmentTransferStoreTests : IDisposable
     [Fact]
     public void ClientCanResumeAfterPartialWriteByReReadingPhysicalOffset()
     {
-        var content = new byte[] { 10, 11, 12, 13 };
-        var digest = Hash(content);
-        var transferId = TransferId(16);
+        byte[] content = [10, 11, 12, 13];
+        string digest = Hash(content);
+        Guid transferId = TransferId(16);
         store.Begin(transferId, digest, content.Length);
         store.Append(transferId, 0, content.AsSpan(0, 2));
 
-        using (var stream = new FileStream(StagingPath(transferId),
+        using (FileStream stream = new(StagingPath(transferId),
             FileMode.Open, FileAccess.Write, FileShare.None))
         {
             stream.Position = 42;
             stream.WriteByte(content[2]);
         }
 
-        var restarted = new LocalAttachmentTransferStore(root);
+        LocalAttachmentTransferStore restarted = new(root);
         Assert.Equal(3, restarted.Status(transferId).Uploaded);
         Assert.Throws<InvalidOperationException>(() =>
             restarted.Append(transferId, 0, content));

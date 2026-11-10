@@ -1,13 +1,12 @@
-using Praxis.Storage.RecoveryCheck;
+using Praxis.Storage.RecoveryCheck.Verification;
 
 if (args.Length != 2 || args[0] is not ("--create" or "--verify"))
 {
-    Console.Error.WriteLine(
-        "Usage: Praxis.Storage.RecoveryCheck --create <scratch-directory> | --verify <check-workspace>");
+    Console.Error.WriteLine("Usage: Praxis.Storage.RecoveryCheck --create <scratch-directory> | --verify <check-workspace>");
     return 2;
 }
 
-using var cancellation = new CancellationTokenSource();
+using CancellationTokenSource cancellation = new();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
     eventArgs.Cancel = true;
@@ -18,7 +17,7 @@ try
 {
     if (args[0] == "--create")
     {
-        var workspace = await RecoveryCheck.CreateAsync(args[1], cancellation.Token);
+        string workspace = await RecoveryCheck.CreateAsync(args[1], cancellation.Token);
         Console.WriteLine("Created and verified: " + workspace);
     }
     else
