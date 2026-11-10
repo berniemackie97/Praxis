@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "corpus": "retrieval-corpus-v1.json",
+  "judgments": [
+    { "name": "exact-symbol", "domain": "technical", "query": "ParseMesh", "relevant": ["mesh"], "lexicalExpected": ["mesh"] },
+    { "name": "mesh-concept", "domain": "technical", "query": "triangulation geometry", "relevant": ["mesh"], "lexicalExpected": [] },
+    { "name": "terrain-terms", "domain": "technical", "query": "terrain atlas", "relevant": ["terrain"], "lexicalExpected": ["terrain"] },
+    { "name": "slope-concept", "domain": "technical", "query": "heightmap gradients", "relevant": ["terrain"], "lexicalExpected": [] },
+    { "name": "video-terms", "domain": "video", "query": "vertex buffer", "relevant": ["captions"], "lexicalExpected": ["captions"] },
+    { "name": "video-concept", "domain": "video", "query": "graphics drawing input", "relevant": ["captions"], "lexicalExpected": [] },
+    { "name": "duplicate-owners", "domain": "technical", "query": "orion duplicate", "relevant": ["duplicate-a", "duplicate-b"], "lexicalExpected": ["duplicate-a", "duplicate-b"] },
+    { "name": "orbit-concept", "domain": "technical", "query": "orbital physics", "relevant": ["conflict"], "lexicalExpected": [] },
+    { "name": "quoted-instructions", "domain": "safety", "query": "ignore previous", "relevant": ["injection"], "lexicalExpected": ["injection"] },
+    { "name": "missing-answer", "domain": "safety", "query": "nonexistentidentifier", "relevant": [], "lexicalExpected": [] },
+    { "name": "unsupported-finance", "domain": "finance", "query": "salary", "relevant": [], "lexicalExpected": [] },
+    { "name": "unsupported-pdf", "domain": "unsupported", "query": "pdf", "relevant": [], "lexicalExpected": [] },
+    { "name": "cross-source-evidence", "domain": "technical", "query": "vertex terrain", "relevant": ["captions", "terrain"], "lexicalExpected": [] },
+    { "name": "unanswerable-plan", "domain": "finance", "query": "savings proposal", "relevant": [], "lexicalExpected": [] }
+  ]
+}
