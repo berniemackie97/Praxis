@@ -12,8 +12,12 @@ internal sealed record SemanticSearchHit(LocalSearchHit Hit, double Similarity);
 /// A derived, model-versioned index over current active canonical text segments. No source
 /// authority lives here; every returned vector is joined against the current eligible evidence.
 /// </summary>
-public sealed class LocalSemanticIndex(CatalogDatabase database)
+public sealed class LocalSemanticIndex
 {
+    private readonly CatalogDatabase database;
+
+    internal LocalSemanticIndex(CatalogDatabase database) => this.database = database;
+
     private const int MaximumScanRows = 5_000;
     private sealed record Target(Guid ItemId, int Revision, int Ordinal, string Digest, string Text);
     private sealed record PendingVector(Target Target, byte[] Bytes, int Dimensions);
