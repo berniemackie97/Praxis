@@ -4,6 +4,11 @@ public sealed record RecipientWrappingKey(Guid DeviceId, byte[] SigningPublicKey
 public sealed record DeviceKeyEnvelope(Guid DeviceId, byte[] WrappedKey, byte[] Signature);
 public sealed record RecoveryKeyEnvelope(byte[] Nonce, byte[] CiphertextAndTag, byte[] Signature);
 
+/// <summary>Signed historical recovery ciphertext, never a decryption credential.</summary>
+public sealed record OwnerRecoveryArchive(
+    Guid SpaceId, long Epoch, Guid SignerDeviceId, byte[] KeyCommitment,
+    RecoveryKeyEnvelope Recovery);
+
 /// <summary>A signed, opaque key distribution submitted by an authorized owner device.</summary>
 public sealed record SpaceKeyPublication(
     Guid SpaceId,
