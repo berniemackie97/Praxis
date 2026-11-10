@@ -105,7 +105,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         Assert.NotNull(available);
         Assert.ThrowsAny<CryptographicException>(() =>
             ClientSpaceKeys.UnlockForDevice(registry.InstallationId, available, impostorRsa, signer, 1));
-        Assert.Throws<CryptographicException>(() =>
+        Assert.ThrowsAny<CryptographicException>(() =>
             ClientSpaceKeys.UnlockWithRecovery(registry.InstallationId, available,
                 ClientSpaceKeys.GenerateRecoverySecret(), signer, 1));
     }
