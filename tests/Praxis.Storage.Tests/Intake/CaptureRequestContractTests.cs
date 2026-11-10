@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
@@ -215,6 +216,29 @@ public sealed class CaptureRequestContractTests : IDisposable
         Assert.False(catalog.Sources.ReadProvenance(first.SourceId)!.RetryEligible);
         Assert.Empty(catalog.Search.Query("amber"));
         await catalog.Originals.VerifyAsync(first.ItemId);
+    }
+
+    [Fact]
+    public async Task WatchedSnapshotMismatchCannotCommitAFalseRevisionOrReceipt()
+    {
+        string path = Path.Combine(selectedRoot, "unstable.md");
+        File.WriteAllText(path, "initial source");
+        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        CapturedOriginal initial = await new LocalSourceIntake(catalog)
+            .ImportFileAsync(path, 100, "before-change");
+        File.WriteAllText(path, "changed source");
+        byte[] currentBytes = File.ReadAllBytes(path);
+        string earlierDigest = Convert.ToHexStringLower(SHA256.HashData("initial source"u8));
+        using MemoryStream stream = new(currentBytes);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            catalog.Originals.CaptureFileAsync(path, stream, 100, "watch-observation",
+                CaptureRequestContext.WatchedFolder(selectedRoot), default,
+                earlierDigest, currentBytes.Length));
+        Assert.Equal(1, catalog.Sources.ReadProvenance(initial.SourceId)!.Revision);
+        Assert.Single(catalog.Sources.ListCaptureReceipts(initial.SourceId));
+        Assert.Equal(initial.Sha256, catalog.Sources.ReadProvenance(initial.SourceId)!.OriginalSha256);
+        await catalog.Originals.VerifyAsync(initial.ItemId);
     }
 
     [Fact]
