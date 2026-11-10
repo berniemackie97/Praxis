@@ -26,7 +26,7 @@ internal readonly record struct RetrievalScore(double Recall, double Precision, 
             throw new InvalidDataException("Retrieval duplicated a canonical item.");
         }
 
-        int found = returned.Count(relevant.Contains);
+        int found = returned.Count(id => relevant.Contains(id));
         return new RetrievalScore(
             relevant.Count == 0 ? returned.Length == 0 ? 1 : 0 : (double)found / relevant.Count,
             returned.Length == 0 ? relevant.Count == 0 ? 1 : 0 : (double)found / returned.Length,
