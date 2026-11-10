@@ -32,6 +32,12 @@ internal static class SecuritySnapshotFiles
             {
                 throw new InvalidDataException("The security backup contains an unexpected or linked entry.");
             }
+
+            if (!OperatingSystem.IsWindows() &&
+                (File.GetUnixFileMode(entry) & ~SnapshotFiles.PrivateFile) != 0)
+            {
+                throw new UnauthorizedAccessException("Security backup files must be owner-private.");
+            }
         }
 
         if (expected.Count != 0)
