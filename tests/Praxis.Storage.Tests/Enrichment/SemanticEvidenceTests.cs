@@ -17,7 +17,7 @@ public sealed class SemanticEvidenceTests
     [Fact]
     public void ReflowedWhitespaceMapsBackToTheOriginalSpan()
     {
-        var span = EvidenceLocator.Find(Segment, "SQLite FTS5 with BM25");
+        (int Offset, int Length)? span = EvidenceLocator.Find(Segment, "SQLite FTS5 with BM25");
         Assert.NotNull(span);
         Assert.Equal("SQLite FTS5\n  with BM25", Segment.Substring(span.Value.Offset, span.Value.Length));
     }
@@ -44,7 +44,7 @@ public sealed class SemanticEvidenceTests
                {"name":"Praxis","type":"project","quote":"Praxis stores"}]}
             """;
 
-        var (accepted, rejected) = SemanticResponseReader.Read(json, Segment, segmentStart: 1_000);
+        (IReadOnlyList<ProposalCandidate> accepted, int rejected) = SemanticResponseReader.Read(json, Segment, segmentStart: 1_000);
 
         Assert.Equal(3, rejected);
         Assert.Equal(
@@ -59,8 +59,8 @@ public sealed class SemanticEvidenceTests
     [Fact]
     public void ItemsBeyondTheSchemaLimitsAreRejected()
     {
-        var topics = string.Join(',', Enumerable.Repeat("""{"name":"Praxis","quote":"Praxis stores"}""", 7));
-        var (accepted, rejected) = SemanticResponseReader.Read(
+        string topics = string.Join(',', Enumerable.Repeat("""{"name":"Praxis","quote":"Praxis stores"}""", 7));
+        (IReadOnlyList<ProposalCandidate> accepted, int rejected) = SemanticResponseReader.Read(
             $$"""{"topics":[{{topics}}],"entities":[]}""", Segment, 0);
 
         Assert.Equal(SemanticExtractionPrompt.MaximumTopics, accepted.Count);
@@ -73,7 +73,7 @@ public sealed class SemanticEvidenceTests
     [InlineData("""["topics","entities"]""")]
     public void MalformedOrOffSchemaAnswersAreInvalidResponses(string json)
     {
-        var exception = Assert.Throws<InferenceException>(() => SemanticResponseReader.Read(json, Segment, 0));
+        InferenceException exception = Assert.Throws<InferenceException>(() => SemanticResponseReader.Read(json, Segment, 0));
         Assert.Equal(InferenceFailure.InvalidResponse, exception.Failure);
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 
 namespace Praxis.Storage.Processing;
@@ -25,27 +26,27 @@ public sealed class LocalTextSegments
 
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT s.source_id, d.source_digest, g.ordinal, g.start_offset, g.length,
-                       g.heading_path, substr(d.content, g.start_offset + 1, g.length)
-                FROM text_segments g
-                JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
-                    AND j.processor_key = g.processor_key AND j.state = 'completed'
-                JOIN text_derivatives d ON d.item_id = g.item_id AND d.revision = g.revision
-                    AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = g.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE g.item_id = $item AND g.revision = $revision AND s.status = 'active'
-                  AND g.revision = (SELECT MAX(latest.revision) FROM item_versions latest
-                                    WHERE latest.item_id = g.item_id)
-                ORDER BY g.ordinal
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT s.source_id, d.source_digest, g.ordinal, g.start_offset, g.length,
+                                                                        g.heading_path, substr(d.content, g.start_offset + 1, g.length)
+                                                                 FROM text_segments g
+                                                                 JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
+                                                                     AND j.processor_key = g.processor_key AND j.state = 'completed'
+                                                                 JOIN text_derivatives d ON d.item_id = g.item_id AND d.revision = g.revision
+                                                                     AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
+                                                                 JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                                                                     AND v.digest = d.source_digest
+                                                                 JOIN items i ON i.item_id = g.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE g.item_id = $item AND g.revision = $revision AND s.status = 'active'
+                                                                   AND g.revision = (SELECT MAX(latest.revision) FROM item_versions latest
+                                                                                     WHERE latest.item_id = g.item_id)
+                                                                 ORDER BY g.ordinal
+                                                                 """);
             query.Parameters.AddWithValue("$item", itemId.ToString("D"));
             query.Parameters.AddWithValue("$revision", revision);
-            using var reader = query.ExecuteReader();
-            var segments = new List<TextSegment>();
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<TextSegment> segments = new List<TextSegment>();
             while (reader.Read())
             {
                 segments.Add(new TextSegment(
@@ -66,18 +67,18 @@ public sealed class LocalTextSegments
     {
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT g.start_offset, g.length, g.heading_path
-                FROM text_segments g
-                JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
-                    AND j.processor_key = g.processor_key AND j.state = 'completed'
-                WHERE g.item_id = $item AND g.revision = $revision
-                ORDER BY g.ordinal
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT g.start_offset, g.length, g.heading_path
+                                                                 FROM text_segments g
+                                                                 JOIN processing_jobs j ON j.item_id = g.item_id AND j.revision = g.revision
+                                                                     AND j.processor_key = g.processor_key AND j.state = 'completed'
+                                                                 WHERE g.item_id = $item AND g.revision = $revision
+                                                                 ORDER BY g.ordinal
+                                                                 """);
             query.Parameters.AddWithValue("$item", itemId.ToString("D"));
             query.Parameters.AddWithValue("$revision", revision);
-            using var reader = query.ExecuteReader();
-            var spans = new List<TextSegmentSpan>();
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<TextSegmentSpan> spans = new List<TextSegmentSpan>();
             while (reader.Read())
             {
                 spans.Add(new TextSegmentSpan(reader.GetInt32(0), reader.GetInt32(1),
@@ -91,8 +92,8 @@ public sealed class LocalTextSegments
     /// <summary>Stores the segments and completes the leased job in one transaction.</summary>
     internal bool Commit(ProcessingLease lease, LeasedText input, IReadOnlyList<TextSegmentSpan> segments)
     {
-        var expected = 0;
-        foreach (var segment in segments)
+        int expected = 0;
+        foreach (TextSegmentSpan segment in segments)
         {
             if (segment.Start != expected || segment.Length < 1)
             {
@@ -107,22 +108,22 @@ public sealed class LocalTextSegments
             throw new ArgumentException("Segments must cover the extracted text exactly.", nameof(segments));
         }
 
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
+            using SqliteTransaction transaction = connection.BeginTransaction();
             if (!LocalProcessingQueue.TryCompleteLeased(connection, transaction, lease, input.Digest, now))
             {
                 return false;
             }
 
-            for (var ordinal = 0; ordinal < segments.Count; ordinal++)
+            for (int ordinal = 0; ordinal < segments.Count; ordinal++)
             {
-                using var insert = connection.CreateCommand("""
-                    INSERT INTO text_segments
-                        (item_id, revision, processor_key, ordinal, start_offset, length, heading_path)
-                    VALUES ($item, $revision, $processor, $ordinal, $start, $length, $path)
-                    """);
+                using SqliteCommand insert = connection.CreateCommand("""
+                                                                      INSERT INTO text_segments
+                                                                          (item_id, revision, processor_key, ordinal, start_offset, length, heading_path)
+                                                                      VALUES ($item, $revision, $processor, $ordinal, $start, $length, $path)
+                                                                      """);
                 insert.Transaction = transaction;
                 ProcessingJobKey.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
                 insert.Parameters.AddWithValue("$ordinal", ordinal);

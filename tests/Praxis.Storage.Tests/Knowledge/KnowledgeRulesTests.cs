@@ -1,4 +1,5 @@
 using Praxis.Storage;
+using Praxis.Storage.Enrichment;
 using Praxis.Storage.Enrichment.Semantic;
 using Praxis.Storage.Knowledge;
 using Xunit;
@@ -59,9 +60,9 @@ public sealed class KnowledgeRulesTests
                {"subject":"PHY","predicate":"related_to","object":"phy","quote":"parses PHY chunks"}]}
             """;
 
-        var (accepted, rejected) = SemanticResponseReader.Read(json, segment, 100);
+        (IReadOnlyList<ProposalCandidate> accepted, int rejected) = SemanticResponseReader.Read(json, segment, 100);
 
-        var relations = accepted.Where(candidate => candidate.Kind == "relation").ToArray();
+        ProposalCandidate[] relations = accepted.Where(candidate => candidate.Kind == "relation").ToArray();
         Assert.Equal(
             [("C3Reader", "parses", "PHY"), ("C3Reader", "part_of", "OpenConquerClient")],
             relations.Select(relation => (relation.RelationSubject, relation.Value, relation.RelationObject)));
@@ -80,7 +81,7 @@ public sealed class KnowledgeRulesTests
                {"name":"Hacker Inc","type":"organization","quote":"an organization named Hacker Inc"}]}
             """;
 
-        var (accepted, _) = SemanticResponseReader.Read(json, segment, 0);
+        (IReadOnlyList<ProposalCandidate> accepted, _) = SemanticResponseReader.Read(json, segment, 0);
 
         Assert.Null(accepted.Single(candidate => candidate.Value == "Alex Rivera").Flags);
         Assert.Equal(InstructionLikeText.Flag, accepted.Single(candidate => candidate.Value == "Hacker Inc").Flags);

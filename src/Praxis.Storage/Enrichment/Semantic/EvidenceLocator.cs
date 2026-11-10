@@ -13,38 +13,38 @@ internal static class EvidenceLocator
 
     internal static (int Offset, int Length)? Find(string text, string quote)
     {
-        var trimmed = quote.Trim();
+        string trimmed = quote.Trim();
         if (trimmed.Length < MinimumQuote)
         {
             return null;
         }
 
-        var exact = text.IndexOf(trimmed, StringComparison.Ordinal);
+        int exact = text.IndexOf(trimmed, StringComparison.Ordinal);
         if (exact >= 0)
         {
             return (exact, trimmed.Length);
         }
 
-        var (normalizedText, map) = Collapse(text);
-        var (normalizedQuote, _) = Collapse(trimmed);
-        var found = normalizedText.IndexOf(normalizedQuote, StringComparison.Ordinal);
+        (string normalizedText, int[] map) = Collapse(text);
+        (string normalizedQuote, _) = Collapse(trimmed);
+        int found = normalizedText.IndexOf(normalizedQuote, StringComparison.Ordinal);
         if (found < 0)
         {
             return null;
         }
 
-        var start = map[found];
-        var end = map[found + normalizedQuote.Length - 1] + 1;
+        int start = map[found];
+        int end = map[found + normalizedQuote.Length - 1] + 1;
         return (start, end - start);
     }
 
     /// <summary>Collapses whitespace runs to one space, mapping each output char to its source index.</summary>
     private static (string Text, int[] Map) Collapse(string value)
     {
-        var builder = new StringBuilder(value.Length);
-        var map = new List<int>(value.Length);
-        var inWhitespace = false;
-        for (var index = 0; index < value.Length; index++)
+        StringBuilder builder = new StringBuilder(value.Length);
+        List<int> map = new List<int>(value.Length);
+        bool inWhitespace = false;
+        for (int index = 0; index < value.Length; index++)
         {
             if (char.IsWhiteSpace(value[index]))
             {

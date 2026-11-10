@@ -26,9 +26,9 @@ internal static partial class InstructionLikeText
     /// <summary>Checks the sentence(s) of <paramref name="text"/> that contain the evidence span.</summary>
     internal static bool Matches(string text, int offset, int length)
     {
-        var start = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, offset - 1)) + 1;
-        var endIndex = text.IndexOfAny(['.', '!', '?', '\n'], Math.Min(text.Length - 1, offset + length));
-        var end = endIndex < 0 ? text.Length : endIndex + 1;
+        int start = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, offset - 1)) + 1;
+        int endIndex = text.IndexOfAny(['.', '!', '?', '\n'], Math.Min(text.Length - 1, offset + length));
+        int end = endIndex < 0 ? text.Length : endIndex + 1;
         try
         {
             return Instruction().IsMatch(text.AsSpan(start, end - start));

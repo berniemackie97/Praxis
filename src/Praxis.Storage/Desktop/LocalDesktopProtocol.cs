@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Praxis.Inference;
+using Praxis.Inference.Ollama;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Models;
@@ -174,7 +175,9 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         {
             var failure = new
             {
-                requestId, ok = false, error = exception.Message
+                requestId,
+                ok = false,
+                error = exception.Message
             };
             return JsonSerializer.Serialize(failure, JsonOptions);
         }
@@ -214,7 +217,7 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
 
     private ModelProfile SaveModelProfile(DesktopRequestFields fields)
     {
-        var saved = catalog.Models.Save(new ModelProfile(
+        ModelProfile saved = catalog.Models.Save(new ModelProfile(
             ModelProfile.LocalEnrichment,
             fields.RequireString("provider", 32),
             fields.RequireString("endpoint", 256),
@@ -229,7 +232,7 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
     private static async Task<IReadOnlyList<InstalledModel>> ListLocalModelsAsync(
         DesktopRequestFields fields, CancellationToken cancellationToken)
     {
-        using var runtime = new OllamaRuntime(fields.RequireString("endpoint", 256), TimeSpan.FromSeconds(10));
+        using OllamaRuntime runtime = new OllamaRuntime(fields.RequireString("endpoint", 256), TimeSpan.FromSeconds(10));
         return await runtime.ListModelsAsync(cancellationToken);
     }
 
