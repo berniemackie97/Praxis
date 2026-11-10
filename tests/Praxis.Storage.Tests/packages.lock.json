@@ -128,10 +128,14 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "praxis.inference": {
+        "type": "Project"
+      },
       "praxis.storage": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Data.Sqlite": "[10.0.14, )"
+          "Microsoft.Data.Sqlite": "[10.0.14, )",
+          "Praxis.Inference": "[1.0.0, )"
         }
       },
       "Microsoft.Data.Sqlite": {

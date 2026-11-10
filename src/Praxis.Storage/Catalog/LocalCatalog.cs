@@ -1,8 +1,10 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Collections;
 using Praxis.Storage.Enrichment;
+using Praxis.Storage.Knowledge;
 using Praxis.Storage.Library;
 using Praxis.Storage.Media;
+using Praxis.Storage.Models;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Processing;
 using Praxis.Storage.Recovery;
@@ -29,11 +31,14 @@ public sealed class LocalCatalog : IDisposable
     public LocalLibrary Library { get; }
     public LocalProcessingQueue Processing { get; }
     public LocalTextDerivatives Text { get; }
+    public LocalTextSegments Segments { get; }
     public LocalTextSearch Search { get; }
-    public LocalTopicProposals Topics { get; }
+    public LocalProposals Proposals { get; }
+    public LocalKnowledge Knowledge { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
+    public LocalModelProfiles Models { get; }
 
     private LocalCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
     {
@@ -48,11 +53,14 @@ public sealed class LocalCatalog : IDisposable
         Originals = new LocalOriginals(database, objects, dataDirectory);
         Library = new LocalLibrary(database);
         Text = new LocalTextDerivatives(database);
+        Segments = new LocalTextSegments(database);
         Search = new LocalTextSearch(database);
-        Topics = new LocalTopicProposals(database);
+        Proposals = new LocalProposals(database);
+        Knowledge = new LocalKnowledge(database);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
+        Models = new LocalModelProfiles(database);
     }
 
     public static LocalCatalog Open(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);

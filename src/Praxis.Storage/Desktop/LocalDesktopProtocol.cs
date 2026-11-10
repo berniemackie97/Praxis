@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Praxis.Inference;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
+using Praxis.Storage.Models;
 using Praxis.Storage.Processing;
 
 namespace Praxis.Storage.Desktop;
@@ -92,12 +94,17 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                 "noteCapture" => await CaptureNoteAsync(fields, cancellationToken),
                 "topics" => new
                 {
-                    proposals = catalog.Topics.List(fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 40, 1, 100)),
-                    outcome = catalog.Topics.Outcome(fields.RequireGuid("sourceId"))
+                    proposals = catalog.Proposals.List(
+                        fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 40, 1, 100)),
+                    outcome = catalog.Proposals.Outcome(fields.RequireGuid("sourceId")),
+                    semanticOutcome = catalog.Proposals.Outcome(
+                        fields.RequireGuid("sourceId"), LocalProcessors.SemanticExtraction)
                 },
                 "topicReview" => new
                 {
-                    reviewed = catalog.Topics.Review(fields.RequireGuid("proposalId"), fields.RequireString("decision", 16),
+                    reviewed = catalog.Proposals.Review(
+                        fields.RequireGuid("proposalId"),
+                        fields.RequireString("decision", 16),
                         fields.OptionalText("correction", 80, "The review correction is invalid."))
                 },
                 "exportOriginal" => new
@@ -120,6 +127,36 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
                 "retry" => Retry(fields),
+                "entities" => new
+                {
+                    entities = catalog.Knowledge.ListEntities(
+                        fields.OptionalText("entityType", 32, "The entity type is invalid."),
+                        fields.OptionalText("search", 120, "The entity search is invalid."),
+                        fields.IntegerOrDefault("limit", 100, 1, 500))
+                },
+                "entity" => new { entity = catalog.Knowledge.GetEntity(fields.RequireGuid("entityId")) },
+                "entityRename" => new
+                {
+                    changed = catalog.Knowledge.Rename(fields.RequireGuid("entityId"), fields.RequireString("name", 120))
+                },
+                "entitySetType" => new
+                {
+                    changed = catalog.Knowledge.SetType(fields.RequireGuid("entityId"), fields.RequireString("entityType", 32))
+                },
+                "entityMerge" => new
+                {
+                    changed = catalog.Knowledge.Merge(fields.RequireGuid("entityId"), fields.RequireGuid("targetEntityId"))
+                },
+                "entityReject" => new { changed = catalog.Knowledge.Reject(fields.RequireGuid("entityId")) },
+                "entityRestore" => new { changed = catalog.Knowledge.Restore(fields.RequireGuid("entityId")) },
+                "entityRelate" => new
+                {
+                    relationId = catalog.Knowledge.Relate(fields.RequireGuid("entityId"),
+                        fields.RequireString("predicate", 32), fields.RequireGuid("targetEntityId"))
+                },
+                "modelProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEnrichment) },
+                "modelProfileSave" => new { profile = SaveModelProfile(fields) },
+                "localModels" => new { models = await ListLocalModelsAsync(fields, cancellationToken) },
                 "revoke" => new
                 {
                     revoked = catalog.Sources.Revoke(fields.RequireGuid("sourceId"))
@@ -130,8 +167,10 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
             return JsonSerializer.Serialize(new { requestId, ok = true, data = result },
                 JsonOptions);
         }
-        catch (Exception exception) when (exception is ArgumentException or JsonException or InvalidOperationException or IOException
-            or InvalidDataException or UnauthorizedAccessException or KeyNotFoundException or NotSupportedException)
+        catch (Exception exception) when (exception is ArgumentException
+            or JsonException or InvalidOperationException or IOException
+            or InvalidDataException or UnauthorizedAccessException
+            or KeyNotFoundException or NotSupportedException or InferenceException)
         {
             var failure = new
             {
@@ -171,6 +210,27 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                 fields.RequireString("text", 8_000), cancellationToken);
         processing?.Wake();
         return new { capture };
+    }
+
+    private ModelProfile SaveModelProfile(DesktopRequestFields fields)
+    {
+        var saved = catalog.Models.Save(new ModelProfile(
+            ModelProfile.LocalEnrichment,
+            fields.RequireString("provider", 32),
+            fields.RequireString("endpoint", 256),
+            fields.RequireString("model", 200),
+            fields.IntegerOrDefault("contextTokens", 16_384, 2_048, 262_144),
+            fields.RequireBoolean("enabled")));
+        // A model change applies to the next job; waking clears any runtime backoff.
+        processing?.Wake();
+        return saved;
+    }
+
+    private static async Task<IReadOnlyList<InstalledModel>> ListLocalModelsAsync(
+        DesktopRequestFields fields, CancellationToken cancellationToken)
+    {
+        using var runtime = new OllamaRuntime(fields.RequireString("endpoint", 256), TimeSpan.FromSeconds(10));
+        return await runtime.ListModelsAsync(cancellationToken);
     }
 
     private object Retry(DesktopRequestFields fields)

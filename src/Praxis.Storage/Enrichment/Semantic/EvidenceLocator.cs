@@ -1,0 +1,68 @@
+using System.Text;
+
+namespace Praxis.Storage.Enrichment.Semantic;
+
+/// <summary>
+/// Finds a model-quoted passage in the text it was given. An exact ordinal match wins;
+/// otherwise runs of whitespace are treated as equivalent, which tolerates reflowed line
+/// breaks but never changed words. Returns the span in the original text, or null.
+/// </summary>
+internal static class EvidenceLocator
+{
+    internal const int MinimumQuote = 3;
+
+    internal static (int Offset, int Length)? Find(string text, string quote)
+    {
+        var trimmed = quote.Trim();
+        if (trimmed.Length < MinimumQuote)
+        {
+            return null;
+        }
+
+        var exact = text.IndexOf(trimmed, StringComparison.Ordinal);
+        if (exact >= 0)
+        {
+            return (exact, trimmed.Length);
+        }
+
+        var (normalizedText, map) = Collapse(text);
+        var (normalizedQuote, _) = Collapse(trimmed);
+        var found = normalizedText.IndexOf(normalizedQuote, StringComparison.Ordinal);
+        if (found < 0)
+        {
+            return null;
+        }
+
+        var start = map[found];
+        var end = map[found + normalizedQuote.Length - 1] + 1;
+        return (start, end - start);
+    }
+
+    /// <summary>Collapses whitespace runs to one space, mapping each output char to its source index.</summary>
+    private static (string Text, int[] Map) Collapse(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        var map = new List<int>(value.Length);
+        var inWhitespace = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            if (char.IsWhiteSpace(value[index]))
+            {
+                if (!inWhitespace)
+                {
+                    builder.Append(' ');
+                    map.Add(index);
+                    inWhitespace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(value[index]);
+            map.Add(index);
+            inWhitespace = false;
+        }
+
+        return (builder.ToString(), map.ToArray());
+    }
+}

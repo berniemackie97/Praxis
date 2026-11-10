@@ -223,7 +223,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             $$"""{"requestId":"correction","action":"topicReview","proposalId":"{{id}}","decision":"corrected","correction":"Verified owner topic"}""");
         Assert.True(correction.RootElement.GetProperty("data").GetProperty("reviewed").GetBoolean());
         Assert.Equal("Verified owner topic",
-            Assert.Single(catalog.Topics.List(captured.SourceId)).Correction);
+            Assert.Single(catalog.Proposals.List(captured.SourceId)).Correction);
 
         using JsonDocument invalid = await Send(protocol,
             $$"""{"requestId":"invalid","action":"topicReview","proposalId":"{{id}}","decision":"run"}""");

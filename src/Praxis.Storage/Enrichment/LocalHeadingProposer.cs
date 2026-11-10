@@ -7,7 +7,7 @@ namespace Praxis.Storage.Enrichment;
 /// Deterministic topic proposals from literal first- to third-level Markdown headings of
 /// verified extracted text. Non-Markdown sources are marked unsupported; no model is used.
 /// </summary>
-public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingHandler
+public sealed class LocalHeadingProposer(LocalCatalog catalog) : ILocalProcessingHandler
 {
     public string ProcessorKey => LocalProcessors.MarkdownHeadings;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
@@ -18,7 +18,7 @@ public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingH
     public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        TopicCandidate? candidate = catalog.Topics.ReadLeasedCandidate(lease);
+        LeasedText? candidate = catalog.Text.ReadLeasedInput(lease);
         if (candidate is null)
         {
             return Task.CompletedTask;
@@ -31,13 +31,13 @@ public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingH
             return Task.CompletedTask;
         }
 
-        catalog.Topics.CommitCandidates(lease, candidate, ExtractHeadings(candidate.Content));
+        catalog.Proposals.Commit(lease, candidate, ExtractHeadings(candidate.Content));
         return Task.CompletedTask;
     }
 
-    private static IReadOnlyList<TopicEvidence> ExtractHeadings(string text)
+    private static IReadOnlyList<ProposalCandidate> ExtractHeadings(string text)
     {
-        List<TopicEvidence> headings = new(8);
+        List<ProposalCandidate> headings = new(8);
         bool fenced = false;
         for (int offset = 0; offset < text.Length && headings.Count < 8;)
         {
@@ -79,7 +79,8 @@ public sealed class LocalTopicProposer(LocalCatalog catalog) : ILocalProcessingH
                     ReadOnlySpan<char> value = fragment[start..].TrimEnd();
                     if (value.Length is >= 3 and <= 80 && value.ToString().Any(char.IsLetterOrDigit))
                     {
-                        headings.Add(new TopicEvidence(value.ToString(), offset + indent + start));
+                        headings.Add(new ProposalCandidate("topic", null, value.ToString(),
+                            offset + indent + start, value.Length));
                     }
                 }
             }

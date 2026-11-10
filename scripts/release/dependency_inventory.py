@@ -42,6 +42,16 @@ def package_license(cache, package, version):
     return {"kind": "unknown", "value": ""}
 
 
+def project_closure(project, references):
+    closure, pending = set(), list(references.get(project, []))
+    while pending:
+        path = pending.pop()
+        if path not in closure:
+            closure.add(path)
+            pending.extend(references.get(path, []))
+    return closure
+
+
 def generate(root=ROOT, cache=None):
     root = Path(root)
     cache = Path(cache or os.environ.get("NUGET_PACKAGES", Path.home() / ".nuget/packages"))
@@ -61,14 +71,23 @@ def generate(root=ROOT, cache=None):
     if not projects:
         raise ValueError("The solution contains no projects.")
 
+    references = {}
+    for project in projects:
+        project_path = root / project
+        model = ET.parse(project_path).getroot()
+        references[project] = sorted(
+            (project_path.parent / item.attrib["Include"].replace("\\", "/")).resolve()
+            .relative_to(root.resolve()).as_posix()
+            for item in children(model, "ProjectReference"))
+
     package_rows = {}
     for project in projects:
         project_path = root / project
         name = Path(project).parent.as_posix()
         model = ET.parse(project_path).getroot()
         direct = {item.attrib["Include"].lower() for item in children(model, "PackageReference")}
-        linked = {Path(item.attrib["Include"].replace("\\", "/")).stem.lower()
-                  for item in children(model, "ProjectReference")}
+        # NuGet locks every project in the reference closure, not only direct references.
+        linked = {Path(path).stem.lower() for path in project_closure(project, references)}
         if not direct.issubset(central):
             raise ValueError(f"Project has unversioned package references: {name}")
 

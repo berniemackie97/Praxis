@@ -39,9 +39,9 @@ public sealed class LocalProcessingPipelineTests : IDisposable
 
         CapturedOriginal captured = await Capture(catalog, "plan.md", "# Architecture\nBody", "plan");
         pipeline.Wake();
-        await WaitForAsync(() => catalog.Topics.Outcome(captured.SourceId) == "generated");
+        await WaitForAsync(() => catalog.Proposals.Outcome(captured.SourceId) == "generated");
 
-        Assert.Equal("Architecture", Assert.Single(catalog.Topics.List(captured.SourceId)).Value);
+        Assert.Equal("Architecture", Assert.Single(catalog.Proposals.List(captured.SourceId)).Value);
         Assert.Single(catalog.Search.Query("Architecture"));
         await cancellation.CancelAsync();
         await running;

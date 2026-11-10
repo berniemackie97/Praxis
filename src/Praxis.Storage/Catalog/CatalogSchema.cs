@@ -4,7 +4,7 @@ namespace Praxis.Storage.Catalog;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 9;
+    internal const int CurrentVersion = 13;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -20,7 +20,19 @@ internal static class CatalogSchema
         (7, "enrichment_runs", "item_id, revision, processor_key, source_digest, outcome, created_utc"),
         (7, "enrichment_proposals", "proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence, evidence_offset, status, correction, created_utc, reviewed_utc"),
         (7, "enrichment_reviews", "review_id, proposal_id, decision, correction, reviewed_utc"),
-        (8, "source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc")
+        (8, "source_locator_moves", "move_id, source_id, old_locator, new_locator, digest, recorded_utc"),
+        (10, "processing_jobs", "priority"),
+        (10, "text_segments", "item_id, revision, processor_key, ordinal, start_offset, length, heading_path"),
+        (11, "model_profiles", "role, provider, endpoint, model, context_tokens, enabled, updated_utc"),
+        (12, "enrichment_proposals", "entity_type, evidence_length"),
+        (13, "enrichment_proposals", "relation_subject, relation_object, flags"),
+        (13, "knowledge_entities", "entity_id, display_name, entity_type, type_origin, status, merged_into, created_utc, updated_utc"),
+        (13, "entity_aliases", "alias_key, entity_id, display, origin, created_utc"),
+        (13, "entity_mentions", "proposal_id, entity_id, created_utc"),
+        (13, "knowledge_relations", "relation_id, subject_id, predicate, object_id, origin, proposal_id, created_utc"),
+        (13, "entity_decisions", "decision_id, entity_id, action, detail, decided_utc"),
+        (13, "enrichment_runs", "segments_reused"),
+        (12, "enrichment_runs", "model_provider, model_name, model_digest, input_tokens, output_tokens, duration_ms, segments_examined, segments_total, rejected_count")
     ];
 
     internal static void Prepare(SqliteConnection database)
@@ -46,23 +58,7 @@ internal static class CatalogSchema
 
         if (version < CurrentVersion)
         {
-            using SqliteTransaction transaction = database.BeginTransaction();
-            for (int target = version + 1; target <= CurrentVersion; target++)
-            {
-                string resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
-                using SqliteCommand migration = database.CreateCommand(ReadSchema(resource));
-                migration.Transaction = transaction;
-                migration.ExecuteNonQuery();
-            }
-
-            using SqliteCommand versionCheck = database.CreateCommand("PRAGMA user_version");
-            versionCheck.Transaction = transaction;
-            if (Convert.ToInt32(versionCheck.ExecuteScalar()) != CurrentVersion)
-            {
-                throw new InvalidDataException("The catalog migration did not reach the expected version.");
-            }
-
-            transaction.Commit();
+            Migrate(database, version);
         }
 
         VerifySchema(database, CurrentVersion);
@@ -80,7 +76,53 @@ internal static class CatalogSchema
         }
     }
 
-    internal static int ReadVersion(SqliteConnection database) => Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
+    /// <summary>
+    /// Applies pending migrations in one transaction using SQLite's documented table-rebuild
+    /// procedure: foreign keys are disabled for the batch (the pragma cannot change inside a
+    /// transaction), every reference is verified with foreign_key_check before commit, and
+    /// enforcement is restored whether or not the upgrade succeeds.
+    /// </summary>
+    private static void Migrate(SqliteConnection database, int version)
+    {
+        Execute(database, "PRAGMA foreign_keys = OFF");
+        try
+        {
+            using var transaction = database.BeginTransaction();
+            for (var target = version + 1; target <= CurrentVersion; target++)
+            {
+                var resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
+                using var migration = database.CreateCommand(ReadSchema(resource));
+                migration.Transaction = transaction;
+                migration.ExecuteNonQuery();
+            }
+
+            using var versionCheck = database.CreateCommand("PRAGMA user_version");
+            versionCheck.Transaction = transaction;
+            if (Convert.ToInt32(versionCheck.ExecuteScalar()) != CurrentVersion)
+            {
+                throw new InvalidDataException("The catalog migration did not reach the expected version.");
+            }
+
+            using var references = database.CreateCommand("PRAGMA foreign_key_check");
+            references.Transaction = transaction;
+            using (var violation = references.ExecuteReader())
+            {
+                if (violation.Read())
+                {
+                    throw new InvalidDataException("The catalog migration left invalid foreign key references.");
+                }
+            }
+
+            transaction.Commit();
+        }
+        finally
+        {
+            Execute(database, "PRAGMA foreign_keys = ON");
+        }
+    }
+
+    internal static int ReadVersion(SqliteConnection database) =>
+        Convert.ToInt32(Scalar(database, "PRAGMA user_version"));
 
     internal static void VerifyIntegrity(SqliteConnection database)
     {

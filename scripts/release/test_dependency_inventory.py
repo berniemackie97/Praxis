@@ -152,6 +152,35 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Central version"):
             generate(self.root, self.cache)
 
+    def test_transitive_project_references_are_expected_in_locks(self):
+        for path, references in (("src/Middle", ["../Example/Example.csproj"]),
+                                 ("src/Top", ["../Middle/Middle.csproj"])):
+            folder = self.root / path
+            folder.mkdir(parents=True)
+            items = "".join(f'<ProjectReference Include="{item}" />' for item in references)
+            (folder / f"{folder.name}.csproj").write_text(
+                f"<Project><ItemGroup>{items}</ItemGroup></Project>", encoding="utf-8")
+        (self.root / "src/Middle/packages.lock.json").write_text(json.dumps({
+            "version": 2, "dependencies": {"net10.0": {"example": {"type": "Project"}}}
+        }), encoding="utf-8")
+        top_lock = self.root / "src/Top/packages.lock.json"
+        top_lock.write_text(json.dumps({"version": 2, "dependencies": {"net10.0": {
+            "middle": {"type": "Project"}, "example": {"type": "Project"}
+        }}}), encoding="utf-8")
+        (self.root / "Praxis.slnx").write_text(
+            '<Solution><Project Path="src/Example/Example.csproj"/>'
+            '<Project Path="src/Middle/Middle.csproj"/><Project Path="src/Top/Top.csproj"/></Solution>',
+            encoding="utf-8")
+
+        generate(self.root, self.cache)
+
+        top_lock.write_text(json.dumps({"version": 2, "dependencies": {"net10.0": {
+            "middle": {"type": "Project"}, "example": {"type": "Project"},
+            "unrelated": {"type": "Project"}
+        }}}), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Unexpected project dependency"):
+            generate(self.root, self.cache)
+
     def test_unpinned_sdk_is_rejected(self):
         (self.root / "global.json").write_text(
             '{"sdk":{"version":"10.0.403","rollForward":"latestFeature"}}',
