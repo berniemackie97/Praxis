@@ -12,7 +12,7 @@ namespace Praxis.Storage.Tests.Enrichment;
 
 public sealed class LocalHeadingProposalTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-topics-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 

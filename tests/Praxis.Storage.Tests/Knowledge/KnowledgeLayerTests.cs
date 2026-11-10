@@ -18,7 +18,7 @@ namespace Praxis.Storage.Tests.Knowledge;
 
 public sealed class KnowledgeLayerTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-knowledge-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
     private readonly Dictionary<string, string> types = new(StringComparer.Ordinal)

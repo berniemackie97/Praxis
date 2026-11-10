@@ -3,6 +3,7 @@ using Praxis.Storage;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Enrichment;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Enrichment;
@@ -10,7 +11,7 @@ namespace Praxis.Storage.Tests.Enrichment;
 public sealed class ProposalSchemaMigrationTests : IDisposable
 {
     private const string At = "2026-11-09T00:00:00.0000000Z";
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-v12-" + Guid.NewGuid().ToString("N"));
 
     public ProposalSchemaMigrationTests()

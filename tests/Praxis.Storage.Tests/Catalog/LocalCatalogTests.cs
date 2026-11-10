@@ -1,12 +1,13 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Catalog;
 
 public sealed class LocalCatalogTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-storage-test-" + Guid.NewGuid().ToString("N"));
 
     public LocalCatalogTests()
@@ -234,7 +235,7 @@ public sealed class LocalCatalogTests : IDisposable
             return;
         }
 
-        string other = Path.Combine(Path.GetTempPath(), "praxis-other-" + Guid.NewGuid().ToString("N"));
+        string other = Path.Combine(TestPaths.Temp, "praxis-other-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(other);
         try
         {

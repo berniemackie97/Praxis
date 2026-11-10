@@ -78,31 +78,92 @@ public sealed class LocalSources
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
-            using SqliteCommand source = connection.CreateCommand("""
-                                                                  UPDATE sources SET status = 'revoked'
-                                                                  WHERE source_id = $source AND status = 'active'
-                                                                  """);
-            source.Transaction = transaction;
-            source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            if (source.ExecuteNonQuery() == 0)
-            {
-                return false;
-            }
-
-            using SqliteCommand jobs = connection.CreateCommand("""
-                                                                UPDATE processing_jobs
-                                                                SET state = 'canceled', failure_code = NULL, lease_key = NULL,
-                                                                    lease_until_utc = NULL, updated_utc = $now
-                                                                WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
-                                                                  AND state IN ('queued', 'running', 'failed')
-                                                                """);
-            jobs.Transaction = transaction;
-            jobs.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            jobs.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            jobs.ExecuteNonQuery();
+            bool revoked = RevokeWithin(connection, transaction, sourceId.ToString("D"), CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             transaction.Commit();
-            return true;
+            return revoked;
         });
+    }
+
+    /// <summary>Active file sources with their stored locator and current digest.</summary>
+    internal IReadOnlyList<(Guid SourceId, string Locator, string Digest)> ActiveFileLocators() => database.Execute(connection =>
+    {
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT s.source_id, s.locator, v.digest
+                                                             FROM sources s
+                                                             JOIN items i ON i.source_id = s.source_id
+                                                             JOIN item_versions v ON v.item_id = i.item_id
+                                                             WHERE s.source_kind = 'file' AND s.status = 'active'
+                                                               AND v.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = i.item_id)
+                                                             ORDER BY s.created_utc, s.source_id
+                                                             """);
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<(Guid, string, string)> sources = new();
+        while (reader.Read())
+        {
+            sources.Add((Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2)));
+        }
+
+        return sources;
+    });
+
+    /// <summary>
+    /// Folds an active source recorded under a non-canonical spelling into the source that
+    /// already uses the canonical spelling: collection memberships and proposal reviews carry
+    /// over to matching proposals, then the alias is revoked. When the canonical source was
+    /// revoked by the owner, the alias is revoked too. Returns false when nothing changed.
+    /// </summary>
+    internal bool FoldAlias(Guid aliasSourceId, string canonicalLocator) => database.Execute(connection =>
+    {
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string alias = aliasSourceId.ToString("D");
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        using SqliteCommand target = connection.CreateCommand("SELECT source_id, status FROM sources WHERE source_kind = 'file' AND locator = $locator");
+        target.Transaction = transaction;
+        target.Parameters.AddWithValue("$locator", canonicalLocator);
+        string? canonical = null;
+        string? status = null;
+        using (SqliteDataReader reader = target.ExecuteReader())
+        {
+            if (reader.Read())
+            {
+                canonical = reader.GetString(0);
+                status = reader.GetString(1);
+            }
+        }
+
+        if (canonical is null || canonical == alias)
+        {
+            return false;
+        }
+
+        if (status == "active")
+        {
+            connection.Run(transaction, """
+                                        INSERT OR IGNORE INTO source_collection_memberships (collection_id, source_id, created_utc)
+                                        SELECT collection_id, $canonical, created_utc FROM source_collection_memberships WHERE source_id = $alias
+                                        """, ("$canonical", canonical), ("$alias", alias));
+            ReviewCarryOver.Apply(connection, transaction, alias, canonical, now);
+        }
+
+        bool revoked = RevokeWithin(connection, transaction, alias, now);
+        transaction.Commit();
+        return revoked;
+    });
+
+    private static bool RevokeWithin(SqliteConnection connection, SqliteTransaction transaction, string sourceId, string now)
+    {
+        if (connection.Run(transaction, "UPDATE sources SET status = 'revoked' WHERE source_id = $source AND status = 'active'", ("$source", sourceId)) == 0)
+        {
+            return false;
+        }
+
+        connection.Run(transaction, """
+                                    UPDATE processing_jobs
+                                    SET state = 'canceled', failure_code = NULL, lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
+                                    WHERE item_id IN (SELECT item_id FROM items WHERE source_id = $source)
+                                      AND state IN ('queued', 'running', 'failed')
+                                    """, ("$source", sourceId), ("$now", now));
+        return true;
     }
 
     public IReadOnlyList<LocalSourceMovement> ListMovements(Guid sourceId, int limit = 20)

@@ -12,7 +12,7 @@ namespace Praxis.Storage.Tests.Intake;
 public sealed class LocalObservedRenameTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-renames-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-renames-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
     private readonly string inbox;
 

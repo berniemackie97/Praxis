@@ -22,6 +22,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
     private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
     private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
+    private bool locatorsNormalized;
 
     private readonly Dictionary<string, ObservedState> observations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, VerifiedState> verified = new(StringComparer.Ordinal);
@@ -32,6 +33,14 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
 
     internal async Task<WatchedScanResult> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
+        if (!locatorsNormalized)
+        {
+            // Before the first scan, so canonical paths match existing sources instead of
+            // being captured again under a second identity.
+            new SourceLocatorCanonicalizer(catalog, report).Run();
+            locatorsNormalized = true;
+        }
+
         IReadOnlyList<LocalObservedFile> files = intake.InspectFolder(root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
         long renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
         ForgetMissing(files);

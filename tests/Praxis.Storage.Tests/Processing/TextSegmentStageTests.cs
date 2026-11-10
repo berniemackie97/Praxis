@@ -12,7 +12,7 @@ namespace Praxis.Storage.Tests.Processing;
 public sealed class TextSegmentStageTests : IDisposable
 {
     private const string At = "2026-11-09T00:00:00.0000000Z";
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-segments-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 

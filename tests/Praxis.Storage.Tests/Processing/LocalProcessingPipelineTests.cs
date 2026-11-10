@@ -3,6 +3,7 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Processing;
@@ -10,7 +11,7 @@ namespace Praxis.Storage.Tests.Processing;
 public sealed class LocalProcessingPipelineTests : IDisposable
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-pipeline-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
     private readonly string inbox;

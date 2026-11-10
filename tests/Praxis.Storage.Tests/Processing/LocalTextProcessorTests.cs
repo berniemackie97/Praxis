@@ -13,7 +13,7 @@ namespace Praxis.Storage.Tests.Processing;
 public sealed class LocalTextProcessorTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-text-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-text-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 
     public LocalTextProcessorTests()

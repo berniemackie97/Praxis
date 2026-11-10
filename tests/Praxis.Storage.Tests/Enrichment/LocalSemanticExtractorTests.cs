@@ -19,7 +19,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         "# Storage\n" + "Praxis keeps immutable originals in a content-addressed store. " + new string('.', 200) +
         "\n\n# Search\n" + "Search uses SQLite FTS5 for ranking. " + new string('.', 200) + "\n";
 
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-semantic-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
 
