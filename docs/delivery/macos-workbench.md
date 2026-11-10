@@ -8,7 +8,7 @@ The first-party window launches one .NET worker as a private child process. Stru
 
 The private pipe supports bounded library pages, local lexical search, versioned extracted-text previews, integrity verification, processing retry and explicit source revocation. The UI asks for confirmation before revocation. Revocation removes a source from active retrieval; it does **not** automatically destroy an original. Original export/open is a separate outstanding UI acceptance criterion.
 
-The first macOS delivery surface does not settle #36's future Windows/Linux/mobile stack decision. The app requires the .NET 10 runtime and Apple's Swift compiler during development. macOS GUI processes may not inherit a shell's dotnet path; first-run setup can explicitly select a trusted dotnet executable when it is installed outside standard locations.
+The first macOS delivery surface does not settle #36's future Windows/Linux/mobile stack decision. The app requires the .NET 10 runtime and, during development, full Xcode (Swift 6.2 or later) as the active developer directory; the standalone Command Line Tools lack Swift Testing and are rejected by the build scripts. macOS GUI processes may not inherit a shell's dotnet path; first-run setup can explicitly select a trusted dotnet executable when it is installed outside standard locations.
 
 ## Build and first-use smoke
 
@@ -20,8 +20,11 @@ dotnet build Praxis.slnx -c Release --no-restore
 dotnet test Praxis.slnx -c Release --no-build --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 bash scripts/macos/build-desktop.sh
+bash scripts/macos/test-worker-session.sh
 open .artifacts/Praxis.app
 ```
+
+The workbench is a Swift package at `apps/macos` (`Package.swift`, macOS 13 minimum, Swift 6 language mode, all warnings as errors). Open `Package.swift` in Xcode to edit, run and debug it, or use `swift build` and `swift test` with `--package-path apps/macos`. `Sources/Praxis` holds the app; `Tests/PraxisTests` holds Swift Testing suites: unit tests always run, and the worker integration suite runs when `PRAXIS_WORKER_DLL` names a published worker, which `test-worker-session.sh` sets after `build-desktop.sh`. Select Xcode once with `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`, or set `DEVELOPER_DIR` for a single shell.
 
 The packaging script refuses to overwrite an existing app bundle. To rebuild, remove only the previous development bundle under `.artifacts/`—never the private data directory. The resulting app is unsigned and intended for local development, not distribution.
 

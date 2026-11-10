@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+source "$root/scripts/macos/xcode-toolchain.sh"
 artifacts="$root/.artifacts"
 destination="$artifacts/Praxis.app"
 minimum_macos=13.0
@@ -20,11 +21,9 @@ dotnet publish "$root/src/Praxis.Worker/Praxis.Worker.csproj" \
   --configuration Release --output "$bundle/Contents/Resources/worker" \
   --no-restore
 
-swiftc -swift-version 6 -warnings-as-errors -parse-as-library -O \
-  -target "$(uname -m)-apple-macosx${minimum_macos}" \
-  "$root"/apps/macos/{App,Views,Workbench,Worker}/*.swift \
-  -framework SwiftUI -framework AppKit \
-  -o "$bundle/Contents/MacOS/Praxis"
+swift build --package-path "$PRAXIS_SWIFT_PACKAGE" --configuration release --product Praxis
+cp "$(swift build --package-path "$PRAXIS_SWIFT_PACKAGE" --configuration release --show-bin-path)/Praxis" \
+  "$bundle/Contents/MacOS/Praxis"
 
 cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

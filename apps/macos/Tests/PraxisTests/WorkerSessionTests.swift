@@ -1,11 +1,21 @@
 import Foundation
+import Testing
+@testable import Praxis
 
-@main
+/// End-to-end check of the worker transport against the published .NET worker. Runs when
+/// `PRAXIS_WORKER_DLL` names the worker (scripts/macos/test-worker-session.sh sets it).
+enum WorkerFixture {
+    static let workerPath = ProcessInfo.processInfo.environment["PRAXIS_WORKER_DLL"]
+    static let dotnetPath = ProcessInfo.processInfo.environment["PRAXIS_DOTNET"] ?? "/usr/local/share/dotnet/dotnet"
+}
+
 @MainActor
-struct WorkerSessionSmoke {
-    static func main() async throws {
-        let executable = URL(fileURLWithPath: CommandLine.arguments[1])
-        let worker = CommandLine.arguments[2]
+@Suite(.enabled(if: WorkerFixture.workerPath != nil, "Set PRAXIS_WORKER_DLL to the published worker"))
+struct WorkerSessionTests {
+    @Test("Capture, search, typed replies, denied requests, restart and malformed responses")
+    func workerTransport() async throws {
+        let executable = URL(fileURLWithPath: WorkerFixture.dotnetPath)
+        let worker = try #require(WorkerFixture.workerPath)
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("praxis-worker-smoke-\(UUID().uuidString)")
         let catalog = fixture.appendingPathComponent("Catalog")
@@ -132,10 +142,9 @@ struct WorkerSessionSmoke {
             throw Failure.unexpected("Malformed response did not fail the session")
         }
 
-        print("Worker session passed capture, search, typed feature replies, denied requests, restart and malformed response.")
     }
 
-    private static func waitFor(_ event: String, condition: () -> Bool) async throws {
+    private func waitFor(_ event: String, condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !condition() {
             guard ContinuousClock.now < deadline else { throw Failure.timeout(event) }
