@@ -4,13 +4,14 @@ using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Recovery;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Recovery;
 
 public sealed class LocalSnapshotTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-snapshot-test-" + Guid.NewGuid().ToString("N"));
 
     public LocalSnapshotTests()

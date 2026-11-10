@@ -3,13 +3,14 @@ using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Recovery;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Recovery;
 
 public sealed class OriginalRecoveryTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-recovery-test-" + Guid.NewGuid().ToString("N"));
 
     public OriginalRecoveryTests()

@@ -5,6 +5,7 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Desktop;
 using Praxis.Storage.Media;
 using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Evidence;
@@ -12,7 +13,7 @@ namespace Praxis.Storage.Tests.Evidence;
 public sealed class LocalMediaInspectionTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-media-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-media-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
 
     public LocalMediaInspectionTests()

@@ -45,7 +45,8 @@ public sealed class LocalWatchedIntake
             throw new ArgumentOutOfRangeException(nameof(rescanInterval));
         }
 
-        root = Path.GetFullPath(intakeDirectory);
+        // Watcher events, scans and stored locators must agree on one spelling of the folder.
+        root = CatalogPaths.Canonicalize(intakeDirectory);
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
         LocalSourceIntake intake = new(catalog);

@@ -12,7 +12,7 @@ namespace Praxis.Storage.Tests.Intake;
 public sealed class LocalWatchedIntakeTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-watched-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-watched-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
     private readonly string inbox;
 

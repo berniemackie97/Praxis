@@ -1,13 +1,14 @@
 using System.Security.Cryptography;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Originals;
 
 public sealed class LocalOriginalExportTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-export-" + Guid.NewGuid().ToString("N"));
     private readonly string catalogRoot;
     private readonly string exportRoot;

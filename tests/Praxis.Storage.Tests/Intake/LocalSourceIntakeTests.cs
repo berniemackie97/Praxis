@@ -2,13 +2,14 @@ using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Intake;
 
 public sealed class LocalSourceIntakeTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-intake-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
 

@@ -9,7 +9,7 @@ namespace Praxis.Storage.Tests.Processing;
 public sealed class HeadingJobMigrationTests : IDisposable
 {
     private const string At = "2026-11-09T00:00:00.0000000Z";
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-v9-" + Guid.NewGuid().ToString("N"));
 
     public HeadingJobMigrationTests()

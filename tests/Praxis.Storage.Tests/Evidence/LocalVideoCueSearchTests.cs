@@ -12,7 +12,7 @@ namespace Praxis.Storage.Tests.Evidence;
 public sealed class LocalVideoCueSearchTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
-        Path.GetTempPath(), "praxis-evidence-" + Guid.NewGuid().ToString("N"));
+        TestPaths.Temp, "praxis-evidence-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
 
     public LocalVideoCueSearchTests()

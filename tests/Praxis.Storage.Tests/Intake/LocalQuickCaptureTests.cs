@@ -10,7 +10,7 @@ namespace Praxis.Storage.Tests.Intake;
 
 public sealed class LocalQuickCaptureTests : IDisposable
 {
-    private readonly string workspace = Path.Combine(Path.GetTempPath(),
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
         "praxis-quick-note-" + Guid.NewGuid().ToString("N"));
     private readonly string dataRoot;
     private readonly string inbox;

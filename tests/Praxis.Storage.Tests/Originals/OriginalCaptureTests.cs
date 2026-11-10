@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
 namespace Praxis.Storage.Tests.Originals;
 
 public sealed class OriginalCaptureTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(),
+    private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-original-test-" + Guid.NewGuid().ToString("N"));
 
     public OriginalCaptureTests()
@@ -220,7 +221,7 @@ public sealed class OriginalCaptureTests : IDisposable
         }
 
         using LocalCatalog catalog = LocalCatalog.Open(root);
-        string external = Path.Combine(Path.GetTempPath(), "praxis-untrusted-" + Guid.NewGuid().ToString("N"));
+        string external = Path.Combine(TestPaths.Temp, "praxis-untrusted-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(external);
         try
         {
