@@ -160,6 +160,17 @@ public sealed class SpaceKeyDistribution(SecurityRegistry registry)
         return registry.Execute(connection =>
         {
             RequireCurrent(ownerProof);
+            using (SqliteCommand owner = SecurityRegistry.Command(connection, null,
+                "SELECT owner_id FROM security_spaces WHERE space_id=$space",
+                ("$space", SecurityRegistry.Id(ownerProof.SpaceId))))
+            {
+                if (!string.Equals(owner.ExecuteScalar() as string,
+                    SecurityRegistry.Id(ownerProof.PrincipalId), StringComparison.Ordinal))
+                {
+                    throw new UnauthorizedAccessException("Only the space owner may read its recovery archive.");
+                }
+            }
+
             using SqliteCommand command = SecurityRegistry.Command(connection, null, """
                 SELECT e.epoch, e.signer_device_id, e.commitment,
                        e.recovery_nonce, e.recovery_ciphertext, e.recovery_signature
