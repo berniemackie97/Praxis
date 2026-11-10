@@ -102,7 +102,16 @@ internal static class SecurityRegistrySchema
             transaction.Commit();
         }
 
-        foreach (string table in new[] { "installation", "principals", "devices", "security_spaces", "space_grants", "source_spaces", "proof_challenges" })
+        foreach ((string table, string columns) in new (string, string)[]
+        {
+            ("installation", "singleton, installation_id"),
+            ("principals", "principal_id, created_utc, disabled_utc"),
+            ("devices", "device_id, principal_id, public_key, enrolled_utc, revoked_utc"),
+            ("security_spaces", "space_id, owner_id, processing_class, created_utc"),
+            ("space_grants", "space_id, principal_id, permissions, grant_version, revoked_utc"),
+            ("source_spaces", "source_id, space_id"),
+            ("proof_challenges", "challenge_id, device_id, space_id, source_id, permission, grant_version, nonce, expires_utc, consumed")
+        })
         {
             using SqliteCommand check = connection.CreateCommand();
             check.CommandText = "SELECT sql FROM sqlite_master WHERE type='table' AND name=$table";
@@ -111,6 +120,17 @@ internal static class SecurityRegistrySchema
                 !definition.TrimEnd().EndsWith("STRICT", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("The security registry schema is incompatible.");
+            }
+
+            using SqliteCommand projection = connection.CreateCommand();
+            projection.CommandText = $"SELECT {columns} FROM {table} LIMIT 0";
+            try
+            {
+                using SqliteDataReader reader = projection.ExecuteReader();
+            }
+            catch (SqliteException exception)
+            {
+                throw new InvalidDataException("The security registry schema is incomplete.", exception);
             }
         }
 
@@ -137,6 +157,14 @@ internal static class SecurityRegistrySchema
         {
             durability.CommandText = "PRAGMA synchronous=FULL";
             durability.ExecuteNonQuery();
+        }
+        using (SqliteCommand check = connection.CreateCommand())
+        {
+            check.CommandText = "PRAGMA synchronous";
+            if (Convert.ToInt32(check.ExecuteScalar()) != 2)
+            {
+                throw new InvalidDataException("The security registry requires full commit durability.");
+            }
         }
     }
 }
