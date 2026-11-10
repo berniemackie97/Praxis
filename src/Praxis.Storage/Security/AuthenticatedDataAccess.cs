@@ -2,6 +2,28 @@ using Microsoft.Data.Sqlite;
 
 namespace Praxis.Storage.Security;
 
+/// <summary>Immutable identity and resource selection validated by the security registry.</summary>
+public sealed class AuthorizedDataScope
+{
+    internal AuthorizedDataScope(Guid principalId, Guid deviceId, Guid spaceId,
+        Guid sourceId, SecurityPermission permission, long contentEpoch)
+    {
+        PrincipalId = principalId;
+        DeviceId = deviceId;
+        SpaceId = spaceId;
+        SourceId = sourceId;
+        Permission = permission;
+        ContentEpoch = contentEpoch;
+    }
+
+    public Guid PrincipalId { get; }
+    public Guid DeviceId { get; }
+    public Guid SpaceId { get; }
+    public Guid SourceId { get; }
+    public SecurityPermission Permission { get; }
+    public long ContentEpoch { get; }
+}
+
 /// <summary>
 /// Synchronous execution fence for future private-data transport. Caller supplies
 /// a transactional data operation; no private HTTP endpoint is created here.
@@ -9,7 +31,7 @@ namespace Praxis.Storage.Security;
 public sealed class AuthenticatedDataAccess(SecurityRegistry registry)
 {
     public T Execute<T>(VerifiedCertificateIdentity session, VerifiedDeviceProof proof,
-        Guid sourceId, SecurityPermission permission, long contentEpoch, Func<T> operation)
+        Guid sourceId, SecurityPermission permission, long contentEpoch, Func<AuthorizedDataScope, T> operation)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(proof);
@@ -62,7 +84,8 @@ public sealed class AuthenticatedDataAccess(SecurityRegistry registry)
 
             // Hold the registry lease/gate throughout the caller's synchronous,
             // transactional data operation. Revocation cannot interleave here.
-            return operation();
+            return operation(new AuthorizedDataScope(session.PrincipalId, session.DeviceId,
+                proof.SpaceId, sourceId, permission, contentEpoch));
         });
     }
 }
