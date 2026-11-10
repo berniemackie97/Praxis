@@ -286,14 +286,10 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
                 SecurityPermission.Read, 2, () => { executions++; return 7; }));
         Assert.Equal(1, executions);
 
-        Guid newPrincipal = registry.Operator.CreatePrincipal();
         using ECDsa anotherSigner = Signer();
         using RSA anotherRecipient = Recipient();
-        registry.Operator.EnrollDevice(newPrincipal, anotherSigner.ExportSubjectPublicKeyInfo(),
-            anotherRecipient.ExportSubjectPublicKeyInfo(),
-            Binding(anotherSigner, anotherRecipient));
-        // A new owner device is sufficient to fence publication until rekey.
-        Guid newOwnerDevice = Enroll(registry, owner, anotherSigner, Recipient());
+        // A newly enrolled owner device fences publication until the next key epoch.
+        Guid newOwnerDevice = Enroll(registry, owner, anotherSigner, anotherRecipient);
         Assert.NotEqual(Guid.Empty, newOwnerDevice);
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.ProtectedData.Execute(identity, read, source,
