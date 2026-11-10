@@ -74,6 +74,7 @@ internal static class SecurityRegistrySchema
                     space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
                     principal_id TEXT NOT NULL REFERENCES principals(principal_id),
                     permissions INTEGER NOT NULL CHECK (permissions BETWEEN 1 AND 3),
+                    grant_version INTEGER NOT NULL DEFAULT 1 CHECK (grant_version >= 1),
                     revoked_utc TEXT,
                     PRIMARY KEY (space_id, principal_id)
                 ) STRICT;
@@ -87,6 +88,7 @@ internal static class SecurityRegistrySchema
                     space_id TEXT NOT NULL REFERENCES security_spaces(space_id),
                     source_id TEXT,
                     permission INTEGER NOT NULL CHECK (permission IN (1, 2)),
+                    grant_version INTEGER NOT NULL CHECK (grant_version >= 0),
                     nonce BLOB NOT NULL CHECK (length(nonce) = 32),
                     expires_utc TEXT NOT NULL,
                     consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
