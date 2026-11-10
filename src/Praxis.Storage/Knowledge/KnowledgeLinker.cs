@@ -21,7 +21,7 @@ internal static class KnowledgeLinker
         {
             if (ResolveOrCreate(connection, transaction, candidate.Value, candidate.EntityType, now) is { } entity)
             {
-                Execute(connection, transaction, """
+                connection.Run(transaction, """
                     INSERT INTO entity_mentions (proposal_id, entity_id, created_utc)
                     VALUES ($proposal, $entity, $now)
                     """, ("$proposal", proposalId), ("$entity", entity), ("$now", now));
@@ -35,7 +35,7 @@ internal static class KnowledgeLinker
             string? obj = ResolveOrCreate(connection, transaction, candidate.RelationObject!, null, now);
             if (subject is not null && obj is not null && subject != obj)
             {
-                Execute(connection, transaction, """
+                connection.Run(transaction, """
                     INSERT INTO knowledge_relations
                         (relation_id, subject_id, predicate, object_id, origin, proposal_id, created_utc)
                     VALUES ($id, $subject, $predicate, $object, 'model', $proposal, $now)
@@ -61,7 +61,7 @@ internal static class KnowledgeLinker
             return;
         }
 
-        Execute(connection, transaction, "UPDATE entity_mentions SET entity_id = $entity WHERE proposal_id = $proposal",
+        connection.Run(transaction, "UPDATE entity_mentions SET entity_id = $entity WHERE proposal_id = $proposal",
             ("$entity", next), ("$proposal", proposalId));
         RecomputeInferredTypes(connection, transaction, [previous, next], now);
     }
@@ -84,7 +84,7 @@ internal static class KnowledgeLinker
         }
 
         string entity = Guid.NewGuid().ToString("D");
-        Execute(connection, transaction, """
+        connection.Run(transaction, """
             INSERT INTO knowledge_entities
                 (entity_id, display_name, entity_type, type_origin, status, merged_into, created_utc, updated_utc)
             VALUES ($entity, $name, $type, 'inferred', 'active', NULL, $now, $now);
@@ -103,7 +103,7 @@ internal static class KnowledgeLinker
     {
         foreach (string entity in entities.Distinct(StringComparer.Ordinal))
         {
-            Execute(connection, transaction, """
+            connection.Run(transaction, """
                 UPDATE knowledge_entities
                 SET entity_type = COALESCE((
                         SELECT m.entity_type FROM visible_entity_mentions m
@@ -114,19 +114,5 @@ internal static class KnowledgeLinker
                 WHERE entity_id = $entity AND type_origin = 'inferred'
                 """, ("$entity", entity), ("$now", now));
         }
-    }
-
-    internal static void Execute(
-        SqliteConnection connection, SqliteTransaction transaction, string sql,
-        params (string Name, object? Value)[] parameters)
-    {
-        using SqliteCommand command = connection.CreateCommand(sql);
-        command.Transaction = transaction;
-        foreach ((string name, object? value) in parameters)
-        {
-            command.Parameters.AddWithValue(name, value ?? DBNull.Value);
-        }
-
-        command.ExecuteNonQuery();
     }
 }

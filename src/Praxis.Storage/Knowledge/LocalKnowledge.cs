@@ -113,7 +113,7 @@ public sealed class LocalKnowledge
                 throw new InvalidOperationException("Another entity already uses this name; merge them instead.");
             }
 
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 UPDATE knowledge_entities SET display_name = $name, updated_utc = $now WHERE entity_id = $entity;
                 INSERT INTO entity_aliases (alias_key, entity_id, display, origin, created_utc)
                 VALUES ($key, $entity, $name, 'owner', $now)
@@ -130,7 +130,7 @@ public sealed class LocalKnowledge
         }
 
         return Decide(entityId, "set_type", entityType, (connection, transaction, now) =>
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 UPDATE knowledge_entities SET entity_type = $type, type_origin = 'owner', updated_utc = $now
                 WHERE entity_id = $entity
                 """, ("$type", entityType), ("$now", now), ("$entity", entityId.ToString("D"))));
@@ -158,7 +158,7 @@ public sealed class LocalKnowledge
                 throw new InvalidOperationException("The merge target is not an active entity.");
             }
 
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 UPDATE entity_aliases SET entity_id = $target WHERE entity_id = $source;
                 UPDATE entity_mentions SET entity_id = $target WHERE entity_id = $source;
                 DELETE FROM knowledge_relations
@@ -203,7 +203,7 @@ public sealed class LocalKnowledge
                 throw new InvalidOperationException("The related entity is not active.");
             }
 
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 INSERT INTO knowledge_relations
                     (relation_id, subject_id, predicate, object_id, origin, proposal_id, created_utc)
                 VALUES ($id, $subject, $predicate, $object, 'owner', NULL, $now)
@@ -236,7 +236,7 @@ public sealed class LocalKnowledge
 
     private bool SetStatus(Guid entityId, string status, string action) =>
         Decide(entityId, action, status, (connection, transaction, now) =>
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 UPDATE knowledge_entities SET status = $status, updated_utc = $now
                 WHERE entity_id = $entity AND status <> 'merged'
                 """, ("$status", status), ("$now", now), ("$entity", entityId.ToString("D"))));
@@ -260,7 +260,7 @@ public sealed class LocalKnowledge
             }
 
             apply(connection, transaction, now);
-            KnowledgeLinker.Execute(connection, transaction, """
+            connection.Run(transaction, """
                 INSERT INTO entity_decisions (decision_id, entity_id, action, detail, decided_utc)
                 VALUES ($id, $entity, $action, $detail, $now)
                 """, ("$id", Guid.NewGuid().ToString("D")), ("$entity", entityId.ToString("D")),
@@ -329,7 +329,10 @@ public sealed class LocalKnowledge
         return mentions;
     }
 
-    /// <summary>Owner relations, and model relations whose proposal is currently visible.</summary>
+    /// <summary>
+    /// Owner relations, and model relations whose proposal is visible under the same rule as
+    /// mentions: owner decisions first, then verifier verdicts, then the instruction flag.
+    /// </summary>
     private static List<EntityRelation> Relations(SqliteConnection connection, Guid entityId)
     {
         using SqliteCommand query = connection.CreateCommand("""
@@ -340,9 +343,11 @@ public sealed class LocalKnowledge
                                                              JOIN knowledge_entities other ON other.entity_id =
                                                                  CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END
                                                              LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
+                                                             LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
                                                              WHERE (r.subject_id = $entity OR r.object_id = $entity) AND other.status = 'active'
                                                                AND (r.origin = 'owner' OR (p.proposal_id IS NOT NULL AND p.status <> 'rejected'
-                                                                    AND (p.flags IS NULL OR p.status = 'accepted')))
+                                                                    AND (p.status = 'accepted' OR (COALESCE(v.verdict, '') <> 'unsupported'
+                                                                         AND (p.flags IS NULL OR v.verdict = 'supported')))))
                                                              ORDER BY r.predicate, other.display_name LIMIT 200
                                                              """);
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));

@@ -10,6 +10,7 @@ using Praxis.Storage.Processing;
 using Praxis.Storage.Recovery;
 using Praxis.Storage.Search;
 using Praxis.Storage.Sources;
+using Praxis.Storage.Verification;
 
 namespace Praxis.Storage.Catalog;
 
@@ -35,6 +36,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalTextSearch Search { get; }
     public LocalProposals Proposals { get; }
     public LocalKnowledge Knowledge { get; }
+    public LocalVerification Verification { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
@@ -57,6 +59,7 @@ public sealed class LocalCatalog : IDisposable
         Search = new LocalTextSearch(database);
         Proposals = new LocalProposals(database);
         Knowledge = new LocalKnowledge(database);
+        Verification = new LocalVerification(database);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);

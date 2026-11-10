@@ -63,4 +63,58 @@ internal readonly struct DesktopRequestFields(JsonElement root)
 
         return number;
     }
+
+    /// <summary>An optional array of integers within bounds, at most <paramref name="maximumCount"/> long.</summary>
+    public IReadOnlyList<int> OptionalIntegers(string property, int min, int max, int maximumCount)
+    {
+        if (!root.TryGetProperty(property, out JsonElement value))
+        {
+            return [];
+        }
+
+        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > maximumCount)
+        {
+            throw new ArgumentException($"The {property} field must be a bounded array.");
+        }
+
+        List<int> numbers = [];
+        foreach (JsonElement item in value.EnumerateArray())
+        {
+            if (!item.TryGetInt32(out int number) || number < min || number > max)
+            {
+                throw new ArgumentException($"The {property} field contains an invalid value.");
+            }
+
+            numbers.Add(number);
+        }
+
+        return numbers;
+    }
+
+    /// <summary>An optional array of nonempty strings, each at most <paramref name="limit"/> characters.</summary>
+    public IReadOnlyList<string> OptionalStrings(string property, int limit, int maximumCount)
+    {
+        if (!root.TryGetProperty(property, out JsonElement value))
+        {
+            return [];
+        }
+
+        if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() > maximumCount)
+        {
+            throw new ArgumentException($"The {property} field must be a bounded array.");
+        }
+
+        List<string> texts = [];
+        foreach (JsonElement item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String || item.GetString() is not { Length: >= 1 } text || text.Length > limit)
+            {
+                throw new ArgumentException($"The {property} field contains an invalid value.");
+            }
+
+            texts.Add(text);
+        }
+
+        return texts;
+    }
 }

@@ -15,6 +15,10 @@ public enum InferenceFailure
     ServerError,
     /// <summary>The output stopped at the token limit, so structured output is incomplete.</summary>
     Truncated,
+    /// <summary>A subscription plan's usage limit is exhausted until its reset time.</summary>
+    QuotaExhausted,
+    /// <summary>The provider's sign-in is missing or expired; the owner must sign in again.</summary>
+    Unauthenticated,
     /// <summary>The response was malformed or exceeded its size bound.</summary>
     InvalidResponse
 }
@@ -37,6 +41,8 @@ public sealed class InferenceException(InferenceFailure failure, string message,
         InferenceFailure.Rejected => "model_rejected",
         InferenceFailure.ServerError => "model_server_error",
         InferenceFailure.Truncated => "model_truncated",
+        InferenceFailure.QuotaExhausted => "model_quota_exhausted",
+        InferenceFailure.Unauthenticated => "model_unauthenticated",
         _ => "model_invalid_response"
     };
 }
