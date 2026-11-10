@@ -42,3 +42,9 @@ The test writes per-domain recall and precision, elapsed query time, synchronous
 - Owner-scoped retrieval and injection-resistant agent tool approvals require #32/#160; the prompt-like fixture is never executed by this lexical benchmark.
 - Finance calculations and provenance must be deterministic and source-scoped under #184/#178, through the shared assistant experience, not a separate Budget workspace.
 - #29 stays open for real host measurements, larger cross-domain gold cases (#179), missing-original/partial-index recovery and model-vs-lexical comparisons. A green lexical test is not an intelligent MVP release (#170).
+
+## Hybrid retrieval follow-through — issue #28
+
+The optional owner-local semantic index introduced in [ADR 0037](../decisions/0037-local-hybrid-retrieval.md) is **not** a replacement for lexical corpus v1. `LocalHybridSearchTests` uses a deterministic stub embedding model to assert concept-only recall, fused source attribution, distinct owners of identical bytes, revocation/revision fencing, index-loss recovery and failed rebuild safety. `OllamaEmbeddingTests` checks the actual local embedding transport. Neither suite reports measured embedding quality of a physical local model.
+
+The next evaluation under #29 must record a pinned installed embedding model and digest; compare lexical, semantic-only and fused result identities against independently judged relevant sources; report per-domain recall/precision and no-answer false-positive behavior, query/index throughput, index bytes, local model memory and machine details; and exercise broader cross-file, contradiction, PDF/CSV when implemented, video cue and financial cases. Do not extrapolate quality or performance from synthetic fixture vectors or from a queued CI job.
