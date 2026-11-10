@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
+using Praxis.Storage.Sources;
 using Praxis.Storage.Tests.Support;
 using Xunit;
 
@@ -165,6 +166,40 @@ public sealed class LocalCatalogTests : IDisposable
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM text_derivatives"));
+    }
+
+    [Fact]
+    public async Task PriorSchemaReceiptsUpgradeWithoutManufacturingAuthorization()
+    {
+        string file = Path.Combine(root, "legacy.md");
+        File.WriteAllText(file, "Legacy original");
+        Guid sourceId;
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        {
+            CapturedOriginal original = await new Praxis.Storage.Intake.LocalSourceIntake(catalog)
+                .ImportFileAsync(file, 200, "legacy-key");
+            sourceId = original.SourceId;
+        }
+
+        using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
+        {
+            Execute(connection, """
+                DROP TABLE capture_request_context;
+                DROP INDEX ingest_requests_source_revision;
+                PRAGMA user_version = 14;
+                """);
+        }
+
+        using LocalCatalog upgraded = LocalCatalog.Open(root);
+        Assert.Equal(15, upgraded.SchemaVersion);
+        Assert.Equal("file", upgraded.Sources.ReadProvenance(sourceId)!.SourceKind);
+        Assert.Null(upgraded.Sources.ReadProvenance(sourceId)!.CaptureRoute);
+        LocalCaptureReceipt receipt = Assert.Single(upgraded.Sources.ListCaptureReceipts(sourceId));
+        Assert.Equal("legacy-key", receipt.RequestKey);
+        Assert.Null(receipt.Route);
+        Assert.Null(receipt.AuthorityBasis);
+        Assert.Null(receipt.RecordedUtc);
+        await upgraded.Originals.VerifyAsync(upgraded.Sources.ReadProvenance(sourceId)!.ItemId);
     }
 
     [Fact]
