@@ -9,7 +9,16 @@ public sealed record LocalSourceProvenance(
     DateTimeOffset CreatedUtc, int Revision, DateTimeOffset ObservedUtc,
     string OriginalSha256, long OriginalBytes, string? ProcessorKey,
     string? ProcessingState, string? FailureCode, string? ExtractionOutcome,
-    string? ExtractionReasonCode);
+    string? ExtractionReasonCode, string? CaptureRoute, string? CaptureAuthorityBasis,
+    string? CaptureScope, DateTimeOffset? CaptureRecordedUtc, bool RetryEligible);
+
+public sealed record LocalCaptureReceipt(
+    string RequestKey, int Revision, string? Route, string? AuthorityBasis,
+    string? Scope, DateTimeOffset? RecordedUtc);
+
+public sealed record LocalSourceProcessingState(
+    string ProcessorKey, string State, int Attempt, int TotalAttempts,
+    string? FailureCode, DateTimeOffset UpdatedUtc, bool RetryEligible);
 
 public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
 
@@ -48,7 +57,14 @@ public sealed class LocalSources
                                                                  SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
                                                                         s.created_utc, v.revision, v.observed_utc, v.digest,
                                                                         o.byte_length, j.processor_key, j.state, j.failure_code,
-                                                                        d.outcome, d.reason_code
+                                                                        d.outcome, d.reason_code,
+                                                                        c.route, c.authority_basis, c.scope, c.recorded_utc,
+                                                                        CASE WHEN s.status = 'active'
+                                                                          AND j.state IN ('failed', 'canceled')
+                                                                          AND v.revision = (
+                                                                              SELECT MAX(latest.revision)
+                                                                              FROM item_versions latest WHERE latest.item_id = i.item_id)
+                                                                        THEN 1 ELSE 0 END
                                                                  FROM sources s
                                                                  JOIN items i ON i.source_id = s.source_id
                                                                  JOIN item_versions v ON v.item_id = i.item_id
@@ -58,6 +74,14 @@ public sealed class LocalSources
                                                                  LEFT JOIN text_derivatives d ON d.item_id = v.item_id
                                                                      AND d.revision = v.revision AND d.processor_key = j.processor_key
                                                                      AND d.source_digest = v.digest
+                                                                 LEFT JOIN ingest_requests r ON r.request_key = (
+                                                                     SELECT first_receipt.request_key
+                                                                     FROM ingest_requests first_receipt
+                                                                     WHERE first_receipt.source_id = s.source_id
+                                                                       AND first_receipt.revision = v.revision
+                                                                       AND first_receipt.state = 'committed'
+                                                                     ORDER BY first_receipt.rowid LIMIT 1)
+                                                                 LEFT JOIN capture_request_context c ON c.request_key = r.request_key
                                                                  WHERE s.source_id = $source
                                                                    AND ($revision IS NULL OR v.revision = $revision)
                                                                  ORDER BY v.revision DESC LIMIT 1
@@ -81,7 +105,105 @@ public sealed class LocalSources
                 reader.IsDBNull(11) ? null : reader.GetString(11),
                 reader.IsDBNull(12) ? null : reader.GetString(12),
                 reader.IsDBNull(13) ? null : reader.GetString(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14));
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15),
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.IsDBNull(17) ? null : reader.GetString(17),
+                reader.IsDBNull(18) ? null : CatalogValues.ParseTimestamp(reader.GetString(18)),
+                reader.GetInt64(19) == 1);
+        });
+    }
+
+    /// <summary>All committed receipt routes for one source, including legacy unattributed entries.</summary>
+    public IReadOnlyList<LocalCaptureReceipt> ListCaptureReceipts(Guid sourceId, int? revision = null, int limit = 100)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (revision is < 1 || limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT r.request_key, r.revision, c.route,
+                                                                        c.authority_basis, c.scope, c.recorded_utc
+                                                                 FROM ingest_requests r
+                                                                 LEFT JOIN capture_request_context c ON c.request_key = r.request_key
+                                                                 WHERE r.source_id = $source AND r.state = 'committed'
+                                                                   AND r.revision IS NOT NULL
+                                                                   AND ($revision IS NULL OR r.revision = $revision)
+                                                                 ORDER BY r.rowid DESC LIMIT $limit
+                                                                 """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalCaptureReceipt> result = new();
+            while (reader.Read())
+            {
+                result.Add(new LocalCaptureReceipt(reader.GetString(0), reader.GetInt32(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : CatalogValues.ParseTimestamp(reader.GetString(5))));
+            }
+
+            return result;
+        });
+    }
+
+    /// <summary>Versioned processing status for all registered processors of one source.</summary>
+    public IReadOnlyList<LocalSourceProcessingState> ListProcessing(Guid sourceId, int? revision = null, int limit = 100)
+    {
+        if (sourceId == Guid.Empty)
+        {
+            throw new ArgumentException("A source identifier is required.", nameof(sourceId));
+        }
+
+        if (revision is < 1 || limit is < 1 or > 500)
+        {
+            throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT j.processor_key, j.state, j.attempt, j.total_attempts,
+                                                                        j.failure_code, j.updated_utc,
+                                                                        CASE WHEN s.status = 'active'
+                                                                          AND j.state IN ('failed', 'canceled')
+                                                                          AND j.revision = (
+                                                                              SELECT MAX(v.revision) FROM item_versions v
+                                                                              WHERE v.item_id = j.item_id)
+                                                                        THEN 1 ELSE 0 END
+                                                                 FROM processing_jobs j
+                                                                 JOIN items i ON i.item_id = j.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE s.source_id = $source
+                                                                   AND j.revision = COALESCE($revision, (
+                                                                       SELECT MAX(v.revision) FROM item_versions v
+                                                                       WHERE v.item_id = j.item_id))
+                                                                 ORDER BY j.updated_utc DESC, j.processor_key LIMIT $limit
+                                                                 """);
+            query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
+            query.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalSourceProcessingState> result = new();
+            while (reader.Read())
+            {
+                result.Add(new LocalSourceProcessingState(
+                    reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
+                    reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4),
+                    CatalogValues.ParseTimestamp(reader.GetString(5)), reader.GetInt64(6) == 1));
+            }
+
+            return result;
         });
     }
 

@@ -45,7 +45,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         return files;
     }
 
-    public async Task<CapturedOriginal> ImportFileAsync(string sourcePath, long maxBytes, string requestKey, CancellationToken cancellationToken = default)
+    public Task<CapturedOriginal> ImportFileAsync(string sourcePath, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
+        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.SelectedFile(sourcePath), cancellationToken);
+
+    internal Task<CapturedOriginal> ImportWatchedFileAsync(string sourcePath, string approvedRoot, long maxBytes, string requestKey, string expectedDigest, long expectedLength, CancellationToken cancellationToken = default) =>
+        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.WatchedFolder(approvedRoot), cancellationToken, expectedDigest, expectedLength);
+
+    private async Task<CapturedOriginal> ImportFileCoreAsync(string sourcePath, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken, string? expectedDigest = null, long? expectedLength = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
         if (requestKey.Length > 128)
@@ -58,7 +64,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         string path = ValidateSourcePath(sourcePath, expectDirectory: false);
         cancellationToken.ThrowIfCancellationRequested();
         await using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, cancellationToken);
+        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, capture, cancellationToken, expectedDigest, expectedLength);
         return accepted.Length > maxBytes
             ? throw new InvalidDataException("The committed original exceeds the import byte limit.")
             : accepted;
@@ -101,12 +107,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         }
 
         List<LocalImportedFile> imported = new(paths.Count);
+        CaptureRequestContext capture = CaptureRequestContext.SelectedFolder(root);
         remaining = maxTotalBytes;
         foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-folder-v1\n{batchKey}\n{path}")));
-            CapturedOriginal accepted = await ImportFileAsync(path, Math.Min(maxFileBytes, remaining), scopedKey, cancellationToken);
+            CapturedOriginal accepted = await ImportFileCoreAsync(path, Math.Min(maxFileBytes, remaining), scopedKey, capture, cancellationToken);
             remaining -= accepted.Length;
             imported.Add(new LocalImportedFile(path, accepted));
         }

@@ -127,7 +127,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
             if (latest?.Sha256 != digest)
             {
                 string requestKey = MakeRequestKey(file.SourcePath, latest?.Revision ?? 0, digest);
-                CapturedOriginal captured = await intake.ImportFileAsync(file.SourcePath, IntakeFileRules.MaximumFileBytes, requestKey, cancellationToken);
+                CapturedOriginal captured = await intake.ImportWatchedFileAsync(file.SourcePath, root, IntakeFileRules.MaximumFileBytes, requestKey, digest, file.Length, cancellationToken);
                 if (captured.Sha256 != digest || captured.Length != file.Length || !IntakeFileRules.IsStable(file))
                 {
                     throw new InvalidDataException("The source changed during capture; a new scan is required.");

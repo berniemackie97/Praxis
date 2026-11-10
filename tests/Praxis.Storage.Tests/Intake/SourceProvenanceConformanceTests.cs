@@ -82,6 +82,9 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
 
             Assert.All(new[] { manual.SourceId, quick.SourceId, watchedSourceId },
                 source => AssertSource(catalog.Sources.ReadProvenance(source)!));
+            AssertCapture(catalog, manual.SourceId, "selected_file", "owner_selected", manualPath);
+            AssertCapture(catalog, quick.SourceId, "quick_note", "owner_submitted", inbox);
+            AssertCapture(catalog, watchedSourceId, "watched_folder", "owner_configured", inbox);
             Assert.Equal(2, catalog.Search.Query("violet blueprint").Count);
             Assert.Single(catalog.Search.Query("ivy orchard"));
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -93,6 +96,9 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             Assert.Equal(manual.ItemId, updated.ItemId);
             Assert.Equal(2, updated.Revision);
             Assert.NotEqual(manual.Sha256, updated.Sha256);
+            Assert.Equal(2, catalog.Sources.ListCaptureReceipts(manual.SourceId).Count);
+            Assert.Equal(2, catalog.Sources.ListCaptureReceipts(manual.SourceId, 2).Single().Revision);
+            Assert.Equal("selected_file", catalog.Sources.ReadProvenance(manual.SourceId, 2)!.CaptureRoute);
             Assert.Equal(manual.Sha256, catalog.Sources.ReadProvenance(manual.SourceId, 1)!.OriginalSha256);
             Assert.Equal("queued", catalog.Sources.ReadProvenance(manual.SourceId)!.ProcessingState);
             Assert.Equal(quick.SourceId, Assert.Single(catalog.Search.Query("violet")).SourceId);
@@ -149,6 +155,17 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Equal("failed", invalid.ProcessingState);
         Assert.Equal("invalid_utf8", invalid.FailureCode);
         Assert.Null(invalid.ExtractionOutcome);
+        Assert.True(invalid.RetryEligible);
+        Assert.False(unknown.RetryEligible);
+        LocalSourceProcessingState failed = Assert.Single(catalog.Sources.ListProcessing(
+            invalid.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+        Assert.Equal("failed", failed.State);
+        Assert.True(failed.RetryEligible);
+        Assert.Equal("invalid_utf8", failed.FailureCode);
+        LocalSourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
+            unsupported.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+        Assert.Equal("unsupported", unsupportedJob.State);
+        Assert.False(unsupportedJob.RetryEligible);
         Assert.Empty(catalog.Search.Query("asset"));
         Assert.Empty(catalog.Search.Query("malformed"));
         await catalog.Originals.VerifyAsync(unsupported.ItemId);
@@ -185,6 +202,21 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         }
     }
 
+    private static void AssertCapture(LocalCatalog catalog, Guid sourceId,
+        string route, string basis, string scope)
+    {
+        LocalSourceProvenance source = catalog.Sources.ReadProvenance(sourceId)!;
+        Assert.Equal(route, source.CaptureRoute);
+        Assert.Equal(basis, source.CaptureAuthorityBasis);
+        Assert.Equal(scope, source.CaptureScope);
+        Assert.NotNull(source.CaptureRecordedUtc);
+        LocalCaptureReceipt receipt = Assert.Single(catalog.Sources.ListCaptureReceipts(sourceId));
+        Assert.Equal(route, receipt.Route);
+        Assert.Equal(basis, receipt.AuthorityBasis);
+        Assert.Equal(scope, receipt.Scope);
+        Assert.Equal(source.CaptureRecordedUtc, receipt.RecordedUtc);
+    }
+
     private static void AssertSource(LocalSourceProvenance source)
     {
         Assert.NotEqual(Guid.Empty, source.SourceId);
@@ -201,6 +233,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Equal("completed", source.ExtractionOutcome);
         Assert.Null(source.FailureCode);
         Assert.Null(source.ExtractionReasonCode);
+        Assert.False(source.RetryEligible);
     }
 
     private static long Count(string databasePath, string table)
