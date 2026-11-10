@@ -82,6 +82,8 @@ public sealed class SecuritySnapshotTests : IDisposable
             ownerRecipient, ownerSigner, 1));
         Assert.Equal(contentKey, ClientSpaceKeys.UnlockWithRecovery(installation, ownerKey,
             recoverySecret, ownerSigner, 1));
+        Assert.ThrowsAny<CryptographicException>(() => ClientSpaceKeys.UnlockWithRecovery(
+            installation, ownerKey, ClientSpaceKeys.GenerateRecoverySecret(), ownerSigner, 1));
 
         VerifiedDeviceProof memberRead = Prove(restored, memberSigner, memberDevice, space,
             SecurityPermission.Read, source);
@@ -100,6 +102,8 @@ public sealed class SecuritySnapshotTests : IDisposable
         await MakeBackupAsync();
         Assert.Equal((await SecurityRegistrySnapshots.VerifyAsync(Backup, Budget)).DatabaseBytes,
             new FileInfo(Path.Combine(Backup, "identity.sqlite")).Length);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            SecurityRegistrySnapshots.VerifyAsync(Backup, 1));
         byte[] database = await File.ReadAllBytesAsync(Path.Combine(Backup, "identity.sqlite"));
         string manifestPath = Path.Combine(Backup, "manifest.json");
         byte[] manifest = await File.ReadAllBytesAsync(manifestPath);
