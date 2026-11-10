@@ -22,13 +22,16 @@ Separate tests check: a new revision hides the previous one even before processi
 
 ## Repeatable commands
 
+Run these as one **fail-fast chain**, so a failed compile cannot be followed by a misleading green `--no-build` test run using previously built assemblies.
+
 ```bash
-dotnet restore Praxis.slnx --locked-mode
+dotnet restore Praxis.slnx --locked-mode &&
+dotnet build Praxis.slnx -c Release --no-restore &&
 dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
-  -c Release --no-restore \
+  -c Release --no-build --no-restore \
   --filter FullyQualifiedName~RetrievalEvaluationTests \
-  --logger 'console;verbosity=detailed'
-dotnet test Praxis.slnx -c Release --no-restore
+  --logger 'console;verbosity=detailed' &&
+dotnet test Praxis.slnx -c Release --no-build --no-restore &&
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 ```
 
