@@ -61,7 +61,7 @@ The present route catalog contains only `/health/live` (registered through ASP.N
 | Pair, rotate or revoke integrations | Owner UI only | Denied | Denied | Denied |
 | Use a remotely reachable service | Not approved | Not approved | Not approved | Not approved |
 
-Neither an extension nor an MCP endpoint is enabled by this ADR. An extension must not be allowed to read back newly submitted private content merely because the capture succeeded.
+Neither an extension nor an MCP endpoint is enabled by this ADR. An extension must not be allowed to read back newly submitted private content merely because the capture succeeded. Future multi-user authorization is determined by independent **security-space/source grants**, not the existing many-to-many owner-authored organizational `source_collections` memberships (ADRs 0003/0023). A collection view never delegates permission to an integration, another household member or a remote agent.
 
 ## Errors, quotas, and audit contract
 
