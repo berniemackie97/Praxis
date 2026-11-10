@@ -91,7 +91,7 @@ struct SourceDetailView: View {
                         Text("Header recognition is not a decoder, transcript verification or permission to play.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    TopicReviewView()
+                    ProposalReviewView()
                     Text("Extracted text preview").font(.headline)
                     Text(model.libraryPreview)
                         .font(.system(.body, design: .monospaced))

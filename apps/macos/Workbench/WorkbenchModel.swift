@@ -7,6 +7,7 @@ final class WorkbenchModel: ObservableObject {
     @Published private(set) var collections: [SourceCollection] = []
     @Published private(set) var topicProposals: [TopicProposal] = []
     @Published private(set) var topicOutcome = "pending"
+    @Published private(set) var semanticOutcome = "pending"
     @Published private(set) var intakeStatus: IntakeStatus?
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published private(set) var sourceMoves: [SourceMovement] = []
@@ -27,6 +28,9 @@ final class WorkbenchModel: ObservableObject {
     private var noteCaptureId: String?
 
     let search: SearchWorkbenchModel
+    let knowledge: KnowledgeWorkbenchModel
+    let verification: VerificationWorkbenchModel
+    let intelligence: IntelligenceSettingsModel
     private let worker: WorkerSession
     private var watchedInbox: URL?
     private var workerDiagnostic: String?
@@ -35,6 +39,10 @@ final class WorkbenchModel: ObservableObject {
         let worker = WorkerSession()
         self.worker = worker
         search = SearchWorkbenchModel(worker: worker)
+        let channel = WorkerChannel(worker: worker)
+        knowledge = KnowledgeWorkbenchModel(channel: channel)
+        verification = VerificationWorkbenchModel(channel: channel)
+        intelligence = IntelligenceSettingsModel(channel: channel)
     }
 
     func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
@@ -193,6 +201,7 @@ final class WorkbenchModel: ObservableObject {
         sourceMoves = []
         topicProposals = []
         topicOutcome = "pending"
+        semanticOutcome = "pending"
         mediaInspection = nil
     }
 
@@ -324,6 +333,7 @@ final class WorkbenchModel: ObservableObject {
         case .topics:
             topicProposals = data?.proposals ?? []
             topicOutcome = data?.outcome ?? "unavailable"
+            semanticOutcome = data?.semanticOutcome ?? "unavailable"
         case .topicReview:
             message = data?.reviewed == true
                 ? "Review decision saved with its source revision."

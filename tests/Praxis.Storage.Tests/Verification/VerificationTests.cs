@@ -259,6 +259,32 @@ public sealed class VerificationTests : IDisposable
         Assert.False(tooMany.RootElement.GetProperty("ok").GetBoolean());
     }
 
+    [Fact]
+    public void DiscoveryKeepsTheStablePathEntryInsteadOfAVersionedTarget()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string versions = Path.Combine(workspace, "versions", "2.1.212");
+        string bin = Path.Combine(workspace, "bin");
+        Directory.CreateDirectory(versions);
+        Directory.CreateDirectory(bin);
+        File.WriteAllText(Path.Combine(versions, "claude"), "");
+        File.CreateSymbolicLink(Path.Combine(bin, "claude"), Path.Combine(versions, "claude"));
+        string? path = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", bin);
+            Assert.Equal(Path.Combine(bin, "claude"), ProviderModels.Discover()[VerificationProvider.ClaudeCode]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", path);
+        }
+    }
+
     private LocalCatalog Open()
     {
         LocalCatalog catalog = LocalCatalog.Open(root);

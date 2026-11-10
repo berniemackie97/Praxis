@@ -150,3 +150,13 @@ Search displays timecoded matches from captured `.vtt` and `.srt` sidecars. A cu
 Select an active captured `.mp4`, `.mov`, `.m4v`, `.webm` or `.mkv` in **Inbox & Library**, then choose **Inspect verified media header**. The trusted worker reads and verifies the immutable original object rather than opening the watched Inbox path. The UI identifies the exact source/item/revision/digest, recognized ISO BMFF header or supported EBML document-type signature, source size and optional bounded movie-header duration. An unrecognized header is presented explicitly as unsupported.
 
 For this initial implementation, inspections are owner-initiated and bounded to 512 MiB of original bytes, 64 KiB retained in memory and a 30-second deadline. Missing, revoked, changed or corrupted originals do not produce valid results. A duration is unavailable unless an early `moov/mvhd` header is present and sane. Signature recognition does not establish video playback, track correctness, caption alignment, codec support, visual analysis or a searchable tutorial answer. Owner macOS validation and #114/#177 acceptance remain open.
+
+## Knowledge, verification and model settings
+
+Three workspaces expose the enrichment and verification layers (ADRs 0031–0034):
+
+- **Knowledge** lists entities across all sources with type, where the type came from (local model, verified, set by you), mention and source counts, and type conflicts. An entity shows its verbatim mentions with source names, relations with their evidence, entities mentioned alongside it, and aliases. Owner actions: set type, rename, merge, mark as not a real entity (and restore), add relations, and ask a stronger model to settle its type.
+- **Verification** lists requests planned from flagged evidence and type conflicts, or created by the owner from a source's suggestions or an entity. A request awaiting approval shows each item with its quotes; unchecked items are removed and redacted phrases are replaced everywhere, including other items' quotes, and the panel shows exactly what approval will send. After checking, verdicts, notes and token usage are shown alongside what was sent.
+- **Models** selects the local Ollama model (listing installed models) and configures Codex and Claude Code as verifiers: CLI path (suggested from PATH, stored as the stable link, not a versioned target), optional model, cost weight and daily limit. Re-saving a provider retries requests that were waiting on it.
+
+Source suggestions now include the local model's entities and relations, mark instruction-like evidence, and offer a stronger-model check for the source's pending items.
