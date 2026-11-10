@@ -310,6 +310,88 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
         Assert.Equal(1, executions);
     }
 
+    [Fact]
+    public void SignedApprovalSurvivesRestartAndRejectsChangedDeviceIdentity()
+    {
+        Guid owner, member, ownerDevice, space;
+        DeviceApprovalChallenge challenge;
+        using ECDsa ownerSigner = Signer();
+        using ECDsa memberSigner = Signer();
+        using RSA ownerRecipient = Recipient();
+        using RSA memberRecipient = Recipient();
+
+        using (SecurityRegistry first = SecurityRegistry.Open(root))
+        {
+            owner = first.Operator.CreatePrincipal();
+            member = first.Operator.CreatePrincipal();
+            ownerDevice = Enroll(first, owner, ownerSigner, ownerRecipient);
+            space = first.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+            first.Operator.Grant(owner, space, member, SecurityPermission.Read);
+            VerifiedDeviceProof proof = Prove(first, ownerSigner, ownerDevice,
+                space, null, SecurityPermission.Write);
+            challenge = first.Enrollment.Begin(proof, member,
+                memberSigner.ExportSubjectPublicKeyInfo(), memberRecipient.ExportSubjectPublicKeyInfo(),
+                Binding(memberSigner, memberRecipient));
+        }
+
+        using (SecurityRegistry reopened = SecurityRegistry.Open(root))
+        {
+            VerifiedDeviceProof proof = Prove(reopened, ownerSigner, ownerDevice,
+                space, null, SecurityPermission.Write);
+            ApprovedDeviceIdentity? approved = reopened.Enrollment.Complete(proof,
+                challenge.ChallengeId, Sign(ownerSigner, challenge.Message),
+                Sign(memberSigner, challenge.Message));
+            Assert.NotNull(approved);
+            ApprovedDeviceIdentity? persisted = reopened.Enrollment.Receipt(proof, approved.DeviceId);
+            Assert.NotNull(persisted);
+            Assert.True(ApprovedDeviceEnrollment.VerifyApproval(persisted,
+                ownerSigner.ExportSubjectPublicKeyInfo(), DateTimeOffset.UtcNow));
+            Assert.False(ApprovedDeviceEnrollment.VerifyApproval(
+                persisted with { DeviceId = Guid.NewGuid() },
+                ownerSigner.ExportSubjectPublicKeyInfo(), DateTimeOffset.UtcNow));
+            Assert.Null(reopened.Enrollment.Complete(proof, challenge.ChallengeId,
+                Sign(ownerSigner, challenge.Message), Sign(memberSigner, challenge.Message)));
+        }
+    }
+
+    [Fact]
+    public void EnrollmentChallengeExpiresAndOutstandingCountIsBounded()
+    {
+        MutableClock clock = new(DateTimeOffset.Parse("2026-11-10T19:00:00Z"));
+        using SecurityRegistry registry = SecurityRegistry.Open(root, clock);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid member = registry.Operator.CreatePrincipal();
+        using ECDsa ownerSigner = Signer();
+        using ECDsa memberSigner = Signer();
+        using RSA ownerRecipient = Recipient();
+        using RSA memberRecipient = Recipient();
+        Guid ownerDevice = Enroll(registry, owner, ownerSigner, ownerRecipient);
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+        VerifiedDeviceProof proof = Prove(registry, ownerSigner, ownerDevice,
+            space, null, SecurityPermission.Write);
+        DeviceApprovalChallenge first = registry.Enrollment.Begin(proof, member,
+            memberSigner.ExportSubjectPublicKeyInfo(), memberRecipient.ExportSubjectPublicKeyInfo(),
+            Binding(memberSigner, memberRecipient));
+        for (int index = 1; index < 8; index++)
+        {
+            registry.Enrollment.Begin(proof, member, memberSigner.ExportSubjectPublicKeyInfo(),
+                memberRecipient.ExportSubjectPublicKeyInfo(), Binding(memberSigner, memberRecipient));
+        }
+
+        Assert.Throws<InvalidOperationException>(() => registry.Enrollment.Begin(proof, member,
+            memberSigner.ExportSubjectPublicKeyInfo(), memberRecipient.ExportSubjectPublicKeyInfo(),
+            Binding(memberSigner, memberRecipient)));
+        clock.Advance(TimeSpan.FromMinutes(3));
+        VerifiedDeviceProof renewed = Prove(registry, ownerSigner, ownerDevice,
+            space, null, SecurityPermission.Write);
+        Assert.Null(registry.Enrollment.Complete(renewed, first.ChallengeId,
+            Sign(ownerSigner, first.Message), Sign(memberSigner, first.Message)));
+        Assert.NotNull(registry.Enrollment.Begin(renewed, member,
+            memberSigner.ExportSubjectPublicKeyInfo(), memberRecipient.ExportSubjectPublicKeyInfo(),
+            Binding(memberSigner, memberRecipient)));
+    }
+
     private static ECDsa Signer() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
     private static RSA Recipient()
@@ -363,6 +445,15 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(purposes, true));
         return request.Create(rootCert, DateTimeOffset.UtcNow.AddMinutes(-5),
             DateTimeOffset.UtcNow.AddHours(1), RandomNumberGenerator.GetBytes(16));
+    }
+
+    private sealed class MutableClock(DateTimeOffset initial) : TimeProvider
+    {
+        private DateTimeOffset now = initial;
+
+        public override DateTimeOffset GetUtcNow() => now;
+
+        internal void Advance(TimeSpan interval) => now += interval;
     }
 
     public void Dispose()
