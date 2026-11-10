@@ -5,52 +5,46 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 source "$root/scripts/macos/xcode-toolchain.sh"
 artifacts="$root/.artifacts"
 destination="$artifacts/Praxis.app"
-minimum_macos=13.0
+derived="$artifacts/XcodeDerivedData"
+
 if [[ -e "$destination" || -L "$destination" ]]; then
   echo "Destination already exists: $destination" >&2
-  echo "Remove only the previous development app bundle before rebuilding." >&2
+  echo "Move the previous development app bundle before building again." >&2
   exit 1
 fi
 
 mkdir -p "$artifacts"
-staging="$(mktemp -d "$artifacts/.praxis-build.XXXXXX")"
-trap 'rm -rf "$staging"' EXIT
-bundle="$staging/Praxis.app"
-mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources/worker"
-dotnet publish "$root/src/Praxis.Worker/Praxis.Worker.csproj" \
-  --configuration Release --output "$bundle/Contents/Resources/worker" \
-  --no-restore
+xcodebuild \
+  -project "$PRAXIS_XCODE_PROJECT" \
+  -scheme "$PRAXIS_XCODE_SCHEME" \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$derived" \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 
-swift build --package-path "$PRAXIS_SWIFT_PACKAGE" --configuration release --product Praxis
-cp "$(swift build --package-path "$PRAXIS_SWIFT_PACKAGE" --configuration release --show-bin-path)/Praxis" \
-  "$bundle/Contents/MacOS/Praxis"
-
-cat > "$bundle/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
- "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleExecutable</key><string>Praxis</string>
-  <key>CFBundleIdentifier</key><string>dev.praxis.renames-preview</string>
-  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>CFBundleName</key><string>Praxis</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>LSMinimumSystemVersion</key><string>${minimum_macos}</string>
-  <key>NSHighResolutionCapable</key><true/>
-</dict>
-</plist>
-PLIST
-
-plutil -lint "$bundle/Contents/Info.plist"
-mv -n "$bundle" "$artifacts/"
-if [[ -e "$bundle" ]]; then
-  echo "Destination already exists: $destination" >&2
+built="$derived/Build/Products/Release/Praxis.app"
+plist="$built/Contents/Info.plist"
+worker="$built/Contents/Resources/worker/Praxis.Worker.dll"
+if [[ ! -f "$plist" || ! -f "$worker" ]]; then
+  echo "The Xcode build did not produce an app with its published .NET worker." >&2
+  exit 1
+fi
+plutil -lint "$plist"
+identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
+if [[ "$identifier" != 'dev.praxis.renames-preview' ]]; then
+  echo "Unexpected development app bundle identifier: $identifier" >&2
   exit 1
 fi
 
-echo "Created unsigned local-development app: $destination"
+staging="$(mktemp -d "$artifacts/.praxis-package.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
+ditto "$built" "$staging/Praxis.app"
+mv -n "$staging/Praxis.app" "$destination"
+if [[ -e "$staging/Praxis.app" ]]; then
+  echo "Another build created the destination before publication: $destination" >&2
+  exit 1
+fi
+
+echo "Created unsigned development application: $destination"
 echo "Launch with: open \"$destination\""

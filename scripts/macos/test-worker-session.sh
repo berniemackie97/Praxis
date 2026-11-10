@@ -3,12 +3,24 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 source "$root/scripts/macos/xcode-toolchain.sh"
+derived="$root/.artifacts/XcodeDerivedData"
 worker="$root/.artifacts/Praxis.app/Contents/Resources/worker/Praxis.Worker.dll"
+
 if [[ ! -f "$worker" ]]; then
-  echo "Build the macOS workbench before running the worker session test." >&2
+  echo "Run scripts/macos/build-desktop.sh to package the .NET worker first." >&2
+  exit 1
+fi
+if ! command -v dotnet >/dev/null 2>&1; then
+  echo "The .NET 10 SDK is required for the worker integration test." >&2
   exit 1
 fi
 
-# Unit tests always run; the worker integration suite runs because the worker is provided.
 PRAXIS_WORKER_DLL="$worker" PRAXIS_DOTNET="$(command -v dotnet)" \
-  swift test --package-path "$PRAXIS_SWIFT_PACKAGE"
+  xcodebuild \
+    -project "$PRAXIS_XCODE_PROJECT" \
+    -scheme "$PRAXIS_XCODE_SCHEME" \
+    -configuration Debug \
+    -destination 'platform=macOS' \
+    -derivedDataPath "$derived" \
+    CODE_SIGNING_ALLOWED=NO \
+    test
