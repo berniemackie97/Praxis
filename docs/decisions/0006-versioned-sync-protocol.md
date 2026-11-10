@@ -6,7 +6,7 @@
 
 Praxis already preserves Markdown histories (ADR 0004) and original binary attachments (ADR 0005). Neither archive represents concurrent writers, tombstones, offline replay, device authorization or a durable change cursor. Client timestamps, filenames and file modification times cannot establish causal order across devices.
 
-The host and encryption/trust choices in #50 remain unresolved. This contract must therefore work for an authorized processing service or an opaque encrypted-payload service without pretending those modes offer identical server-side validation.
+Owner decisions in completed #50 select local-only, client-held encrypted sync and trusted-host processing as **distinct security-space boundaries**; [ADR 0003](0003-processing-trust-boundaries.md) defines their key, identity and disclosure constraints. This protocol remains mode-neutral in its revisions and receipts, not in its server-side ability to validate hidden plaintext. Local-only collections have no remote change log. Client-held ciphertext relays must not pretend to inspect contents; trusted processors must not claim end-to-end encryption.
 
 ## Decision
 
@@ -19,7 +19,7 @@ This is not a database, crypto, hosting, HTTP endpoint or identity-provider deci
 | Field | Contract |
 | --- | --- |
 | protocolVersion | Required schema number; initial protocol supports version 1 only |
-| collectionId | Stable UUID for the collection; never an authorization capability |
+| collectionId | Stable UUID of the **synchronization security space**, never an authorization capability or an owner-authored organizational `source_collections` view (ADR 0023) |
 | collectionEpoch | Opaque UUID for one compatible log generation; changed after incompatible rebootstrap |
 | deviceId | Bound to authenticated device enrollment; the request field alone proves nothing |
 | operationId | UUID generated once for an intended mutation; retained unchanged for retries |
@@ -40,7 +40,7 @@ The executable fixture models one collection and uses the epoch as its scope. It
 - Delete requires the current live revision and creates a **tombstone** with a new revision. It retains the record UUID and the preceding content/revision reference for recoverability; deletion is not immediate physical erasure.
 - Upsert cannot resurrect a tombstone. Restore requires the current tombstone revision and creates another revision. A stale restore cannot overwrite intervening changes.
 - Stale write, delete/edit race, rename/edit race, or active path collision returns a conflict without changing state or advancing the sequence. Authorized clients can inspect the current revision and retain their pending local contribution until explicit resolution.
-- Case-insensitive path uniqueness applies to a filesystem-facing collection projection. It is enforced where the selected trust model allows the relevant path metadata to be inspected. A ciphertext-only service cannot claim to enforce hidden plaintext paths.
+- Case-insensitive path uniqueness applies to a filesystem-facing collection projection. It is enforced where the selected trust model allows the relevant path metadata to be inspected. A ciphertext-only service cannot claim to enforce hidden plaintext paths. An organizational view may contain sources from multiple security spaces but is not a sync collection, identity boundary or authorization grant.
 - Deleted paths may be reused by another record. A subsequent restore must choose a nonconflicting path rather than stealing it.
 - Deleting an attachment with live references requires an explicit versioned reference update or must be rejected; it cannot leave silently broken links.
 
@@ -72,7 +72,7 @@ ADR 0005 archives the **current** link set but does not version historical links
 - A UUID, sequence or operation key is never an authorization token (RFC 9562).
 - Operational diagnostics use safe reason codes, correlation and sequence metadata. Do not log note text, attachment bytes, secrets or unrestricted conflict payloads.
 
-The selected plaintext-versus-ciphertext processing model determines which validation can happen server-side. This ADR cannot approve remote writes while #50 and authentication/recovery gates remain open.
+An authorized trusted processor may check visible plaintext paths, links and permitted derivatives. Every logical source belongs to one security space; copying between spaces is an explicitly authorized new source identity with recorded provenance, not a many-to-many organizational membership change. A client-held ciphertext relay may only check authenticated identity, collection membership, visible opaque record/version/change metadata and bounded transport; enrolled decrypting clients validate hidden plaintext path/link constraints, encrypted-object integrity, key epochs and rollback against durable client state. The server cannot infer missing decrypted metadata, guarantee content-based conflict correctness or run a plaintext index over opaque ciphertext. A remote client must reject a mismatched class/epoch and preserve pending local writes through rebootstrap; collection class changes require a separately approved migration, not wire-version fallback. This ADR cannot approve remotely accessible writes until #13's threat contract and #15/#19/#40/#41 identity, transport and recovery gates are implemented and verified.
 
 ### Alternatives rejected
 

@@ -1,12 +1,12 @@
 # ADR 0021: Owner-local caller and integration security
 
-**Status:** Proposed for #129. Six product decisions approved November 8, 2026; engineering contract pending PR review and CI. This ADR does not authorize enabling an integration.
+**Status:** Owner-approved local caller policy, merged in PR #139 / closed #129. **Local caller controls and cross-platform/GUI denial tests remain separately gated** by #107/#112/#117/#215 and actual CI (#137). This ADR does not authorize enabling an integration or remotely reachable private-data service.
 
 ## Scope and evidence
 
 Praxis's first-party application will serve one logged-in OS owner using owner-private local data. At the audited baseline, `src/Praxis.Api/Program.cs` registers only `/health/live`; it has no private-data route, authentication middleware, paired integration, IPC endpoint or user interface. `Praxis.Storage` offers an explicitly called plaintext local catalog with immutable originals and processing results; its caller-supplied paths, source IDs and idempotency keys **are not identities or authorization grants**. Therefore existing tests can establish that the current API has no private routes, not that future identity, network or OS isolation is implemented.
 
-The selected design avoids creating an HTTP authority for the first-party UI merely to support later extensions or agents. Security work on future interfaces must not silently change this default. Remote access, user sharing, external inference, encryption mode, key recovery and server hosting remain gated by #13/#50.
+The selected design avoids creating an HTTP authority for the first-party UI merely to support later extensions or agents. Security work on future interfaces must not silently change this default. Remote hosting/placement, user sharing and confidentiality classes are approved **product requirements** in completed #50 and [ADR 0003](0003-processing-trust-boundaries.md); their actual remote identity, key custody, authorized processing, implementation and recovery remain gated by #13/#15/#19/#40/#41. Owner-local scopes do not automatically become remote user scopes.
 
 ## Approved product decisions (binding)
 
@@ -19,7 +19,7 @@ The selected design avoids creating an HTTP authority for the first-party UI mer
 
 ## First-party execution and OS trust
 
-**Initial first-party choice:** the application host, owner-local catalog and trusted application services execute **in one OS-user process**; the UI calls them directly through application interfaces. The desktop UI framework/packaging decision stays under #36, but the chosen UI must be capable of this in-process service boundary. If that UI stack instead requires a renderer or helper process, it cannot receive an automatic privileged bridge: a new reviewed OS IPC contract is required before enabling it. No owner content is exposed to an ordinary website or a general-purpose browser view.
+**First-party trust intent:** no first-party private-data HTTP authority. The initial plan proposed one in-process OS-user application host, but the implemented native macOS UI is SwiftUI and launches a **separate .NET worker via inherited pipes** (ADR 0036, #215). This makes the protected child-process boundary the actual architecture to validate, not an assumption that SwiftUI can call C# in-process. The app/worker must remain bound to the selected logged-in OS user and explicitly approved data root; verify worker executable/path integrity, inherited pipe ownership/lifetime, child execution rights, lack of an exposed private listener, and impersonation/failure scenarios in #215/#107 before claiming the local IPC security contract complete. Inherited pipes limit ordinary unrelated access but are not a cryptographic guarantee against same-user malware. This does **not** authorize a privileged bridge to ordinary websites, extensions or another OS-user session.
 
 **Protected IPC, only if later needed:** on macOS/Linux, place Unix-domain sockets under a verified owner-only directory (`0700`) and independently validate peer identity/permissions; on Windows, use a named pipe with an explicit current-user SID ACL and verified peer identity. Resolve the per-OS peer-check API and exercise real process impersonation tests before shipping, rather than assuming socket-path permissions or a file lock alone authenticate the peer. A service in a different OS session is not a trusted UI process. A shared service account or privileged system daemon is not part of the initial release.
 
@@ -61,7 +61,7 @@ The present route catalog contains only `/health/live` (registered through ASP.N
 | Pair, rotate or revoke integrations | Owner UI only | Denied | Denied | Denied |
 | Use a remotely reachable service | Not approved | Not approved | Not approved | Not approved |
 
-Neither an extension nor an MCP endpoint is enabled by this ADR. An extension must not be allowed to read back newly submitted private content merely because the capture succeeded.
+Neither an extension nor an MCP endpoint is enabled by this ADR. An extension must not be allowed to read back newly submitted private content merely because the capture succeeded. Future multi-user authorization is determined by independent **security-space/source grants**, not the existing many-to-many owner-authored organizational `source_collections` memberships (ADRs 0003/0023). A collection view never delegates permission to an integration, another household member or a remote agent.
 
 ## Errors, quotas, and audit contract
 
@@ -89,14 +89,14 @@ Audit records contain UTC time, event type, opaque correlation/grant identifier,
 - Microsoft Kestrel endpoint documentation confirms explicit IP binding and OS-assigned port `0`, but excludes `ListenLocalhost(0)`. Microsoft also documents that host prefixes and request `Host` validation are separate concerns. See [Kestrel endpoint configuration](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/endpoints?view=aspnetcore-10.0) and [Kestrel host filtering](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel?view=aspnetcore-10.0).
 - Microsoft documents CORS as a browser relaxation mechanism, **not** API authentication: [ASP.NET Core CORS](https://learn.microsoft.com/en-us/aspnet/core/security/cors?view=aspnetcore-10.0).
 - The [current MCP 2026-07-28 transport specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http) uses stateless request-scoped Streamable HTTP POST with mandatory Origin verification; it no longer specifies the earlier GET stream and requires per-request version/capability metadata. [HTTP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) specifies OAuth-compatible authorization-server discovery, audience binding and token enforcement. #117 must test the target clients' actual protocol-era compatibility, including clients using the older initialization/GET-stream behavior, before choosing a transport or shipping an MCP listener.
-- No trusted UI runtime, OS IPC proof, per-user ACL proof, secure credential store, owner-only port-discovery channel or hostile-origin enforcement has yet been built. Those are **tests to perform before exposure**, not existing guarantees. The approved product choices do not authorize remote hosting or model processing.
+- A SwiftUI first-party application and inherited-pipe .NET worker now exist, but verified OS peer/ACL isolation, independent secure integration credentials, owner-only port discovery and hostile-origin enforcement remain **open test gates**. The approved product modes in #50 do not authorize automatically exposing remote private routes or external inference.
 
 ## Implementation handoff and closure gates
 
 - **#107:** select an owner-local UI package supporting in-process application calls; keep source HTTP routes absent until the authenticated loopback listener, startup bind checks, Host/Origin/CSRF denial, grant enforcement, bounded request handling, safe errors and audit tests pass. This issue must test real TCP binding, not merely `WebApplicationFactory`.
 - **#112:** only if scheduled after #107, develop explicit per-install pairing, isolated capture-only credential storage/renewal, extension-vs-page separation and strict upload/consent limits. No search or retrieval grants.
 - **#117:** choose an MCP-spec-compatible client/server transport and authorization mechanism, with read-only source-scoped access. Do not enable or advertise MCP tool endpoints before #106 and #107 gates pass.
-- **#13/#50:** link the local decision for threat-model consistency but leave remote hosting, device sharing, encryption/key custody, backup and recovery owner decisions open.
-- **#129:** close only when this ADR, a reproducible negative-test plan, representative baseline tests, cross-platform CI and owner review are all accepted and merged. No other security issue or board item becomes Done because this ADR exists.
+- **#13/#50:** owner product choices for remote hosting, household sharing and privacy classes are now recorded in completed #50 and ADR 0003; this document remains the narrower owner-local caller policy. Real remote authentication/key custody and backup/recovery are unimplemented and belong to #13/#15/#19/#40/#41.
+- **#129:** the owner merged PR #139 and closed the decision spike. That merge accepted the **policy**, not passing CI, protected-IPC implementation or OS-account isolation; the latter tests remain in #107/#215 and the [owner-local verification matrix](../testing/owner-local-caller-security.md). No other security issue becomes Done because the decision was merged.
 
 See [executable security verification plan](../testing/owner-local-caller-security.md).
