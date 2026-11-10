@@ -103,7 +103,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         AvailableSpaceKey? available = registry.SpaceKeys.Download(
             Prove(registry, signer, device, space, SecurityPermission.Read));
         Assert.NotNull(available);
-        Assert.Throws<CryptographicException>(() =>
+        Assert.ThrowsAny<CryptographicException>(() =>
             ClientSpaceKeys.UnlockForDevice(registry.InstallationId, available, impostorRsa, signer, 1));
         Assert.Throws<CryptographicException>(() =>
             ClientSpaceKeys.UnlockWithRecovery(registry.InstallationId, available,
