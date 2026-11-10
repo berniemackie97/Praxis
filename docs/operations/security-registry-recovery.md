@@ -32,6 +32,8 @@ Successful commands report installation ID, verified database length and SHA-256
 
 Test corruption only on **disposable copies** of a verified backup: remove its manifest, truncate the database, insert unexpected entries or expose its permissions. Verify and restore must fail without producing a completed recovery root. Preserve the original and the error output. Automated `SecuritySnapshotTests` exercise these logical cases.
 
+The combined [offline coordinated recovery set](coordinated-recovery-set.md) now holds both source leases and publishes the verified catalog/originals + identity snapshots under one manifest. It is the preferred owner-local consistency boundary when both stores exist; the commands above remain independent checkpoints and must not be paired at unrelated times.
+
 ## Exclusions and outstanding gates
 
 - **No private keys or secrets are recreated.** Device private signing/wrapping keys, operator CA private key, independent recovery signing key, AES-GCM content recovery secret, locally pinned client trust state and OS keychain secrets are not stored in the host registry. Loss can make encrypted content irrecoverable.
