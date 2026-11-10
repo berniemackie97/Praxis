@@ -34,8 +34,16 @@ public sealed class DeviceCertificateIdentity(SecurityRegistry registry)
     private const string ClientAuthenticationOid = "1.3.6.1.5.5.7.3.2";
 
     public VerifiedCertificateIdentity? Authenticate(
+        X509Certificate2 clientCertificate, X509Certificate2 trustedRoot, Guid deviceId) =>
+        Inspect(clientCertificate, trustedRoot, deviceId, X509RevocationMode.Online);
+
+    internal VerifiedCertificateIdentity? AuthenticateForTest(
+        X509Certificate2 clientCertificate, X509Certificate2 trustedRoot, Guid deviceId) =>
+        Inspect(clientCertificate, trustedRoot, deviceId, X509RevocationMode.NoCheck);
+
+    private VerifiedCertificateIdentity? Inspect(
         X509Certificate2 clientCertificate, X509Certificate2 trustedRoot,
-        Guid deviceId, X509RevocationMode revocationMode = X509RevocationMode.Online)
+        Guid deviceId, X509RevocationMode revocationMode)
     {
         ArgumentNullException.ThrowIfNull(clientCertificate);
         ArgumentNullException.ThrowIfNull(trustedRoot);
