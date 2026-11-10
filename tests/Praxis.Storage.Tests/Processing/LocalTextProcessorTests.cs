@@ -170,7 +170,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
         using LocalCatalog restored = LocalCatalog.Open(destination);
-        Assert.Equal(14, restored.SchemaVersion);
+        Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(restored).ProcessNextAsync());
         await restored.Originals.VerifyAsync(accepted.ItemId);
@@ -255,7 +255,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         }
 
         using LocalCatalog upgraded = LocalCatalog.Open(root);
-        Assert.Equal(14, upgraded.SchemaVersion);
+        Assert.Equal(16, upgraded.SchemaVersion);
         using SqliteConnection check = new(new SqliteConnectionStringBuilder
         {
             DataSource = upgraded.DatabasePath,
