@@ -140,8 +140,8 @@ public static class SecurityRegistrySnapshots
 
         await VerifyContentsAsync(staging, maxBytes, allowIncomplete: true, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        // The restored registry is deliberately not opened here: its first owner-controlled
-        // startup must acquire the normal exclusive registry lease.
+        // A live registry accepts only identity.sqlite and its own SQLite/lease files.
+        File.Delete(Path.Combine(staging, "manifest.json"));
         Directory.Move(staging, destination);
         return verified;
     }
