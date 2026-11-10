@@ -15,10 +15,12 @@ public static class ClientSpaceKeys
 
     public static SpaceKeyPublication Protect(Guid installationId, Guid spaceId, long epoch,
         Guid signerDeviceId, ECDsa signer, IReadOnlyList<RecipientWrappingKey> recipients,
+        IReadOnlyDictionary<Guid, byte[]> pinnedSigningKeys,
         ReadOnlySpan<byte> contentKey, ReadOnlySpan<byte> recoverySecret)
     {
         ArgumentNullException.ThrowIfNull(signer);
         ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentNullException.ThrowIfNull(pinnedSigningKeys);
         if (installationId == Guid.Empty || spaceId == Guid.Empty || signerDeviceId == Guid.Empty ||
             epoch < 1 || contentKey.Length != 32 || recoverySecret.Length != 32 ||
             signer.KeySize != 256 || recipients.Count is < 1 or > 64)
@@ -35,6 +37,13 @@ public static class ClientSpaceKeys
                 !DeviceWrappingKey.Verify(target.SigningPublicKey, target.PublicKey, target.BindingSignature))
             {
                 throw new ArgumentException("The recipient key is not uniquely attested.");
+            }
+
+            if (!pinnedSigningKeys.TryGetValue(target.DeviceId, out byte[]? trustedKey) ||
+                trustedKey is null ||
+                !CryptographicOperations.FixedTimeEquals(trustedKey, target.SigningPublicKey))
+            {
+                throw new UnauthorizedAccessException("The recipient identity is not independently approved.");
             }
 
             using RSA rsa = RSA.Create();
