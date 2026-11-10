@@ -28,6 +28,20 @@ The canonical macOS target is `apps/macos/Praxis.xcodeproj`, with a **shared Pra
 
 The Xcode application target produces a real `.app` with a generated `Info.plist`, fixed development identifier `dev.praxis.renames-preview`, macOS 13 deployment floor and locally signed app for the debugger. Its Run Script build phase executes `scripts/macos/publish-worker.sh` **before Xcode's final app signing step**. That script uses the existing .NET 10 project to publish the backend into `Contents/Resources/worker` and never modifies the private catalog. The backend remains .NET; none of the processing, databases, models or storage are copied into Swift. App-hosted tests skip automatic opening of the owner's saved catalog and check the actual bundle plus worker location.
 
+### Diagnosing Xcode worker build failures
+
+Xcode's Run Script phase inherits Xcode build settings as process environment variables. MSBuild also reads environment variables as project properties. The root `Directory.Build.props` therefore explicitly pins each .NET project's `AssemblyName` and `TargetName` to its own `MSBuildProjectName` so `Praxis.Inference`, `Praxis.Storage` and `Praxis.Worker` cannot all emit `Praxis.dll`. The Xcode worker publisher validates each evaluated `TargetFileName` before building and verifies that all three distinct assemblies appear in the published bundle.
+
+If Xcode reports `Command PhaseScriptExecution failed`, expand **Publish .NET Worker** in the Xcode Report Navigator. Fix the first underlying error rather than removing the phase or editing the Swift application. Confirm the distinct names independently with:
+
+```sh
+dotnet msbuild src/Praxis.Inference/Praxis.Inference.csproj -getProperty:TargetFileName
+dotnet msbuild src/Praxis.Storage/Praxis.Storage.csproj -getProperty:TargetFileName
+dotnet msbuild src/Praxis.Worker/Praxis.Worker.csproj -getProperty:TargetFileName
+```
+
+These should report `Praxis.Inference.dll`, `Praxis.Storage.dll` and `Praxis.Worker.dll` respectively. The Xcode build still requires the local .NET SDK and performs a locked restore and worker publish; no backend code is translated into Swift.
+
 The worker is **framework-dependent in this development slice**: a local .NET 10 SDK is needed at build time, and a .NET 10 runtime is needed on the Mac at run time. Finder-launched Xcode may not inherit your terminal's `PATH`. If its build cannot find the SDK, set a user-defined Xcode Build Setting `PRAXIS_DOTNET_EXECUTABLE` to the absolute executable path (or install .NET in a standard location). Separately, the app's first-run setup can select the .NET executable used to launch the worker. A locally configured path is not committed to the project. Select Xcode once using `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer` or set `DEVELOPER_DIR` for that terminal.
 
 `scripts/macos/build-desktop.sh` now uses **the exact same Xcode application project and shared scheme**, not a parallel Swift Package build or custom handwritten `Info.plist`. It packages an unsigned local `.app` only if `.artifacts/Praxis.app` is absent. `scripts/macos/test-worker-session.sh` runs `xcodebuild test` against the hosted native test target and includes the published worker integration fixture. Direct Xcode testing also discovers the bundled worker when a supported runtime is installed.
