@@ -14,7 +14,7 @@ public sealed record EntitySummary(
 
 public sealed record EntityMention(
     Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string? MentionType,
-    string Evidence, int EvidenceOffset, string Status);
+    string Evidence, int EvidenceOffset, string Status, string SourceName, string? Verdict);
 
 public sealed record EntityRelation(
     Guid RelationId, string Predicate, bool Outgoing, Guid OtherEntityId, string OtherName,
@@ -311,9 +311,11 @@ public sealed class LocalKnowledge
     private static List<EntityMention> Mentions(SqliteConnection connection, Guid entityId)
     {
         using SqliteCommand query = connection.CreateCommand("""
-                                                             SELECT proposal_id, source_id, item_id, revision, entity_type, evidence, evidence_offset, status
-                                                             FROM visible_entity_mentions WHERE entity_id = $entity
-                                                             ORDER BY source_id, evidence_offset LIMIT 200
+                                                             SELECT m.proposal_id, m.source_id, m.item_id, m.revision, m.entity_type, m.evidence,
+                                                                    m.evidence_offset, m.status, s.locator, m.verdict
+                                                             FROM visible_entity_mentions m JOIN sources s ON s.source_id = m.source_id
+                                                             WHERE m.entity_id = $entity
+                                                             ORDER BY s.locator, m.evidence_offset LIMIT 200
                                                              """);
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
         using SqliteDataReader reader = query.ExecuteReader();
@@ -323,7 +325,8 @@ public sealed class LocalKnowledge
             mentions.Add(new EntityMention(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                 Guid.Parse(reader.GetString(2)), reader.GetInt32(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5),
-                reader.GetInt32(6), reader.GetString(7)));
+                reader.GetInt32(6), reader.GetString(7), Path.GetFileName(reader.GetString(8)),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
         }
 
         return mentions;

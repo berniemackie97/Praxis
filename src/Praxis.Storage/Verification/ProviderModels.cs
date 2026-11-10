@@ -33,7 +33,9 @@ public static class ProviderModels
                 var candidate = Path.Combine(directory, command);
                 if (File.Exists(candidate))
                 {
-                    found[provider] = new FileInfo(candidate).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? candidate;
+                    // Keep the PATH entry rather than its link target: package managers replace
+                    // versioned targets on update, while the PATH link stays stable.
+                    found[provider] = candidate;
                     break;
                 }
             }

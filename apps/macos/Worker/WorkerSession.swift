@@ -11,7 +11,8 @@ final class WorkerSession {
     private let decoder = JSONDecoder()
     private var process: Process?
     private var input: FileHandle?
-    private var pending: [String: (WorkerResponse) -> Void] = [:]
+    /// Each pending request decodes its own response line; false means the line was invalid.
+    private var pending: [String: (Data) -> Bool] = [:]
     private var buffer = Data()
     private var failure: String?
     private var onDiagnostic: ((String) -> Void)?
@@ -89,6 +90,28 @@ final class WorkerSession {
     func send(
         _ action: String, fields: [String: Any], receive: @escaping (WorkerResponse) -> Void
     ) throws {
+        try send(action, fields: fields) { [decoder] line in
+            guard let response = try? decoder.decode(WorkerResponse.self, from: line) else { return false }
+            receive(response)
+            return true
+        }
+    }
+
+    /// Sends a request whose `data` decodes as `Payload`, independent of the shared response shape.
+    func send<Payload: Decodable>(
+        _ action: String, fields: [String: Any], as _: Payload.Type,
+        receive: @escaping (WorkerReply<Payload>) -> Void
+    ) throws {
+        try send(action, fields: fields) { [decoder] line in
+            guard let reply = try? decoder.decode(WorkerReply<Payload>.self, from: line) else { return false }
+            receive(reply)
+            return true
+        }
+    }
+
+    private func send(
+        _ action: String, fields: [String: Any], complete: @escaping (Data) -> Bool
+    ) throws {
         guard let process, let input else { throw SessionError.notRunning }
         guard pending.count < Self.maximumPendingRequests else { throw SessionError.busy }
 
@@ -101,7 +124,7 @@ final class WorkerSession {
             throw SessionError.requestTooLarge
         }
         frame.append(0x0A)
-        pending[id] = receive
+        pending[id] = complete
 
         writeQueue.async { [weak self, weak process, frame] in
             do {
@@ -132,13 +155,13 @@ final class WorkerSession {
 
             let line = Data(buffer[..<end])
             buffer.removeSubrange(...end)
-            guard let response = try? decoder.decode(WorkerResponse.self, from: line),
-                  let id = response.requestId,
-                  let complete = pending.removeValue(forKey: id) else {
+            guard let header = try? decoder.decode(ResponseHeader.self, from: line),
+                  let id = header.requestId,
+                  let complete = pending.removeValue(forKey: id),
+                  complete(line) else {
                 fail(child, message: "The worker returned an invalid response.")
                 return
             }
-            complete(response)
         }
         if buffer.count > Self.maximumResponseBytes {
             fail(child, message: "A worker response exceeded the size limit.")
@@ -164,6 +187,10 @@ final class WorkerSession {
         onDiagnostic = nil
         onExit = nil
         notify?(exitError)
+    }
+
+    private struct ResponseHeader: Decodable {
+        let requestId: String?
     }
 
     private enum SessionError: LocalizedError {

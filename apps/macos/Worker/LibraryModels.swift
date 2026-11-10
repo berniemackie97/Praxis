@@ -39,6 +39,7 @@ struct SourceCollection: Decodable, Identifiable {
     var id: String { collectionId }
 }
 
+/// A source-grounded proposal: a topic, a typed entity, or a relation between two entities.
 struct TopicProposal: Decodable, Identifiable {
     let proposalId: String
     let sourceId: String
@@ -46,12 +47,28 @@ struct TopicProposal: Decodable, Identifiable {
     let revision: Int
     let sourceSha256: String
     let producer: String
+    let kind: String
+    let entityType: String?
     let value: String
     let evidence: String
     let evidenceOffset: Int
     let status: String
     let correction: String?
+    let relationSubject: String?
+    let relationObject: String?
+    let flags: String?
     var id: String { proposalId }
+
+    var instructionLike: Bool { flags == "instruction_like" }
+    var fromModel: Bool { producer.hasPrefix("semantic-extract") }
+
+    var title: String {
+        switch kind {
+        case "relation": "\(relationSubject ?? "") \(KnowledgeVocabulary.label(value)) \(relationObject ?? "")"
+        case "entity": "\(value) · \(KnowledgeVocabulary.label(entityType))"
+        default: value
+        }
+    }
 }
 
 struct OriginalExportReceipt: Decodable {

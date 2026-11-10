@@ -14,6 +14,7 @@ struct WorkerResponseData: Decodable {
     let clips: [VideoCue]?
     let media: MediaInspection?
     let outcome: String?
+    let semanticOutcome: String?
     let content: String?
     let reasonCode: String?
     let verified: Bool?

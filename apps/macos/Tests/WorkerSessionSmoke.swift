@@ -66,6 +66,42 @@ struct WorkerSessionSmoke {
         try await waitFor("validation response") { denied != nil }
         guard denied?.ok == false else { throw Failure.unexpected("Invalid item was accepted") }
 
+        // Typed replies: feature payloads decode without the shared response shape, and a
+        // decoding mismatch fails the session instead of silently dropping data.
+        var profile: WorkerReply<ModelProfileData>?
+        try session.send("modelProfileSave", fields: [
+            "provider": "ollama", "endpoint": "http://127.0.0.1:11434", "model": "smoke:1b",
+            "contextTokens": 4096, "enabled": false
+        ], as: ModelProfileData.self) { profile = $0 }
+        try await waitFor("model profile") { profile != nil }
+        guard profile?.data?.profile?.model == "smoke:1b", profile?.data?.profile?.enabled == false else {
+            throw Failure.unexpected("Model profile did not round-trip through a typed reply")
+        }
+
+        var providers: WorkerReply<ProvidersData>?
+        try session.send("verificationProviders", fields: [:], as: ProvidersData.self) { providers = $0 }
+        try await waitFor("verification providers") { providers != nil }
+        guard providers?.ok == true, providers?.data?.providers.isEmpty == true else {
+            throw Failure.unexpected("Verification providers did not decode")
+        }
+
+        var entities: WorkerReply<EntityListData>?
+        try session.send("entities", fields: ["limit": 10], as: EntityListData.self) { entities = $0 }
+        var requests: WorkerReply<VerificationListData>?
+        try session.send("verifications", fields: [:], as: VerificationListData.self) { requests = $0 }
+        try await waitFor("knowledge and verification lists") { entities != nil && requests != nil }
+        guard entities?.data?.entities.isEmpty == true, requests?.data?.requests.isEmpty == true else {
+            throw Failure.unexpected("Knowledge or verification lists did not decode")
+        }
+
+        var rejected: WorkerReply<VerificationCreatedData>?
+        try session.send("verificationApprove", fields: ["verificationId": UUID().uuidString.lowercased()],
+                         as: VerificationCreatedData.self) { rejected = $0 }
+        try await waitFor("rejected approval") { rejected != nil }
+        guard rejected?.ok == false, rejected?.error != nil else {
+            throw Failure.unexpected("Approving an unknown verification was accepted")
+        }
+
         session.stop()
         try await waitFor("worker exit") { exited }
         if let exitError { throw Failure.unexpected(exitError) }
@@ -96,7 +132,7 @@ struct WorkerSessionSmoke {
             throw Failure.unexpected("Malformed response did not fail the session")
         }
 
-        print("Worker session passed capture, search, denied request, restart and malformed response.")
+        print("Worker session passed capture, search, typed feature replies, denied requests, restart and malformed response.")
     }
 
     private static func waitFor(_ event: String, condition: () -> Bool) async throws {

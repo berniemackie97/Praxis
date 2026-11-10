@@ -48,7 +48,9 @@ struct PraxisWindow: View {
         }
         .onDisappear { model.stop() }
         .onReceive(refreshTimer) { _ in
-            if model.running { model.refresh() }
+            guard model.running else { return }
+            model.refresh()
+            if section == .verification { model.verification.refresh() }
         }
     }
 
@@ -58,7 +60,10 @@ struct PraxisWindow: View {
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
+        case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification)
+        case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .collections: CollectionsView()
+        case .models: IntelligenceSettingsView(model: model.intelligence)
         case .configuration: ConfigurationView(dataRoot: dataRoot, inbox: inbox)
         }
     }
@@ -67,7 +72,10 @@ struct PraxisWindow: View {
         case library = "Inbox & Library"
         case quickNote = "Quick note"
         case search = "Search"
+        case knowledge = "Knowledge"
+        case verification = "Verification"
         case collections = "Collections"
+        case models = "Models"
         case configuration = "Configuration"
     }
 }
