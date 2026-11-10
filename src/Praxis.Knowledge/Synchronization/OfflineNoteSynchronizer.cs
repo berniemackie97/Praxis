@@ -113,7 +113,7 @@ public sealed class OfflineNoteSynchronizer(LocalNoteJournal journal,
                 long cursor = journal.Cursor;
                 NotePullResult page = await exchange.PullAsync(
                     new NotePullRequest(ProtocolVersion, securitySpaceId, epoch,
-                        cursor, PageLimit), cancellationToken).ConfigureAwait(false);
+                        deviceId, cursor, PageLimit), cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (page is null || page.SecuritySpaceId != securitySpaceId ||
                     page.RequestedCursor != cursor || page.Changes is null ||
@@ -160,7 +160,7 @@ public sealed class OfflineNoteSynchronizer(LocalNoteJournal journal,
                     }
 
                     NoteSnapshotResult restored = await exchange.SnapshotAsync(
-                        securitySpaceId, epoch, cancellationToken).ConfigureAwait(false);
+                        securitySpaceId, epoch, deviceId, cancellationToken).ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (restored is null || restored.SecuritySpaceId != securitySpaceId ||
                         restored.Snapshot is null || restored.Snapshot.CollectionEpoch != epoch ||
