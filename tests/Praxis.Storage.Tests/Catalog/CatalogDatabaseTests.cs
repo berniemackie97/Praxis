@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Catalog;
 
 public sealed class CatalogDatabaseTests : IDisposable
 {
@@ -10,14 +10,14 @@ public sealed class CatalogDatabaseTests : IDisposable
 
     public CatalogDatabaseTests()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
+        SqliteConnection connection = new("Data Source=:memory:");
         connection.Open();
         database = new CatalogDatabase(connection);
         database.Execute(c =>
         {
-            using var create = c.CreateCommand("CREATE TABLE counter (value INTEGER NOT NULL)");
+            using SqliteCommand create = c.CreateCommand("CREATE TABLE counter (value INTEGER NOT NULL)");
             create.ExecuteNonQuery();
-            using var seed = c.CreateCommand("INSERT INTO counter (value) VALUES (0)");
+            using SqliteCommand seed = c.CreateCommand("INSERT INTO counter (value) VALUES (0)");
             seed.ExecuteNonQuery();
         });
     }
@@ -25,10 +25,10 @@ public sealed class CatalogDatabaseTests : IDisposable
     [Fact]
     public void NestedOperationOnTheOwningThreadDoesNotDeadlock()
     {
-        var value = database.Execute(_ =>
+        long value = database.Execute(_ =>
             database.Execute(inner =>
             {
-                using var read = inner.CreateCommand("SELECT value FROM counter");
+                using SqliteCommand read = inner.CreateCommand("SELECT value FROM counter");
                 return (long)read.ExecuteScalar()!;
             }));
 
@@ -40,19 +40,19 @@ public sealed class CatalogDatabaseTests : IDisposable
     {
         const int writers = 8;
         const int incrementsPerWriter = 200;
-        var start = new ManualResetEventSlim();
-        var tasks = Enumerable.Range(0, writers).Select(_ => Task.Run(() =>
+        ManualResetEventSlim start = new();
+        Task[] tasks = Enumerable.Range(0, writers).Select(_ => Task.Run(() =>
         {
             start.Wait();
-            for (var i = 0; i < incrementsPerWriter; i++)
+            for (int i = 0; i < incrementsPerWriter; i++)
             {
                 // Without whole-callback exclusion, interleaved callbacks would lose
                 // updates or fault on the shared connection.
                 database.Execute(connection =>
                 {
-                    using var read = connection.CreateCommand("SELECT value FROM counter");
-                    var current = (long)read.ExecuteScalar()!;
-                    using var write = connection.CreateCommand("UPDATE counter SET value = $value");
+                    using SqliteCommand read = connection.CreateCommand("SELECT value FROM counter");
+                    long current = (long)read.ExecuteScalar()!;
+                    using SqliteCommand write = connection.CreateCommand("UPDATE counter SET value = $value");
                     write.Parameters.AddWithValue("$value", current + 1);
                     write.ExecuteNonQuery();
                 });
@@ -62,9 +62,9 @@ public sealed class CatalogDatabaseTests : IDisposable
         start.Set();
         await Task.WhenAll(tasks);
 
-        var total = database.Execute(connection =>
+        long total = database.Execute(connection =>
         {
-            using var read = connection.CreateCommand("SELECT value FROM counter");
+            using SqliteCommand read = connection.CreateCommand("SELECT value FROM counter");
             return (long)read.ExecuteScalar()!;
         });
         Assert.Equal(writers * incrementsPerWriter, total);

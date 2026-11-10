@@ -1,8 +1,13 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Library;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Search;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Intake;
 
 public sealed class LocalWatchedIntakeTests : IDisposable
 {
@@ -27,22 +32,22 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task StableDropsEnterDurableLibraryAndSupportedTextIsSearchable()
     {
-        var text = Path.Combine(inbox, "plan.md");
-        var unknown = Path.Combine(inbox, "archive.data");
+        string text = Path.Combine(inbox, "plan.md");
+        string unknown = Path.Combine(inbox, "archive.data");
         File.WriteAllText(text, "# Plan\nThe violet notebook is ready.");
         File.WriteAllBytes(unknown, [0, 1, 255, 2]);
 
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var watcher = NewMonitor(catalog);
-        var time = DateTimeOffset.UtcNow;
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(time));
         Assert.Empty(catalog.Library.List());
 
         Assert.Equal(2, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        var items = catalog.Library.List();
+        IReadOnlyList<LocalLibraryItem> items = catalog.Library.List();
         Assert.Equal(2, items.Count);
-        var markdown = Assert.Single(items, item => item.SourceLocator == text);
-        var unsupported = Assert.Single(items, item => item.SourceLocator == unknown);
+        LocalLibraryItem markdown = Assert.Single(items, item => item.SourceLocator == text);
+        LocalLibraryItem unsupported = Assert.Single(items, item => item.SourceLocator == unknown);
         Assert.Equal("completed", markdown.ProcessingState);
         Assert.Equal("completed", markdown.ExtractionOutcome);
         Assert.Equal("unsupported", unsupported.ProcessingState);
@@ -60,18 +65,18 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task TechnicalFilesDroppedIntoInboxAreIndexedAndRemainAvailableAfterRestart()
     {
-        var codePath = Path.Combine(inbox, "C3Reader.cs");
-        var dumpPath = Path.Combine(inbox, "C3Dump.asm");
-        var opaquePath = Path.Combine(inbox, "packed.bin");
+        string codePath = Path.Combine(inbox, "C3Reader.cs");
+        string dumpPath = Path.Combine(inbox, "C3Dump.asm");
+        string opaquePath = Path.Combine(inbox, "packed.bin");
         File.WriteAllText(codePath, "public sealed class C3ChunkReader {}");
         File.WriteAllText(dumpPath, "C3ChunkReader PROC\\nRET\\nC3ChunkReader ENDP");
         File.WriteAllBytes(opaquePath, [0, 255, 1]);
 
         LocalSearchHit[] indexed;
-        var time = DateTimeOffset.UtcNow;
-        using (var catalog = LocalCatalog.Open(dataRoot))
+        DateTimeOffset time = DateTimeOffset.UtcNow;
+        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
-            var watcher = NewMonitor(catalog);
+            IntakeHarness watcher = NewMonitor(catalog);
             Assert.Equal(0, await watcher.ReconcileAsync(time));
             Assert.Equal(3, await watcher.ReconcileAsync(time.AddSeconds(2)));
             indexed = catalog.Search.Query("C3ChunkReader").ToArray();
@@ -79,14 +84,14 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             Assert.All(indexed, hit => Assert.Equal(1, hit.Revision));
             Assert.Equal("unsupported", catalog.Library.List().Single(
                 item => item.SourceLocator == opaquePath).ExtractionOutcome);
-            foreach (var hit in indexed)
+            foreach (LocalSearchHit hit in indexed)
             {
                 await catalog.Originals.VerifyAsync(hit.ItemId);
             }
         }
 
-        using var reopened = LocalCatalog.Open(dataRoot);
-        var restored = reopened.Search.Query("C3ChunkReader");
+        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        IReadOnlyList<LocalSearchHit> restored = reopened.Search.Query("C3ChunkReader");
         Assert.Equal(indexed.Select(hit => hit.SourceId).OrderBy(id => id),
             restored.Select(hit => hit.SourceId).OrderBy(id => id));
         Assert.Equal(3, reopened.Library.List().Count);
@@ -95,21 +100,21 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task ContentUpdatesPreserveSourceIdentityAndInvalidatePreviousSearch()
     {
-        var path = Path.Combine(inbox, "changing.txt");
+        string path = Path.Combine(inbox, "changing.txt");
         File.WriteAllText(path, "violet revision");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var watcher = NewMonitor(catalog);
-        var time = DateTimeOffset.UtcNow;
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        var first = Assert.Single(catalog.Library.List());
+        LocalLibraryItem first = Assert.Single(catalog.Library.List());
         Assert.Single(catalog.Search.Query("violet"));
 
         File.WriteAllText(path, "amber revision");
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        var second = Assert.Single(catalog.Library.List());
+        LocalLibraryItem second = Assert.Single(catalog.Library.List());
         Assert.Equal(first.ItemId, second.ItemId);
         Assert.Equal(first.SourceId, second.SourceId);
         Assert.Equal(2, second.Revision);
@@ -124,12 +129,12 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task TemporaryFilesAreIgnoredAndAtomicRenameIsCaptured()
     {
-        var temporary = Path.Combine(inbox, "download.part");
-        var completed = Path.Combine(inbox, "download.md");
+        string temporary = Path.Combine(inbox, "download.part");
+        string completed = Path.Combine(inbox, "download.md");
         File.WriteAllText(temporary, "a temporary violet note");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var watcher = NewMonitor(catalog);
-        var time = DateTimeOffset.UtcNow;
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(2)));
         Assert.Empty(catalog.Library.List());
@@ -144,14 +149,14 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task DeletingAWatchedFileDoesNotRevokeItsPreservedOriginal()
     {
-        var path = Path.Combine(inbox, "history.txt");
+        string path = Path.Combine(inbox, "history.txt");
         File.WriteAllText(path, "original violet history");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var watcher = NewMonitor(catalog);
-        var time = DateTimeOffset.UtcNow;
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        var prior = Assert.Single(catalog.Library.List());
+        LocalLibraryItem prior = Assert.Single(catalog.Library.List());
 
         File.Delete(path);
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
@@ -163,24 +168,24 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task ReconciliationAfterRestartKeepsCommittedVersionAndReceipt()
     {
-        var path = Path.Combine(inbox, "restart.md");
+        string path = Path.Combine(inbox, "restart.md");
         File.WriteAllText(path, "# violet durable");
         LocalLibraryItem before;
-        var time = DateTimeOffset.UtcNow;
-        using (var catalog = LocalCatalog.Open(dataRoot))
+        DateTimeOffset time = DateTimeOffset.UtcNow;
+        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
-            var first = NewMonitor(catalog);
+            IntakeHarness first = NewMonitor(catalog);
             await first.ReconcileAsync(time);
             await first.ReconcileAsync(time.AddSeconds(2));
             before = Assert.Single(catalog.Library.List());
         }
 
-        using (var reopened = LocalCatalog.Open(dataRoot))
+        using (LocalCatalog reopened = LocalCatalog.Open(dataRoot))
         {
-            var resumed = NewMonitor(reopened);
+            IntakeHarness resumed = NewMonitor(reopened);
             await resumed.ReconcileAsync(time.AddSeconds(10));
             Assert.Equal(0, await resumed.ReconcileAsync(time.AddSeconds(12)));
-            var after = Assert.Single(reopened.Library.List());
+            LocalLibraryItem after = Assert.Single(reopened.Library.List());
             Assert.Equal(before, after);
             Assert.Single(reopened.Search.Query("violet"));
             Assert.Equal(1L, Count(reopened.DatabasePath, "ingest_requests"));
@@ -196,11 +201,11 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             return;
         }
 
-        var outside = Path.Combine(workspace, "outside.txt");
+        string outside = Path.Combine(workspace, "outside.txt");
         File.WriteAllText(outside, "private");
         File.CreateSymbolicLink(Path.Combine(inbox, "linked.txt"), outside);
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var watcher = NewMonitor(catalog);
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             watcher.ReconcileAsync(DateTimeOffset.UtcNow));
         Assert.Empty(catalog.Library.List());
@@ -210,23 +215,23 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task ActiveMonitorNoticesNewDropsWithoutAnImportCommand()
     {
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = NewMonitor(catalog, TimeSpan.Zero,
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness monitor = NewMonitor(catalog, TimeSpan.Zero,
             TimeSpan.FromMilliseconds(100));
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
             await Task.Delay(200);
             File.WriteAllText(Path.Combine(inbox, "live.txt"), "violet observation");
-            var deadline = DateTime.UtcNow.AddSeconds(10);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
             while (catalog.Library.List().FirstOrDefault()?.ProcessingState != "completed" &&
                 DateTime.UtcNow < deadline)
             {
                 await Task.Delay(100);
             }
 
-            var imported = Assert.Single(catalog.Library.List());
+            LocalLibraryItem imported = Assert.Single(catalog.Library.List());
             Assert.Equal("completed", imported.ProcessingState);
             Assert.Single(catalog.Search.Query("violet"));
         }
@@ -240,12 +245,12 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task OfflineApprovedIntakeResumesAfterDirectoryReturns()
     {
-        var removable = Path.Combine(workspace, "offline");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new IntakeHarness(catalog, removable,
+        string removable = Path.Combine(workspace, "offline");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness monitor = new(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
             await Task.Delay(200);
@@ -266,18 +271,18 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task OfflineWatcherStillDrainsPreviouslyQueuedProcessing()
     {
-        var outside = Path.Combine(workspace, "queued.txt");
+        string outside = Path.Combine(workspace, "queued.txt");
         File.WriteAllText(outside, "violet from existing queue");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var original = await new LocalSourceIntake(catalog)
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        CapturedOriginal original = await new LocalSourceIntake(catalog)
             .ImportFileAsync(outside, 100, "offline-queued");
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
 
-        var monitor = new IntakeHarness(
+        IntakeHarness monitor = new(
             catalog, Path.Combine(workspace, "not-mounted"),
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
             await WaitForAsync(() =>
@@ -293,7 +298,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
 
     private static async Task WaitForAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
         while (!condition() && DateTime.UtcNow < deadline)
         {
             await Task.Delay(100);
@@ -309,14 +314,14 @@ public sealed class LocalWatchedIntakeTests : IDisposable
 
     private static long Count(string databasePath, string table)
     {
-        using var database = new SqliteConnection(new SqliteConnectionStringBuilder
+        using SqliteConnection database = new(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadOnly,
             Pooling = false
         }.ToString());
         database.Open();
-        using var command = database.CreateCommand();
+        using SqliteCommand command = database.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {table}";
         return (long)command.ExecuteScalar()!;
     }

@@ -1,7 +1,7 @@
 using Xunit;
-using static Praxis.Knowledge.Tests.SyncHarnessInputs;
+using static Praxis.Knowledge.Tests.Synchronization.SyncHarnessInputs;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Synchronization;
 
 public sealed class SyncDeliveryTests
 {
@@ -14,18 +14,18 @@ public sealed class SyncDeliveryTests
     [InlineData(31337)]
     public void SeededOfflineDeliveryAndDuplicatePullsConverge(int seed)
     {
-        var random = new Random(seed);
-        var server = new SyncContractFixture(Epoch);
-        var clients = new[] { FirstDevice, SecondDevice, ThirdDevice }
+        Random random = new(seed);
+        SyncContractFixture server = new(Epoch);
+        OfflineSyncReplica[] clients = new[] { FirstDevice, SecondDevice, ThirdDevice }
             .Select(device => OfflineSyncReplica.Start(Epoch, device)).ToArray();
-        var deliveries = new List<(OfflineSyncReplica Replica, SyncMutation Mutation)>();
+        List<(OfflineSyncReplica Replica, SyncMutation Mutation)> deliveries = new();
 
-        for (var index = 0; index < clients.Length; index++)
+        for (int index = 0; index < clients.Length; index++)
         {
-            for (var item = 0; item < 12; item++)
+            for (int item = 0; item < 12; item++)
             {
-                var record = NextGuid(random);
-                var mutation = NewMutation(
+                Guid record = NextGuid(random);
+                SyncMutation mutation = NewMutation(
                     clients[index].DeviceId, NextGuid(random), record, 0,
                     SyncAction.Upsert, $"device-{index}/note-{item}.md", $"seed-{seed}-{index}-{item}");
                 clients[index].Queue(mutation);
@@ -34,9 +34,9 @@ public sealed class SyncDeliveryTests
         }
 
         Shuffle(deliveries, random);
-        foreach (var (replica, mutation) in deliveries)
+        foreach ((OfflineSyncReplica replica, SyncMutation mutation) in deliveries)
         {
-            var receipt = server.Apply(mutation);
+            SyncReply receipt = server.Apply(mutation);
             Assert.Equal(ApplyStatus.Applied, receipt.Status);
             if (random.Next(4) == 0)
             {
@@ -49,12 +49,12 @@ public sealed class SyncDeliveryTests
             }
         }
 
-        foreach (var replica in clients)
+        foreach (OfflineSyncReplica replica in clients)
         {
-            foreach (var pending in replica.Pending.ToArray())
+            foreach (SyncMutation pending in replica.Pending.ToArray())
             {
-                var before = server.HeadSequence;
-                var receipt = server.Apply(pending);
+                long before = server.HeadSequence;
+                SyncReply receipt = server.Apply(pending);
                 Assert.Equal(ApplyStatus.Applied, receipt.Status);
                 Assert.True(receipt.HeadSequence <= before);
                 Assert.Equal(before, server.HeadSequence);
@@ -65,17 +65,17 @@ public sealed class SyncDeliveryTests
             Assert.Empty(replica.Conflicts);
         }
 
-        var expected = server.Snapshot().Records.ToArray();
+        SyncRecord[] expected = server.Snapshot().Records.ToArray();
         Assert.Equal((long)deliveries.Count, server.HeadSequence);
-        for (var index = 0; index < clients.Length; index++)
+        for (int index = 0; index < clients.Length; index++)
         {
-            var replica = clients[index];
+            OfflineSyncReplica replica = clients[index];
             while (replica.Cursor < server.HeadSequence)
             {
-                var page = server.Pull(Epoch, replica.Cursor, random.Next(1, 8));
+                SyncPage page = server.Pull(Epoch, replica.Cursor, random.Next(1, 8));
                 Assert.Equal(PullStatus.Ok, page.Status);
                 Assert.NotEmpty(page.Changes);
-                var checkpoint = replica.Checkpoint();
+                ReplicaCheckpoint checkpoint = replica.Checkpoint();
 
                 if (random.Next(3) == 0)
                 {

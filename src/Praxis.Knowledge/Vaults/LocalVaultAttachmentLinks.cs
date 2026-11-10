@@ -1,39 +1,32 @@
 using System.Text.RegularExpressions;
+using Praxis.Knowledge.Model;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Vaults;
 
 public sealed record VaultLinkProblem(string NotePath, string Target, string Reason);
 
-public sealed record VaultLinkReport(
-    IReadOnlyList<AttachmentReference> References, IReadOnlyList<VaultLinkProblem> Problems);
+public sealed record VaultLinkReport(IReadOnlyList<AttachmentReference> References, IReadOnlyList<VaultLinkProblem> Problems);
 
 public static class LocalVaultAttachmentLinks
 {
-    private static readonly Regex WikiEmbed = new(
-        @"!\[\[([^\]\r\n]+)\]\]", RegexOptions.Compiled | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(1));
-    private static readonly Regex MarkdownEmbed = new(
-        @"!\[[^\]\r\n]*\]\(([^()\r\n]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(1));
+    private static readonly Regex WikiEmbed = new(@"!\[\[([^\]\r\n]+)\]\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex MarkdownEmbed = new(@"!\[[^\]\r\n]*\]\(([^()\r\n]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     public static VaultLinkReport Inspect(KnowledgeCollection collection)
     {
         ArgumentNullException.ThrowIfNull(collection);
-        var byPath = collection.Attachments.ToDictionary(
-            item => item.Path, StringComparer.OrdinalIgnoreCase);
-        var byName = collection.Attachments.ToLookup(
-            item => item.Path[(item.Path.LastIndexOf('/') + 1)..],
-            StringComparer.OrdinalIgnoreCase);
-        var references = new HashSet<AttachmentReference>();
-        var problems = new List<VaultLinkProblem>();
-        var scannedEmbeds = 0;
+        Dictionary<string, AttachmentRecord> byPath = collection.Attachments.ToDictionary(item => item.Path, StringComparer.OrdinalIgnoreCase);
+        ILookup<string, AttachmentRecord> byName = collection.Attachments.ToLookup(item => item.Path[(item.Path.LastIndexOf('/') + 1)..], StringComparer.OrdinalIgnoreCase);
+        HashSet<AttachmentReference> references = [];
+        List<VaultLinkProblem> problems = [];
+        int scannedEmbeds = 0;
 
-        foreach (var note in collection.Notes)
+        foreach (NoteRecord note in collection.Notes)
         {
             char fence = '\0';
-            foreach (var line in note.Current.Markdown.Split('\n'))
+            foreach (string line in note.Current.Markdown.Split('\n'))
             {
-                var trimmed = line.TrimStart();
+                string trimmed = line.TrimStart();
                 if (fence == '\0' && (trimmed.StartsWith("~~~") || trimmed.StartsWith("\u0060\u0060\u0060")))
                 {
                     fence = trimmed[0];
@@ -42,8 +35,7 @@ public static class LocalVaultAttachmentLinks
 
                 if (fence != '\0')
                 {
-                    if (trimmed.Length >= 3 && trimmed[0] == fence &&
-                        trimmed[1] == fence && trimmed[2] == fence)
+                    if (trimmed.Length >= 3 && trimmed[0] == fence && trimmed[1] == fence && trimmed[2] == fence)
                     {
                         fence = '\0';
                     }
@@ -51,13 +43,12 @@ public static class LocalVaultAttachmentLinks
                     continue;
                 }
 
-                var visible = HideInlineCode(line);
+                string visible = HideInlineCode(line);
                 foreach (Match match in WikiEmbed.Matches(visible))
                 {
-                    var target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
+                    string target = match.Groups[1].Value.Split('|', 2)[0].Split('#', 2)[0];
                     CheckLimit();
-                    if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
-                        !Path.HasExtension(target))
+                    if (target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || !Path.HasExtension(target))
                     {
                         continue;
                     }
@@ -68,15 +59,13 @@ public static class LocalVaultAttachmentLinks
                 foreach (Match match in MarkdownEmbed.Matches(visible))
                 {
                     CheckLimit();
-                    var value = match.Groups[1].Value.Trim();
-                    if (Uri.TryCreate(value, UriKind.Absolute, out _) ||
-                        value.StartsWith("//", StringComparison.Ordinal) ||
-                        value.StartsWith('#'))
+                    string value = match.Groups[1].Value.Trim();
+                    if (Uri.TryCreate(value, UriKind.Absolute, out _) || value.StartsWith("//", StringComparison.Ordinal) || value.StartsWith('#'))
                     {
                         continue;
                     }
 
-                    var target = value.Split('#', 2)[0].Split('?', 2)[0];
+                    string target = value.Split('#', 2)[0].Split('?', 2)[0];
                     try
                     {
                         Resolve(note, Uri.UnescapeDataString(target), wiki: false);
@@ -89,11 +78,8 @@ public static class LocalVaultAttachmentLinks
             }
         }
 
-        return new VaultLinkReport(
-            Array.AsReadOnly(references.OrderBy(item => item.NoteId)
-                .ThenBy(item => item.AttachmentId).ToArray()),
-            Array.AsReadOnly(problems.OrderBy(item => item.NotePath, StringComparer.Ordinal)
-                .ThenBy(item => item.Target, StringComparer.Ordinal).ToArray()));
+        return new VaultLinkReport(Array.AsReadOnly(references.OrderBy(item => item.NoteId).ThenBy(item => item.AttachmentId).ToArray()),
+            Array.AsReadOnly(problems.OrderBy(item => item.NotePath, StringComparer.Ordinal).ThenBy(item => item.Target, StringComparer.Ordinal).ToArray()));
 
         void CheckLimit()
         {
@@ -105,23 +91,22 @@ public static class LocalVaultAttachmentLinks
 
         void Resolve(NoteRecord note, string target, bool wiki)
         {
-            var path = note.Current.Path;
+            string path = note.Current.Path;
             if (string.IsNullOrWhiteSpace(target))
             {
                 return;
             }
 
-            var candidates = new HashSet<Guid>();
-            var attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var relative = target.StartsWith("./", StringComparison.Ordinal) ||
-                           target.StartsWith("../", StringComparison.Ordinal);
+            HashSet<Guid> candidates = new();
+            HashSet<string> attempted = new(StringComparer.OrdinalIgnoreCase);
+            bool relative = target.StartsWith("./", StringComparison.Ordinal) || target.StartsWith("../", StringComparison.Ordinal);
 
             if (relative || !wiki)
             {
-                var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
-                var segments = new List<string>(parent.Length == 0 ? [] : parent.Split('/'));
-                var escaped = false;
-                foreach (var segment in target.Split('/'))
+                string parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
+                List<string> segments = new(parent.Length == 0 ? [] : parent.Split('/'));
+                bool escaped = false;
+                foreach (string segment in target.Split('/'))
                 {
                     if (segment is "" or ".")
                     {
@@ -160,9 +145,9 @@ public static class LocalVaultAttachmentLinks
                 attempted.Add(target.TrimStart('/'));
             }
 
-            foreach (var candidate in attempted)
+            foreach (string candidate in attempted)
             {
-                if (byPath.TryGetValue(candidate, out var attachment))
+                if (byPath.TryGetValue(candidate, out AttachmentRecord? attachment))
                 {
                     candidates.Add(attachment.Id);
                 }
@@ -170,46 +155,44 @@ public static class LocalVaultAttachmentLinks
 
             if (wiki && !target.Contains('/'))
             {
-                foreach (var attachment in byName[target])
+                foreach (AttachmentRecord attachment in byName[target])
                 {
                     candidates.Add(attachment.Id);
                 }
             }
 
-            if (candidates.Count == 1)
+            switch (candidates.Count)
             {
-                references.Add(new AttachmentReference(note.Id, candidates.Single()));
-            }
-            else if (candidates.Count > 1)
-            {
-                problems.Add(new VaultLinkProblem(path, target, "Multiple attachments match."));
-            }
-            else
-            {
-                problems.Add(new VaultLinkProblem(path, target, "No attachment matches."));
+                case 1:
+                    references.Add(new AttachmentReference(note.Id, candidates.Single()));
+                    break;
+                case > 1:
+                    problems.Add(new VaultLinkProblem(path, target, "Multiple attachments match."));
+                    break;
+                default:
+                    problems.Add(new VaultLinkProblem(path, target, "No attachment matches."));
+                    break;
             }
         }
     }
 
     public static KnowledgeCollection Track(KnowledgeCollection collection)
     {
-        var report = Inspect(collection);
-        if (report.Problems.Count != 0)
+        VaultLinkReport report = Inspect(collection);
+        if (report.Problems.Count == 0)
         {
-            var problem = report.Problems[0];
-            throw new InvalidDataException(
-                $"Attachment link audit found {report.Problems.Count} problem(s); " +
-                $"{problem.NotePath}: {problem.Target}: {problem.Reason}");
+            return new KnowledgeCollection(collection.Notes, collection.Attachments, collection.References, report.References);
         }
 
-        return new KnowledgeCollection(
-            collection.Notes, collection.Attachments, collection.References, report.References);
+        VaultLinkProblem problem = report.Problems[0];
+        throw new InvalidDataException($"Attachment link audit found {report.Problems.Count} problem(s); {problem.NotePath}: {problem.Target}: {problem.Reason}");
+
     }
 
     private static string HideInlineCode(string line)
     {
-        var characters = line.ToCharArray();
-        for (var i = 0; i < characters.Length;)
+        char[] characters = line.ToCharArray();
+        for (int i = 0; i < characters.Length;)
         {
             if (characters[i] != '\u0060')
             {
@@ -217,22 +200,22 @@ public static class LocalVaultAttachmentLinks
                 continue;
             }
 
-            var start = i;
+            int start = i;
             while (i < characters.Length && characters[i] == '\u0060')
             {
                 i++;
             }
 
-            var delimiterLength = i - start;
-            var end = -1;
-            for (var j = i; j < characters.Length; j++)
+            int delimiterLength = i - start;
+            int end = -1;
+            for (int j = i; j < characters.Length; j++)
             {
                 if (characters[j] != '\u0060')
                 {
                     continue;
                 }
 
-                var runStart = j;
+                int runStart = j;
                 while (j < characters.Length && characters[j] == '\u0060')
                 {
                     j++;

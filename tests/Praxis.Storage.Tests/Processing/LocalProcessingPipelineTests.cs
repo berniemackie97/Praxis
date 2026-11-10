@@ -1,8 +1,11 @@
 using System.Text;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Processing;
 
 public sealed class LocalProcessingPipelineTests : IDisposable
 {
@@ -20,7 +23,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         Directory.CreateDirectory(inbox);
         if (!OperatingSystem.IsWindows())
         {
-            var mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
             File.SetUnixFileMode(workspace, mode);
             File.SetUnixFileMode(root, mode);
         }
@@ -29,12 +32,12 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task BackgroundPipelineExtractsAndProposesWithoutAnIntakeScan()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var pipeline = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(50));
-        using var cancellation = new CancellationTokenSource();
-        var running = pipeline.RunAsync(cancellation.Token);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalProcessingPipeline pipeline = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(50));
+        using CancellationTokenSource cancellation = new();
+        Task running = pipeline.RunAsync(cancellation.Token);
 
-        var captured = await Capture(catalog, "plan.md", "# Architecture\nBody", "plan");
+        CapturedOriginal captured = await Capture(catalog, "plan.md", "# Architecture\nBody", "plan");
         pipeline.Wake();
         await WaitForAsync(() => catalog.Topics.Outcome(captured.SourceId) == "generated");
 
@@ -47,15 +50,15 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task SlowProcessingDoesNotBlockWatchedIntakeCapture()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var blocking = new BlockingHandler(LocalProcessors.SourceText, maxConcurrency: 1);
-        var pipeline = new LocalProcessingPipeline(catalog, [blocking], TimeSpan.FromMilliseconds(50));
-        var intake = new LocalWatchedIntake(catalog, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
-        using var cancellation = new CancellationTokenSource();
-        var running = pipeline.RunAsync(cancellation.Token);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
+        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        LocalWatchedIntake intake = new(catalog, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
+        using CancellationTokenSource cancellation = new();
+        Task running = pipeline.RunAsync(cancellation.Token);
 
         File.WriteAllText(Path.Combine(inbox, "first.txt"), "first");
-        var time = DateTimeOffset.UtcNow;
+        DateTimeOffset time = DateTimeOffset.UtcNow;
         await intake.ReconcileAsync(time);
         Assert.Equal(1, await intake.ReconcileAsync(time.AddSeconds(1)));
         await blocking.Started.Task.WaitAsync(Deadline);
@@ -73,16 +76,16 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task ConcurrencyIsBoundedPerHandler()
     {
-        using var catalog = LocalCatalog.Open(root);
-        for (var index = 0; index < 5; index++)
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        for (int index = 0; index < 5; index++)
         {
             await Capture(catalog, $"item{index}.txt", $"text {index}", $"key{index}");
         }
 
-        var blocking = new BlockingHandler(LocalProcessors.SourceText, maxConcurrency: 2);
-        var pipeline = new LocalProcessingPipeline(catalog, [blocking], TimeSpan.FromMilliseconds(50));
-        using var cancellation = new CancellationTokenSource();
-        var running = pipeline.RunAsync(cancellation.Token);
+        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 2);
+        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        using CancellationTokenSource cancellation = new();
+        Task running = pipeline.RunAsync(cancellation.Token);
 
         await WaitForAsync(() => blocking.Active == 2);
         await Task.Delay(200);
@@ -98,25 +101,25 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task HandlerFaultFailsOnlyItsJobAndProcessingContinues()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var broken = await Capture(catalog, "broken.txt", "boom", "broken");
-        var healthy = await Capture(catalog, "healthy.txt", "fine", "healthy");
-        var reports = new List<string>();
-        var faulting = new FaultingHandler(catalog, broken.ItemId);
-        var pipeline = new LocalProcessingPipeline(catalog, [faulting],
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal broken = await Capture(catalog, "broken.txt", "boom", "broken");
+        CapturedOriginal healthy = await Capture(catalog, "healthy.txt", "fine", "healthy");
+        List<string> reports = new();
+        FaultingHandler faulting = new(catalog, broken.ItemId);
+        LocalProcessingPipeline pipeline = new(catalog, [faulting],
             TimeSpan.FromMilliseconds(50), status: message => { lock (reports) { reports.Add(message); } });
 
         Assert.True(await pipeline.ProcessNextAsync());
         Assert.True(await pipeline.ProcessNextAsync());
         Assert.False(await pipeline.ProcessNextAsync());
 
-        var jobs = catalog.Processing.List()
+        ProcessingJob[] jobs = catalog.Processing.List()
             .Where(job => job.ProcessorKey == LocalProcessors.SourceText).ToArray();
-        var failed = Assert.Single(jobs, job => job.ItemId == broken.ItemId);
+        ProcessingJob failed = Assert.Single(jobs, job => job.ItemId == broken.ItemId);
         Assert.Equal("failed", failed.State);
         Assert.Equal(LocalProcessingPipeline.FaultCode, failed.FailureCode);
         Assert.Equal("completed", Assert.Single(jobs, job => job.ItemId == healthy.ItemId).State);
-        var report = Assert.Single(reports);
+        string report = Assert.Single(reports);
         Assert.Contains(nameof(InvalidOperationException), report, StringComparison.Ordinal);
         Assert.DoesNotContain("secret detail", report, StringComparison.Ordinal);
     }
@@ -124,18 +127,18 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task ShutdownLeavesInterruptedLeaseRecoverableInsteadOfFailed()
     {
-        using var catalog = LocalCatalog.Open(root);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
         await Capture(catalog, "slow.txt", "slow", "slow");
-        var blocking = new BlockingHandler(LocalProcessors.SourceText, maxConcurrency: 1);
-        var pipeline = new LocalProcessingPipeline(catalog, [blocking], TimeSpan.FromMilliseconds(50));
-        using var cancellation = new CancellationTokenSource();
-        var running = pipeline.RunAsync(cancellation.Token);
+        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
+        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        using CancellationTokenSource cancellation = new();
+        Task running = pipeline.RunAsync(cancellation.Token);
         await blocking.Started.Task.WaitAsync(Deadline);
 
         await cancellation.CancelAsync();
         await running.WaitAsync(Deadline);
 
-        var job = Assert.Single(catalog.Processing.List());
+        ProcessingJob job = Assert.Single(catalog.Processing.List());
         Assert.Equal("running", job.State);
         Assert.Null(job.FailureCode);
         Assert.NotNull(catalog.Processing.TryClaim(TimeSpan.FromSeconds(1),
@@ -145,7 +148,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public void HandlersMustHaveDistinctProcessorsAndBoundedConcurrency()
     {
-        using var catalog = LocalCatalog.Open(root);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
         Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog, []));
         Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog,
             [new BlockingHandler("same", 1), new BlockingHandler("same", 1)]));
@@ -156,14 +159,14 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string filename, string contents, string key)
     {
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(contents));
+        using MemoryStream stream = new(Encoding.UTF8.GetBytes(contents));
         return await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, filename), stream, 20_000, key);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow + Deadline;
+        DateTime deadline = DateTime.UtcNow + Deadline;
         while (!condition())
         {
             Assert.True(DateTime.UtcNow < deadline, "The pipeline did not converge.");
@@ -195,7 +198,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
 
         public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
         {
-            var now = Interlocked.Increment(ref active);
+            int now = Interlocked.Increment(ref active);
             int observed;
             while (now > (observed = Volatile.Read(ref maximumActive)) &&
                 Interlocked.CompareExchange(ref maximumActive, now, observed) != observed)

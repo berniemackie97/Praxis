@@ -1,6 +1,8 @@
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Support;
 
 /// <summary>
 /// Watched intake and the processing pipeline composed as the worker composes them:
@@ -23,7 +25,7 @@ internal sealed class IntakeHarness
     /// <summary>One intake scan followed by processing everything it made available.</summary>
     internal async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var imported = await Monitor.ReconcileAsync(now, cancellationToken);
+        int imported = await Monitor.ReconcileAsync(now, cancellationToken);
         while (await Processing.ProcessNextAsync(cancellationToken))
         {
         }

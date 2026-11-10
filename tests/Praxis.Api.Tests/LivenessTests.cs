@@ -10,8 +10,8 @@ public sealed class LivenessTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task EndpointReturnsOk()
     {
-        using var client = factory.CreateClient();
-        using var response = await client.GetAsync("/health/live");
+        using HttpClient client = factory.CreateClient();
+        using HttpResponseMessage response = await client.GetAsync("/health/live");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }

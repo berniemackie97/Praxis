@@ -1,4 +1,4 @@
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 /// <summary>
 /// Executes one processor's leased jobs. A handler commits its result and terminal job state

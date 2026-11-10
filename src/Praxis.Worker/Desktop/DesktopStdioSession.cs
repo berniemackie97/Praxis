@@ -1,37 +1,34 @@
 using System.Text;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Desktop;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Worker;
+namespace Praxis.Worker.Desktop;
 
 internal static class DesktopStdioSession
 {
-    internal static async Task RunAsync(
-        LocalCatalog catalog, LocalWatchedIntake monitor, LocalProcessingPipeline processing,
-        string inbox, CancellationToken cancellationToken)
+    internal static async Task RunAsync(LocalCatalog catalog, LocalWatchedIntake monitor, LocalProcessingPipeline processing, string inbox, CancellationToken cancellationToken)
     {
-        using var reader = new StreamReader(Console.OpenStandardInput(),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true),
-            detectEncodingFromByteOrderMarks: false);
-        using var writer = new StreamWriter(Console.OpenStandardOutput(),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
+        using StreamReader reader = new(Console.OpenStandardInput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false);
+        using StreamWriter writer = new(Console.OpenStandardOutput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
         {
             AutoFlush = true
         };
-        var frames = new DesktopRequestReader(reader);
-        var protocol = new LocalDesktopProtocol(
-            catalog, new LocalQuickCapture(catalog, inbox), monitor, processing);
+        DesktopRequestReader frames = new(reader);
+        LocalDesktopProtocol protocol = new(catalog, new LocalQuickCapture(catalog, inbox), monitor, processing);
 
         async Task ServeAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested && !protocol.StopRequested)
             {
-                var request = await frames.ReadAsync(token);
+                string? request = await frames.ReadAsync(token);
                 if (request is null)
                 {
                     return;
                 }
 
-                var response = await protocol.HandleAsync(request, token);
+                string response = await protocol.HandleAsync(request, token);
                 await writer.WriteLineAsync(response.AsMemory(), token);
             }
         }

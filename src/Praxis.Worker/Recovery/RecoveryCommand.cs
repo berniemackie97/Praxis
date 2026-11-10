@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
-using Praxis.Storage;
+using Praxis.Storage.Recovery;
 
-namespace Praxis.Worker;
+namespace Praxis.Worker.Recovery;
 
 internal static class RecoveryCommand
 {
@@ -12,15 +12,15 @@ internal static class RecoveryCommand
         switch (args)
         {
             case ["recovery", "backup", var catalog, var destination, "--max-bytes", var limit]
-                when IsAbsolutePath(catalog) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out var maxBytes):
+                when IsAbsolutePath(catalog) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
                 report = await LocalCatalogSnapshots.BackupExistingAsync(catalog, destination, maxBytes, cancellationToken);
                 break;
             case ["recovery", "verify", var backup, "--max-bytes", var limit]
-                when IsAbsolutePath(backup) && TryParseByteLimit(limit, out var maxBytes):
+                when IsAbsolutePath(backup) && TryParseByteLimit(limit, out long maxBytes):
                 report = await LocalCatalogSnapshots.VerifyAsync(backup, maxBytes, cancellationToken);
                 break;
             case ["recovery", "restore", var backup, var destination, "--max-bytes", var limit]
-                when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out var maxBytes):
+                when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
                 report = await LocalCatalogSnapshots.RestoreAsync(backup, destination, maxBytes, cancellationToken);
                 break;
             default:
@@ -37,9 +37,7 @@ internal static class RecoveryCommand
         return 0;
     }
 
-    private static bool IsAbsolutePath(string path) =>
-        !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
+    private static bool IsAbsolutePath(string path) => !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
 
-    private static bool TryParseByteLimit(string text, out long limit) =>
-        long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) && limit > 0;
+    private static bool TryParseByteLimit(string text, out long limit) => long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) && limit > 0;
 }

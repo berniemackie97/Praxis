@@ -1,8 +1,10 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Processing;
 
 public sealed class HeadingJobMigrationTests : IDisposable
 {
@@ -23,11 +25,11 @@ public sealed class HeadingJobMigrationTests : IDisposable
     [Fact]
     public void VersionEightCatalogGainsHeadingJobsMatchingRecordedOutcomes()
     {
-        var examined = Guid.NewGuid();
-        var superseded = Guid.NewGuid();
-        var revoked = Guid.NewGuid();
-        var unsupported = Guid.NewGuid();
-        using (var connection = CreateVersionEightCatalog())
+        Guid examined = Guid.NewGuid();
+        Guid superseded = Guid.NewGuid();
+        Guid revoked = Guid.NewGuid();
+        Guid unsupported = Guid.NewGuid();
+        using (SqliteConnection connection = CreateVersionEightCatalog())
         {
             AddItem(connection, examined, "/notes/examined.md", "active", ("a", "completed"));
             Execute(connection, $"""
@@ -41,8 +43,8 @@ public sealed class HeadingJobMigrationTests : IDisposable
             AddItem(connection, unsupported, "/notes/archive.bin", "active", ("e", "unsupported"));
         }
 
-        using var catalog = LocalCatalog.Open(root);
-        var headings = catalog.Processing.List()
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        Dictionary<(Guid ItemId, int Revision), string> headings = catalog.Processing.List()
             .Where(job => job.ProcessorKey == LocalProcessors.MarkdownHeadings)
             .ToDictionary(job => (job.ItemId, job.Revision), job => job.State);
 
@@ -54,26 +56,26 @@ public sealed class HeadingJobMigrationTests : IDisposable
         Assert.DoesNotContain(headings.Keys, key => key.ItemId == unsupported);
 
         // Only the current revision is still owed a heading run.
-        var proposer = ProcessingDriver.Topics(catalog);
+        ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
         Assert.True(proposer.ProcessNext());
         Assert.False(proposer.ProcessNext());
     }
 
     private SqliteConnection CreateVersionEightCatalog()
     {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(root, "catalog.sqlite"),
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = false
         }.ToString());
         connection.Open();
-        foreach (var resource in new[] { "LocalCatalog.sql" }
+        foreach (string resource in new[] { "LocalCatalog.sql" }
             .Concat(Enumerable.Range(2, 7).Select(version => $"LocalCatalog.V{version}.sql")))
         {
-            using var stream = typeof(LocalCatalog).Assembly
+            using Stream stream = typeof(LocalCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Storage." + resource)!;
-            using var reader = new StreamReader(stream);
+            using StreamReader reader = new(stream);
             Execute(connection, reader.ReadToEnd());
         }
 
@@ -84,18 +86,18 @@ public sealed class HeadingJobMigrationTests : IDisposable
         SqliteConnection connection, Guid itemId, string locator, string status,
         params (string Seed, string Outcome)[] revisions)
     {
-        var sourceId = Guid.NewGuid();
+        Guid sourceId = Guid.NewGuid();
         Execute(connection, $"""
             INSERT INTO sources (source_id, source_kind, locator, created_utc, status)
             VALUES ('{sourceId}', 'file', '{locator}', '{At}', '{status}');
             INSERT INTO items (item_id, source_id) VALUES ('{itemId}', '{sourceId}');
             """);
-        for (var index = 0; index < revisions.Length; index++)
+        for (int index = 0; index < revisions.Length; index++)
         {
-            var (seed, outcome) = revisions[index];
-            var digest = Digest(seed);
-            var content = outcome == "completed" ? "'# Heading'" : "NULL";
-            var reason = outcome == "completed" ? "NULL" : "'unsupported_format'";
+            (string seed, string outcome) = revisions[index];
+            string digest = Digest(seed);
+            string content = outcome == "completed" ? "'# Heading'" : "NULL";
+            string reason = outcome == "completed" ? "NULL" : "'unsupported_format'";
             Execute(connection, $"""
                 INSERT INTO original_objects (digest, byte_length, recorded_utc)
                 VALUES ('{digest}', 9, '{At}');
@@ -118,7 +120,7 @@ public sealed class HeadingJobMigrationTests : IDisposable
 
     private static void Execute(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         command.ExecuteNonQuery();
     }

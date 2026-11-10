@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Model;
 
 public sealed class AttachmentRecord
 {
@@ -30,14 +30,11 @@ public sealed class AttachmentRecord
 
     public byte[] ReadContent() => (byte[])content.Clone();
 
-    public static AttachmentRecord Create(string path, ReadOnlySpan<byte> content)
-        => new(Guid.NewGuid(), path, content.ToArray());
+    public static AttachmentRecord Create(string path, ReadOnlySpan<byte> content) => new(Guid.NewGuid(), path, content.ToArray());
 
-    public AttachmentRecord Rename(string path)
-        => new(Id, path, content);
+    public AttachmentRecord Rename(string path) => new(Id, path, content);
 
     internal ReadOnlySpan<byte> ContentSpan => content;
 
-    internal static AttachmentRecord Restore(Guid id, string path, byte[] content)
-        => new(id, path, content);
+    internal static AttachmentRecord Restore(Guid id, string path, byte[] content) => new(id, path, content);
 }

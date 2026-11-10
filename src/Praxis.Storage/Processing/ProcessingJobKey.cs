@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 /// <summary>Validation and parameter binding for the (item, revision, processor) job key.</summary>
 internal static class ProcessingJobKey
@@ -18,8 +18,7 @@ internal static class ProcessingJobKey
     internal static void ValidateProcessor(string processor)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(processor);
-        if (processor.Length > 64 || processor.Any(c =>
-            c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))
+        if (processor.Length > 64 || processor.Any(c => c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')))
         {
             throw new ArgumentException("Processor keys must be bounded lowercase identifiers.", nameof(processor));
         }

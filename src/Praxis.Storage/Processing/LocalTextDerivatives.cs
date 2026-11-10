@@ -1,6 +1,9 @@
 using System.Text;
+using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Processing;
 
 public sealed record TextDerivative(
     Guid SourceId, Guid ItemId, int Revision, string ProcessorKey, string SourceSha256,
@@ -27,21 +30,21 @@ public sealed class LocalTextDerivatives
 
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
-                FROM text_derivatives d
-                JOIN processing_jobs j ON j.item_id = d.item_id
-                    AND j.revision = d.revision AND j.processor_key = d.processor_key
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = d.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE d.item_id = $item AND d.revision = $revision
-                  AND d.processor_key = $processor AND s.status = 'active'
-                  AND j.state = d.outcome
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
+                                                                   FROM text_derivatives d
+                                                                   JOIN processing_jobs j ON j.item_id = d.item_id
+                                                                       AND j.revision = d.revision AND j.processor_key = d.processor_key
+                                                                   JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                                                                       AND v.digest = d.source_digest
+                                                                   JOIN items i ON i.item_id = d.item_id
+                                                                   JOIN sources s ON s.source_id = i.source_id
+                                                                   WHERE d.item_id = $item AND d.revision = $revision
+                                                                     AND d.processor_key = $processor AND s.status = 'active'
+                                                                     AND j.state = d.outcome
+                                                                   """);
             ProcessingJobKey.Bind(command, itemId, revision, LocalProcessors.SourceText);
-            using var reader = command.ExecuteReader();
+            using SqliteDataReader reader = command.ExecuteReader();
             return reader.Read()
                 ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,
                     LocalProcessors.SourceText, reader.GetString(1), reader.GetString(2),
@@ -57,21 +60,21 @@ public sealed class LocalTextDerivatives
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         return database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                SELECT s.source_kind, s.locator, v.digest, o.byte_length
-                FROM processing_jobs j
-                JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
-                JOIN original_objects o ON o.digest = v.digest
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT s.source_kind, s.locator, v.digest, o.byte_length
+                                                                   FROM processing_jobs j
+                                                                   JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
+                                                                   JOIN original_objects o ON o.digest = v.digest
+                                                                   JOIN items i ON i.item_id = j.item_id
+                                                                   JOIN sources s ON s.source_id = i.source_id
+                                                                   WHERE j.item_id = $item AND j.revision = $revision
+                                                                     AND j.processor_key = $processor AND j.state = 'running'
+                                                                     AND j.lease_key = $lease AND j.lease_until_utc > $now
+                                                                     AND s.status = 'active'
+                                                                   """);
             ProcessingJobKey.BindLease(command, lease);
             command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            using var reader = command.ExecuteReader();
+            using SqliteDataReader reader = command.ExecuteReader();
             return reader.Read()
                 ? new LeasedTextSource(reader.GetString(0), reader.GetString(1),
                     new OriginalObject(reader.GetString(2), reader.GetInt64(3)))
@@ -99,21 +102,21 @@ public sealed class LocalTextDerivatives
             throw new ArgumentException("Use a bounded unsupported reason code.", nameof(reasonCode));
         }
 
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var source = connection.CreateCommand("""
-                SELECT v.digest
-                FROM processing_jobs j
-                JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand source = connection.CreateCommand("""
+                                                                  SELECT v.digest
+                                                                  FROM processing_jobs j
+                                                                  JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
+                                                                  JOIN items i ON i.item_id = j.item_id
+                                                                  JOIN sources s ON s.source_id = i.source_id
+                                                                  WHERE j.item_id = $item AND j.revision = $revision
+                                                                    AND j.processor_key = $processor AND j.state = 'running'
+                                                                    AND j.lease_key = $lease AND j.lease_until_utc > $now
+                                                                    AND s.status = 'active'
+                                                                  """);
             source.Transaction = transaction;
             ProcessingJobKey.BindLease(source, lease);
             source.Parameters.AddWithValue("$now", now);
@@ -122,14 +125,14 @@ public sealed class LocalTextDerivatives
                 return false;
             }
 
-            var outcome = content is null ? "unsupported" : "completed";
-            using var insert = connection.CreateCommand("""
-                INSERT INTO text_derivatives
-                    (item_id, revision, processor_key, source_digest,
-                     outcome, content, reason_code, created_utc)
-                VALUES ($item, $revision, $processor, $digest,
-                        $outcome, $content, $reason, $now)
-                """);
+            string outcome = content is null ? "unsupported" : "completed";
+            using SqliteCommand insert = connection.CreateCommand("""
+                                                                  INSERT INTO text_derivatives
+                                                                      (item_id, revision, processor_key, source_digest,
+                                                                       outcome, content, reason_code, created_utc)
+                                                                  VALUES ($item, $revision, $processor, $digest,
+                                                                          $outcome, $content, $reason, $now)
+                                                                  """);
             insert.Transaction = transaction;
             ProcessingJobKey.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
             insert.Parameters.AddWithValue("$digest", sourceDigest);
@@ -139,14 +142,14 @@ public sealed class LocalTextDerivatives
             insert.Parameters.AddWithValue("$now", now);
             insert.ExecuteNonQuery();
 
-            using var finish = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = $outcome, lease_key = NULL, lease_until_utc = NULL,
-                    failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = $processor AND state = 'running'
-                  AND lease_key = $lease AND lease_until_utc > $now
-                """);
+            using SqliteCommand finish = connection.CreateCommand("""
+                                                                  UPDATE processing_jobs
+                                                                  SET state = $outcome, lease_key = NULL, lease_until_utc = NULL,
+                                                                      failure_code = NULL, updated_utc = $now
+                                                                  WHERE item_id = $item AND revision = $revision
+                                                                    AND processor_key = $processor AND state = 'running'
+                                                                    AND lease_key = $lease AND lease_until_utc > $now
+                                                                  """);
             finish.Transaction = transaction;
             ProcessingJobKey.BindLease(finish, lease);
             finish.Parameters.AddWithValue("$outcome", outcome);
@@ -178,38 +181,38 @@ public sealed class LocalTextDerivatives
             return false;
         }
 
-        var suffixMatch = string.Join(" OR ", Enumerable.Range(0, extensions.Count)
+        string suffixMatch = string.Join(" OR ", Enumerable.Range(0, extensions.Count)
             .Select(index => $"substr(lower(s.locator), -length($extension{index})) = $extension{index}"));
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var find = connection.CreateCommand($"""
-                SELECT d.item_id, d.revision
-                FROM text_derivatives d
-                JOIN processing_jobs j ON j.item_id = d.item_id
-                    AND j.revision = d.revision AND j.processor_key = d.processor_key
-                JOIN item_versions v ON v.item_id = d.item_id
-                    AND v.revision = d.revision AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = d.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE d.processor_key = 'source-text-v1'
-                  AND d.outcome = 'unsupported' AND d.reason_code = 'unsupported_format'
-                  AND j.state = 'unsupported' AND s.status = 'active'
-                  AND s.source_kind = 'file'
-                  AND d.revision = (SELECT MAX(latest.revision) FROM item_versions latest
-                                    WHERE latest.item_id = d.item_id)
-                  AND ({suffixMatch})
-                ORDER BY d.created_utc, d.item_id LIMIT 1
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand find = connection.CreateCommand($"""
+                                                                 SELECT d.item_id, d.revision
+                                                                 FROM text_derivatives d
+                                                                 JOIN processing_jobs j ON j.item_id = d.item_id
+                                                                     AND j.revision = d.revision AND j.processor_key = d.processor_key
+                                                                 JOIN item_versions v ON v.item_id = d.item_id
+                                                                     AND v.revision = d.revision AND v.digest = d.source_digest
+                                                                 JOIN items i ON i.item_id = d.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE d.processor_key = 'source-text-v1'
+                                                                   AND d.outcome = 'unsupported' AND d.reason_code = 'unsupported_format'
+                                                                   AND j.state = 'unsupported' AND s.status = 'active'
+                                                                   AND s.source_kind = 'file'
+                                                                   AND d.revision = (SELECT MAX(latest.revision) FROM item_versions latest
+                                                                                     WHERE latest.item_id = d.item_id)
+                                                                   AND ({suffixMatch})
+                                                                 ORDER BY d.created_utc, d.item_id LIMIT 1
+                                                                 """);
             find.Transaction = transaction;
-            for (var index = 0; index < extensions.Count; index++)
+            for (int index = 0; index < extensions.Count; index++)
             {
                 find.Parameters.AddWithValue($"$extension{index}", extensions[index]);
             }
 
             string item;
             int revision;
-            using (var reader = find.ExecuteReader())
+            using (SqliteDataReader reader = find.ExecuteReader())
             {
                 if (!reader.Read())
                 {
@@ -220,12 +223,12 @@ public sealed class LocalTextDerivatives
                 revision = reader.GetInt32(1);
             }
 
-            using var remove = connection.CreateCommand("""
-                DELETE FROM text_derivatives
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = 'source-text-v1'
-                  AND outcome = 'unsupported' AND reason_code = 'unsupported_format'
-                """);
+            using SqliteCommand remove = connection.CreateCommand("""
+                                                                  DELETE FROM text_derivatives
+                                                                  WHERE item_id = $item AND revision = $revision
+                                                                    AND processor_key = 'source-text-v1'
+                                                                    AND outcome = 'unsupported' AND reason_code = 'unsupported_format'
+                                                                  """);
             remove.Transaction = transaction;
             remove.Parameters.AddWithValue("$item", item);
             remove.Parameters.AddWithValue("$revision", revision);
@@ -234,13 +237,13 @@ public sealed class LocalTextDerivatives
                 throw new InvalidOperationException("The unsupported derivative changed.");
             }
 
-            using var requeue = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'queued', attempt = 0, lease_key = NULL,
-                    lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = 'source-text-v1' AND state = 'unsupported'
-                """);
+            using SqliteCommand requeue = connection.CreateCommand("""
+                                                                   UPDATE processing_jobs
+                                                                   SET state = 'queued', attempt = 0, lease_key = NULL,
+                                                                       lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
+                                                                   WHERE item_id = $item AND revision = $revision
+                                                                     AND processor_key = 'source-text-v1' AND state = 'unsupported'
+                                                                   """);
             requeue.Transaction = transaction;
             requeue.Parameters.AddWithValue("$item", item);
             requeue.Parameters.AddWithValue("$revision", revision);

@@ -1,9 +1,14 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Processing;
+using Praxis.Storage.Recovery;
+using Praxis.Storage.Search;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Processing;
 
 public sealed class LocalTextProcessorTests : IDisposable
 {
@@ -27,19 +32,19 @@ public sealed class LocalTextProcessorTests : IDisposable
     {
         CapturedOriginal text;
         CapturedOriginal markdown;
-        var markdownBytes = Encoding.UTF8.GetPreamble()
+        byte[] markdownBytes = Encoding.UTF8.GetPreamble()
             .Concat(Encoding.UTF8.GetBytes("# Topic\nReady ✅")).ToArray();
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             text = await Capture(catalog, "plain.txt", Encoding.UTF8.GetBytes("hello\nworld"), "text");
             markdown = await Capture(catalog, "note.md", markdownBytes, "markdown");
-            var processor = ProcessingDriver.Text(catalog);
+            ProcessingDriver processor = ProcessingDriver.Text(catalog);
             Assert.True(await processor.ProcessNextAsync());
             Assert.True(await processor.ProcessNextAsync());
             Assert.False(await processor.ProcessNextAsync());
 
-            var first = Assert.IsType<TextDerivative>(catalog.Text.Read(text.ItemId, 1));
-            var second = Assert.IsType<TextDerivative>(catalog.Text.Read(markdown.ItemId, 1));
+            TextDerivative first = Assert.IsType<TextDerivative>(catalog.Text.Read(text.ItemId, 1));
+            TextDerivative second = Assert.IsType<TextDerivative>(catalog.Text.Read(markdown.ItemId, 1));
             Assert.Equal("completed", first.Outcome);
             Assert.Equal(text.SourceId, first.SourceId);
             Assert.Equal(LocalProcessors.SourceText, first.ProcessorKey);
@@ -49,7 +54,7 @@ public sealed class LocalTextProcessorTests : IDisposable
             Assert.Null(first.ReasonCode);
             Assert.Equal("# Topic\nReady ✅", second.Content);
             Assert.Equal(markdown.Sha256, second.SourceSha256);
-            var jobs = catalog.Processing.List();
+            IReadOnlyList<ProcessingJob> jobs = catalog.Processing.List();
             Assert.All(jobs.Where(job => job.ProcessorKey == LocalProcessors.SourceText),
                 job => Assert.Equal("completed", job.State));
             // Completed extraction schedules exactly one downstream heading job per revision.
@@ -57,7 +62,7 @@ public sealed class LocalTextProcessorTests : IDisposable
                 job.ProcessorKey == LocalProcessors.MarkdownHeadings && job.State == "queued"));
         }
 
-        using var reopened = LocalCatalog.Open(root);
+        using LocalCatalog reopened = LocalCatalog.Open(root);
         Assert.Equal("hello\nworld", reopened.Text.Read(text.ItemId, 1)?.Content);
         Assert.Equal("# Topic\nReady ✅", reopened.Text.Read(markdown.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(reopened).ProcessNextAsync());
@@ -68,14 +73,14 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task UnsupportedFileKindsAndMismatchedSignaturesRemainVisible()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var binary = await Capture(catalog, "image.png", [137, 80, 78, 71], "image");
-        var pdf = await Capture(catalog, "article.pdf", Encoding.ASCII.GetBytes("%PDF-1.7"), "pdf");
-        var disguised = await Capture(catalog, "disguised.txt",
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal binary = await Capture(catalog, "image.png", [137, 80, 78, 71], "image");
+        CapturedOriginal pdf = await Capture(catalog, "article.pdf", Encoding.ASCII.GetBytes("%PDF-1.7"), "pdf");
+        CapturedOriginal disguised = await Capture(catalog, "disguised.txt",
             Encoding.ASCII.GetBytes("%PDF-1.7"), "disguised");
-        var nul = await Capture(catalog, "nul.md", [65, 0, 66], "nul");
-        var processor = ProcessingDriver.Text(catalog);
-        for (var i = 0; i < 4; i++)
+        CapturedOriginal nul = await Capture(catalog, "nul.md", [65, 0, 66], "nul");
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
+        for (int i = 0; i < 4; i++)
         {
             Assert.True(await processor.ProcessNextAsync());
         }
@@ -93,17 +98,17 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task InvalidUtf8AndCorruptOriginalsFailWithoutPublishingDerivatives()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var malformed = await Capture(catalog, "invalid.txt", [0xff, 0xfe, 0x41], "invalid");
-        var corrupt = await Capture(catalog, "corrupt.md", Encoding.UTF8.GetBytes("good"), "corrupt");
-        var truncated = await Capture(catalog, "truncated.txt", Encoding.UTF8.GetBytes("complete"), "truncated");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal malformed = await Capture(catalog, "invalid.txt", [0xff, 0xfe, 0x41], "invalid");
+        CapturedOriginal corrupt = await Capture(catalog, "corrupt.md", Encoding.UTF8.GetBytes("good"), "corrupt");
+        CapturedOriginal truncated = await Capture(catalog, "truncated.txt", Encoding.UTF8.GetBytes("complete"), "truncated");
         File.WriteAllBytes(ObjectPath(corrupt.Sha256), Encoding.UTF8.GetBytes("bad!"));
         File.WriteAllBytes(ObjectPath(truncated.Sha256), Encoding.UTF8.GetBytes("short"));
-        var processor = ProcessingDriver.Text(catalog);
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        var states = catalog.Processing.List();
+        IReadOnlyList<ProcessingJob> states = catalog.Processing.List();
         Assert.Equal("invalid_utf8",
             states.Single(job => job.ItemId == malformed.ItemId).FailureCode);
         Assert.Equal("corrupt_original",
@@ -117,7 +122,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.True(catalog.Processing.Retry(malformed.ItemId, 1,
             LocalProcessors.SourceText));
         Assert.True(await processor.ProcessNextAsync());
-        var retry = catalog.Processing.List().Single(job => job.ItemId == malformed.ItemId);
+        ProcessingJob retry = catalog.Processing.List().Single(job => job.ItemId == malformed.ItemId);
         Assert.Equal(2, retry.TotalAttempts);
         Assert.Equal("invalid_utf8", retry.FailureCode);
         Assert.Null(catalog.Text.Read(malformed.ItemId, 1));
@@ -126,14 +131,14 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task RevisionsAndRevocationPreserveIndependentSources()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var first = await Capture(catalog, "first.txt", Encoding.UTF8.GetBytes("shared"), "a1");
-        var second = await Capture(catalog, "second.txt", Encoding.UTF8.GetBytes("shared"), "b1");
-        var processor = ProcessingDriver.Text(catalog);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal first = await Capture(catalog, "first.txt", Encoding.UTF8.GetBytes("shared"), "a1");
+        CapturedOriginal second = await Capture(catalog, "second.txt", Encoding.UTF8.GetBytes("shared"), "b1");
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
 
-        var updated = await Capture(catalog, "first.txt", Encoding.UTF8.GetBytes("updated"), "a2");
+        CapturedOriginal updated = await Capture(catalog, "first.txt", Encoding.UTF8.GetBytes("updated"), "a2");
         Assert.Equal(first.SourceId, updated.SourceId);
         Assert.Equal(first.ItemId, updated.ItemId);
         Assert.Equal(2, updated.Revision);
@@ -152,10 +157,10 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task SnapshotRestoreRetainsTextAndDoesNotExecutePendingJobs()
     {
-        var backup = Path.Combine(workspace, "backup");
-        var destination = Path.Combine(workspace, "recovered");
+        string backup = Path.Combine(workspace, "backup");
+        string destination = Path.Combine(workspace, "recovered");
         CapturedOriginal accepted;
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             accepted = await Capture(catalog, "retained.txt", Encoding.UTF8.GetBytes("saved"), "a");
             Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
@@ -164,7 +169,7 @@ public sealed class LocalTextProcessorTests : IDisposable
 
         Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
-        using var restored = LocalCatalog.Open(destination);
+        using LocalCatalog restored = LocalCatalog.Open(destination);
         Assert.Equal(9, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(restored).ProcessNextAsync());
@@ -174,14 +179,14 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task FileSizeLimitAndOtherProcessorsAreNotAccidentallyConsumed()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var large = await Capture(catalog, "large.txt",
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal large = await Capture(catalog, "large.txt",
             new byte[LocalTextProcessor.MaximumTextBytes + 1], "large");
         Assert.True(catalog.Processing.Queue(large.ItemId, 1, "media-v1"));
-        var processor = ProcessingDriver.Text(catalog);
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.False(await processor.ProcessNextAsync());
-        var text = Assert.IsType<TextDerivative>(catalog.Text.Read(large.ItemId, 1));
+        TextDerivative text = Assert.IsType<TextDerivative>(catalog.Text.Read(large.ItemId, 1));
         Assert.Equal("unsupported", text.Outcome);
         Assert.Equal("text_too_large", text.ReasonCode);
         Assert.Null(text.Content);
@@ -192,15 +197,15 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task TextClaimsDoNotExpireJobsOwnedByOtherProcessors()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var item = await Capture(catalog, "scoped.txt", Encoding.UTF8.GetBytes("scoped"), "scope");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal item = await Capture(catalog, "scoped.txt", Encoding.UTF8.GetBytes("scoped"), "scope");
         Assert.True(catalog.Processing.Queue(item.ItemId, 1, "media-v1"));
-        var time = new DateTimeOffset(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
-        var media = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+        DateTimeOffset time = new(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
+        ProcessingLease media = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time, processorKey: "media-v1"));
         Assert.Equal("media-v1", media.ProcessorKey);
 
-        var text = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
+        ProcessingLease text = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time.AddSeconds(2),
             processorKey: LocalProcessors.SourceText));
         Assert.Equal(LocalProcessors.SourceText, text.ProcessorKey);
@@ -211,8 +216,8 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task CanceledWorkCannotProduceTextWithoutExplicitRetry()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var item = await Capture(catalog, "canceled.txt", Encoding.UTF8.GetBytes("private"), "cancel");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal item = await Capture(catalog, "canceled.txt", Encoding.UTF8.GetBytes("private"), "cancel");
         Assert.True(catalog.Processing.Cancel(item.ItemId, 1, LocalProcessors.SourceText));
         Assert.False(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Null(catalog.Text.Read(item.ItemId, 1));
@@ -224,8 +229,8 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public void SchemaThreeCatalogMigratesWithoutDiscardingProcessingJobs()
     {
-        var path = Path.Combine(root, "catalog.sqlite");
-        using (var database = new SqliteConnection(new SqliteConnectionStringBuilder
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection database = new(new SqliteConnectionStringBuilder
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadWriteCreate,
@@ -233,32 +238,32 @@ public sealed class LocalTextProcessorTests : IDisposable
         }.ToString()))
         {
             database.Open();
-            foreach (var schema in new[]
+            foreach (string schema in new[]
                 { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql" })
             {
-                using var input = typeof(LocalCatalog).Assembly
+                using Stream input = typeof(LocalCatalog).Assembly
                     .GetManifestResourceStream("Praxis.Storage." + schema)!;
-                using var reader = new StreamReader(input);
-                using var command = database.CreateCommand();
+                using StreamReader reader = new(input);
+                using SqliteCommand command = database.CreateCommand();
                 command.CommandText = reader.ReadToEnd();
                 command.ExecuteNonQuery();
             }
 
-            using var version = database.CreateCommand();
+            using SqliteCommand version = database.CreateCommand();
             version.CommandText = "PRAGMA user_version";
             Assert.Equal(3L, (long)version.ExecuteScalar()!);
         }
 
-        using var upgraded = LocalCatalog.Open(root);
+        using LocalCatalog upgraded = LocalCatalog.Open(root);
         Assert.Equal(9, upgraded.SchemaVersion);
-        using var check = new SqliteConnection(new SqliteConnectionStringBuilder
+        using SqliteConnection check = new(new SqliteConnectionStringBuilder
         {
             DataSource = upgraded.DatabasePath,
             Mode = SqliteOpenMode.ReadOnly,
             Pooling = false
         }.ToString());
         check.Open();
-        using var query = check.CreateCommand();
+        using SqliteCommand query = check.CreateCommand();
         query.CommandText = "SELECT COUNT(*) FROM text_derivatives";
         Assert.Equal(0L, (long)query.ExecuteScalar()!);
     }
@@ -272,16 +277,16 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task TechnicalTextIsIndexedWithVerifiedOriginalProvenance(
         string name, string content)
     {
-        using var catalog = LocalCatalog.Open(root);
-        var source = await Capture(catalog, name, Encoding.UTF8.GetBytes(content), "technical");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal source = await Capture(catalog, name, Encoding.UTF8.GetBytes(content), "technical");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
 
-        var derivative = Assert.IsType<TextDerivative>(
+        TextDerivative derivative = Assert.IsType<TextDerivative>(
             catalog.Text.Read(source.ItemId, source.Revision));
         Assert.Equal("completed", derivative.Outcome);
         Assert.Equal(content, derivative.Content);
         Assert.Equal(source.Sha256, derivative.SourceSha256);
-        var hit = Assert.Single(catalog.Search.Query("ParseTriangleMesh"),
+        LocalSearchHit hit = Assert.Single(catalog.Search.Query("ParseTriangleMesh"),
             result => result.SourceId == source.SourceId);
         Assert.Equal(source.ItemId, hit.ItemId);
         Assert.Equal(source.Sha256, hit.OriginalSha256);
@@ -292,7 +297,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task PreviouslyUnsupportedCodeIsReprocessedWithoutNewRevisionOrDuplicateIndex()
     {
         CapturedOriginal source;
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             source = await Capture(catalog, "legacy.cs",
                 Encoding.UTF8.GetBytes("public class RecoveredTechnicalSource {}"), "legacy");
@@ -301,9 +306,9 @@ public sealed class LocalTextProcessorTests : IDisposable
                 catalog.Text.Read(source.ItemId, 1)?.Outcome);
         }
 
-        using (var reopened = LocalCatalog.Open(root))
+        using (LocalCatalog reopened = LocalCatalog.Open(root))
         {
-            var processor = ProcessingDriver.Text(reopened);
+            ProcessingDriver processor = ProcessingDriver.Text(reopened);
             Assert.True(await processor.ProcessNextAsync());
             Assert.False(await processor.ProcessNextAsync());
             Assert.Equal("completed",
@@ -317,7 +322,7 @@ public sealed class LocalTextProcessorTests : IDisposable
             await reopened.Originals.VerifyAsync(source.ItemId);
         }
 
-        using var final = LocalCatalog.Open(root);
+        using LocalCatalog final = LocalCatalog.Open(root);
         Assert.Single(final.Search.Query("RecoveredTechnicalSource"));
         Assert.False(await ProcessingDriver.Text(final).ProcessNextAsync());
     }
@@ -325,19 +330,19 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task ReprocessingDoesNotReviveRevokedOrSupersededText()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var revoked = await Capture(catalog, "revoked.cs",
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal revoked = await Capture(catalog, "revoked.cs",
             Encoding.UTF8.GetBytes("RevokedTechnicalSource"), "revoked");
-        var first = await Capture(catalog, "updated.cs",
+        CapturedOriginal first = await Capture(catalog, "updated.cs",
             Encoding.UTF8.GetBytes("SupersededTechnicalSource"), "old");
         SimulateOldUnsupportedText(catalog.DatabasePath, revoked);
         SimulateOldUnsupportedText(catalog.DatabasePath, first);
         Assert.True(catalog.Sources.Revoke(revoked.SourceId));
-        var revised = await Capture(catalog, "updated.cs",
+        CapturedOriginal revised = await Capture(catalog, "updated.cs",
             Encoding.UTF8.GetBytes("CurrentTechnicalSource"), "new");
         Assert.Equal(2, revised.Revision);
 
-        var processor = ProcessingDriver.Text(catalog);
+        ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.False(await processor.ProcessNextAsync());
         Assert.Empty(catalog.Search.Query("RevokedTechnicalSource"));
@@ -358,10 +363,10 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task CodeFileExtensionsDoNotOverrideBinaryOrMalformedContent(
         string name, byte[] bytes)
     {
-        using var catalog = LocalCatalog.Open(root);
-        var source = await Capture(catalog, name, bytes, "hostile");
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        CapturedOriginal source = await Capture(catalog, name, bytes, "hostile");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-        var derivative = catalog.Text.Read(source.ItemId, 1);
+        TextDerivative? derivative = catalog.Text.Read(source.ItemId, 1);
         if (name == "broken.cpp")
         {
             Assert.Null(derivative);
@@ -378,15 +383,15 @@ public sealed class LocalTextProcessorTests : IDisposable
 
     private static void SimulateOldUnsupportedText(string databasePath, CapturedOriginal source)
     {
-        using var database = new SqliteConnection(new SqliteConnectionStringBuilder
+        using SqliteConnection database = new(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWrite,
             Pooling = false
         }.ToString());
         database.Open();
-        using var transaction = database.BeginTransaction();
-        using var job = database.CreateCommand();
+        using SqliteTransaction transaction = database.BeginTransaction();
+        using SqliteCommand job = database.CreateCommand();
         job.Transaction = transaction;
         job.CommandText = """
             UPDATE processing_jobs SET state = 'unsupported'
@@ -396,7 +401,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         job.Parameters.AddWithValue("$item", source.ItemId.ToString("D"));
         job.Parameters.AddWithValue("$revision", source.Revision);
         Assert.Equal(1, job.ExecuteNonQuery());
-        using var derivative = database.CreateCommand();
+        using SqliteCommand derivative = database.CreateCommand();
         derivative.Transaction = transaction;
         derivative.CommandText = """
             INSERT INTO text_derivatives
@@ -416,8 +421,8 @@ public sealed class LocalTextProcessorTests : IDisposable
     private async Task<CapturedOriginal> Capture(
         LocalCatalog catalog, string name, byte[] bytes, string key)
     {
-        var locator = Path.Combine(workspace, "incoming", name);
-        using var input = new MemoryStream(bytes);
+        string locator = Path.Combine(workspace, "incoming", name);
+        using MemoryStream input = new(bytes);
         return await catalog.Originals.CaptureFileAsync(locator, input, bytes.Length, key);
     }
 

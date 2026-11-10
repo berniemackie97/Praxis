@@ -1,7 +1,13 @@
-using Praxis.Storage;
+using System.Text.Json;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Desktop;
+using Praxis.Storage.Intake;
+using Praxis.Storage.Library;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Tests.Support;
 using Xunit;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Intake;
 
 public sealed class LocalIntakeHealthTests : IDisposable
 {
@@ -18,8 +24,8 @@ public sealed class LocalIntakeHealthTests : IDisposable
         Directory.CreateDirectory(inbox);
         if (!OperatingSystem.IsWindows())
         {
-            var privateMode = UnixFileMode.UserRead |
-                UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            UnixFileMode privateMode = UnixFileMode.UserRead |
+                                       UnixFileMode.UserWrite | UnixFileMode.UserExecute;
             File.SetUnixFileMode(workspace, privateMode);
             File.SetUnixFileMode(dataRoot, privateMode);
             File.SetUnixFileMode(inbox, privateMode);
@@ -29,18 +35,18 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task ReconcilePublishesCountsAndClearsResolvedFileErrors()
     {
-        var path = Path.Combine(inbox, "note.md");
+        string path = Path.Combine(inbox, "note.md");
         File.WriteAllText(path, "# First\nOriginal text");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new IntakeHarness(catalog, inbox, TimeSpan.Zero);
-        var started = monitor.Snapshot();
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
+        LocalIntakeStatus started = monitor.Snapshot();
         Assert.Equal("starting", started.State);
         Assert.Null(started.LastSuccessfulScanUtc);
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await monitor.ReconcileAsync(now));
         Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(1)));
-        var captured = Assert.Single(catalog.Library.List());
+        LocalLibraryItem captured = Assert.Single(catalog.Library.List());
         Assert.Equal("watching", monitor.Snapshot().State);
         Assert.Equal(1, monitor.Snapshot().ObservedFiles);
         Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
@@ -51,7 +57,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(30));
         Assert.Equal(0, await monitor.ReconcileAsync(now.AddSeconds(2)));
         Assert.Equal(0, await monitor.ReconcileAsync(now.AddSeconds(3)));
-        var broken = monitor.Snapshot();
+        LocalIntakeStatus broken = monitor.Snapshot();
         Assert.Equal("degraded", broken.State);
         Assert.Equal(1, broken.ErrorCount);
         Assert.Single(broken.FileErrors);
@@ -62,7 +68,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
         File.Delete(path);
         await monitor.ReconcileAsync(now.AddSeconds(4));
-        var resumed = monitor.Snapshot();
+        LocalIntakeStatus resumed = monitor.Snapshot();
         Assert.Equal("watching", resumed.State);
         Assert.Equal(0, resumed.ErrorCount);
         Assert.Empty(resumed.FileErrors);
@@ -73,15 +79,15 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task OwnerPausePreventsNewCapturesAndResumeReconcilesThem()
     {
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new IntakeHarness(catalog, inbox,
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness monitor = new(catalog, inbox,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         Assert.True(monitor.SetPaused(true).Paused);
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
-            var first = Path.Combine(inbox, "paused.md");
+            string first = Path.Combine(inbox, "paused.md");
             File.WriteAllText(first, "Written while paused");
             await Task.Delay(350);
             Assert.Empty(catalog.Library.List());
@@ -122,12 +128,12 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task OfflineWatcherReportsDisconnectionAndRecoversWithoutRecreatingOriginals()
     {
-        var removable = Path.Combine(workspace, "removable");
-        using var catalog = LocalCatalog.Open(dataRoot);
-        var monitor = new IntakeHarness(catalog, removable,
+        string removable = Path.Combine(workspace, "removable");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness monitor = new(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
             await WaitForAsync(() => monitor.Snapshot().State == "offline");
@@ -140,7 +146,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
                 monitor.Snapshot().State == "watching" &&
                 monitor.Snapshot().ImportedSinceStart == 1);
-            var saved = Assert.Single(catalog.Library.List());
+            LocalLibraryItem saved = Assert.Single(catalog.Library.List());
             Assert.NotNull(monitor.Snapshot().LastSuccessfulScanUtc);
             Assert.Single(catalog.Search.Query("Reconnected"));
 
@@ -160,30 +166,30 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task DesktopLibraryRemainsReadableWhenApprovedInboxIsOffline()
     {
-        using var catalog = LocalCatalog.Open(dataRoot);
-        using var source = new MemoryStream(
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using MemoryStream source = new(
             System.Text.Encoding.UTF8.GetBytes("Preserved offline knowledge"));
-        var captured = await catalog.Originals.CaptureFileAsync(
+        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(workspace, "unmounted.md"), source, 256, "offline-original");
-        var disconnected = Path.Combine(workspace, "not-mounted");
-        var monitor = new IntakeHarness(catalog, disconnected,
+        string disconnected = Path.Combine(workspace, "not-mounted");
+        IntakeHarness monitor = new(catalog, disconnected,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
-        using var cancellation = new CancellationTokenSource();
-        var running = monitor.RunAsync(cancellation.Token);
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
         try
         {
             await WaitForAsync(() => monitor.Snapshot().State == "offline");
-            var service = new LocalDesktopProtocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
-            using var status = System.Text.Json.JsonDocument.Parse(
+            LocalDesktopProtocol service = new(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
+            using JsonDocument status = System.Text.Json.JsonDocument.Parse(
                 await service.HandleAsync(
                     """{"requestId":"status","action":"intakeStatus"}"""));
             Assert.Equal("offline", status.RootElement.GetProperty("data")
                 .GetProperty("status").GetProperty("state").GetString());
 
-            using var library = System.Text.Json.JsonDocument.Parse(
+            using JsonDocument library = System.Text.Json.JsonDocument.Parse(
                 await service.HandleAsync(
                     """{"requestId":"library","action":"library"}"""));
-            var item = Assert.Single(library.RootElement.GetProperty("data")
+            JsonElement item = Assert.Single(library.RootElement.GetProperty("data")
                 .GetProperty("items").EnumerateArray());
             Assert.Equal(captured.ItemId.ToString("D"),
                 item.GetProperty("itemId").GetString());
@@ -199,7 +205,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
     private static async Task WaitForAsync(Func<bool> predicate)
     {
-        var timeout = DateTime.UtcNow.AddSeconds(10);
+        DateTime timeout = DateTime.UtcNow.AddSeconds(10);
         while (!predicate() && DateTime.UtcNow < timeout)
         {
             await Task.Delay(50);

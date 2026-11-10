@@ -1,4 +1,4 @@
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Journal;
 
 public enum LocalNoteAction
 {
@@ -15,12 +15,9 @@ public enum LocalNoteConflictReason
 
 public sealed record LocalNoteState(Guid Id, long Revision, string Path, string Markdown, bool Deleted);
 
-public sealed record PendingNoteEdit(
-    Guid OperationId, Guid RecordId, long ExpectedRevision,
-    LocalNoteAction Action, string? Path, string? Markdown);
+public sealed record PendingNoteEdit(Guid OperationId, Guid RecordId, long ExpectedRevision, LocalNoteAction Action, string? Path, string? Markdown);
 
-public sealed record RejectedNoteEdit(
-    PendingNoteEdit Edit, LocalNoteConflictReason Reason, LocalNoteState? Current);
+public sealed record RejectedNoteEdit(PendingNoteEdit Edit, LocalNoteConflictReason Reason, LocalNoteState? Current);
 
 public sealed record AppliedNoteChange(long Sequence, LocalNoteState Record);
 

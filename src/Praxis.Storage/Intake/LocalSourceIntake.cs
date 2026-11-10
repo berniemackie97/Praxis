@@ -1,16 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Intake;
 
 public sealed record LocalImportedFile(string SourcePath, CapturedOriginal Original);
 public sealed record LocalObservedFile(string SourcePath, long Length, DateTime LastWriteUtc);
 
 public sealed class LocalSourceIntake(LocalCatalog catalog)
 {
-    public IReadOnlyList<LocalObservedFile> InspectFolder(
-        string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes,
-        CancellationToken cancellationToken = default)
+    public IReadOnlyList<LocalObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
     {
         if (maxFiles is < 1 or > 10_000)
         {
@@ -22,20 +22,17 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(maxDepth));
         }
 
-        if (maxTotalBytes < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(maxTotalBytes);
 
-        var root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
-        var paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
-        var files = new List<LocalObservedFile>(paths.Count);
-        var remaining = maxTotalBytes;
-        foreach (var path in paths)
+        string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
+        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        List<LocalObservedFile> files = new(paths.Count);
+        long remaining = maxTotalBytes;
+        foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var info = new FileInfo(path);
-            var length = info.Length;
+            FileInfo info = new(path);
+            long length = info.Length;
             if (length > remaining)
             {
                 throw new InvalidDataException("The selected folder exceeds its inspection byte budget.");
@@ -48,9 +45,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         return files;
     }
 
-    public async Task<CapturedOriginal> ImportFileAsync(
-        string sourcePath, long maxBytes, string requestKey,
-        CancellationToken cancellationToken = default)
+    public async Task<CapturedOriginal> ImportFileAsync(string sourcePath, long maxBytes, string requestKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
         if (requestKey.Length > 128)
@@ -58,29 +53,18 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(requestKey));
         }
 
-        if (maxBytes < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBytes);
 
-        var path = ValidateSourcePath(sourcePath, expectDirectory: false);
+        string path = ValidateSourcePath(sourcePath, expectDirectory: false);
         cancellationToken.ThrowIfCancellationRequested();
-        await using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
-            FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey,
-            cancellationToken);
-        if (accepted.Length > maxBytes)
-        {
-            throw new InvalidDataException("The committed original exceeds the import byte limit.");
-        }
-
-        return accepted;
+        await using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, cancellationToken);
+        return accepted.Length > maxBytes
+            ? throw new InvalidDataException("The committed original exceeds the import byte limit.")
+            : accepted;
     }
 
-    public async Task<IReadOnlyList<LocalImportedFile>> ImportFolderAsync(
-        string selectedDirectory, string batchKey, int maxFiles, int maxDepth,
-        long maxFileBytes, long maxTotalBytes,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LocalImportedFile>> ImportFolderAsync(string selectedDirectory, string batchKey, int maxFiles, int maxDepth, long maxFileBytes, long maxTotalBytes, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(batchKey);
         if (batchKey.Length > 128)
@@ -98,23 +82,16 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentOutOfRangeException(nameof(maxDepth));
         }
 
-        if (maxFileBytes < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxFileBytes));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(maxFileBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxTotalBytes);
 
-        if (maxTotalBytes < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxTotalBytes));
-        }
-
-        var root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
-        var paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
-        var remaining = maxTotalBytes;
-        foreach (var path in paths)
+        string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
+        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        long remaining = maxTotalBytes;
+        foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var length = new FileInfo(path).Length;
+            long length = new FileInfo(path).Length;
             if (length > maxFileBytes || length > remaining)
             {
                 throw new InvalidDataException("The selected folder exceeds its import budget.");
@@ -123,15 +100,13 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             remaining -= length;
         }
 
-        var imported = new List<LocalImportedFile>(paths.Count);
+        List<LocalImportedFile> imported = new(paths.Count);
         remaining = maxTotalBytes;
-        foreach (var path in paths)
+        foreach (string path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(
-                Encoding.UTF8.GetBytes($"praxis-folder-v1\n{batchKey}\n{path}")));
-            var accepted = await ImportFileAsync(path, Math.Min(maxFileBytes, remaining),
-                scopedKey, cancellationToken);
+            string scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-folder-v1\n{batchKey}\n{path}")));
+            CapturedOriginal accepted = await ImportFileAsync(path, Math.Min(maxFileBytes, remaining), scopedKey, cancellationToken);
             remaining -= accepted.Length;
             imported.Add(new LocalImportedFile(path, accepted));
         }
@@ -147,41 +122,36 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             throw new ArgumentException("A selected source path must be absolute.", nameof(sourcePath));
         }
 
-        var full = Path.GetFullPath(sourcePath);
-        var dataRoot = CatalogPaths.ResolveExisting(catalog.DataDirectory);
+        string full = Path.GetFullPath(sourcePath);
+        string dataRoot = CatalogPaths.ResolveExisting(catalog.DataDirectory);
         if (CatalogPaths.Contains(dataRoot, CatalogPaths.ResolveExisting(full)))
         {
             throw new InvalidOperationException("The data store cannot be imported as a source.");
         }
 
-        var attributes = File.GetAttributes(full);
+        FileAttributes attributes = File.GetAttributes(full);
         if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidDataException("A selected source path cannot be a symbolic link.");
         }
 
-        var isDirectory = (attributes & FileAttributes.Directory) != 0;
-        if (isDirectory != expectDirectory)
-        {
-            throw new InvalidDataException("The selected source has an unexpected file type.");
-        }
-
-        return full;
+        bool isDirectory = (attributes & FileAttributes.Directory) != 0;
+        return isDirectory != expectDirectory
+            ? throw new InvalidDataException("The selected source has an unexpected file type.")
+            : full;
     }
 
-    private List<string> DiscoverFiles(
-        string directory, int maxFiles, int maxDepth,
-        CancellationToken cancellationToken)
+    private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth, CancellationToken cancellationToken)
     {
-        var result = new List<string>();
-        var stack = new Stack<(string Directory, int Depth)>();
+        List<string> result = new();
+        Stack<(string Directory, int Depth)> stack = new();
         stack.Push((directory, 0));
-        var remainingEntries = checked(maxFiles * 4);
-        while (stack.TryPop(out var pending))
+        int remainingEntries = checked(maxFiles * 4);
+        while (stack.TryPop(out (string Directory, int Depth) pending))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entries = new List<string>();
-            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Directory))
+            List<string> entries = new();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(pending.Directory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (--remainingEntries < 0)
@@ -193,10 +163,10 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             }
 
             entries.Sort(StringComparer.Ordinal);
-            for (var index = entries.Count - 1; index >= 0; index--)
+            for (int index = entries.Count - 1; index >= 0; index--)
             {
-                var path = entries[index];
-                var attributes = File.GetAttributes(path);
+                string path = entries[index];
+                FileAttributes attributes = File.GetAttributes(path);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     throw new InvalidDataException("Folder imports cannot follow symbolic links.");
@@ -209,8 +179,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
                         throw new InvalidDataException("The folder nesting depth exceeds the limit.");
                     }
 
-                    stack.Push((ValidateSourcePath(path, expectDirectory: true),
-                        pending.Depth + 1));
+                    stack.Push((ValidateSourcePath(path, expectDirectory: true), pending.Depth + 1));
                     continue;
                 }
 

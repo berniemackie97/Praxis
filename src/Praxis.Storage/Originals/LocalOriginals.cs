@@ -1,6 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Originals;
 
 public sealed record CapturedOriginal(Guid SourceId, Guid ItemId, int Revision, string Sha256, long Length);
 
@@ -23,9 +25,7 @@ public sealed class LocalOriginals
         this.dataDirectory = dataDirectory;
     }
 
-    public async Task<CapturedOriginal> CaptureFileAsync(
-        string sourcePath, Stream content, long maxBytes, string requestKey,
-        CancellationToken cancellationToken = default)
+    public async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
@@ -40,24 +40,23 @@ public sealed class LocalOriginals
             throw new ArgumentOutOfRangeException(nameof(requestKey), "Request keys cannot exceed 128 characters.");
         }
 
-        var locator = Path.GetFullPath(sourcePath);
+        string locator = Path.GetFullPath(sourcePath);
         CatalogDirectory.Validate(dataDirectory);
 
-        var receipt = database.Execute(connection => ReadReceipt(connection, null, requestKey, locator));
+        CapturedOriginal? receipt = database.Execute(connection => ReadReceipt(connection, null, requestKey, locator));
         if (receipt is not null)
         {
-            await objects.VerifyAsync(
-                new OriginalObject(receipt.Sha256, receipt.Length), cancellationToken);
+            await objects.VerifyAsync(new OriginalObject(receipt.Sha256, receipt.Length), cancellationToken);
             return receipt;
         }
 
-        var original = await objects.PublishAsync(content, maxBytes, cancellationToken);
+        OriginalObject original = await objects.PublishAsync(content, maxBytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            var concurrent = ReadReceipt(connection, transaction, requestKey, locator);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            CapturedOriginal? concurrent = ReadReceipt(connection, transaction, requestKey, locator);
             if (concurrent is not null)
             {
                 if (concurrent.Sha256 != original.Digest || concurrent.Length != original.Length)
@@ -68,19 +67,16 @@ public sealed class LocalOriginals
                 return concurrent;
             }
 
-            var recorded = CommitOriginal(connection, transaction, locator, requestKey, original);
+            CapturedOriginal recorded = CommitOriginal(connection, transaction, locator, requestKey, original);
             transaction.Commit();
             return recorded;
         });
     }
 
-    private static CapturedOriginal CommitOriginal(
-        SqliteConnection connection, SqliteTransaction transaction,
-        string locator, string requestKey, OriginalObject original)
+    private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original)
     {
-        var recordedUtc = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
-        using (var check = connection.CreateCommand(
-            "SELECT byte_length FROM original_objects WHERE digest=$digest"))
+        string recordedUtc = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        using (SqliteCommand check = connection.CreateCommand("SELECT byte_length FROM original_objects WHERE digest=$digest"))
         {
             check.Transaction = transaction;
             check.Parameters.AddWithValue("$digest", original.Digest);
@@ -93,18 +89,18 @@ public sealed class LocalOriginals
         Guid sourceId, itemId;
         int revision;
         string? previousDigest = null;
-        using (var source = connection.CreateCommand("""
-            SELECT s.source_id, s.status, i.item_id, v.revision, v.digest
-            FROM sources s
-            JOIN items i ON i.source_id = s.source_id
-            JOIN item_versions v ON v.item_id = i.item_id
-            WHERE s.source_kind = 'file' AND s.locator = $locator
-            ORDER BY v.revision DESC LIMIT 1
-            """))
+        using (SqliteCommand source = connection.CreateCommand("""
+                                                               SELECT s.source_id, s.status, i.item_id, v.revision, v.digest
+                                                               FROM sources s
+                                                               JOIN items i ON i.source_id = s.source_id
+                                                               JOIN item_versions v ON v.item_id = i.item_id
+                                                               WHERE s.source_kind = 'file' AND s.locator = $locator
+                                                               ORDER BY v.revision DESC LIMIT 1
+                                                               """))
         {
             source.Transaction = transaction;
             source.Parameters.AddWithValue("$locator", locator);
-            using var reader = source.ExecuteReader();
+            using SqliteDataReader reader = source.ExecuteReader();
             if (reader.Read())
             {
                 if (reader.GetString(1) != "active")
@@ -129,11 +125,11 @@ public sealed class LocalOriginals
             }
         }
 
-        using var command = connection.CreateCommand("""
-            INSERT INTO original_objects (digest, byte_length, recorded_utc)
-                VALUES ($digest, $length, $recorded)
-                ON CONFLICT(digest) DO NOTHING;
-            """);
+        using SqliteCommand command = connection.CreateCommand("""
+                                                               INSERT INTO original_objects (digest, byte_length, recorded_utc)
+                                                                   VALUES ($digest, $length, $recorded)
+                                                                   ON CONFLICT(digest) DO NOTHING;
+                                                               """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$digest", original.Digest);
         command.Parameters.AddWithValue("$length", original.Length);
@@ -142,11 +138,11 @@ public sealed class LocalOriginals
 
         if (previousDigest is null)
         {
-            using var source = connection.CreateCommand("""
-                INSERT INTO sources (source_id, source_kind, locator, created_utc)
-                    VALUES ($source, 'file', $locator, $recorded);
-                INSERT INTO items (item_id, source_id) VALUES ($item, $source);
-                """);
+            using SqliteCommand source = connection.CreateCommand("""
+                                                                  INSERT INTO sources (source_id, source_kind, locator, created_utc)
+                                                                      VALUES ($source, 'file', $locator, $recorded);
+                                                                  INSERT INTO items (item_id, source_id) VALUES ($item, $source);
+                                                                  """);
             source.Transaction = transaction;
             source.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             source.Parameters.AddWithValue("$item", itemId.ToString("D"));
@@ -157,24 +153,23 @@ public sealed class LocalOriginals
 
         if (previousDigest != original.Digest)
         {
-            using var version = connection.CreateCommand("""
-                INSERT INTO item_versions (item_id, revision, digest, observed_utc)
-                    VALUES ($item, $revision, $digest, $recorded)
-                """);
+            using SqliteCommand version = connection.CreateCommand("""
+                                                                   INSERT INTO item_versions (item_id, revision, digest, observed_utc)
+                                                                       VALUES ($item, $revision, $digest, $recorded)
+                                                                   """);
             version.Transaction = transaction;
             version.Parameters.AddWithValue("$item", itemId.ToString("D"));
             version.Parameters.AddWithValue("$revision", revision);
             version.Parameters.AddWithValue("$digest", original.Digest);
             version.Parameters.AddWithValue("$recorded", recordedUtc);
             version.ExecuteNonQuery();
-            LocalProcessingQueue.QueueVersion(
-                connection, transaction, itemId, revision, LocalProcessors.SourceText, recordedUtc);
+            LocalProcessingQueue.QueueVersion(connection, transaction, itemId, revision, LocalProcessors.SourceText, recordedUtc);
         }
 
-        using var receipt = connection.CreateCommand("""
-            INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
-                VALUES ($key, $source, 'committed', 1, NULL, $revision)
-            """);
+        using SqliteCommand receipt = connection.CreateCommand("""
+                                                               INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code, revision)
+                                                                   VALUES ($key, $source, 'committed', 1, NULL, $revision)
+                                                               """);
         receipt.Transaction = transaction;
         receipt.Parameters.AddWithValue("$key", requestKey);
         receipt.Parameters.AddWithValue("$source", sourceId.ToString("D"));
@@ -184,22 +179,21 @@ public sealed class LocalOriginals
         return new CapturedOriginal(sourceId, itemId, revision, original.Digest, original.Length);
     }
 
-    private static CapturedOriginal? ReadReceipt(
-        SqliteConnection connection, SqliteTransaction? transaction, string requestKey, string locator)
+    private static CapturedOriginal? ReadReceipt(SqliteConnection connection, SqliteTransaction? transaction, string requestKey, string locator)
     {
-        using var command = connection.CreateCommand("""
-            SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
-                   r.revision, o.digest, o.byte_length
-            FROM ingest_requests r
-            JOIN sources s ON s.source_id = r.source_id
-            JOIN items i ON i.source_id = s.source_id
-            LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
-            LEFT JOIN original_objects o ON o.digest = v.digest
-            WHERE r.request_key = $key
-            """);
+        using SqliteCommand command = connection.CreateCommand("""
+                                                               SELECT s.locator, s.status, r.state, s.source_id, i.item_id,
+                                                                      r.revision, o.digest, o.byte_length
+                                                               FROM ingest_requests r
+                                                               JOIN sources s ON s.source_id = r.source_id
+                                                               JOIN items i ON i.source_id = s.source_id
+                                                               LEFT JOIN item_versions v ON v.item_id = i.item_id AND v.revision = r.revision
+                                                               LEFT JOIN original_objects o ON o.digest = v.digest
+                                                               WHERE r.request_key = $key
+                                                               """);
         command.Transaction = transaction;
         command.Parameters.AddWithValue("$key", requestKey);
-        using var reader = command.ExecuteReader();
+        using SqliteDataReader reader = command.ExecuteReader();
         if (!reader.Read())
         {
             return null;
@@ -215,21 +209,18 @@ public sealed class LocalOriginals
             throw new InvalidOperationException("A revoked source is not available for retry.");
         }
 
-        if (reader.GetString(2) != "committed" || reader.IsDBNull(5) ||
-            reader.IsDBNull(6) || reader.IsDBNull(7))
+        if (reader.GetString(2) != "committed" || reader.IsDBNull(5) || reader.IsDBNull(6) || reader.IsDBNull(7))
         {
             throw new InvalidOperationException("The request has no completed original version.");
         }
 
-        return new CapturedOriginal(
-            Guid.Parse(reader.GetString(3)), Guid.Parse(reader.GetString(4)),
+        return new CapturedOriginal(Guid.Parse(reader.GetString(3)), Guid.Parse(reader.GetString(4)),
             reader.GetInt32(5), reader.GetString(6), reader.GetInt64(7));
     }
 
     /// <summary>Reads a whole original after verifying its recorded length and SHA-256.</summary>
-    internal Task<byte[]> ReadVerifiedBytesAsync(
-        OriginalObject original, int maxBytes, CancellationToken cancellationToken) =>
-        objects.ReadVerifiedBytesAsync(original, maxBytes, cancellationToken);
+    internal Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken)
+        => objects.ReadVerifiedBytesAsync(original, maxBytes, cancellationToken);
 
     public async Task VerifyAsync(Guid itemId, CancellationToken cancellationToken = default)
     {
@@ -238,32 +229,27 @@ public sealed class LocalOriginals
             throw new ArgumentException("The item ID must be nonempty.", nameof(itemId));
         }
 
-        var original = database.Execute(connection =>
+        OriginalObject original = database.Execute(connection =>
         {
-            using var command = connection.CreateCommand("""
-                SELECT o.digest, o.byte_length
-                FROM item_versions v
-                JOIN original_objects o ON o.digest = v.digest
-                WHERE v.item_id = $item
-                ORDER BY v.revision DESC
-                LIMIT 1
-                """);
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT o.digest, o.byte_length
+                                                                   FROM item_versions v
+                                                                   JOIN original_objects o ON o.digest = v.digest
+                                                                   WHERE v.item_id = $item
+                                                                   ORDER BY v.revision DESC
+                                                                   LIMIT 1
+                                                                   """);
             command.Parameters.AddWithValue("$item", itemId.ToString("D"));
-            using var reader = command.ExecuteReader();
-            if (!reader.Read())
-            {
-                throw new KeyNotFoundException("The catalog item has no original version.");
-            }
-
-            return new OriginalObject(reader.GetString(0), reader.GetInt64(1));
+            using SqliteDataReader reader = command.ExecuteReader();
+            return !reader.Read()
+                ? throw new KeyNotFoundException("The catalog item has no original version.")
+                : new OriginalObject(reader.GetString(0), reader.GetInt64(1));
         });
 
         await objects.VerifyAsync(original, cancellationToken);
     }
 
-    public async Task<LocalOriginalExport> ExportAsync(
-        Guid itemId, int revision, string destinationPath,
-        CancellationToken cancellationToken = default)
+    public async Task<LocalOriginalExport> ExportAsync(Guid itemId, int revision, string destinationPath, CancellationToken cancellationToken = default)
     {
         if (itemId == Guid.Empty || revision < 1)
         {
@@ -276,16 +262,16 @@ public sealed class LocalOriginals
             throw new ArgumentException("The export destination must be absolute.", nameof(destinationPath));
         }
 
-        var requestedDestination = Path.GetFullPath(destinationPath);
-        var requestedFolder = Path.GetDirectoryName(requestedDestination)!;
+        string requestedDestination = Path.GetFullPath(destinationPath);
+        string requestedFolder = Path.GetDirectoryName(requestedDestination)!;
         if (!Directory.Exists(requestedFolder))
         {
             throw new DirectoryNotFoundException(requestedFolder);
         }
 
-        var resolvedCatalog = CatalogPaths.ResolveExisting(dataDirectory);
-        var folder = CatalogPaths.ResolveExisting(requestedFolder);
-        var destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
+        string resolvedCatalog = CatalogPaths.ResolveExisting(dataDirectory);
+        string folder = CatalogPaths.ResolveExisting(requestedFolder);
+        string destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
         if (CatalogPaths.Contains(resolvedCatalog, destination))
         {
             throw new InvalidOperationException("An export cannot be written inside the private catalog.");
@@ -296,13 +282,13 @@ public sealed class LocalOriginals
             throw new IOException("The export destination already exists and cannot be overwritten.");
         }
 
-        var original = database.Execute(connection => CurrentExportableOriginal(connection, itemId, revision))
-            ?? throw new InvalidOperationException("The selected source version is not active or current.");
+        OriginalObject original = database.Execute(connection => CurrentExportableOriginal(connection, itemId, revision))
+                                  ?? throw new InvalidOperationException("The selected source version is not active or current.");
 
-        var pending = Path.Combine(folder, ".praxis-export-" + Guid.NewGuid().ToString("N") + ".part");
+        string pending = Path.Combine(folder, ".praxis-export-" + Guid.NewGuid().ToString("N") + ".part");
         try
         {
-            var options = new FileStreamOptions
+            FileStreamOptions options = new()
             {
                 Mode = FileMode.CreateNew,
                 Access = FileAccess.Write,
@@ -315,7 +301,7 @@ public sealed class LocalOriginals
                 options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
             }
 
-            await using (var output = new FileStream(pending, options))
+            await using (FileStream output = new(pending, options))
             {
                 await objects.CopyVerifiedAsync(original, output, cancellationToken);
                 await output.FlushAsync(cancellationToken);
@@ -342,24 +328,23 @@ public sealed class LocalOriginals
         }
     }
 
-    private static OriginalObject? CurrentExportableOriginal(
-        SqliteConnection connection, Guid itemId, int revision)
+    private static OriginalObject? CurrentExportableOriginal(SqliteConnection connection, Guid itemId, int revision)
     {
-        using var query = connection.CreateCommand("""
-            SELECT v.digest, o.byte_length
-            FROM item_versions v
-            JOIN items i ON i.item_id = v.item_id
-            JOIN sources s ON s.source_id = i.source_id
-            JOIN original_objects o ON o.digest = v.digest
-            WHERE v.item_id = $item AND v.revision = $revision
-              AND s.status = 'active'
-              AND v.revision = (
-                  SELECT MAX(latest.revision) FROM item_versions latest
-                  WHERE latest.item_id = v.item_id)
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT v.digest, o.byte_length
+                                                             FROM item_versions v
+                                                             JOIN items i ON i.item_id = v.item_id
+                                                             JOIN sources s ON s.source_id = i.source_id
+                                                             JOIN original_objects o ON o.digest = v.digest
+                                                             WHERE v.item_id = $item AND v.revision = $revision
+                                                               AND s.status = 'active'
+                                                               AND v.revision = (
+                                                                   SELECT MAX(latest.revision) FROM item_versions latest
+                                                                   WHERE latest.item_id = v.item_id)
+                                                             """);
         query.Parameters.AddWithValue("$item", itemId.ToString("D"));
         query.Parameters.AddWithValue("$revision", revision);
-        using var reader = query.ExecuteReader();
+        using SqliteDataReader reader = query.ExecuteReader();
         return reader.Read() ? new OriginalObject(reader.GetString(0), reader.GetInt64(1)) : null;
     }
 }

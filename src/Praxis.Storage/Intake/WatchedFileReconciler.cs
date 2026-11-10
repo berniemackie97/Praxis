@@ -1,8 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Originals;
+using Praxis.Storage.Sources;
 
-namespace Praxis.Storage;
+namespace Praxis.Storage.Intake;
 
 internal sealed record WatchedScanResult(int ObservedFiles, int Imported);
 
@@ -12,9 +15,7 @@ internal sealed record WatchedScanResult(int ObservedFiles, int Imported);
 /// deterministic request key. Unchanged verified files are re-hashed only periodically.
 /// Not thread-safe; the owning intake serializes passes.
 /// </summary>
-internal sealed class WatchedFileReconciler(
-    LocalCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod,
-    ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
+internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
 {
     private const int MaximumFiles = 5_000;
     private const int MaximumDepth = 12;
@@ -29,17 +30,15 @@ internal sealed class WatchedFileReconciler(
     private sealed record ObservedState(FileStamp Stamp, DateTimeOffset FirstSeen);
     private sealed record VerifiedState(FileStamp Stamp, DateTimeOffset LastVerified);
 
-    internal async Task<WatchedScanResult> ReconcileAsync(
-        DateTimeOffset now, CancellationToken cancellationToken)
+    internal async Task<WatchedScanResult> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var files = intake.InspectFolder(root, MaximumFiles, MaximumDepth,
-            MaximumFolderBytes, cancellationToken);
-        var renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
+        IReadOnlyList<LocalObservedFile> files = intake.InspectFolder(root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
+        long renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
         ForgetMissing(files);
 
-        var imported = 0;
-        var remainingHashBytes = HashBudgetPerScan - renameHashBytes;
-        foreach (var file in files)
+        int imported = 0;
+        long remainingHashBytes = HashBudgetPerScan - renameHashBytes;
+        foreach (LocalObservedFile file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (IntakeFileRules.IsTemporaryName(file.SourcePath))
@@ -47,19 +46,15 @@ internal sealed class WatchedFileReconciler(
                 continue;
             }
 
-            var stamp = new FileStamp(file.Length, file.LastWriteUtc);
-            if (!observations.TryGetValue(file.SourcePath, out var observed) || observed.Stamp != stamp)
+            FileStamp stamp = new(file.Length, file.LastWriteUtc);
+            if (!observations.TryGetValue(file.SourcePath, out ObservedState? observed) || observed.Stamp != stamp)
             {
                 observations[file.SourcePath] = new ObservedState(stamp, now);
                 verified.Remove(file.SourcePath);
                 continue;
             }
 
-            if (now - observed.FirstSeen < quietPeriod ||
-                (verified.TryGetValue(file.SourcePath, out var previous) &&
-                 previous.Stamp == stamp &&
-                 now - previous.LastVerified < FullVerificationInterval) ||
-                file.Length > remainingHashBytes)
+            if (now - observed.FirstSeen < quietPeriod || (verified.TryGetValue(file.SourcePath, out VerifiedState? previous) && previous.Stamp == stamp && now - previous.LastVerified < FullVerificationInterval) || file.Length > remainingHashBytes)
             {
                 continue;
             }
@@ -76,9 +71,9 @@ internal sealed class WatchedFileReconciler(
 
     private void ForgetMissing(IReadOnlyList<LocalObservedFile> files)
     {
-        var present = files.Select(file => file.SourcePath).ToHashSet(StringComparer.Ordinal);
-        var removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
-        foreach (var missing in removed)
+        HashSet<string> present = files.Select(file => file.SourcePath).ToHashSet(StringComparer.Ordinal);
+        string[] removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
+        foreach (string missing in removed)
         {
             observations.Remove(missing);
             verified.Remove(missing);
@@ -91,8 +86,7 @@ internal sealed class WatchedFileReconciler(
         }
     }
 
-    private async Task<bool> TryImportAsync(
-        LocalObservedFile file, FileStamp stamp, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<bool> TryImportAsync(LocalObservedFile file, FileStamp stamp, DateTimeOffset now, CancellationToken cancellationToken)
     {
         try
         {
@@ -107,31 +101,27 @@ internal sealed class WatchedFileReconciler(
                 return false;
             }
 
-            var digest = await IntakeFileRules.HashAsync(file.SourcePath, cancellationToken);
+            string digest = await IntakeFileRules.HashAsync(file.SourcePath, cancellationToken);
             if (!IntakeFileRules.IsStable(file))
             {
                 observations.Remove(file.SourcePath);
                 return false;
             }
 
-            var latest = catalog.Sources.FindLatestFile(file.SourcePath);
+            LocalFileVersion? latest = catalog.Sources.FindLatestFile(file.SourcePath);
             if (latest?.Status == "revoked")
             {
-                throw new InvalidOperationException(
-                    "Revoked sources require explicit owner authorization to reimport.");
+                throw new InvalidOperationException("Revoked sources require explicit owner authorization to reimport.");
             }
 
-            var capturedRevision = false;
+            bool capturedRevision = false;
             if (latest?.Sha256 != digest)
             {
-                var requestKey = MakeRequestKey(file.SourcePath, latest?.Revision ?? 0, digest);
-                var captured = await intake.ImportFileAsync(
-                    file.SourcePath, IntakeFileRules.MaximumFileBytes, requestKey, cancellationToken);
-                if (captured.Sha256 != digest || captured.Length != file.Length ||
-                    !IntakeFileRules.IsStable(file))
+                string requestKey = MakeRequestKey(file.SourcePath, latest?.Revision ?? 0, digest);
+                CapturedOriginal captured = await intake.ImportFileAsync(file.SourcePath, IntakeFileRules.MaximumFileBytes, requestKey, cancellationToken);
+                if (captured.Sha256 != digest || captured.Length != file.Length || !IntakeFileRules.IsStable(file))
                 {
-                    throw new InvalidDataException(
-                        "The source changed during capture; a new scan is required.");
+                    throw new InvalidDataException("The source changed during capture; a new scan is required.");
                 }
 
                 report("Captured source revision " + captured.Revision +
@@ -143,8 +133,7 @@ internal sealed class WatchedFileReconciler(
             status.ClearFileError(file.SourcePath);
             return capturedRevision;
         }
-        catch (Exception exception) when (exception is IOException or
-            UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
         {
             if (status.RecordFileError(file.SourcePath, exception.Message))
             {
@@ -157,6 +146,5 @@ internal sealed class WatchedFileReconciler(
     }
 
     private string MakeRequestKey(string path, int previousRevision, string digest) =>
-        "watch-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"praxis-watched-file-v2\n{path}\n{catalog.Sources.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
+        "watch-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{catalog.Sources.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
 }

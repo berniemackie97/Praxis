@@ -1,10 +1,13 @@
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHealthChecks();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 app.MapHealthChecks("/health/live");
 app.Run();
 
-public partial class Program
+namespace Praxis.Api
 {
+    public partial class Program
+    {
+    }
 }

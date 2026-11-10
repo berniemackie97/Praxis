@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace Praxis.Knowledge.Tests;
+namespace Praxis.Knowledge.Tests.Synchronization;
 
 public sealed class SyncContractTests
 {
@@ -13,13 +13,13 @@ public sealed class SyncContractTests
     [Fact]
     public void ConcurrentEditsHaveOneWinnerAndPreserveAnExplicitConflict()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "note.md", "base"));
 
-        var alice = Mutation(Note, 1, SyncAction.Upsert, "note.md", "Alice", DeviceA);
-        var bob = Mutation(Note, 1, SyncAction.Upsert, "note.md", "Bob", DeviceB);
-        var accepted = fixture.Apply(alice);
-        var conflicted = fixture.Apply(bob);
+        SyncMutation alice = Mutation(Note, 1, SyncAction.Upsert, "note.md", "Alice", DeviceA);
+        SyncMutation bob = Mutation(Note, 1, SyncAction.Upsert, "note.md", "Bob", DeviceB);
+        SyncReply accepted = fixture.Apply(alice);
+        SyncReply conflicted = fixture.Apply(bob);
 
         Assert.Equal(ApplyStatus.Applied, accepted.Status);
         Assert.Equal(ApplyStatus.StaleRevision, conflicted.Status);
@@ -28,7 +28,7 @@ public sealed class SyncContractTests
         Assert.Equal("Bob", bob.Body);
         Assert.Equal(2, fixture.HeadSequence);
 
-        var resolution = fixture.Apply(Mutation(Note, 2, SyncAction.Upsert,
+        SyncReply resolution = fixture.Apply(Mutation(Note, 2, SyncAction.Upsert,
             "note.md", "Alice and Bob", DeviceB));
         Assert.Equal(ApplyStatus.Applied, resolution.Status);
         Assert.Equal(3, resolution.Current!.Revision);
@@ -39,13 +39,13 @@ public sealed class SyncContractTests
     [InlineData(false)]
     public void DeleteAndEditRaceNeverSilentlyDropsTheOtherBranch(bool deleteFirst)
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "note.md", "original"));
-        var deletion = Mutation(Note, 1, SyncAction.Delete, null, null, DeviceA);
-        var edit = Mutation(Note, 1, SyncAction.Upsert, "note.md", "offline edit", DeviceB);
+        SyncMutation deletion = Mutation(Note, 1, SyncAction.Delete, null, null, DeviceA);
+        SyncMutation edit = Mutation(Note, 1, SyncAction.Upsert, "note.md", "offline edit", DeviceB);
 
-        var first = fixture.Apply(deleteFirst ? deletion : edit);
-        var second = fixture.Apply(deleteFirst ? edit : deletion);
+        SyncReply first = fixture.Apply(deleteFirst ? deletion : edit);
+        SyncReply second = fixture.Apply(deleteFirst ? edit : deletion);
 
         Assert.Equal(ApplyStatus.Applied, first.Status);
         Assert.Equal(ApplyStatus.StaleRevision, second.Status);
@@ -58,9 +58,9 @@ public sealed class SyncContractTests
     [Fact]
     public void DeletedIdentityCannotResurrectWithoutAnExplicitRestore()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "first.md", "original"));
-        var tombstone = Apply(fixture, Mutation(Note, 1, SyncAction.Delete, null, null));
+        SyncRecord tombstone = Apply(fixture, Mutation(Note, 1, SyncAction.Delete, null, null));
 
         Assert.True(tombstone.Deleted);
         Assert.Equal("original", tombstone.Body);
@@ -72,7 +72,7 @@ public sealed class SyncContractTests
         Assert.Equal(ApplyStatus.StaleRevision,
             fixture.Apply(Mutation(Note, 1, SyncAction.Restore, "first.md", "old")).Status);
 
-        var restored = Apply(fixture, Mutation(Note, 2, SyncAction.Restore, "first.md", "original"));
+        SyncRecord restored = Apply(fixture, Mutation(Note, 2, SyncAction.Restore, "first.md", "original"));
         Assert.Equal(Note, restored.Id);
         Assert.Equal(3, restored.Revision);
         Assert.False(restored.Deleted);
@@ -81,14 +81,14 @@ public sealed class SyncContractTests
     [Fact]
     public void TombstoneReleasesPathButRestoringCannotStealAnOccupiedPath()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "first.md", "one"));
         Apply(fixture, Mutation(Note, 1, SyncAction.Delete, null, null));
         Apply(fixture, Mutation(OtherNote, 0, SyncAction.Upsert, "FIRST.md", "two"));
 
         Assert.Equal(ApplyStatus.PathCollision,
             fixture.Apply(Mutation(Note, 2, SyncAction.Restore, "first.md", "one")).Status);
-        var recovered = Apply(fixture, Mutation(Note, 2, SyncAction.Restore, "recovered.md", "one"));
+        SyncRecord recovered = Apply(fixture, Mutation(Note, 2, SyncAction.Restore, "recovered.md", "one"));
         Assert.Equal("recovered.md", recovered.Path);
         Assert.Equal(4, fixture.HeadSequence);
     }
@@ -96,9 +96,9 @@ public sealed class SyncContractTests
     [Fact]
     public void SameOperationRetriesDoNotAppendTwiceEvenAfterLaterChanges()
     {
-        var fixture = new SyncContractFixture(Collection);
-        var original = Mutation(Note, 0, SyncAction.Upsert, "note.md", "one");
-        var receipt = fixture.Apply(original);
+        SyncContractFixture fixture = new(Collection);
+        SyncMutation original = Mutation(Note, 0, SyncAction.Upsert, "note.md", "one");
+        SyncReply receipt = fixture.Apply(original);
         Apply(fixture, Mutation(Note, 1, SyncAction.Upsert, "note.md", "two"));
 
         Assert.Equal(receipt, fixture.Apply(original));
@@ -115,8 +115,8 @@ public sealed class SyncContractTests
     [Fact]
     public void OperationKeysAreScopedToTheirAuthenticatedDeviceIdentity()
     {
-        var fixture = new SyncContractFixture(Collection);
-        var operation = Guid.NewGuid();
+        SyncContractFixture fixture = new(Collection);
+        Guid operation = Guid.NewGuid();
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "one.md", "one",
             DeviceA, operation));
         Apply(fixture, Mutation(OtherNote, 0, SyncAction.Upsert, "two.md", "two",
@@ -128,10 +128,10 @@ public sealed class SyncContractTests
     [Fact]
     public void ClientClockSkewDoesNotChangeAcceptedRevisionOrdering()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "note.md", "first",
             DeviceA, time: DateTimeOffset.MaxValue));
-        var later = Apply(fixture, Mutation(Note, 1, SyncAction.Upsert, "note.md", "second",
+        SyncRecord later = Apply(fixture, Mutation(Note, 1, SyncAction.Upsert, "note.md", "second",
             DeviceB, time: DateTimeOffset.MinValue));
 
         Assert.Equal("second", later.Body);
@@ -142,11 +142,11 @@ public sealed class SyncContractTests
     [Fact]
     public void RenameAndConcurrentContentEditRequireExplicitReconciliation()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "old.md", "content"));
         Apply(fixture, Mutation(Note, 1, SyncAction.Upsert, "new.md", "content", DeviceA));
 
-        var conflict = fixture.Apply(Mutation(Note, 1, SyncAction.Upsert,
+        SyncReply conflict = fixture.Apply(Mutation(Note, 1, SyncAction.Upsert,
             "old.md", "new text", DeviceB));
         Assert.Equal(ApplyStatus.StaleRevision, conflict.Status);
         Assert.Equal("new.md", conflict.Current!.Path);
@@ -159,10 +159,10 @@ public sealed class SyncContractTests
     [Fact]
     public void ActivePathsConflictCaseInsensitivelyAcrossRecordIdentities()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "Assets/one.md", "first"));
 
-        var collision = fixture.Apply(Mutation(OtherNote, 0, SyncAction.Upsert,
+        SyncReply collision = fixture.Apply(Mutation(OtherNote, 0, SyncAction.Upsert,
             "assets/ONE.md", "second"));
         Assert.Equal(ApplyStatus.PathCollision, collision.Status);
         Assert.Equal(1, fixture.HeadSequence);
@@ -172,18 +172,18 @@ public sealed class SyncContractTests
     [Fact]
     public void PullUsesExclusiveDurableCursorAndStablePages()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "note.md", "v1"));
         Apply(fixture, Mutation(Note, 1, SyncAction.Upsert, "note.md", "v2"));
         Apply(fixture, Mutation(Note, 2, SyncAction.Delete, null, null));
 
-        var first = fixture.Pull(Collection, 0, 2);
+        SyncPage first = fixture.Pull(Collection, 0, 2);
         Assert.Equal(PullStatus.Ok, first.Status);
         Assert.Equal([1L, 2L], first.Changes.Select(change => change.Sequence));
         Assert.Equal(2, first.Cursor);
         Assert.Equal(3, first.HeadSequence);
 
-        var second = fixture.Pull(Collection, first.Cursor, 2);
+        SyncPage second = fixture.Pull(Collection, first.Cursor, 2);
         Assert.Equal([3L], second.Changes.Select(change => change.Sequence));
         Assert.True(Assert.Single(second.Changes).Record.Deleted);
         Assert.Equal(3, second.Cursor);
@@ -194,18 +194,18 @@ public sealed class SyncContractTests
     [Fact]
     public void ExpiredCursorRequiresSnapshotIncludingTombstones()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Apply(fixture, Mutation(Note, 0, SyncAction.Upsert, "note.md", "original"));
         Apply(fixture, Mutation(Note, 1, SyncAction.Delete, null, null));
         fixture.PruneThrough(1);
 
         Assert.Equal(PullStatus.CursorExpired, fixture.Pull(Collection, 0, 5).Status);
-        var snapshot = fixture.Snapshot();
+        SyncSnapshot snapshot = fixture.Snapshot();
         Assert.Equal(2, snapshot.Cursor);
         Assert.True(Assert.Single(snapshot.Records).Deleted);
         Assert.Equal("original", snapshot.Records[0].Body);
 
-        var replay = fixture.Pull(Collection, 1, 5);
+        SyncPage replay = fixture.Pull(Collection, 1, 5);
         Assert.Equal(PullStatus.Ok, replay.Status);
         Assert.Single(replay.Changes);
     }
@@ -213,8 +213,8 @@ public sealed class SyncContractTests
     [Fact]
     public void EpochAndFutureCursorAreRejectedWithoutChangingState()
     {
-        var fixture = new SyncContractFixture(Collection);
-        var otherEpoch = Guid.NewGuid();
+        SyncContractFixture fixture = new(Collection);
+        Guid otherEpoch = Guid.NewGuid();
 
         Assert.Equal(PullStatus.WrongCollectionEpoch,
             fixture.Pull(otherEpoch, 0, 10).Status);
@@ -232,8 +232,8 @@ public sealed class SyncContractTests
     [InlineData(2)]
     public void UnsupportedProtocolVersionsAreRejectedBeforeAnyWrite(int version)
     {
-        var fixture = new SyncContractFixture(Collection);
-        var attempted = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload",
+        SyncContractFixture fixture = new(Collection);
+        SyncMutation attempted = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload",
             version: version);
 
         Assert.Equal(ApplyStatus.UnsupportedProtocolVersion, fixture.Apply(attempted).Status);
@@ -244,8 +244,8 @@ public sealed class SyncContractTests
     [Fact]
     public void WrongCollectionEpochDoesNotConsumeAnOperationKey()
     {
-        var fixture = new SyncContractFixture(Collection);
-        var mutation = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload");
+        SyncContractFixture fixture = new(Collection);
+        SyncMutation mutation = Mutation(Note, 0, SyncAction.Upsert, "note.md", "payload");
         Assert.Equal(ApplyStatus.WrongCollectionEpoch,
             fixture.Apply(mutation with { CollectionEpoch = Guid.NewGuid() }).Status);
 
@@ -256,10 +256,10 @@ public sealed class SyncContractTests
     [Fact]
     public void IndependentOfflineCreatesConvergeDespiteDeliveryReordering()
     {
-        var first = Mutation(Note, 0, SyncAction.Upsert, "one.md", "one", DeviceA);
-        var second = Mutation(OtherNote, 0, SyncAction.Upsert, "two.md", "two", DeviceB);
-        var a = new SyncContractFixture(Collection);
-        var b = new SyncContractFixture(Collection);
+        SyncMutation first = Mutation(Note, 0, SyncAction.Upsert, "one.md", "one", DeviceA);
+        SyncMutation second = Mutation(OtherNote, 0, SyncAction.Upsert, "two.md", "two", DeviceB);
+        SyncContractFixture a = new(Collection);
+        SyncContractFixture b = new(Collection);
 
         Apply(a, first);
         Apply(a, second);
@@ -274,13 +274,13 @@ public sealed class SyncContractTests
     [Fact]
     public void IncompatibleEpochMigrationRejectsOldCursorsAndPendingOperations()
     {
-        var original = new SyncContractFixture(Collection);
-        var pending = Mutation(Note, 0, SyncAction.Upsert, "note.md", "offline");
+        SyncContractFixture original = new(Collection);
+        SyncMutation pending = Mutation(Note, 0, SyncAction.Upsert, "note.md", "offline");
         Apply(original, pending);
-        var oldCursor = original.HeadSequence;
+        long oldCursor = original.HeadSequence;
 
-        var newEpoch = Guid.Parse("44444444-4444-4444-8444-444444444444");
-        var restored = new SyncContractFixture(newEpoch);
+        Guid newEpoch = Guid.Parse("44444444-4444-4444-8444-444444444444");
+        SyncContractFixture restored = new(newEpoch);
 
         Assert.Equal(PullStatus.WrongCollectionEpoch,
             restored.Pull(Collection, oldCursor, 10).Status);
@@ -293,7 +293,7 @@ public sealed class SyncContractTests
     [Fact]
     public void InvalidRequestsAndRejectedWritesNeverChangeSequence()
     {
-        var fixture = new SyncContractFixture(Collection);
+        SyncContractFixture fixture = new(Collection);
         Assert.Equal(ApplyStatus.InvalidRequest, fixture.Apply(
             Mutation(Note, -1, SyncAction.Upsert, "note.md", "body")).Status);
         Assert.Equal(ApplyStatus.InvalidRequest, fixture.Apply(
@@ -314,7 +314,7 @@ public sealed class SyncContractTests
 
     private static SyncRecord Apply(SyncContractFixture fixture, SyncMutation mutation)
     {
-        var reply = fixture.Apply(mutation);
+        SyncReply reply = fixture.Apply(mutation);
         Assert.Equal(ApplyStatus.Applied, reply.Status);
         return Assert.IsType<SyncRecord>(reply.Current);
     }

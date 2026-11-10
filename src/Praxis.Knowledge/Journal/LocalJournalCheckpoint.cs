@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Praxis.Knowledge.Model;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Journal;
 
 internal static class LocalJournalCheckpoint
 {
@@ -21,7 +22,7 @@ internal static class LocalJournalCheckpoint
 
     public static LocalJournalState Read(string path)
     {
-        var info = new FileInfo(path);
+        FileInfo info = new(path);
         if (info.Length > MaxFileBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
@@ -29,19 +30,14 @@ internal static class LocalJournalCheckpoint
 
         try
         {
-            var container = JsonSerializer.Deserialize<CheckpointEnvelope>(
-                File.ReadAllBytes(path), Options) ?? throw new InvalidDataException("The local checkpoint is empty.");
-            if (container.Version != 1 || container.Payload is null ||
-                container.Payload.Length > MaxPayloadBytes || container.Sha256 is null ||
-                !string.Equals(
-                    Convert.ToHexStringLower(SHA256.HashData(container.Payload)),
-                    container.Sha256, StringComparison.Ordinal))
+            CheckpointEnvelope container = JsonSerializer.Deserialize<CheckpointEnvelope>(File.ReadAllBytes(path), Options) ?? throw new InvalidDataException("The local checkpoint is empty.");
+            if (container.Version != 1 || container.Payload is null || container.Payload.Length > MaxPayloadBytes || container.Sha256 is null
+                || !string.Equals(Convert.ToHexStringLower(SHA256.HashData(container.Payload)), container.Sha256, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("The local checkpoint failed integrity verification.");
             }
 
-            var result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options)
-                ?? throw new InvalidDataException("The local checkpoint payload is empty.");
+            LocalJournalState result = JsonSerializer.Deserialize<LocalJournalState>(container.Payload, Options) ?? throw new InvalidDataException("The local checkpoint payload is empty.");
             Validate(result);
             return result;
         }
@@ -54,29 +50,28 @@ internal static class LocalJournalCheckpoint
     public static void Write(string path, LocalJournalState state)
     {
         Validate(state);
-        var payload = JsonSerializer.SerializeToUtf8Bytes(state, Options);
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(state, Options);
         if (payload.Length > MaxPayloadBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
         }
 
-        var envelope = new CheckpointEnvelope
+        CheckpointEnvelope envelope = new()
         {
             Version = 1,
             Sha256 = Convert.ToHexStringLower(SHA256.HashData(payload)),
             Payload = payload
         };
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, Options);
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(envelope, Options);
         if (bytes.Length > MaxFileBytes)
         {
             throw new InvalidDataException("The local checkpoint exceeds its size limit.");
         }
 
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".pending";
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".pending";
         try
         {
-            using (var output = new FileStream(temporary, FileMode.CreateNew,
-                       FileAccess.Write, FileShare.None))
+            using (FileStream output = new(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 output.Write(bytes);
                 output.Flush(flushToDisk: true);
@@ -92,20 +87,17 @@ internal static class LocalJournalCheckpoint
 
     internal static void Validate(LocalJournalState state)
     {
-        if (state.CollectionEpoch == Guid.Empty || state.DeviceId == Guid.Empty ||
-            state.Cursor < 0 ||
-            state.Records is null || state.Pending is null ||
-            state.Conflicts is null || state.Resolved is null || state.AwaitingPull is null ||
-            state.Records.Count > MaxRecords || state.Pending.Count > MaxPending ||
-            state.Conflicts.Count > MaxConflicts || state.Resolved.Count > MaxConflicts ||
-            state.AwaitingPull.Count > MaxPending)
+        if (state.CollectionEpoch == Guid.Empty || state.DeviceId == Guid.Empty || state.Cursor < 0 || state.Records is null
+            || state.Pending is null || state.Conflicts is null || state.Resolved is null || state.AwaitingPull is null
+            || state.Records.Count > MaxRecords || state.Pending.Count > MaxPending || state.Conflicts.Count > MaxConflicts
+            || state.Resolved.Count > MaxConflicts || state.AwaitingPull.Count > MaxPending)
         {
             throw new InvalidDataException("The local checkpoint metadata is invalid.");
         }
 
-        var ids = new HashSet<Guid>();
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var record in state.Records)
+        HashSet<Guid> ids = new();
+        HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
+        foreach (LocalNoteState record in state.Records)
         {
             ValidateRecord(record);
             if (!ids.Add(record.Id) || !record.Deleted && !paths.Add(record.Path))
@@ -114,14 +106,11 @@ internal static class LocalJournalCheckpoint
             }
         }
 
-        var acceptedSequences = new HashSet<long>();
-        var acceptedOperations = new HashSet<Guid>();
-        foreach (var accepted in state.AwaitingPull)
+        HashSet<long> acceptedSequences = new();
+        HashSet<Guid> acceptedOperations = new();
+        foreach (AcceptedNoteReceipt? accepted in state.AwaitingPull)
         {
-            if (accepted is null || accepted.OperationId == Guid.Empty ||
-                accepted.Sequence <= state.Cursor ||
-                !acceptedSequences.Add(accepted.Sequence) ||
-                !acceptedOperations.Add(accepted.OperationId))
+            if (accepted.OperationId == Guid.Empty || accepted.Sequence <= state.Cursor || !acceptedSequences.Add(accepted.Sequence) || !acceptedOperations.Add(accepted.OperationId))
             {
                 throw new InvalidDataException("The accepted-event receipt is invalid.");
             }
@@ -133,9 +122,9 @@ internal static class LocalJournalCheckpoint
             }
         }
 
-        var operations = new HashSet<Guid>();
-        var lastRevision = new Dictionary<Guid, long>();
-        foreach (var pending in state.Pending)
+        HashSet<Guid> operations = new();
+        Dictionary<Guid, long> lastRevision = new();
+        foreach (PendingNoteEdit pending in state.Pending)
         {
             ValidateEdit(pending);
             if (!operations.Add(pending.OperationId))
@@ -143,7 +132,7 @@ internal static class LocalJournalCheckpoint
                 throw new InvalidDataException("The local checkpoint repeats an operation identity.");
             }
 
-            if (lastRevision.TryGetValue(pending.RecordId, out var prior) &&
+            if (lastRevision.TryGetValue(pending.RecordId, out long prior) &&
                 pending.ExpectedRevision != prior + 1)
             {
                 throw new InvalidDataException("The local outbox has inconsistent revisions.");
@@ -152,19 +141,17 @@ internal static class LocalJournalCheckpoint
             lastRevision[pending.RecordId] = pending.ExpectedRevision;
         }
 
-        var conflictIds = new HashSet<Guid>();
-        foreach (var conflict in state.Conflicts)
+        HashSet<Guid> conflictIds = new();
+        foreach (RejectedNoteEdit conflict in state.Conflicts)
         {
             ValidateConflict(conflict);
-            if (!operations.Contains(conflict.Edit.OperationId) ||
-                !conflictIds.Add(conflict.Edit.OperationId) ||
-                !state.Pending.Contains(conflict.Edit))
+            if (!operations.Contains(conflict.Edit.OperationId) || !conflictIds.Add(conflict.Edit.OperationId) || !state.Pending.Contains(conflict.Edit))
             {
                 throw new InvalidDataException("The local conflict is not associated with a pending edit.");
             }
         }
 
-        foreach (var conflict in state.Resolved)
+        foreach (RejectedNoteEdit conflict in state.Resolved)
         {
             ValidateConflict(conflict);
             if (operations.Contains(conflict.Edit.OperationId))
@@ -176,8 +163,7 @@ internal static class LocalJournalCheckpoint
 
     internal static void ValidateRecord(LocalNoteState? record)
     {
-        if (record is null || record.Id == Guid.Empty || record.Revision <= 0 ||
-            record.Markdown is null || !IsBounded(record.Markdown))
+        if (record is null || record.Id == Guid.Empty || record.Revision <= 0 || !IsBounded(record.Markdown))
         {
             throw new InvalidDataException("The local note record is invalid.");
         }
@@ -187,8 +173,7 @@ internal static class LocalJournalCheckpoint
 
     internal static void ValidateEdit(PendingNoteEdit? edit)
     {
-        if (edit is null || edit.OperationId == Guid.Empty || edit.RecordId == Guid.Empty ||
-            edit.ExpectedRevision < 0 || !Enum.IsDefined(edit.Action))
+        if (edit is null || edit.OperationId == Guid.Empty || edit.RecordId == Guid.Empty || edit.ExpectedRevision < 0 || !Enum.IsDefined(edit.Action))
         {
             throw new InvalidDataException("The pending edit is invalid.");
         }
@@ -219,13 +204,15 @@ internal static class LocalJournalCheckpoint
         }
 
         ValidateEdit(conflict.Edit);
-        if (conflict.Current is not null)
+        if (conflict.Current is null)
         {
-            ValidateRecord(conflict.Current);
-            if (conflict.Current.Id != conflict.Edit.RecordId)
-            {
-                throw new InvalidDataException("The conflict record identity is invalid.");
-            }
+            return;
+        }
+
+        ValidateRecord(conflict.Current);
+        if (conflict.Current.Id != conflict.Edit.RecordId)
+        {
+            throw new InvalidDataException("The conflict record identity is invalid.");
         }
     }
 
@@ -241,8 +228,7 @@ internal static class LocalJournalCheckpoint
         }
     }
 
-    private static bool IsBounded(string markdown)
-        => System.Text.Encoding.UTF8.GetByteCount(markdown) <= MaxRecordBytes;
+    private static bool IsBounded(string markdown) => System.Text.Encoding.UTF8.GetByteCount(markdown) <= MaxRecordBytes;
 
     private sealed class CheckpointEnvelope
     {

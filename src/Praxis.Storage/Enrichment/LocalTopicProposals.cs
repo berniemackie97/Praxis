@@ -1,12 +1,12 @@
-namespace Praxis.Storage;
+using Microsoft.Data.Sqlite;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Processing;
 
-public sealed record LocalTopicProposal(
-    Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string SourceSha256,
-    string Producer, string Value, string Evidence, int EvidenceOffset,
-    string Status, string? Correction);
+namespace Praxis.Storage.Enrichment;
 
-internal sealed record TopicCandidate(
-    Guid ItemId, int Revision, string Digest, string Content, string SourceKind, string Locator);
+public sealed record LocalTopicProposal(Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string SourceSha256, string Producer, string Value, string Evidence, int EvidenceOffset, string Status, string? Correction);
+
+internal sealed record TopicCandidate(Guid ItemId, int Revision, string Digest, string Content, string SourceKind, string Locator);
 internal sealed record TopicEvidence(string Value, int Offset);
 
 /// <summary>
@@ -28,28 +28,27 @@ public sealed class LocalTopicProposals
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT d.source_digest, d.content, s.source_kind, s.locator
-                FROM processing_jobs j
-                JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
-                    AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
-                JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
-                    AND t.processor_key = d.processor_key AND t.state = 'completed'
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT d.source_digest, d.content, s.source_kind, s.locator
+                                                                 FROM processing_jobs j
+                                                                 JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
+                                                                     AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
+                                                                 JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
+                                                                     AND t.processor_key = d.processor_key AND t.state = 'completed'
+                                                                 JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                                                                     AND v.digest = d.source_digest
+                                                                 JOIN items i ON i.item_id = j.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE j.item_id = $item AND j.revision = $revision
+                                                                   AND j.processor_key = $processor AND j.state = 'running'
+                                                                   AND j.lease_key = $lease AND j.lease_until_utc > $now
+                                                                   AND s.status = 'active'
+                                                                 """);
             ProcessingJobKey.BindLease(query, lease);
             query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            using var reader = query.ExecuteReader();
+            using SqliteDataReader reader = query.ExecuteReader();
             return reader.Read()
-                ? new TopicCandidate(lease.ItemId, lease.Revision, reader.GetString(0),
-                    reader.GetString(1), reader.GetString(2), reader.GetString(3))
+                ? new TopicCandidate(lease.ItemId, lease.Revision, reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3))
                 : null;
         });
     }
@@ -58,35 +57,31 @@ public sealed class LocalTopicProposals
     /// Records the producer run, its proposals and the job's completion in one transaction,
     /// only while the lease is still held and the source is active.
     /// </summary>
-    internal bool CommitCandidates(
-        ProcessingLease lease, TopicCandidate candidate, IReadOnlyList<TopicEvidence> evidence)
+    internal bool CommitCandidates(ProcessingLease lease, TopicCandidate candidate, IReadOnlyList<TopicEvidence> evidence)
     {
-        if (candidate.ItemId != lease.ItemId || candidate.Revision != lease.Revision ||
-            evidence.Count > 8 || evidence.Any(e => e.Offset < 0 ||
-            e.Value.Length is < 3 or > 80 ||
-            e.Offset > candidate.Content.Length - e.Value.Length ||
-            !candidate.Content.AsSpan(e.Offset, e.Value.Length).SequenceEqual(e.Value.AsSpan())))
+        if (candidate.ItemId != lease.ItemId || candidate.Revision != lease.Revision || evidence.Count > 8 || evidence.Any(e => e.Offset < 0
+                || e.Value.Length is < 3 or > 80 || e.Offset > candidate.Content.Length - e.Value.Length || !candidate.Content.AsSpan(e.Offset, e.Value.Length).SequenceEqual(e.Value.AsSpan())))
         {
             throw new ArgumentException("Topic evidence must match its extracted source span.");
         }
 
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var finish = connection.CreateCommand("""
-                UPDATE processing_jobs
-                SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
-                    failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision
-                  AND processor_key = $processor AND state = 'running'
-                  AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (
-                      SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                      JOIN item_versions v ON v.item_id = i.item_id
-                      WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
-                        AND v.revision = processing_jobs.revision AND v.digest = $digest)
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand finish = connection.CreateCommand("""
+                                                                  UPDATE processing_jobs
+                                                                  SET state = 'completed', lease_key = NULL, lease_until_utc = NULL,
+                                                                      failure_code = NULL, updated_utc = $now
+                                                                  WHERE item_id = $item AND revision = $revision
+                                                                    AND processor_key = $processor AND state = 'running'
+                                                                    AND lease_key = $lease AND lease_until_utc > $now
+                                                                    AND EXISTS (
+                                                                        SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                        JOIN item_versions v ON v.item_id = i.item_id
+                                                                        WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                                                                          AND v.revision = processing_jobs.revision AND v.digest = $digest)
+                                                                  """);
             finish.Transaction = transaction;
             ProcessingJobKey.BindLease(finish, lease);
             finish.Parameters.AddWithValue("$digest", candidate.Digest);
@@ -96,11 +91,11 @@ public sealed class LocalTopicProposals
                 return false;
             }
 
-            using var run = connection.CreateCommand("""
-                INSERT INTO enrichment_runs
-                    (item_id, revision, processor_key, source_digest, outcome, created_utc)
-                VALUES ($item, $revision, $processor, $digest, $outcome, $now)
-                """);
+            using SqliteCommand run = connection.CreateCommand("""
+                                                               INSERT INTO enrichment_runs
+                                                                   (item_id, revision, processor_key, source_digest, outcome, created_utc)
+                                                               VALUES ($item, $revision, $processor, $digest, $outcome, $now)
+                                                               """);
             run.Transaction = transaction;
             ProcessingJobKey.Bind(run, lease.ItemId, lease.Revision, lease.ProcessorKey);
             run.Parameters.AddWithValue("$digest", candidate.Digest);
@@ -108,15 +103,15 @@ public sealed class LocalTopicProposals
             run.Parameters.AddWithValue("$now", now);
             run.ExecuteNonQuery();
 
-            foreach (var item in evidence)
+            foreach (TopicEvidence item in evidence)
             {
-                using var proposal = connection.CreateCommand("""
-                    INSERT INTO enrichment_proposals
-                        (proposal_id, item_id, revision, processor_key, source_digest,
-                         kind, value, evidence, evidence_offset, status, created_utc)
-                    VALUES ($id, $item, $revision, $processor, $digest,
-                            'topic', $value, $evidence, $offset, 'pending', $now)
-                    """);
+                using SqliteCommand proposal = connection.CreateCommand("""
+                                                                        INSERT INTO enrichment_proposals
+                                                                            (proposal_id, item_id, revision, processor_key, source_digest,
+                                                                             kind, value, evidence, evidence_offset, status, created_utc)
+                                                                        VALUES ($id, $item, $revision, $processor, $digest,
+                                                                                'topic', $value, $evidence, $offset, 'pending', $now)
+                                                                        """);
                 proposal.Transaction = transaction;
                 proposal.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
                 ProcessingJobKey.Bind(proposal, lease.ItemId, lease.Revision, lease.ProcessorKey);
@@ -128,8 +123,7 @@ public sealed class LocalTopicProposals
                 proposal.ExecuteNonQuery();
             }
 
-            LocalProcessingQueue.QueueDependents(connection, transaction,
-                lease.ItemId, lease.Revision, lease.ProcessorKey, now);
+            LocalProcessingQueue.QueueDependents(connection, transaction, lease.ItemId, lease.Revision, lease.ProcessorKey, now);
             transaction.Commit();
             return true;
         });
@@ -149,26 +143,26 @@ public sealed class LocalTopicProposals
 
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT proposal_id, source_id, item_id, revision,
-                       source_digest, processor_key, value, evidence,
-                       evidence_offset, status, correction
-                FROM eligible_enrichment_proposals
-                WHERE source_id = $source
-                ORDER BY evidence_offset, proposal_id LIMIT $limit
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT proposal_id, source_id, item_id, revision,
+                                                                        source_digest, processor_key, value, evidence,
+                                                                        evidence_offset, status, correction
+                                                                 FROM eligible_enrichment_proposals
+                                                                 WHERE source_id = $source
+                                                                 ORDER BY evidence_offset, proposal_id LIMIT $limit
+                                                                 """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);
-            using var reader = query.ExecuteReader();
-            var result = new List<LocalTopicProposal>();
+            using SqliteDataReader reader = query.ExecuteReader();
+            List<LocalTopicProposal> result = new();
             while (reader.Read())
             {
-                result.Add(new LocalTopicProposal(
-                    Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
-                    Guid.Parse(reader.GetString(2)), reader.GetInt32(3),
-                    reader.GetString(4), reader.GetString(5), reader.GetString(6),
-                    reader.GetString(7), reader.GetInt32(8), reader.GetString(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10)));
+                result.Add(new LocalTopicProposal(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                    Guid.Parse(reader.GetString(2)), reader.GetInt32(3), reader.GetString(4),
+                    reader.GetString(5), reader.GetString(6), reader.GetString(7),
+                    reader.GetInt32(8), reader.GetString(9), reader.IsDBNull(10)
+                        ? null
+                        : reader.GetString(10)));
             }
 
             return result;
@@ -190,11 +184,9 @@ public sealed class LocalTopicProposals
         if (decision == "corrected")
         {
             correction = correction?.Trim();
-            if (string.IsNullOrWhiteSpace(correction) || correction.Length > 80 ||
-                correction.Any(char.IsControl))
+            if (string.IsNullOrWhiteSpace(correction) || correction.Length > 80 || correction.Any(char.IsControl))
             {
-                throw new ArgumentException(
-                    "Corrections must be printable and at most 80 characters.", nameof(correction));
+                throw new ArgumentException("Corrections must be printable and at most 80 characters.", nameof(correction));
             }
         }
         else if (correction is not null)
@@ -204,16 +196,16 @@ public sealed class LocalTopicProposals
 
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var eligible = connection.CreateCommand("""
-                SELECT status, correction FROM eligible_enrichment_proposals
-                WHERE proposal_id = $id
-                """);
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand eligible = connection.CreateCommand("""
+                                                                    SELECT status, correction FROM eligible_enrichment_proposals
+                                                                    WHERE proposal_id = $id
+                                                                    """);
             eligible.Transaction = transaction;
             eligible.Parameters.AddWithValue("$id", proposalId.ToString("D"));
             string status;
             string? previousCorrection;
-            using (var reader = eligible.ExecuteReader())
+            using (SqliteDataReader reader = eligible.ExecuteReader())
             {
                 if (!reader.Read())
                 {
@@ -229,11 +221,11 @@ public sealed class LocalTopicProposals
                 return false;
             }
 
-            var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
-            using var update = connection.CreateCommand("""
-                UPDATE enrichment_proposals SET status = $decision,
-                    correction = $correction, reviewed_utc = $now WHERE proposal_id = $id
-                """);
+            string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+            using SqliteCommand update = connection.CreateCommand("""
+                                                                  UPDATE enrichment_proposals SET status = $decision,
+                                                                      correction = $correction, reviewed_utc = $now WHERE proposal_id = $id
+                                                                  """);
             update.Transaction = transaction;
             update.Parameters.AddWithValue("$id", proposalId.ToString("D"));
             update.Parameters.AddWithValue("$decision", decision);
@@ -244,11 +236,11 @@ public sealed class LocalTopicProposals
                 throw new InvalidOperationException("The proposal review was not saved.");
             }
 
-            using var history = connection.CreateCommand("""
-                INSERT INTO enrichment_reviews
-                    (review_id, proposal_id, decision, correction, reviewed_utc)
-                VALUES ($review, $id, $decision, $correction, $now)
-                """);
+            using SqliteCommand history = connection.CreateCommand("""
+                                                                   INSERT INTO enrichment_reviews
+                                                                       (review_id, proposal_id, decision, correction, reviewed_utc)
+                                                                   VALUES ($review, $id, $decision, $correction, $now)
+                                                                   """);
             history.Transaction = transaction;
             history.Parameters.AddWithValue("$review", Guid.NewGuid().ToString("D"));
             history.Parameters.AddWithValue("$id", proposalId.ToString("D"));
@@ -274,26 +266,26 @@ public sealed class LocalTopicProposals
 
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT s.status, text.state, heading.state, r.outcome
-                FROM sources s
-                JOIN items i ON i.source_id = s.source_id
-                JOIN item_versions v ON v.item_id = i.item_id
-                LEFT JOIN processing_jobs text ON text.item_id = v.item_id
-                    AND text.revision = v.revision AND text.processor_key = 'source-text-v1'
-                LEFT JOIN processing_jobs heading ON heading.item_id = v.item_id
-                    AND heading.revision = v.revision AND heading.processor_key = $producer
-                LEFT JOIN enrichment_runs r ON r.item_id = v.item_id
-                    AND r.revision = v.revision AND r.source_digest = v.digest
-                    AND r.processor_key = $producer
-                WHERE s.source_id = $source
-                  AND v.revision = (SELECT MAX(latest.revision)
-                                    FROM item_versions latest WHERE latest.item_id = v.item_id)
-                LIMIT 1
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT s.status, text.state, heading.state, r.outcome
+                                                                 FROM sources s
+                                                                 JOIN items i ON i.source_id = s.source_id
+                                                                 JOIN item_versions v ON v.item_id = i.item_id
+                                                                 LEFT JOIN processing_jobs text ON text.item_id = v.item_id
+                                                                     AND text.revision = v.revision AND text.processor_key = 'source-text-v1'
+                                                                 LEFT JOIN processing_jobs heading ON heading.item_id = v.item_id
+                                                                     AND heading.revision = v.revision AND heading.processor_key = $producer
+                                                                 LEFT JOIN enrichment_runs r ON r.item_id = v.item_id
+                                                                     AND r.revision = v.revision AND r.source_digest = v.digest
+                                                                     AND r.processor_key = $producer
+                                                                 WHERE s.source_id = $source
+                                                                   AND v.revision = (SELECT MAX(latest.revision)
+                                                                                     FROM item_versions latest WHERE latest.item_id = v.item_id)
+                                                                 LIMIT 1
+                                                                 """);
             query.Parameters.AddWithValue("$producer", LocalProcessors.MarkdownHeadings);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            using var reader = query.ExecuteReader();
+            using SqliteDataReader reader = query.ExecuteReader();
             if (!reader.Read() || reader.GetString(0) != "active")
             {
                 return "unavailable";
@@ -304,8 +296,8 @@ public sealed class LocalTopicProposals
                 return reader.GetString(3);
             }
 
-            var textState = reader.IsDBNull(1) ? null : reader.GetString(1);
-            var headingState = reader.IsDBNull(2) ? null : reader.GetString(2);
+            string? textState = reader.IsDBNull(1) ? null : reader.GetString(1);
+            string? headingState = reader.IsDBNull(2) ? null : reader.GetString(2);
             return (headingState ?? textState) switch
             {
                 "unsupported" => "unsupported",

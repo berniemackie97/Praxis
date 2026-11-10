@@ -1,6 +1,7 @@
 using System.Text;
+using Praxis.Knowledge.Model;
 
-namespace Praxis.Knowledge;
+namespace Praxis.Knowledge.Vaults;
 
 public static partial class LocalVaultExchange
 {
@@ -16,26 +17,23 @@ public static partial class LocalVaultExchange
     public static KnowledgeCollection Capture(string vaultDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vaultDirectory);
-        var root = Path.GetFullPath(vaultDirectory);
+        string root = Path.GetFullPath(vaultDirectory);
         if (!Directory.Exists(root))
         {
             throw new DirectoryNotFoundException(root);
         }
 
         CheckLink(root);
-        var notes = new List<NoteRecord>();
-        var attachments = new List<AttachmentRecord>();
-        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var directories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        List<NoteRecord> notes = new();
+        List<AttachmentRecord> attachments = new();
+        HashSet<string> files = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> directories = new(StringComparer.OrdinalIgnoreCase);
         long totalBytes = 0;
 
         Walk(root, 0);
-        if (files.Any(file => directories.ContainsKey(file)))
-        {
-            throw new InvalidDataException("A vault file conflicts with a directory path.");
-        }
-
-        return new KnowledgeCollection(notes, attachments, []);
+        return files.Any(file => directories.ContainsKey(file))
+            ? throw new InvalidDataException("A vault file conflicts with a directory path.")
+            : new KnowledgeCollection(notes, attachments, []);
 
         void Walk(string directory, int depth)
         {
@@ -44,8 +42,7 @@ public static partial class LocalVaultExchange
                 throw new InvalidDataException("The vault directory nesting exceeds the supported limit.");
             }
 
-            var entries = Directory.EnumerateFileSystemEntries(directory)
-                .Take(MaxNotes + MaxAttachments + MaxDirectories + 1).ToArray();
+            string[] entries = Directory.EnumerateFileSystemEntries(directory).Take(MaxNotes + MaxAttachments + MaxDirectories + 1).ToArray();
             if (entries.Length > MaxNotes + MaxAttachments + MaxDirectories)
             {
                 throw new InvalidDataException("The vault directory contains too many entries.");
@@ -57,10 +54,10 @@ public static partial class LocalVaultExchange
                 throw new InvalidDataException("Empty vault directories cannot be represented by the archive.");
             }
 
-            foreach (var entry in entries)
+            foreach (string entry in entries)
             {
                 CheckLink(entry);
-                var relative = Path.GetRelativePath(root, entry).Replace('\\', '/');
+                string relative = Path.GetRelativePath(root, entry).Replace('\\', '/');
                 try
                 {
                     PortablePath.Validate(relative);
@@ -72,8 +69,7 @@ public static partial class LocalVaultExchange
 
                 if ((File.GetAttributes(entry) & FileAttributes.Directory) != 0)
                 {
-                    if (directories.Count >= MaxDirectories ||
-                        directories.TryGetValue(relative, out var prior) && prior != relative)
+                    if (directories.Count >= MaxDirectories || directories.TryGetValue(relative, out string? prior) && prior != relative)
                     {
                         throw new InvalidDataException("The vault contains conflicting or excessive directories.");
                     }
@@ -88,16 +84,15 @@ public static partial class LocalVaultExchange
                     throw new InvalidDataException("The vault contains duplicate or excessive file paths.");
                 }
 
-                var isNote = relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
-                var maximum = isNote ? MaxNoteBytes : MaxAttachmentBytes;
-                using var input = new FileStream(entry, FileMode.Open, FileAccess.Read, FileShare.Read);
-                if (input.Length > maximum || input.Length < 0 ||
-                    (totalBytes += input.Length) > MaxTotalBytes)
+                bool isNote = relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+                int maximum = isNote ? MaxNoteBytes : MaxAttachmentBytes;
+                using FileStream input = new(entry, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (input.Length > maximum || input.Length < 0 || (totalBytes += input.Length) > MaxTotalBytes)
                 {
                     throw new InvalidDataException("The vault file or total content exceeds archive limits.");
                 }
 
-                var bytes = new byte[(int)input.Length];
+                byte[] bytes = new byte[(int)input.Length];
                 input.ReadExactly(bytes);
                 if (input.ReadByte() != -1)
                 {

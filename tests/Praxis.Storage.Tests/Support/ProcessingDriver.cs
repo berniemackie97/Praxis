@@ -1,6 +1,8 @@
-using Praxis.Storage;
+using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment;
+using Praxis.Storage.Processing;
 
-namespace Praxis.Storage.Tests;
+namespace Praxis.Storage.Tests.Support;
 
 /// <summary>
 /// Steps one handler's jobs deterministically, as the pipeline would, so a test can assert
@@ -18,7 +20,7 @@ internal sealed class ProcessingDriver(LocalCatalog catalog, ILocalProcessingHan
 
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
-        var lease = Claim();
+        ProcessingLease? lease = Claim();
         if (lease is null && !reopenExhausted)
         {
             if (handler.TryReopenWork())
