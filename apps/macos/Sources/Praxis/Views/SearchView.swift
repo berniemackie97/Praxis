@@ -10,6 +10,17 @@ struct SearchView: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { model.submit() }
                 Button("Search") { model.submit() }
+                Button(model.indexing ? "Indexing…" : "Update semantic index") {
+                    model.updateSemanticIndex()
+                }
+                .disabled(model.indexing)
+                Button("Rebuild") { model.updateSemanticIndex(rebuild: true) }
+                    .disabled(model.indexing)
+                    .help("Rebuild the derived semantic index from current permitted sources")
+            }
+            Text(model.mode).font(.caption).foregroundStyle(.secondary)
+            if let notice = model.notice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
             }
             if let error = model.error {
                 Text(error).font(.callout).foregroundStyle(.secondary)
