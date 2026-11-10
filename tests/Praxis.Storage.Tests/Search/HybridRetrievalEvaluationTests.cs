@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Data.Sqlite;
 using Praxis.Inference;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Search;
@@ -159,6 +160,48 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
             hit => hit.Hit.SourceId == revoked.SourceId);
         await fixture.Catalog.Originals.VerifyAsync(revised.ItemId);
         await fixture.Catalog.Originals.VerifyAsync(revoked.ItemId);
+    }
+
+    [Fact]
+    public async Task CorruptDerivedVectorsFailClosedAndMissingOriginalsFailVerification()
+    {
+        using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync();
+        TopicEmbeddingModel model = new();
+        Assert.True((await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed > 0);
+        CapturedOriginal mesh = fixture.Originals["mesh"];
+
+        using (SqliteConnection db = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = fixture.Catalog.DatabasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false
+        }.ToString()))
+        {
+            db.Open();
+            using SqliteCommand corrupt = db.CreateCommand();
+            corrupt.CommandText = """
+                UPDATE semantic_vectors SET vector = x'00'
+                WHERE item_id = $item
+                """;
+            corrupt.Parameters.AddWithValue("$item", mesh.ItemId.ToString("D"));
+            Assert.True(corrupt.ExecuteNonQuery() > 0);
+        }
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model));
+        Assert.True((await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed > 0);
+        Assert.Equal(mesh.ItemId,
+            (await fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model))[0].Hit.ItemId);
+
+        string digest = mesh.Sha256;
+        string originalPath = Path.Combine(fixture.Catalog.DataDirectory, "objects",
+            digest[..2], digest[2..4], digest);
+        File.Delete(originalPath);
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            fixture.Catalog.Originals.VerifyAsync(mesh.ItemId));
+        // Cached extracted evidence remains queryable until a separate integrity workflow
+        // reacts; the source digest does not prove the original object still exists.
+        Assert.Equal(mesh.ItemId, Assert.Single(fixture.Catalog.Search.Query("ParseMesh")).ItemId);
     }
 
     [Fact]
