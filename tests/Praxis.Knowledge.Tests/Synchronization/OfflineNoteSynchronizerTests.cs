@@ -144,16 +144,18 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         OfflineNoteSynchronizer secondSync = new(second, Space, server);
         Guid a = Guid.NewGuid(), b = Guid.NewGuid();
         first.Queue(a, LocalNoteAction.Upsert, "one.md", "one");
-        first.Queue(b, LocalNoteAction.Upsert, "two.md", "two");
         await firstSync.ReconcileAsync();
         await secondSync.ReconcileAsync();
 
         PendingNoteEdit rename = second.Queue(a, LocalNoteAction.Upsert, "TWO.md", "renamed one");
+        first.Queue(b, LocalNoteAction.Upsert, "two.md", "two");
+        await firstSync.ReconcileAsync();
         await secondSync.ReconcileAsync();
         Assert.Equal(LocalNoteConflictReason.PathCollision,
             Assert.Single(second.Conflicts).Reason);
         Assert.Equal(rename.OperationId, Assert.Single(second.Pending).OperationId);
         Assert.Equal("TWO.md", Assert.Single(second.Pending).Path);
+        Assert.Contains(second.Records, note => note.Id == b && note.Path == "two.md");
 
         second.Resolve(rename.OperationId, LocalNoteAction.Upsert,
             "three.md", "renamed one");
