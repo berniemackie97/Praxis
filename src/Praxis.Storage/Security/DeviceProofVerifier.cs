@@ -14,7 +14,7 @@ public sealed record DeviceChallenge(Guid ChallengeId, byte[] Message, DateTimeO
 public sealed class VerifiedDeviceProof
 {
     internal VerifiedDeviceProof(Guid installationId, Guid principalId, Guid deviceId,
-        Guid spaceId, Guid? sourceId, SecurityPermission permission, DateTimeOffset expiresUtc)
+        Guid spaceId, Guid? sourceId, SecurityPermission permission, long grantVersion, DateTimeOffset expiresUtc)
     {
         InstallationId = installationId;
         PrincipalId = principalId;
@@ -22,6 +22,7 @@ public sealed class VerifiedDeviceProof
         SpaceId = spaceId;
         SourceId = sourceId;
         Permission = permission;
+        GrantVersion = grantVersion;
         ExpiresUtc = expiresUtc;
     }
 
@@ -31,6 +32,7 @@ public sealed class VerifiedDeviceProof
     public Guid SpaceId { get; }
     public Guid? SourceId { get; }
     public SecurityPermission Permission { get; }
+    internal long GrantVersion { get; }
     public DateTimeOffset ExpiresUtc { get; }
 }
 
@@ -65,7 +67,8 @@ public sealed class DeviceProofVerifier
                 purge.ExecuteNonQuery();
             }
 
-            if (!HasAccess(connection, transaction, device, space, source, permission))
+            long? grantVersion = AccessVersion(connection, transaction, device, space, source, permission);
+            if (grantVersion is null)
             {
                 throw new UnauthorizedAccessException("Device authorization is required.");
             }
@@ -85,14 +88,15 @@ public sealed class DeviceProofVerifier
             DateTimeOffset expires = now.Add(Lifetime);
             using (SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
                 INSERT INTO proof_challenges
-                    (challenge_id, device_id, space_id, source_id, permission, nonce, expires_utc)
-                VALUES ($challenge, $device, $space, $source, $permission, $nonce, $expires)
+                    (challenge_id, device_id, space_id, source_id, permission, grant_version, nonce, expires_utc)
+                VALUES ($challenge, $device, $space, $source, $permission, $version, $nonce, $expires)
                 """,
                 ("$challenge", SecurityRegistry.Id(challengeId)),
                 ("$device", device),
                 ("$space", space),
                 ("$source", source),
                 ("$permission", (int)permission),
+                ("$version", grantVersion.Value),
                 ("$nonce", nonce),
                 ("$expires", Stamp(expires))))
             {
@@ -102,7 +106,7 @@ public sealed class DeviceProofVerifier
             transaction.Commit();
             return new DeviceChallenge(challengeId,
                 Message(registry.InstallationId, challengeId, deviceId, spaceId,
-                    sourceId, permission, nonce, expires), expires);
+                    sourceId, permission, grantVersion.Value, nonce, expires), expires);
         });
     }
 
@@ -120,12 +124,13 @@ public sealed class DeviceProofVerifier
             Guid deviceId, principalId, spaceId;
             Guid? sourceId;
             SecurityPermission permission;
+            long grantVersion;
             byte[] nonce, publicKey;
             DateTimeOffset expires;
 
             using (SqliteCommand load = SecurityRegistry.Command(connection, transaction, """
                 SELECT c.device_id, d.principal_id, c.space_id, c.source_id, c.permission,
-                       c.nonce, c.expires_utc, d.public_key
+                       c.grant_version, c.nonce, c.expires_utc, d.public_key
                 FROM proof_challenges c
                 JOIN devices d ON d.device_id=c.device_id
                 WHERE c.challenge_id=$challenge AND c.consumed=0
@@ -142,9 +147,10 @@ public sealed class DeviceProofVerifier
                 spaceId = Guid.Parse(reader.GetString(2));
                 sourceId = reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3));
                 permission = (SecurityPermission)reader.GetInt32(4);
-                nonce = (byte[])reader.GetValue(5);
-                expires = DateTimeOffset.Parse(reader.GetString(6), System.Globalization.CultureInfo.InvariantCulture);
-                publicKey = (byte[])reader.GetValue(7);
+                grantVersion = reader.GetInt64(5);
+                nonce = (byte[])reader.GetValue(6);
+                expires = DateTimeOffset.Parse(reader.GetString(7), System.Globalization.CultureInfo.InvariantCulture);
+                publicKey = (byte[])reader.GetValue(8);
             }
 
             using (SqliteCommand consume = SecurityRegistry.Command(connection, transaction, """
@@ -159,10 +165,10 @@ public sealed class DeviceProofVerifier
             }
 
             bool allowed = expires > registry.UtcNow &&
-                HasAccess(connection, transaction, SecurityRegistry.Id(deviceId),
+                AccessVersion(connection, transaction, SecurityRegistry.Id(deviceId),
                     SecurityRegistry.Id(spaceId),
                     sourceId is null ? null : SecurityRegistry.Id(sourceId.Value),
-                    permission);
+                    permission) == grantVersion;
             bool valid = false;
             if (allowed)
             {
@@ -170,7 +176,7 @@ public sealed class DeviceProofVerifier
                 verifier.ImportSubjectPublicKeyInfo(publicKey, out int read);
                 valid = read == publicKey.Length && verifier.VerifyData(
                     Message(registry.InstallationId, challengeId, deviceId, spaceId,
-                        sourceId, permission, nonce, expires),
+                        sourceId, permission, grantVersion, nonce, expires),
                     supplied, HashAlgorithmName.SHA256,
                     DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
             }
@@ -178,7 +184,7 @@ public sealed class DeviceProofVerifier
             transaction.Commit();
             return valid
                 ? new VerifiedDeviceProof(registry.InstallationId, principalId, deviceId,
-                    spaceId, sourceId, permission, expires)
+                    spaceId, sourceId, permission, grantVersion, expires)
                 : null;
         });
     }
@@ -197,10 +203,10 @@ public sealed class DeviceProofVerifier
 
         return registry.Execute(connection =>
         {
-            if (!HasAccess(connection, null, SecurityRegistry.Id(proof.DeviceId),
+            if (AccessVersion(connection, null, SecurityRegistry.Id(proof.DeviceId),
                 SecurityRegistry.Id(proof.SpaceId),
                 proof.SourceId is null ? null : SecurityRegistry.Id(proof.SourceId.Value),
-                proof.Permission))
+                proof.Permission) != proof.GrantVersion)
             {
                 return false;
             }
@@ -213,11 +219,11 @@ public sealed class DeviceProofVerifier
         });
     }
 
-    private static bool HasAccess(SqliteConnection connection, SqliteTransaction? transaction,
+    private static long? AccessVersion(SqliteConnection connection, SqliteTransaction? transaction,
         string device, string space, string? source, SecurityPermission permission)
     {
         using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
-            SELECT 1
+            SELECT CASE WHEN s.owner_id=p.principal_id THEN 0 ELSE g.grant_version END
             FROM devices d
             JOIN principals p ON p.principal_id=d.principal_id AND p.disabled_utc IS NULL
             JOIN security_spaces s ON s.space_id=$space
@@ -232,16 +238,16 @@ public sealed class DeviceProofVerifier
             """,
             ("$device", device), ("$space", space), ("$source", source),
             ("$permission", (int)permission));
-        return command.ExecuteScalar() is not null;
+        return command.ExecuteScalar() is long version ? version : null;
     }
 
     private static byte[] Message(Guid installation, Guid challenge, Guid device, Guid space,
-        Guid? source, SecurityPermission permission, byte[] nonce, DateTimeOffset expires)
+        Guid? source, SecurityPermission permission, long grantVersion, byte[] nonce, DateTimeOffset expires)
     {
         return Encoding.UTF8.GetBytes(
             $"Praxis.DeviceProof.v1\n{installation:N}\n{challenge:N}\n{device:N}\n" +
             $"{space:N}\n{(source is null ? "-" : source.Value.ToString("N"))}\n" +
-            $"{(int)permission}\n{expires.ToUnixTimeSeconds()}\n{Convert.ToBase64String(nonce)}\n");
+            $"{(int)permission}\n{grantVersion}\n{expires.ToUnixTimeSeconds()}\n{Convert.ToBase64String(nonce)}\n");
     }
 
     private static void ValidatePermission(SecurityPermission permission)
