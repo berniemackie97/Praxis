@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 3,
+  "corpus": "retrieval-corpus-v3.json",
+  "judgments": [
+    {
+      "name": "exact-mesh",
+      "domain": "technical",
+      "query": "LoadMesh",
+      "relevant": [
+        "mesh-loader"
+      ],
+      "lexicalExpected": [
+        "mesh-loader"
+      ]
+    },
+    {
+      "name": "mesh-decoding",
+      "domain": "technical",
+      "query": "geometry decoding",
+      "relevant": [
+        "mesh-loader"
+      ],
+      "lexicalExpected": []
+    },
+    {
+      "name": "cache-invalidation",
+      "domain": "technical",
+      "query": "cached mesh",
+      "relevant": [
+        "mesh-cache"
+      ],
+      "lexicalExpected": [
+        "mesh-cache"
+      ]
+    },
+    {
+      "name": "collision-stages",
+      "domain": "technical",
+      "query": "broadphase narrowphase",
+      "relevant": [
+        "collision-pipeline"
+      ],
+      "lexicalExpected": [
+        "collision-pipeline"
+      ]
+    },
+    {
+      "name": "collision-concept",
+      "domain": "technical",
+      "query": "accelerate physical contacts",
+      "relevant": [
+        "collision-pipeline"
+      ],
+      "lexicalExpected": []
+    },
+    {
+      "name": "elevation-terms",
+      "domain": "technical",
+      "query": "heightmap elevation",
+      "relevant": [
+        "terrain-guide"
+      ],
+      "lexicalExpected": [
+        "terrain-guide"
+      ]
+    },
+    {
+      "name": "elevation-concept",
+      "domain": "technical",
+      "query": "mountain slope data",
+      "relevant": [
+        "terrain-guide"
+      ],
+      "lexicalExpected": []
+    },
+    {
+      "name": "triplanar",
+      "domain": "technical",
+      "query": "triplanar splatmaps",
+      "relevant": [
+        "terrain-shader"
+      ],
+      "lexicalExpected": [
+        "terrain-shader"
+      ]
+    },
+    {
+      "name": "cliff-palette",
+      "domain": "technical",
+      "query": "cliff tile palette",
+      "relevant": [
+        "terrain-tile"
+      ],
+      "lexicalExpected": [
+        "terrain-tile"
+      ]
+    },
+    {
+      "name": "vertex-upload",
+      "domain": "technical",
+      "query": "UploadVertexBuffer",
+      "relevant": [
+        "vertex-buffer"
+      ],
+      "lexicalExpected": [
+        "vertex-buffer"
+      ]
+    },
+    {
+      "name": "index-order",
+      "domain": "technical",
+      "query": "index buffer",
+      "relevant": [
+        "index-buffer"
+      ],
+      "lexicalExpected": [
+        "index-buffer"
+      ]
+    },
+    {
+      "name": "stable-depth",
+      "domain": "technical",
+      "query": "stable tick precedence",
+      "relevant": [
+        "depth-order"
+      ],
+      "lexicalExpected": [
+        "depth-order"
+      ]
+    },
+    {
+      "name": "visibility",
+      "domain": "technical",
+      "query": "frustum culling",
+      "relevant": [
+        "occlusion"
+      ],
+      "lexicalExpected": [
+        "occlusion"
+      ]
+    },
+    {
+      "name": "session-nonce",
+      "domain": "protocol",
+      "query": "handshake nonce",
+      "relevant": [
+        "session-handshake"
+      ],
+      "lexicalExpected": [
+        "session-handshake"
+      ]
+    },
+    {
+      "name": "replay-concept",
+      "domain": "protocol",
+      "query": "prevent login replay",
+      "relevant": [
+        "session-handshake"
+      ],
+      "lexicalExpected": []
+    },
+    {
+      "name": "admission-rotation",
+      "domain": "protocol",
+      "query": "admission token",
+      "relevant": [
+        "session-reauth"
+      ],
+      "lexicalExpected": [
+        "session-reauth"
+      ]
+    },
+    {
+      "name": "stream-nonces",
+      "domain": "protocol",
+      "query": "stream nonces",
+      "relevant": [
+        "cipher-state"
+      ],
+      "lexicalExpected": [
+        "cipher-state"
+      ]
+    },
+    {
+      "name": "revision-fence",
+      "domain": "storage",
+      "query": "revision fence",
+      "relevant": [
+        "storage-revision"
+      ],
+      "lexicalExpected": [
+        "storage-revision"
+      ]
+    },
+    {
+      "name": "revocation",
+      "domain": "storage",
+      "query": "revoked source",
+      "relevant": [
+        "storage-delete"
+      ],
+      "lexicalExpected": [
+        "storage-delete"
+      ]
+    },
+    {
+      "name": "integrity",
+      "domain": "storage",
+      "query": "sha256 digest",
+      "relevant": [
+        "integrity-check"
+      ],
+      "lexicalExpected": [
+        "integrity-check"
+      ]
+    },
+    {
+      "name": "resume",
+      "domain": "storage",
+      "query": "failed jobs",
+      "relevant": [
+        "resume-jobs"
+      ],
+      "lexicalExpected": [
+        "resume-jobs"
+      ]
+    },
+    {
+      "name": "build",
+      "domain": "operations",
+      "query": "dotnet build",
+      "relevant": [
+        "build-guide"
+      ],
+      "lexicalExpected": [
+        "build-guide"
+      ]
+    },
+    {
+      "name": "release",
+      "domain": "operations",
+      "query": "smoke test",
+      "relevant": [
+        "release-runbook"
+      ],
+      "lexicalExpected": [
+        "release-runbook"
+      ]
+    },
+    {
+      "name": "rendering-cue",
+      "domain": "video",
+      "query": "vertex buffer before drawing",
+      "relevant": [
+        "render-caption"
+      ],
+      "lexicalExpected": [
+        "render-caption"
+      ]
+    },
+    {
+      "name": "material-cue",
+      "domain": "video",
+      "query": "material textures",
+      "relevant": [
+        "shader-caption"
+      ],
+      "lexicalExpected": [
+        "shader-caption"
+      ]
+    },
+    {
+      "name": "collision-cue",
+      "domain": "video",
+      "query": "broadphase candidate",
+      "relevant": [
+        "collision-caption",
+        "collision-pipeline"
+      ],
+      "lexicalExpected": [
+        "collision-caption",
+        "collision-pipeline"
+      ]
+    },
+    {
+      "name": "duplicate-owners",
+      "domain": "technical",
+      "query": "orion duplicate",
+      "relevant": [
+        "duplicate-a",
+        "duplicate-b"
+      ],
+      "lexicalExpected": [
+        "duplicate-a",
+        "duplicate-b"
+      ]
+    },
+    {
+      "name": "conflicting-claims",
+      "domain": "research",
+      "query": "packet code",
+      "relevant": [
+        "conflict-a",
+        "conflict-b"
+      ],
+      "lexicalExpected": [
+        "conflict-a",
+        "conflict-b"
+      ]
+    },
+    {
+      "name": "quoted-instructions",
+      "domain": "safety",
+      "query": "ignore previous",
+      "relevant": [
+        "injection"
+      ],
+      "lexicalExpected": [
+        "injection"
+      ]
+    },
+    {
+      "name": "cross-source-query",
+      "domain": "technical",
+      "query": "cliff triangle",
+      "relevant": [
+        "terrain-tile",
+        "mesh-loader"
+      ],
+      "lexicalExpected": []
+    },
+    {
+      "name": "unknown-symbol",
+      "domain": "safety",
+      "query": "nonexistentidentifier",
+      "relevant": [],
+      "lexicalExpected": []
+    },
+    {
+      "name": "unsupported-finance",
+      "domain": "finance",
+      "query": "salary",
+      "relevant": [],
+      "lexicalExpected": []
+    },
+    {
+      "name": "unsupported-pdf",
+      "domain": "unsupported",
+      "query": "pdf",
+      "relevant": [],
+      "lexicalExpected": []
+    },
+    {
+      "name": "unsupported-media",
+      "domain": "unsupported",
+      "query": "media bytes",
+      "relevant": [],
+      "lexicalExpected": []
+    },
+    {
+      "name": "missing-budget",
+      "domain": "finance",
+      "query": "savings proposal",
+      "relevant": [],
+      "lexicalExpected": []
+    },
+    {
+      "name": "lexical-distractor",
+      "domain": "technical",
+      "query": "triangle mesh",
+      "relevant": [
+        "mesh-loader"
+      ],
+      "lexicalExpected": [
+        "keyword-distractor"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-# Retrieval evaluation — local lexical gold corpus v1
+# Retrieval evaluation — lexical, semantic and fused search
 
-**Status (November 10, 2026):** The lexical corpus and opt-in local hybrid retrieval implementation are merged (#222/#226/#228/#229), and the owner reports a green post-fix macOS .NET Release build/test/format chain for #28. This evaluation extends the deterministic source judgments, but there are no recorded physical-model results, owner-reviewed quality thresholds or executing three-OS CI jobs. Nothing here establishes grounded answer generation or intelligent MVP #170 acceptance.
+**Status (November 10, 2026):** Corpus v1/v2 and source-level provenance evaluation were merged in #222/#230/#232. The owner verified a full 593/593 Release test suite and format exit 0 on macOS using .NET 10.0.403, and ran a real local EmbeddingGemma v2 benchmark (1/1 executed and passed). That baseline exposed 4/4 semantic and hybrid **no-answer false positives**. Corpus/judgments v3 extend ranking evaluation; their latest-head execution and human judgment review are pending. GitHub's three-OS CI remains unexecuted due to owner-deferred runners (#137). None of these tests establishes answer-level grounding or the intelligent MVP (#170).
 
 ## Scope and expected behavior
 
@@ -56,7 +56,7 @@ The next evaluation under #29 must record a pinned installed embedding model and
 
 After merged PR #228, the owner ran the fail-fast chain on macOS using .NET SDK 10.0.403: locked restore and a **fresh Release build passed**. The fresh suite executed **575 tests: 566 passed, 9 failed**. Eight historical snapshot/migration tests asserted schema version 14 despite the catalog now being at version 16; the hybrid retrieval revocation/revision test helper mistakenly expected a single processing job for an item and processor **across all revisions**, although its two revisions correctly retained separate job history. The fail-fast chain stopped at test failure, so **formatting was not run in this pass**.
 
-The follow-up to #28 updates those eight assertions to version 16 and scopes the helper's processing-job assertion to the exact claimed item, revision and processor. The patch does not alter catalog migrations, source identity or runtime retrieval behavior. **A fresh post-fix complete test and format result is still required; no final-head pass or cross-OS CI result is claimed.**
+The follow-up to #28 updates those eight assertions to version 16 and scopes the helper's processing-job assertion to the exact claimed item, revision and processor. The patch does not alter catalog migrations, source identity or runtime retrieval behavior. **Historical checkpoint before #232:** a fresh post-fix complete suite was still required here. The owner subsequently verified 593/593 Release tests and format exit code 0 on merged #232; the cross-OS CI matrix has not run.
 
 ## Hybrid evaluation v2 — task #29
 
@@ -110,4 +110,71 @@ After merged #230, the owner ran locked restore, a fresh Release build and the f
 
 The #29 follow-up modifies only the test corruption fixture: it reads an existing vector, writes `float.NaN` into its first 32-bit IEEE-754 element without changing its length, and updates that one segment. The SQLite length constraint is retained while `LocalSemanticIndex.QueryAsync` must fail closed on a non-finite decoded element. The test then requires a successful derived-index rebuild and verified original-loss behavior. No storage schema or production search change is needed.
 
-**Verification pending:** repeat the complete locked restore → fresh Release build → full tests → format chain after merging the repair; retain and review the actual output. This is test-fixture repair evidence, **not** a completed real-model benchmark, independently reviewed relevance judgment or executed cross-platform CI (#137).
+**Verification outcome:** the owner subsequently passed the locked restore → Release build → 593/593 full tests → format-exit-0 chain on merged #232. A fresh run is still required for any new unmerged test changes. This is test-fixture repair evidence, **not** a completed real-model benchmark, independently reviewed relevance judgment or executed cross-platform CI (#137).
+
+## Expanded ranking measurement — v3 (#29)
+
+The synthetic v3 corpus (`retrieval-corpus-v3.json`) contains **32 separate original sources, 29 expected-searchable**, including code, Markdown, text, caption sidecars, two independently owned duplicate originals, conflicting notes and untrusted text. Three source originals are intentionally unsupported: CSV financial transactions, PDF and a media file. It has **36 authored judgments** across technical, protocol, storage, operations, video text, research, safety, finance and unsupported-input cases; five are no-evidence queries. The v3 corpus is independent of historical v1/v2 fixtures and deliberately has more than five eligible results, so recall@5 cannot be trivially satisfied by returning nearly every result. Labels are provisional pending independent owner review, and the dataset is still too small to claim general production relevance.
+
+`RetrievalRankingEvaluationTests` runs v3 through the actual capture, text extraction, FTS5 and source provenance assertions without external inference. It verifies exact expected lexical identities and scorers with ranked positive results, incorrect negatives and duplicates. The optional local-Ollama test executes **both v2 and v3** when `PRAXIS_RETRIEVAL_OLLAMA_MODEL` is set, comparing lexical, semantic-only and fused top-five results. Every query reports **ordered stable source keys**, judged relevant keys, and separate per-mode elapsed time. Reports aggregate **recall@1/3/5, precision@1/3/5 and MRR@5 across only positive-answer queries**; no-evidence correctness is a separate fraction. No-answer queries never inflate ranking precision or recall by being assigned a perfect 1. V3 **precision@k uses a fixed denominator k**, even when fewer than k results are returned, and recall@k divides by the number of genuinely relevant sources; no-evidence queries are excluded from both. MRR@5 is reciprocal first relevant rank with zero if no relevant item appears in the top five. The real-model runner records per-mode p50/p95 via nearest-rank order statistics, one host/run only, model digest, index segment count, catalog bytes and test-process memory. Sequential semantic and fused calls each embed the query; these are **not cold-start throughput, single-answer latency, GPU RSS or model cost measurements**. All compared modes query identical authorized synthetic sources.
+
+After checking out the PR and performing fresh Release restore/build, the deterministic verification is:
+
+```bash
+dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+  -c Release --no-build --no-restore \
+  --filter 'FullyQualifiedName~RetrievalRankingEvaluationTests|FullyQualifiedName~HybridRetrievalEvaluationTests' \
+  --logger 'console;verbosity=detailed'
+```
+
+To execute the real-model comparison, use **only an embedding model already installed in local Ollama**; the example tag below is not a download or a default selected by Praxis:
+
+```bash
+PRAXIS_RETRIEVAL_OLLAMA_MODEL='embeddinggemma:latest' \
+dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+  -c Release --no-build --no-restore \
+  --filter 'FullyQualifiedName~MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments' \
+  --logger 'console;verbosity=detailed'
+```
+
+The optional test runs two parameterized cases, v2 and v3. Do not count tests marked `NOT EXECUTED` (the variable is unset) as model measurements. Keep the source SHA, exact installed model digest, OS, .NET and Ollama versions, and full ordered-result output for each run.
+
+### Model-host memory evidence
+
+The owner's initial `ps` sample was taken after `ollama ps` showed no loaded model and therefore only captured idle Ollama processes; it is **not** model memory. To request a ten-minute owner-local load and sample the same resident model:
+
+```bash
+curl --fail --silent --show-error \
+  http://127.0.0.1:11434/api/embed \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"embeddinggemma:latest","input":"Praxis memory measurement","keep_alive":"10m"}' \
+  > /dev/null
+ollama ps
+ps -axo pid,rss,%mem,command | grep -E '[o]llama|[l]lama'
+```
+
+The `ps` **RSS column is KiB**. Match the actual model runner PID to `ollama ps`; do not sum helper commands or mistake the model's file size for resident memory. On Apple Silicon, unified GPU allocations and shared pages mean RSS is **not a complete GPU/device-memory measure**; record Activity Monitor's process memory or an appropriate host profiler separately if available. A real macOS idle baseline may be reported, but it is not an inference memory benchmark.
+
+### Independent judgment review
+
+Use only the synthetic repository fixture. Export the 36 cases to a worksheet; inspect every `relevant` source against the original content and write corrections rather than silently changing expected IDs:
+
+```bash
+mkdir -p "$HOME/Desktop/Praxis-29-evidence"
+jq -r '.documents[] | "=== \(.id) ===\n\(.path)\n\(.content)\n"' \
+  tests/Praxis.Storage.Tests/Fixtures/retrieval-corpus-v3.json \
+  > "$HOME/Desktop/Praxis-29-evidence/corpus-v3-review.txt"
+jq -r '(
+  ["case","domain","query","relevant_sources","lexical_expected","approved","correction","reason"],
+  (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),(.lexicalExpected|join(",")),"","",""])
+) | @tsv' \
+  tests/Praxis.Storage.Tests/Fixtures/retrieval-judgments-v3.json \
+  > "$HOME/Desktop/Praxis-29-evidence/judgment-v3-review.tsv"
+```
+
+Mark each case approved or explain why additional, fewer or different sources are relevant. This is **source-retrieval relevance**; it does not confirm a generated answer, the correct cue time, financial arithmetic or instruction following. A deliberate term-match distractor in v3 is a lexical result but is judged irrelevant, so ranking precision can detect false-positive search matches. The v2 judgment labels also remain provisional unless the owner separately signs them off. Cases with conflicting evidence should preserve both sources; source text containing instructions remains inert. A reviewed corpus and an observed baseline must precede any candidate reranker or abstention threshold selection.
+
+### Completion boundary
+
+This PR extends the evaluation only. Production `LocalSemanticIndex` and `LocalHybridSearch` keep their current behavior; no score threshold, guessed abstention rule, remote provider, changed authorization, database migration or index structure is added. Even with a green suite, the observed no-answer issue remains an **unresolved retrieval-quality limitation** (#29/#60, answer-level #33). Owner-approved ranking and abstention changes require stronger reviewed labels and a repeatable before/after comparison. Unsupported financial row citations, PDF extraction, verified video time ranges and answer-level citations belong to #184/#181/#33/#179. Runner provisioning and three-OS CI are separately blocked under #137; macOS local passes do not satisfy that matrix.
+

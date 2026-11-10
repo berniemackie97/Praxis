@@ -58,25 +58,28 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
     public string RuntimeDescription => RuntimeInformation.FrameworkDescription + " / " +
         RuntimeInformation.OSDescription;
 
-    public static async Task<RetrievalBenchmarkFixture> CreateAsync()
+    public static async Task<RetrievalBenchmarkFixture> CreateAsync(
+        string corpusFile = "retrieval-corpus-v1.json",
+        string judgmentsFile = "retrieval-judgments-v2.json")
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Fixtures");
         RetrievalBenchmarkCorpus corpus = JsonSerializer.Deserialize<RetrievalBenchmarkCorpus>(
-            File.ReadAllText(Path.Combine(path, "retrieval-corpus-v1.json")), JsonOptions)
+            File.ReadAllText(Path.Combine(path, corpusFile)), JsonOptions)
             ?? throw new InvalidDataException("Missing retrieval corpus.");
         RetrievalJudgmentSet judgments = JsonSerializer.Deserialize<RetrievalJudgmentSet>(
-            File.ReadAllText(Path.Combine(path, "retrieval-judgments-v2.json")), JsonOptions)
+            File.ReadAllText(Path.Combine(path, judgmentsFile)), JsonOptions)
             ?? throw new InvalidDataException("Missing retrieval judgments.");
-        if (corpus.SchemaVersion != 1 || judgments.SchemaVersion != 2 ||
-            judgments.Corpus != "retrieval-corpus-v1.json" ||
+        if (corpus.SchemaVersion is not (1 or 3) ||
+            judgments.SchemaVersion != (corpus.SchemaVersion == 1 ? 2 : 3) ||
+            judgments.Corpus != corpusFile ||
             corpus.Documents.Length != corpus.Documents.Select(document => document.Id).Distinct().Count() ||
             judgments.Judgments.Length != judgments.Judgments.Select(query => query.Name).Distinct().Count())
         {
             throw new InvalidDataException("Retrieval fixture identity or schema is invalid.");
         }
 
-        HashSet<string> known = corpus.Documents.Select(document => document.Id)
-            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> known = corpus.Documents.Where(document => document.Searchable)
+            .Select(document => document.Id).ToHashSet(StringComparer.Ordinal);
         foreach (RetrievalJudgment judgment in judgments.Judgments)
         {
             if (string.IsNullOrWhiteSpace(judgment.Name) || string.IsNullOrWhiteSpace(judgment.Domain) ||
@@ -157,6 +160,9 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
 
     public Guid[] Expected(IEnumerable<string> keys) =>
         keys.Select(key => Originals[key].ItemId).OrderBy(id => id).ToArray();
+
+    public string SourceKey(Guid itemId) =>
+        Originals.Single(pair => pair.Value.ItemId == itemId).Key;
 
     public void VerifyHits(IReadOnlyList<LocalSearchHit> hits, bool lexical)
     {
