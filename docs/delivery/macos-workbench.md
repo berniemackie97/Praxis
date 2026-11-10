@@ -87,7 +87,7 @@ The bridge is **not** an external integration protocol. Do not expose it through
 - Add explicit URL/article and browser capture (#104/#111/#112), supported text/PDF/media depth (#103/#114), and independently verify timecoded playable video and editable financial artifacts through the assistant (#177/#178/#170).
 - Restore executing cross-platform CI when the owner approves runner provisioning (#137); keep release signing, notarization, runtime distribution and security gates separate.
 
-#101 is already closed for the initial capture milestone. Keep #105/#108/#130 and their specific incomplete acceptance issues open. A first-party application with merged UI code is not a released or fully verified intelligent Second Brain.
+#101 is already closed for the initial capture milestone. The initial #108 workbench implementation and #101 capture milestone are closed, while #105/#215/#130 retain separate watcher, native-launch and integrated acceptance gates. A first-party application with merged UI code is not a released or fully verified intelligent Second Brain.
 
 ## P1/L0 explicit collections checkpoint (#146)
 
