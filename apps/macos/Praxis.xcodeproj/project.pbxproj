@@ -1,0 +1,268 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 60;
+  objects = {
+/* Begin PBXBuildFile section */
+    00000000000000000000A020 /* PraxisApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A01F /* PraxisApp.swift */;};
+    00000000000000000000A022 /* PraxisWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A021 /* PraxisWindow.swift */;};
+    00000000000000000000A024 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A023 /* CollectionsView.swift */;};
+    00000000000000000000A026 /* ConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A025 /* ConfigurationView.swift */;};
+    00000000000000000000A028 /* EntityDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A027 /* EntityDetailView.swift */;};
+    00000000000000000000A02A /* FeedbackLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A029 /* FeedbackLine.swift */;};
+    00000000000000000000A02C /* IntelligenceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A02B /* IntelligenceSettingsView.swift */;};
+    00000000000000000000A02E /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A02D /* KnowledgeView.swift */;};
+    00000000000000000000A030 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A02F /* LibraryView.swift */;};
+    00000000000000000000A032 /* ProposalReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A031 /* ProposalReviewView.swift */;};
+    00000000000000000000A034 /* QuickNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A033 /* QuickNoteView.swift */;};
+    00000000000000000000A036 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A035 /* SearchView.swift */;};
+    00000000000000000000A038 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A037 /* SetupView.swift */;};
+    00000000000000000000A03A /* SourceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A039 /* SourceDetailView.swift */;};
+    00000000000000000000A03C /* VerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A03B /* VerificationView.swift */;};
+    00000000000000000000A03E /* IntelligenceSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A03D /* IntelligenceSettingsModel.swift */;};
+    00000000000000000000A040 /* KnowledgeWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A03F /* KnowledgeWorkbenchModel.swift */;};
+    00000000000000000000A042 /* SearchWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A041 /* SearchWorkbenchModel.swift */;};
+    00000000000000000000A044 /* VerificationWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A043 /* VerificationWorkbenchModel.swift */;};
+    00000000000000000000A046 /* WorkbenchAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A045 /* WorkbenchAction.swift */;};
+    00000000000000000000A048 /* WorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A047 /* WorkbenchModel.swift */;};
+    00000000000000000000A04A /* WorkerChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A049 /* WorkerChannel.swift */;};
+    00000000000000000000A04C /* CanonicalPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04B /* CanonicalPath.swift */;};
+    00000000000000000000A04E /* IntakeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04D /* IntakeModels.swift */;};
+    00000000000000000000A050 /* IntelligenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04F /* IntelligenceModels.swift */;};
+    00000000000000000000A052 /* KnowledgeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A051 /* KnowledgeModels.swift */;};
+    00000000000000000000A054 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A053 /* LibraryModels.swift */;};
+    00000000000000000000A056 /* MediaModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A055 /* MediaModels.swift */;};
+    00000000000000000000A058 /* VerificationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A057 /* VerificationModels.swift */;};
+    00000000000000000000A05A /* WorkerLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A059 /* WorkerLaunch.swift */;};
+    00000000000000000000A05C /* WorkerReply.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A05B /* WorkerReply.swift */;};
+    00000000000000000000A05E /* WorkerResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A05D /* WorkerResponse.swift */;};
+    00000000000000000000A060 /* WorkerSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A05F /* WorkerSession.swift */;};
+    00000000000000000000A062 /* CanonicalPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A061 /* CanonicalPathTests.swift */;};
+    00000000000000000000A064 /* PayloadReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A063 /* PayloadReviewTests.swift */;};
+    00000000000000000000A066 /* PresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A065 /* PresentationTests.swift */;};
+    00000000000000000000A068 /* WorkerSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A067 /* WorkerSessionTests.swift */;};
+/* End PBXBuildFile section */
+/* Begin PBXContainerItemProxy section */
+    00000000000000000000A011 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 00000000000000000000A004 /* Project object */; proxyType = 1; remoteGlobalIDString = 00000000000000000000A005; remoteInfo = Praxis;};
+/* End PBXContainerItemProxy section */
+/* Begin PBXFileReference section */
+    00000000000000000000A007 /* Praxis.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Praxis.app; sourceTree = BUILT_PRODUCTS_DIR;};
+    00000000000000000000A008 /* PraxisTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PraxisTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;};
+    00000000000000000000A01F /* PraxisApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PraxisApp.swift"; sourceTree = "<group>";};
+    00000000000000000000A021 /* PraxisWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PraxisWindow.swift"; sourceTree = "<group>";};
+    00000000000000000000A023 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CollectionsView.swift"; sourceTree = "<group>";};
+    00000000000000000000A025 /* ConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConfigurationView.swift"; sourceTree = "<group>";};
+    00000000000000000000A027 /* EntityDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EntityDetailView.swift"; sourceTree = "<group>";};
+    00000000000000000000A029 /* FeedbackLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FeedbackLine.swift"; sourceTree = "<group>";};
+    00000000000000000000A02B /* IntelligenceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IntelligenceSettingsView.swift"; sourceTree = "<group>";};
+    00000000000000000000A02D /* KnowledgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KnowledgeView.swift"; sourceTree = "<group>";};
+    00000000000000000000A02F /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryView.swift"; sourceTree = "<group>";};
+    00000000000000000000A031 /* ProposalReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProposalReviewView.swift"; sourceTree = "<group>";};
+    00000000000000000000A033 /* QuickNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "QuickNoteView.swift"; sourceTree = "<group>";};
+    00000000000000000000A035 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SearchView.swift"; sourceTree = "<group>";};
+    00000000000000000000A037 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SetupView.swift"; sourceTree = "<group>";};
+    00000000000000000000A039 /* SourceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SourceDetailView.swift"; sourceTree = "<group>";};
+    00000000000000000000A03B /* VerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VerificationView.swift"; sourceTree = "<group>";};
+    00000000000000000000A03D /* IntelligenceSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IntelligenceSettingsModel.swift"; sourceTree = "<group>";};
+    00000000000000000000A03F /* KnowledgeWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KnowledgeWorkbenchModel.swift"; sourceTree = "<group>";};
+    00000000000000000000A041 /* SearchWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SearchWorkbenchModel.swift"; sourceTree = "<group>";};
+    00000000000000000000A043 /* VerificationWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VerificationWorkbenchModel.swift"; sourceTree = "<group>";};
+    00000000000000000000A045 /* WorkbenchAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkbenchAction.swift"; sourceTree = "<group>";};
+    00000000000000000000A047 /* WorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkbenchModel.swift"; sourceTree = "<group>";};
+    00000000000000000000A049 /* WorkerChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerChannel.swift"; sourceTree = "<group>";};
+    00000000000000000000A04B /* CanonicalPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CanonicalPath.swift"; sourceTree = "<group>";};
+    00000000000000000000A04D /* IntakeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IntakeModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A04F /* IntelligenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IntelligenceModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A051 /* KnowledgeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KnowledgeModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A053 /* LibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A055 /* MediaModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MediaModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A057 /* VerificationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VerificationModels.swift"; sourceTree = "<group>";};
+    00000000000000000000A059 /* WorkerLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerLaunch.swift"; sourceTree = "<group>";};
+    00000000000000000000A05B /* WorkerReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerReply.swift"; sourceTree = "<group>";};
+    00000000000000000000A05D /* WorkerResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerResponse.swift"; sourceTree = "<group>";};
+    00000000000000000000A05F /* WorkerSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerSession.swift"; sourceTree = "<group>";};
+    00000000000000000000A061 /* CanonicalPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CanonicalPathTests.swift"; sourceTree = "<group>";};
+    00000000000000000000A063 /* PayloadReviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PayloadReviewTests.swift"; sourceTree = "<group>";};
+    00000000000000000000A065 /* PresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PresentationTests.swift"; sourceTree = "<group>";};
+    00000000000000000000A067 /* WorkerSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WorkerSessionTests.swift"; sourceTree = "<group>";};
+/* End PBXFileReference section */
+/* Begin PBXFrameworksBuildPhase section */
+    00000000000000000000A00A /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+    00000000000000000000A00E /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+/* End PBXFrameworksBuildPhase section */
+/* Begin PBXGroup section */
+    00000000000000000000A000 /* Project */ = {isa = PBXGroup; children = (
+        00000000000000000000A001 /* Praxis Sources */,
+        00000000000000000000A002 /* Praxis Tests */,
+        00000000000000000000A003 /* Products */,
+      ); sourceTree = "<group>";};
+    00000000000000000000A001 /* Praxis Sources */ = {isa = PBXGroup; children = (
+        00000000000000000000A01B /* App */,
+        00000000000000000000A01C /* Views */,
+        00000000000000000000A01D /* Workbench */,
+        00000000000000000000A01E /* Worker */,
+      ); path = Sources/Praxis; sourceTree = "<group>";};
+    00000000000000000000A01B /* App */ = {isa = PBXGroup; children = (
+        00000000000000000000A01F /* PraxisApp.swift */,
+        00000000000000000000A021 /* PraxisWindow.swift */,
+      ); path = App; sourceTree = "<group>";};
+    00000000000000000000A01C /* Views */ = {isa = PBXGroup; children = (
+        00000000000000000000A023 /* CollectionsView.swift */,
+        00000000000000000000A025 /* ConfigurationView.swift */,
+        00000000000000000000A027 /* EntityDetailView.swift */,
+        00000000000000000000A029 /* FeedbackLine.swift */,
+        00000000000000000000A02B /* IntelligenceSettingsView.swift */,
+        00000000000000000000A02D /* KnowledgeView.swift */,
+        00000000000000000000A02F /* LibraryView.swift */,
+        00000000000000000000A031 /* ProposalReviewView.swift */,
+        00000000000000000000A033 /* QuickNoteView.swift */,
+        00000000000000000000A035 /* SearchView.swift */,
+        00000000000000000000A037 /* SetupView.swift */,
+        00000000000000000000A039 /* SourceDetailView.swift */,
+        00000000000000000000A03B /* VerificationView.swift */,
+      ); path = Views; sourceTree = "<group>";};
+    00000000000000000000A01D /* Workbench */ = {isa = PBXGroup; children = (
+        00000000000000000000A03D /* IntelligenceSettingsModel.swift */,
+        00000000000000000000A03F /* KnowledgeWorkbenchModel.swift */,
+        00000000000000000000A041 /* SearchWorkbenchModel.swift */,
+        00000000000000000000A043 /* VerificationWorkbenchModel.swift */,
+        00000000000000000000A045 /* WorkbenchAction.swift */,
+        00000000000000000000A047 /* WorkbenchModel.swift */,
+        00000000000000000000A049 /* WorkerChannel.swift */,
+      ); path = Workbench; sourceTree = "<group>";};
+    00000000000000000000A01E /* Worker */ = {isa = PBXGroup; children = (
+        00000000000000000000A04B /* CanonicalPath.swift */,
+        00000000000000000000A04D /* IntakeModels.swift */,
+        00000000000000000000A04F /* IntelligenceModels.swift */,
+        00000000000000000000A051 /* KnowledgeModels.swift */,
+        00000000000000000000A053 /* LibraryModels.swift */,
+        00000000000000000000A055 /* MediaModels.swift */,
+        00000000000000000000A057 /* VerificationModels.swift */,
+        00000000000000000000A059 /* WorkerLaunch.swift */,
+        00000000000000000000A05B /* WorkerReply.swift */,
+        00000000000000000000A05D /* WorkerResponse.swift */,
+        00000000000000000000A05F /* WorkerSession.swift */,
+      ); path = Worker; sourceTree = "<group>";};
+    00000000000000000000A002 /* Praxis Tests */ = {isa = PBXGroup; children = (
+        00000000000000000000A061 /* CanonicalPathTests.swift */,
+        00000000000000000000A063 /* PayloadReviewTests.swift */,
+        00000000000000000000A065 /* PresentationTests.swift */,
+        00000000000000000000A067 /* WorkerSessionTests.swift */,
+      ); path = Tests/PraxisTests; sourceTree = "<group>";};
+    00000000000000000000A003 /* Products */ = {isa = PBXGroup; children = (
+        00000000000000000000A007 /* Praxis.app */,
+        00000000000000000000A008 /* PraxisTests.xctest */,
+      ); name = Products; sourceTree = "<group>";};
+/* End PBXGroup section */
+/* Begin PBXNativeTarget section */
+    00000000000000000000A005 /* Praxis */ = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000A013 /* Build configuration list for Praxis */; buildPhases = (00000000000000000000A009 /* Sources */, 00000000000000000000A00A /* Frameworks */, 00000000000000000000A00B /* Resources */, 00000000000000000000A00C /* Publish .NET Worker */); buildRules = (); dependencies = (); name = Praxis; productName = Praxis; productReference = 00000000000000000000A007 /* Praxis.app */; productType = "com.apple.product-type.application";};
+    00000000000000000000A006 /* PraxisTests */ = {isa = PBXNativeTarget; buildConfigurationList = 00000000000000000000A014 /* Build configuration list for PraxisTests */; buildPhases = (00000000000000000000A00D /* Sources */, 00000000000000000000A00E /* Frameworks */, 00000000000000000000A00F /* Resources */); buildRules = (); dependencies = (00000000000000000000A010 /* PBXTargetDependency */); name = PraxisTests; productName = PraxisTests; productReference = 00000000000000000000A008 /* PraxisTests.xctest */; productType = "com.apple.product-type.bundle.unit-test";};
+/* End PBXNativeTarget section */
+/* Begin PBXProject section */
+    00000000000000000000A004 /* Project object */ = {isa = PBXProject; attributes = { BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2600; TargetAttributes = { 00000000000000000000A005 = { CreatedOnToolsVersion = 26.0; ProvisioningStyle = Automatic; }; 00000000000000000000A006 = { CreatedOnToolsVersion = 26.0; ProvisioningStyle = Automatic; TestTargetID = 00000000000000000000A005; }; }; }; buildConfigurationList = 00000000000000000000A012 /* Build configuration list for PBXProject */; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 00000000000000000000A000 /* Project */; productRefGroup = 00000000000000000000A003 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (00000000000000000000A005 /* Praxis */, 00000000000000000000A006 /* PraxisTests */);};
+/* End PBXProject section */
+/* Begin PBXResourcesBuildPhase section */
+    00000000000000000000A00B /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+    00000000000000000000A00F /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
+/* End PBXResourcesBuildPhase section */
+/* Begin PBXShellScriptBuildPhase section */
+    00000000000000000000A00C /* Publish .NET Worker */ = {isa = PBXShellScriptBuildPhase; alwaysOutOfDate = 1; buildActionMask = 2147483647; files = (); inputFileListPaths = (); inputPaths = (); name = "Publish .NET Worker"; outputFileListPaths = (); outputPaths = (); runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/bash; shellScript = "\"$SRCROOT/../../scripts/macos/publish-worker.sh\"\n"; showEnvVarsInLog = 0;};
+/* End PBXShellScriptBuildPhase section */
+/* Begin PBXSourcesBuildPhase section */
+    00000000000000000000A009 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+    00000000000000000000A00D /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+/* End PBXSourcesBuildPhase section */
+/* Begin PBXTargetDependency section */
+    00000000000000000000A010 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 00000000000000000000A005 /* Praxis */; targetProxy = 00000000000000000000A011 /* PBXContainerItemProxy */;};
+/* End PBXTargetDependency section */
+/* Begin XCBuildConfiguration section */
+    00000000000000000000A015 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+          ALWAYS_SEARCH_USER_PATHS = NO;
+          CLANG_ENABLE_MODULES = YES;
+          COPY_PHASE_STRIP = NO;
+          DEBUG_INFORMATION_FORMAT = dwarf;
+          ENABLE_USER_SCRIPT_SANDBOXING = NO;
+          MACOSX_DEPLOYMENT_TARGET = 13.0;
+          ONLY_ACTIVE_ARCH = YES;
+          SDKROOT = macosx;
+          SUPPORTED_PLATFORMS = macosx;
+          SWIFT_STRICT_CONCURRENCY = complete;
+          SWIFT_VERSION = 6.0;
+          OTHER_SWIFT_FLAGS = ("$(inherited)", "-warnings-as-errors", "-enable-upcoming-feature", "ExistentialAny", "-enable-upcoming-feature", "InternalImportsByDefault");
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+        }; name = Debug;};
+    00000000000000000000A016 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+          ALWAYS_SEARCH_USER_PATHS = NO;
+          CLANG_ENABLE_MODULES = YES;
+          COPY_PHASE_STRIP = NO;
+          DEBUG_INFORMATION_FORMAT = dwarf-with-dsym;
+          ENABLE_USER_SCRIPT_SANDBOXING = NO;
+          MACOSX_DEPLOYMENT_TARGET = 13.0;
+          ONLY_ACTIVE_ARCH = NO;
+          SDKROOT = macosx;
+          SUPPORTED_PLATFORMS = macosx;
+          SWIFT_STRICT_CONCURRENCY = complete;
+          SWIFT_VERSION = 6.0;
+          OTHER_SWIFT_FLAGS = ("$(inherited)", "-warnings-as-errors", "-enable-upcoming-feature", "ExistentialAny", "-enable-upcoming-feature", "InternalImportsByDefault");
+          SWIFT_COMPILATION_MODE = wholemodule;
+        }; name = Release;};
+    00000000000000000000A017 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+          CODE_SIGN_IDENTITY = "-";
+          CODE_SIGN_STYLE = Automatic;
+          CURRENT_PROJECT_VERSION = 1;
+          GENERATE_INFOPLIST_FILE = YES;
+          INFOPLIST_KEY_CFBundleDisplayName = Praxis;
+          INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+          INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+          LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks");
+          MARKETING_VERSION = 0.1.0;
+          PRODUCT_BUNDLE_IDENTIFIER = "dev.praxis.renames-preview";
+          PRODUCT_NAME = Praxis;
+          SWIFT_EMIT_LOC_STRINGS = YES;
+          ENABLE_TESTABILITY = YES;
+        }; name = Debug;};
+    00000000000000000000A018 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+          CODE_SIGN_IDENTITY = "-";
+          CODE_SIGN_STYLE = Automatic;
+          CURRENT_PROJECT_VERSION = 1;
+          GENERATE_INFOPLIST_FILE = YES;
+          INFOPLIST_KEY_CFBundleDisplayName = Praxis;
+          INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+          INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+          LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks");
+          MARKETING_VERSION = 0.1.0;
+          PRODUCT_BUNDLE_IDENTIFIER = "dev.praxis.renames-preview";
+          PRODUCT_NAME = Praxis;
+          SWIFT_EMIT_LOC_STRINGS = YES;
+          VALIDATE_PRODUCT = YES;
+        }; name = Release;};
+    00000000000000000000A019 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+          BUNDLE_LOADER = "$(TEST_HOST)";
+          CODE_SIGN_IDENTITY = "-";
+          CODE_SIGN_STYLE = Automatic;
+          GENERATE_INFOPLIST_FILE = YES;
+          PRODUCT_BUNDLE_IDENTIFIER = "dev.praxis.renames-preview.tests";
+          PRODUCT_NAME = "$(TARGET_NAME)";
+          TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Praxis.app/Contents/MacOS/Praxis";
+          ENABLE_TESTABILITY = YES;
+        }; name = Debug;};
+    00000000000000000000A01A /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+          BUNDLE_LOADER = "$(TEST_HOST)";
+          CODE_SIGN_IDENTITY = "-";
+          CODE_SIGN_STYLE = Automatic;
+          GENERATE_INFOPLIST_FILE = YES;
+          PRODUCT_BUNDLE_IDENTIFIER = "dev.praxis.renames-preview.tests";
+          PRODUCT_NAME = "$(TARGET_NAME)";
+          TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Praxis.app/Contents/MacOS/Praxis";
+          ENABLE_TESTABILITY = YES;
+        }; name = Release;};
+/* End XCBuildConfiguration section */
+/* Begin XCConfigurationList section */
+    00000000000000000000A012 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A015 /* Debug */, 00000000000000000000A016 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+    00000000000000000000A013 /* Build configuration list for Praxis */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A017 /* Debug */, 00000000000000000000A018 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+    00000000000000000000A014 /* Build configuration list for PraxisTests */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000A019 /* Debug */, 00000000000000000000A01A /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;};
+/* End XCConfigurationList section */
+  };
+  rootObject = 00000000000000000000A004 /* Project object */;
+}
