@@ -17,6 +17,13 @@ public static class SecurityRegistrySnapshots
     {
         SnapshotFiles.ValidateBudget(maxBytes);
         cancellationToken.ThrowIfCancellationRequested();
+        string source = ValidateExistingCurrentRegistry(registryDirectory);
+        using SecurityRegistry registry = SecurityRegistry.Open(source);
+        return await BackupOpenedAsync(registry, source, destinationDirectory, maxBytes, cancellationToken);
+    }
+
+    internal static string ValidateExistingCurrentRegistry(string registryDirectory)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(registryDirectory);
         if (!Path.IsPathFullyQualified(registryDirectory))
         {
@@ -30,18 +37,23 @@ public static class SecurityRegistrySnapshots
             throw new InvalidDataException("An existing security registry database is required.");
         }
 
-        using (SqliteConnection check = SecuritySnapshotFiles.OpenReadOnly(databasePath))
+        using SqliteConnection check = SecuritySnapshotFiles.OpenReadOnly(databasePath);
+        check.Open();
+        using SqliteCommand version = check.CreateCommand();
+        version.CommandText = "PRAGMA user_version";
+        if (Convert.ToInt32(version.ExecuteScalar()) != SecurityRegistrySchema.Version)
         {
-            check.Open();
-            using SqliteCommand version = check.CreateCommand();
-            version.CommandText = "PRAGMA user_version";
-            if (Convert.ToInt32(version.ExecuteScalar()) != SecurityRegistrySchema.Version)
-            {
-                throw new NotSupportedException("Upgrade the security registry explicitly before backing it up.");
-            }
+            throw new NotSupportedException("Upgrade the security registry explicitly before backing it up.");
         }
 
-        using SecurityRegistry registry = SecurityRegistry.Open(source);
+        return source;
+    }
+
+    internal static async Task<SecuritySnapshotReport> BackupOpenedAsync(SecurityRegistry registry,
+        string source, string destinationDirectory, long maxBytes, CancellationToken cancellationToken)
+    {
+        SnapshotFiles.ValidateBudget(maxBytes);
+        cancellationToken.ThrowIfCancellationRequested();
         string destination = SnapshotFiles.ValidateNewDestination(destinationDirectory, source);
         string staging = SnapshotFiles.CreateStagingDirectory(destination);
         string snapshotPath = Path.Combine(staging, "identity.sqlite");
