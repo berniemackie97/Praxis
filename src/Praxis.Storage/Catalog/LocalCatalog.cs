@@ -34,6 +34,8 @@ public sealed class LocalCatalog : IDisposable
     public LocalTextDerivatives Text { get; }
     public LocalTextSegments Segments { get; }
     public LocalTextSearch Search { get; }
+    public LocalSemanticIndex Embeddings { get; }
+    public LocalHybridSearch Hybrid { get; }
     public LocalProposals Proposals { get; }
     public LocalKnowledge Knowledge { get; }
     public LocalVerification Verification { get; }
@@ -57,6 +59,8 @@ public sealed class LocalCatalog : IDisposable
         Text = new LocalTextDerivatives(database);
         Segments = new LocalTextSegments(database);
         Search = new LocalTextSearch(database);
+        Embeddings = new LocalSemanticIndex(database);
+        Hybrid = new LocalHybridSearch(Search, Embeddings);
         Proposals = new LocalProposals(database);
         Knowledge = new LocalKnowledge(database);
         Verification = new LocalVerification(database);
