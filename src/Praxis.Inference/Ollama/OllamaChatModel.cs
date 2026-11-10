@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Praxis.Inference;
+namespace Praxis.Inference.Ollama;
 
 /// <summary>
 /// Structured chat completion through Ollama's native API: non-streaming, reasoning output
@@ -26,61 +26,47 @@ internal sealed class OllamaChatModel : IChatModel
 
     public async Task<ModelIdentity> DescribeAsync(CancellationToken cancellationToken)
     {
-        using var document = await runtime.SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
-        if (!document.RootElement.TryGetProperty("models", out var models) ||
-            models.ValueKind != JsonValueKind.Array)
+        using JsonDocument document = await runtime.SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
+        if (!document.RootElement.TryGetProperty("models", out JsonElement models) || models.ValueKind != JsonValueKind.Array)
         {
             throw OllamaRuntime.Invalid();
         }
 
-        foreach (var candidate in models.EnumerateArray())
+        foreach (JsonElement candidate in models.EnumerateArray().Where(candidate => OllamaRuntime.RequiredString(candidate, "name") == model))
         {
-            if (OllamaRuntime.RequiredString(candidate, "name") != model)
-            {
-                continue;
-            }
-
-            candidate.TryGetProperty("details", out var details);
-            return new ModelIdentity(OllamaRuntime.ProviderName, model,
-                OllamaRuntime.RequiredString(candidate, "digest"),
+            candidate.TryGetProperty("details", out JsonElement details);
+            return new ModelIdentity(OllamaRuntime.ProviderName, model, OllamaRuntime.RequiredString(candidate, "digest"),
                 OptionalString(details, "family"), OptionalString(details, "parameter_size"),
                 OptionalString(details, "quantization_level"));
         }
 
-        throw new InferenceException(InferenceFailure.ModelMissing,
-            "The requested model is not installed in the local runtime.");
+        throw new InferenceException(InferenceFailure.ModelMissing, "The requested model is not installed in the local runtime.");
     }
 
     public async Task<ChatResult> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         request.Validate();
-        using var document = await runtime.SendAsync(
-            HttpMethod.Post, "api/chat", Serialize(request), cancellationToken);
-        var root = document.RootElement;
-        if (!root.TryGetProperty("done", out var done) || done.ValueKind != JsonValueKind.True ||
-            !root.TryGetProperty("message", out var message))
+        using JsonDocument document = await runtime.SendAsync(HttpMethod.Post, "api/chat", Serialize(request), cancellationToken);
+        JsonElement root = document.RootElement;
+        if (!root.TryGetProperty("done", out JsonElement done) || done.ValueKind != JsonValueKind.True || !root.TryGetProperty("message", out JsonElement message))
         {
             throw OllamaRuntime.Invalid();
         }
 
         if (OptionalString(root, "done_reason") == "length")
         {
-            throw new InferenceException(InferenceFailure.Truncated,
-                "The model output reached its token limit before completing.");
+            throw new InferenceException(InferenceFailure.Truncated, "The model output reached its token limit before completing.");
         }
 
-        return new ChatResult(
-            OllamaRuntime.RequiredString(message, "content"),
-            OptionalInt32(root, "prompt_eval_count"),
-            OptionalInt32(root, "eval_count"),
-            TimeSpan.FromTicks(OptionalInt64(root, "total_duration") / 100));
+        return new ChatResult(OllamaRuntime.RequiredString(message, "content"), OptionalInt32(root, "prompt_eval_count"),
+            OptionalInt32(root, "eval_count"), TimeSpan.FromTicks(OptionalInt64(root, "total_duration") / 100));
     }
 
     private byte[] Serialize(ChatRequest request)
     {
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer))
+        using MemoryStream buffer = new MemoryStream();
+        using (Utf8JsonWriter writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
             writer.WriteString("model", model);
@@ -89,7 +75,7 @@ internal sealed class OllamaChatModel : IChatModel
             writer.WritePropertyName("format");
             request.ResponseSchema.WriteTo(writer);
             writer.WriteStartArray("messages");
-            foreach (var entry in request.Messages)
+            foreach (ChatMessage entry in request.Messages)
             {
                 writer.WriteStartObject();
                 writer.WriteString("role", entry.Role switch
@@ -116,14 +102,12 @@ internal sealed class OllamaChatModel : IChatModel
     }
 
     private static string? OptionalString(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out var value) &&
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out JsonElement value) &&
         value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static int OptionalInt32(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.TryGetInt32(out var number) && number >= 0
-            ? number : 0;
+        element.TryGetProperty(property, out JsonElement value) && value.TryGetInt32(out int number) && number >= 0 ? number : 0;
 
     private static long OptionalInt64(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.TryGetInt64(out var number) && number >= 0
-            ? number : 0;
+        element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long number) && number >= 0 ? number : 0;
 }

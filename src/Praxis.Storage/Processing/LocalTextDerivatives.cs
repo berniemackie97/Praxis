@@ -94,25 +94,25 @@ public sealed class LocalTextDerivatives
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand("""
-                SELECT d.source_digest, d.content, s.source_kind, s.locator
-                FROM processing_jobs j
-                JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
-                    AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
-                JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
-                    AND t.processor_key = d.processor_key AND t.state = 'completed'
-                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                    AND v.digest = d.source_digest
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
+            using SqliteCommand query = connection.CreateCommand("""
+                                                                 SELECT d.source_digest, d.content, s.source_kind, s.locator
+                                                                 FROM processing_jobs j
+                                                                 JOIN text_derivatives d ON d.item_id = j.item_id AND d.revision = j.revision
+                                                                     AND d.processor_key = 'source-text-v1' AND d.outcome = 'completed'
+                                                                 JOIN processing_jobs t ON t.item_id = d.item_id AND t.revision = d.revision
+                                                                     AND t.processor_key = d.processor_key AND t.state = 'completed'
+                                                                 JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                                                                     AND v.digest = d.source_digest
+                                                                 JOIN items i ON i.item_id = j.item_id
+                                                                 JOIN sources s ON s.source_id = i.source_id
+                                                                 WHERE j.item_id = $item AND j.revision = $revision
+                                                                   AND j.processor_key = $processor AND j.state = 'running'
+                                                                   AND j.lease_key = $lease AND j.lease_until_utc > $now
+                                                                   AND s.status = 'active'
+                                                                 """);
             ProcessingJobKey.BindLease(query, lease);
             query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            using var reader = query.ExecuteReader();
+            using SqliteDataReader reader = query.ExecuteReader();
             return reader.Read()
                 ? new LeasedText(reader.GetString(0), reader.GetString(1),
                     reader.GetString(2), reader.GetString(3))

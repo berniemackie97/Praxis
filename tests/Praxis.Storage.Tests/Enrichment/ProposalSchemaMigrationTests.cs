@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Storage;
 using Praxis.Storage.Catalog;
+using Praxis.Storage.Enrichment;
 using Praxis.Storage.Processing;
 using Xunit;
 
@@ -25,10 +26,10 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
     [Fact]
     public void VersionElevenProposalsAndReviewsSurviveTheRebuildAndSegmentsAreQueued()
     {
-        var item = Guid.NewGuid();
-        var proposal = Guid.NewGuid();
-        var source = Guid.NewGuid();
-        using (var connection = CreateCatalog(throughVersion: 11))
+        Guid item = Guid.NewGuid();
+        Guid proposal = Guid.NewGuid();
+        Guid source = Guid.NewGuid();
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 11))
         {
             Seed(connection, item, source, proposal);
             Execute(connection, $"""
@@ -37,9 +38,9 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using var catalog = LocalCatalog.Open(root);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
 
-        var migrated = Assert.Single(catalog.Proposals.List(source));
+        LocalProposal migrated = Assert.Single(catalog.Proposals.List(source));
         Assert.Equal(proposal, migrated.ProposalId);
         Assert.Equal("topic", migrated.Kind);
         Assert.Null(migrated.EntityType);
@@ -55,10 +56,10 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
     [Fact]
     public void VersionTwelveSemanticResultsStayVisibleUntilVersionTwoReplacesThem()
     {
-        var item = Guid.NewGuid();
-        var source = Guid.NewGuid();
-        var digest = new string('a', 64);
-        using (var connection = CreateCatalog(throughVersion: 12))
+        Guid item = Guid.NewGuid();
+        Guid source = Guid.NewGuid();
+        string digest = new string('a', 64);
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 12))
         {
             Seed(connection, item, source, Guid.NewGuid(), version: 12);
             Execute(connection, $"""
@@ -75,15 +76,15 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             Assert.Contains(catalog.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
-            var jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
+            ProcessingJob[] jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
             Assert.Equal("queued", jobs.Single(job => job.ProcessorKey == LocalProcessors.SemanticExtraction).State);
             Assert.Equal("completed", jobs.Single(job => job.ProcessorKey == "semantic-extract-v1").State);
         }
 
-        using (var connection = Connect())
+        using (SqliteConnection connection = Connect())
         {
             Execute(connection, $"""
                 INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
@@ -91,7 +92,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using var replaced = LocalCatalog.Open(root);
+        using LocalCatalog replaced = LocalCatalog.Open(root);
         Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
         Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == LocalProcessors.MarkdownHeadings);
     }
@@ -99,7 +100,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
     [Fact]
     public void OrphanedReferencesAreRejectedBeforeAnyUpgrade()
     {
-        using (var connection = CreateCatalog(throughVersion: 11))
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 11))
         {
             Execute(connection, $"""
                 PRAGMA foreign_keys = OFF;
@@ -110,7 +111,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
         Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
 
-        using var check = Connect();
+        using SqliteConnection check = Connect();
         Assert.Equal(11L, Scalar(check, "PRAGMA user_version"));
         Assert.Equal(0L, Scalar(check,
             "SELECT COUNT(*) FROM pragma_table_info('enrichment_proposals') WHERE name = 'entity_type'"));
@@ -118,9 +119,9 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
     private static void Seed(SqliteConnection connection, Guid item, Guid source, Guid proposal, int version = 11)
     {
-        var lengthColumn = version >= 12 ? ", evidence_length" : "";
-        var lengthValue = version >= 12 ? ", 12" : "";
-        var digest = new string('a', 64);
+        string lengthColumn = version >= 12 ? ", evidence_length" : "";
+        string lengthValue = version >= 12 ? ", 12" : "";
+        string digest = new string('a', 64);
         Execute(connection, $"""
             INSERT INTO sources (source_id, source_kind, locator, created_utc)
             VALUES ('{source}', 'file', '/notes/plan.md', '{At}');
@@ -148,13 +149,13 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
     private SqliteConnection CreateCatalog(int throughVersion)
     {
-        var connection = Connect();
-        foreach (var resource in new[] { "LocalCatalog.sql" }
+        SqliteConnection connection = Connect();
+        foreach (string resource in new[] { "LocalCatalog.sql" }
             .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"LocalCatalog.V{version}.sql")))
         {
-            using var stream = typeof(LocalCatalog).Assembly
+            using Stream stream = typeof(LocalCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Storage." + resource)!;
-            using var reader = new StreamReader(stream);
+            using StreamReader reader = new StreamReader(stream);
             Execute(connection, reader.ReadToEnd());
         }
 
@@ -163,7 +164,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
     private SqliteConnection Connect()
     {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        SqliteConnection connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(root, "catalog.sqlite"),
             Mode = SqliteOpenMode.ReadWriteCreate,
@@ -175,14 +176,14 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
     private static object? Scalar(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         return command.ExecuteScalar();
     }
 
     private static void Execute(SqliteConnection connection, string sql)
     {
-        using var command = connection.CreateCommand();
+        using SqliteCommand command = connection.CreateCommand();
         command.CommandText = sql;
         command.ExecuteNonQuery();
     }

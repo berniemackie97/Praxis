@@ -16,8 +16,8 @@ internal static class KnowledgeLinker
         SqliteConnection connection, SqliteTransaction transaction,
         IReadOnlyList<(string ProposalId, ProposalCandidate Candidate)> proposals, string now)
     {
-        var affected = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (proposalId, candidate) in proposals.Where(entry => entry.Candidate.Kind == "entity"))
+        HashSet<string> affected = new HashSet<string>(StringComparer.Ordinal);
+        foreach ((string proposalId, ProposalCandidate candidate) in proposals.Where(entry => entry.Candidate.Kind == "entity"))
         {
             if (ResolveOrCreate(connection, transaction, candidate.Value, candidate.EntityType, now) is { } entity)
             {
@@ -29,10 +29,10 @@ internal static class KnowledgeLinker
             }
         }
 
-        foreach (var (proposalId, candidate) in proposals.Where(entry => entry.Candidate.Kind == "relation"))
+        foreach ((string proposalId, ProposalCandidate candidate) in proposals.Where(entry => entry.Candidate.Kind == "relation"))
         {
-            var subject = ResolveOrCreate(connection, transaction, candidate.RelationSubject!, null, now);
-            var obj = ResolveOrCreate(connection, transaction, candidate.RelationObject!, null, now);
+            string? subject = ResolveOrCreate(connection, transaction, candidate.RelationSubject!, null, now);
+            string? obj = ResolveOrCreate(connection, transaction, candidate.RelationObject!, null, now);
             if (subject is not null && obj is not null && subject != obj)
             {
                 connection.Run(transaction, """
@@ -51,7 +51,7 @@ internal static class KnowledgeLinker
     internal static void Relink(
         SqliteConnection connection, SqliteTransaction transaction, string proposalId, string name, string now)
     {
-        using var current = connection.CreateCommand(
+        using SqliteCommand current = connection.CreateCommand(
             "SELECT entity_id FROM entity_mentions WHERE proposal_id = $proposal");
         current.Transaction = transaction;
         current.Parameters.AddWithValue("$proposal", proposalId);
@@ -75,7 +75,7 @@ internal static class KnowledgeLinker
             return null;
         }
 
-        using var lookup = connection.CreateCommand("SELECT entity_id FROM entity_aliases WHERE alias_key = $key");
+        using SqliteCommand lookup = connection.CreateCommand("SELECT entity_id FROM entity_aliases WHERE alias_key = $key");
         lookup.Transaction = transaction;
         lookup.Parameters.AddWithValue("$key", key);
         if (lookup.ExecuteScalar() is string existing)
@@ -83,7 +83,7 @@ internal static class KnowledgeLinker
             return existing;
         }
 
-        var entity = Guid.NewGuid().ToString("D");
+        string entity = Guid.NewGuid().ToString("D");
         connection.Run(transaction, """
             INSERT INTO knowledge_entities
                 (entity_id, display_name, entity_type, type_origin, status, merged_into, created_utc, updated_utc)
@@ -101,7 +101,7 @@ internal static class KnowledgeLinker
     internal static void RecomputeInferredTypes(
         SqliteConnection connection, SqliteTransaction transaction, IEnumerable<string> entities, string now)
     {
-        foreach (var entity in entities.Distinct(StringComparer.Ordinal))
+        foreach (string entity in entities.Distinct(StringComparer.Ordinal))
         {
             connection.Run(transaction, """
                 UPDATE knowledge_entities

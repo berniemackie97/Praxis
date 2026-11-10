@@ -31,33 +31,33 @@ public sealed class LocalSemanticExtractor(
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
-        var profile = catalog.Models.Get(ModelProfile.LocalEnrichment);
+        ModelProfile? profile = catalog.Models.Get(ModelProfile.LocalEnrichment);
         if (profile is not { Enabled: true })
         {
             throw new ProcessorUnavailableException("model_disabled");
         }
 
-        using var connection = connect(profile);
-        var identity = await DescribeAsync(connection.Model, cancellationToken);
-        var input = catalog.Text.ReadLeasedInput(lease);
+        using ModelConnection connection = connect(profile);
+        ModelIdentity identity = await DescribeAsync(connection.Model, cancellationToken);
+        LeasedText? input = catalog.Text.ReadLeasedInput(lease);
         if (input is null)
         {
             return;
         }
 
-        var segments = catalog.Segments.ReadCompleted(lease.ItemId, lease.Revision);
-        var reusable = ReusableResults(catalog.Proposals.ReadPrior(lease.ItemId, lease.Revision, ProcessorKey));
-        var hints = catalog.Knowledge.GoverningHints();
-        var run = new RunState();
-        var sourceName = Path.GetFileName(input.Locator);
-        foreach (var segment in segments.Take(MaximumSegments))
+        IReadOnlyList<TextSegmentSpan> segments = catalog.Segments.ReadCompleted(lease.ItemId, lease.Revision);
+        Dictionary<string, List<ProposalCandidate>> reusable = ReusableResults(catalog.Proposals.ReadPrior(lease.ItemId, lease.Revision, ProcessorKey));
+        IReadOnlyList<EntityHint> hints = catalog.Knowledge.GoverningHints();
+        RunState run = new RunState();
+        string sourceName = Path.GetFileName(input.Locator);
+        foreach (TextSegmentSpan segment in segments.Take(MaximumSegments))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var text = input.Content.Substring(segment.Start, segment.Length);
-            if (reusable.TryGetValue(text, out var prior))
+            string text = input.Content.Substring(segment.Start, segment.Length);
+            if (reusable.TryGetValue(text, out List<ProposalCandidate>? prior))
             {
                 run.Reused++;
-                foreach (var candidate in prior)
+                foreach (ProposalCandidate candidate in prior)
                 {
                     run.TryAdd(candidate with { EvidenceOffset = segment.Start + candidate.EvidenceOffset });
                 }
@@ -65,7 +65,7 @@ public sealed class LocalSemanticExtractor(
                 continue;
             }
 
-            var segmentHints = hints.Where(hint => text.Contains(hint.Name, StringComparison.OrdinalIgnoreCase))
+            EntityHint[] segmentHints = hints.Where(hint => text.Contains(hint.Name, StringComparison.OrdinalIgnoreCase))
                 .Take(SemanticExtractionPrompt.MaximumHints).ToArray();
             await ExtractAsync(connection.Model, profile, sourceName, segment, text, segmentHints, run,
                 cancellationToken);
@@ -92,16 +92,16 @@ public sealed class LocalSemanticExtractor(
     /// </summary>
     private static Dictionary<string, List<ProposalCandidate>> ReusableResults(PriorExtraction? prior)
     {
-        var reusable = new Dictionary<string, List<ProposalCandidate>>(StringComparer.Ordinal);
+        Dictionary<string, List<ProposalCandidate>> reusable = new Dictionary<string, List<ProposalCandidate>>(StringComparer.Ordinal);
         if (prior is null)
         {
             return reusable;
         }
 
-        foreach (var segment in prior.Segments)
+        foreach (TextSegmentSpan segment in prior.Segments)
         {
-            var text = prior.Content.Substring(segment.Start, segment.Length);
-            var inside = prior.Candidates
+            string text = prior.Content.Substring(segment.Start, segment.Length);
+            List<ProposalCandidate> inside = prior.Candidates
                 .Where(candidate => candidate.EvidenceOffset >= segment.Start &&
                     candidate.EvidenceOffset + candidate.EvidenceLength <= segment.Start + segment.Length)
                 .Select(candidate => candidate with { EvidenceOffset = candidate.EvidenceOffset - segment.Start })
@@ -131,16 +131,16 @@ public sealed class LocalSemanticExtractor(
         run.Examined++;
         try
         {
-            var result = await model.CompleteAsync(new ChatRequest(
+            ChatResult result = await model.CompleteAsync(new ChatRequest(
                 SemanticExtractionPrompt.Messages(sourceName, segment.HeadingPath, text, hints),
                 SemanticExtractionPrompt.Schema, MaximumOutputTokens,
                 Math.Min(profile.ContextTokens, MaximumContextTokens)), cancellationToken);
             run.InputTokens += result.InputTokens;
             run.OutputTokens += result.OutputTokens;
             run.Duration += result.Duration;
-            var (accepted, rejected) = SemanticResponseReader.Read(result.Content, text, segment.Start);
+            (IReadOnlyList<ProposalCandidate> accepted, int rejected) = SemanticResponseReader.Read(result.Content, text, segment.Start);
             run.Rejected += rejected;
-            foreach (var candidate in accepted)
+            foreach (ProposalCandidate candidate in accepted)
             {
                 run.TryAdd(candidate);
             }
@@ -177,7 +177,7 @@ public sealed class LocalSemanticExtractor(
         /// <summary>Keeps the first evidence for each kind and normalized name (or relation triple).</summary>
         public void TryAdd(ProposalCandidate candidate)
         {
-            var identity = candidate.Kind == "relation"
+            string identity = candidate.Kind == "relation"
                 ? $"{KnowledgeVocabulary.NameKey(candidate.RelationSubject)}|{candidate.Value}|{KnowledgeVocabulary.NameKey(candidate.RelationObject)}"
                 : KnowledgeVocabulary.NameKey(candidate.Value) ?? candidate.Value.ToUpperInvariant();
             if (Accepted.Count < LocalProposals.MaximumPerRun && seen.Add((candidate.Kind, identity)))

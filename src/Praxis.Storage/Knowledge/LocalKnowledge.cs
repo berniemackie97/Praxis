@@ -59,19 +59,19 @@ public sealed class LocalKnowledge
             throw new ArgumentException("The entity type is not supported.", nameof(entityType));
         }
 
-        var key = search is null ? null : KnowledgeVocabulary.NameKey(search);
+        string? key = search is null ? null : KnowledgeVocabulary.NameKey(search);
         return database.Execute(connection =>
         {
-            using var query = connection.CreateCommand(Summary + """
-                WHERE e.status = 'active'
-                  AND ($type IS NULL OR e.entity_type = $type)
-                  AND ($search IS NULL OR EXISTS (SELECT 1 FROM entity_aliases a
-                       WHERE a.entity_id = e.entity_id AND instr(a.alias_key, $search) > 0))
-                GROUP BY e.entity_id
-                HAVING COUNT(m.proposal_id) > 0 OR e.type_origin = 'owner'
-                ORDER BY COUNT(m.proposal_id) DESC, e.display_name, e.entity_id
-                LIMIT $limit
-                """);
+            using SqliteCommand query = connection.CreateCommand(Summary + """
+                                                                           WHERE e.status = 'active'
+                                                                             AND ($type IS NULL OR e.entity_type = $type)
+                                                                             AND ($search IS NULL OR EXISTS (SELECT 1 FROM entity_aliases a
+                                                                                  WHERE a.entity_id = e.entity_id AND instr(a.alias_key, $search) > 0))
+                                                                           GROUP BY e.entity_id
+                                                                           HAVING COUNT(m.proposal_id) > 0 OR e.type_origin = 'owner'
+                                                                           ORDER BY COUNT(m.proposal_id) DESC, e.display_name, e.entity_id
+                                                                           LIMIT $limit
+                                                                           """);
             query.Parameters.AddWithValue("$type", (object?)entityType ?? DBNull.Value);
             query.Parameters.AddWithValue("$search", (object?)key ?? DBNull.Value);
             query.Parameters.AddWithValue("$limit", limit);
@@ -84,9 +84,9 @@ public sealed class LocalKnowledge
         RequireId(entityId);
         return database.Execute(connection =>
         {
-            using var summary = connection.CreateCommand(Summary + """
-                WHERE e.entity_id = $entity GROUP BY e.entity_id
-                """);
+            using SqliteCommand summary = connection.CreateCommand(Summary + """
+                                                                             WHERE e.entity_id = $entity GROUP BY e.entity_id
+                                                                             """);
             summary.Parameters.AddWithValue("$entity", entityId.ToString("D"));
             if (ReadSummaries(summary) is not [var found])
             {
@@ -100,12 +100,12 @@ public sealed class LocalKnowledge
 
     public bool Rename(Guid entityId, string name)
     {
-        var key = KnowledgeVocabulary.NameKey(name)
-            ?? throw new ArgumentException("The entity name is invalid.", nameof(name));
-        var display = name.Trim();
+        string key = KnowledgeVocabulary.NameKey(name)
+                     ?? throw new ArgumentException("The entity name is invalid.", nameof(name));
+        string display = name.Trim();
         return Decide(entityId, "rename", display, (connection, transaction, now) =>
         {
-            using var owner = connection.CreateCommand("SELECT entity_id FROM entity_aliases WHERE alias_key = $key");
+            using SqliteCommand owner = connection.CreateCommand("SELECT entity_id FROM entity_aliases WHERE alias_key = $key");
             owner.Transaction = transaction;
             owner.Parameters.AddWithValue("$key", key);
             if (owner.ExecuteScalar() is string other && other != entityId.ToString("D"))
@@ -149,8 +149,8 @@ public sealed class LocalKnowledge
             throw new ArgumentException("An entity cannot be merged into itself.", nameof(targetEntityId));
         }
 
-        var source = sourceEntityId.ToString("D");
-        var target = targetEntityId.ToString("D");
+        string source = sourceEntityId.ToString("D");
+        string target = targetEntityId.ToString("D");
         return Decide(sourceEntityId, "merge", "into " + target, (connection, transaction, now) =>
         {
             if (!IsActive(connection, transaction, target))
@@ -195,8 +195,8 @@ public sealed class LocalKnowledge
             throw new ArgumentException("A relation needs two different entities.", nameof(objectEntityId));
         }
 
-        var relation = Guid.NewGuid();
-        var recorded = Decide(subjectEntityId, "relate", $"{predicate} {objectEntityId:D}", (connection, transaction, now) =>
+        Guid relation = Guid.NewGuid();
+        bool recorded = Decide(subjectEntityId, "relate", $"{predicate} {objectEntityId:D}", (connection, transaction, now) =>
         {
             if (!IsActive(connection, transaction, objectEntityId.ToString("D")))
             {
@@ -216,15 +216,15 @@ public sealed class LocalKnowledge
     /// <summary>Owner and verifier decisions the local model should respect, for prompt hints.</summary>
     internal IReadOnlyList<EntityHint> GoverningHints(int limit = 2_000) => database.Execute(connection =>
     {
-        using var query = connection.CreateCommand("""
-            SELECT a.display, e.entity_type, e.status = 'rejected'
-            FROM entity_aliases a JOIN knowledge_entities e ON e.entity_id = a.entity_id
-            WHERE (e.status = 'rejected' OR (e.status = 'active' AND e.type_origin IN ('owner', 'verified')))
-            ORDER BY a.alias_key LIMIT $limit
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT a.display, e.entity_type, e.status = 'rejected'
+                                                             FROM entity_aliases a JOIN knowledge_entities e ON e.entity_id = a.entity_id
+                                                             WHERE (e.status = 'rejected' OR (e.status = 'active' AND e.type_origin IN ('owner', 'verified')))
+                                                             ORDER BY a.alias_key LIMIT $limit
+                                                             """);
         query.Parameters.AddWithValue("$limit", limit);
-        using var reader = query.ExecuteReader();
-        var hints = new List<EntityHint>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<EntityHint> hints = new List<EntityHint>();
         while (reader.Read())
         {
             hints.Add(new EntityHint(reader.GetString(0),
@@ -246,11 +246,11 @@ public sealed class LocalKnowledge
         Guid entityId, string action, string detail, Action<SqliteConnection, SqliteTransaction, string> apply)
     {
         RequireId(entityId);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         return database.Execute(connection =>
         {
-            using var transaction = connection.BeginTransaction();
-            using var exists = connection.CreateCommand(
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand exists = connection.CreateCommand(
                 "SELECT status FROM knowledge_entities WHERE entity_id = $entity");
             exists.Transaction = transaction;
             exists.Parameters.AddWithValue("$entity", entityId.ToString("D"));
@@ -272,7 +272,7 @@ public sealed class LocalKnowledge
 
     private static bool IsActive(SqliteConnection connection, SqliteTransaction transaction, string entity)
     {
-        using var query = connection.CreateCommand(
+        using SqliteCommand query = connection.CreateCommand(
             "SELECT 1 FROM knowledge_entities WHERE entity_id = $entity AND status = 'active'");
         query.Transaction = transaction;
         query.Parameters.AddWithValue("$entity", entity);
@@ -281,8 +281,8 @@ public sealed class LocalKnowledge
 
     private static List<EntitySummary> ReadSummaries(SqliteCommand query)
     {
-        using var reader = query.ExecuteReader();
-        var result = new List<EntitySummary>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<EntitySummary> result = new List<EntitySummary>();
         while (reader.Read())
         {
             result.Add(new EntitySummary(Guid.Parse(reader.GetString(0)), reader.GetString(1),
@@ -295,11 +295,11 @@ public sealed class LocalKnowledge
 
     private static List<string> Aliases(SqliteConnection connection, Guid entityId)
     {
-        using var query = connection.CreateCommand(
+        using SqliteCommand query = connection.CreateCommand(
             "SELECT display FROM entity_aliases WHERE entity_id = $entity ORDER BY alias_key");
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
-        using var reader = query.ExecuteReader();
-        var aliases = new List<string>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<string> aliases = new List<string>();
         while (reader.Read())
         {
             aliases.Add(reader.GetString(0));
@@ -310,14 +310,14 @@ public sealed class LocalKnowledge
 
     private static List<EntityMention> Mentions(SqliteConnection connection, Guid entityId)
     {
-        using var query = connection.CreateCommand("""
-            SELECT proposal_id, source_id, item_id, revision, entity_type, evidence, evidence_offset, status
-            FROM visible_entity_mentions WHERE entity_id = $entity
-            ORDER BY source_id, evidence_offset LIMIT 200
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT proposal_id, source_id, item_id, revision, entity_type, evidence, evidence_offset, status
+                                                             FROM visible_entity_mentions WHERE entity_id = $entity
+                                                             ORDER BY source_id, evidence_offset LIMIT 200
+                                                             """);
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
-        using var reader = query.ExecuteReader();
-        var mentions = new List<EntityMention>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<EntityMention> mentions = new List<EntityMention>();
         while (reader.Read())
         {
             mentions.Add(new EntityMention(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
@@ -335,24 +335,24 @@ public sealed class LocalKnowledge
     /// </summary>
     private static List<EntityRelation> Relations(SqliteConnection connection, Guid entityId)
     {
-        using var query = connection.CreateCommand("""
-            SELECT r.relation_id, r.predicate, r.subject_id = $entity,
-                   CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END,
-                   other.display_name, r.origin, p.evidence
-            FROM knowledge_relations r
-            JOIN knowledge_entities other ON other.entity_id =
-                CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END
-            LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
-            LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
-            WHERE (r.subject_id = $entity OR r.object_id = $entity) AND other.status = 'active'
-              AND (r.origin = 'owner' OR (p.proposal_id IS NOT NULL AND p.status <> 'rejected'
-                   AND (p.status = 'accepted' OR (COALESCE(v.verdict, '') <> 'unsupported'
-                        AND (p.flags IS NULL OR v.verdict = 'supported')))))
-            ORDER BY r.predicate, other.display_name LIMIT 200
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT r.relation_id, r.predicate, r.subject_id = $entity,
+                                                                    CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END,
+                                                                    other.display_name, r.origin, p.evidence
+                                                             FROM knowledge_relations r
+                                                             JOIN knowledge_entities other ON other.entity_id =
+                                                                 CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END
+                                                             LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
+                                                             LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
+                                                             WHERE (r.subject_id = $entity OR r.object_id = $entity) AND other.status = 'active'
+                                                               AND (r.origin = 'owner' OR (p.proposal_id IS NOT NULL AND p.status <> 'rejected'
+                                                                    AND (p.status = 'accepted' OR (COALESCE(v.verdict, '') <> 'unsupported'
+                                                                         AND (p.flags IS NULL OR v.verdict = 'supported')))))
+                                                             ORDER BY r.predicate, other.display_name LIMIT 200
+                                                             """);
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
-        using var reader = query.ExecuteReader();
-        var relations = new List<EntityRelation>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<EntityRelation> relations = new List<EntityRelation>();
         while (reader.Read())
         {
             relations.Add(new EntityRelation(Guid.Parse(reader.GetString(0)), reader.GetString(1),
@@ -366,25 +366,25 @@ public sealed class LocalKnowledge
     /// <summary>Entities mentioned in the same segments, strongest co-occurrence first.</summary>
     private static List<RelatedEntity> Related(SqliteConnection connection, Guid entityId)
     {
-        using var query = connection.CreateCommand("""
-            SELECT other.entity_id, other.display_name, other.entity_type,
-                   COUNT(DISTINCT g.item_id || ':' || g.revision || ':' || g.ordinal)
-            FROM visible_entity_mentions self
-            JOIN text_segments g ON g.item_id = self.item_id AND g.revision = self.revision
-                AND self.evidence_offset >= g.start_offset
-                AND self.evidence_offset < g.start_offset + g.length
-            JOIN visible_entity_mentions m ON m.item_id = g.item_id AND m.revision = g.revision
-                AND m.evidence_offset >= g.start_offset
-                AND m.evidence_offset < g.start_offset + g.length
-                AND m.entity_id <> self.entity_id
-            JOIN knowledge_entities other ON other.entity_id = m.entity_id AND other.status = 'active'
-            WHERE self.entity_id = $entity
-            GROUP BY other.entity_id
-            ORDER BY 4 DESC, other.display_name LIMIT 20
-            """);
+        using SqliteCommand query = connection.CreateCommand("""
+                                                             SELECT other.entity_id, other.display_name, other.entity_type,
+                                                                    COUNT(DISTINCT g.item_id || ':' || g.revision || ':' || g.ordinal)
+                                                             FROM visible_entity_mentions self
+                                                             JOIN text_segments g ON g.item_id = self.item_id AND g.revision = self.revision
+                                                                 AND self.evidence_offset >= g.start_offset
+                                                                 AND self.evidence_offset < g.start_offset + g.length
+                                                             JOIN visible_entity_mentions m ON m.item_id = g.item_id AND m.revision = g.revision
+                                                                 AND m.evidence_offset >= g.start_offset
+                                                                 AND m.evidence_offset < g.start_offset + g.length
+                                                                 AND m.entity_id <> self.entity_id
+                                                             JOIN knowledge_entities other ON other.entity_id = m.entity_id AND other.status = 'active'
+                                                             WHERE self.entity_id = $entity
+                                                             GROUP BY other.entity_id
+                                                             ORDER BY 4 DESC, other.display_name LIMIT 20
+                                                             """);
         query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
-        using var reader = query.ExecuteReader();
-        var related = new List<RelatedEntity>();
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<RelatedEntity> related = new List<RelatedEntity>();
         while (reader.Read())
         {
             related.Add(new RelatedEntity(Guid.Parse(reader.GetString(0)), reader.GetString(1),

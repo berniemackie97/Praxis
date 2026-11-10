@@ -90,25 +90,25 @@ internal static class CatalogSchema
         Execute(database, "PRAGMA foreign_keys = OFF");
         try
         {
-            using var transaction = database.BeginTransaction();
-            for (var target = version + 1; target <= CurrentVersion; target++)
+            using SqliteTransaction transaction = database.BeginTransaction();
+            for (int target = version + 1; target <= CurrentVersion; target++)
             {
-                var resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
-                using var migration = database.CreateCommand(ReadSchema(resource));
+                string resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
+                using SqliteCommand migration = database.CreateCommand(ReadSchema(resource));
                 migration.Transaction = transaction;
                 migration.ExecuteNonQuery();
             }
 
-            using var versionCheck = database.CreateCommand("PRAGMA user_version");
+            using SqliteCommand versionCheck = database.CreateCommand("PRAGMA user_version");
             versionCheck.Transaction = transaction;
             if (Convert.ToInt32(versionCheck.ExecuteScalar()) != CurrentVersion)
             {
                 throw new InvalidDataException("The catalog migration did not reach the expected version.");
             }
 
-            using var references = database.CreateCommand("PRAGMA foreign_key_check");
+            using SqliteCommand references = database.CreateCommand("PRAGMA foreign_key_check");
             references.Transaction = transaction;
-            using (var violation = references.ExecuteReader())
+            using (SqliteDataReader violation = references.ExecuteReader())
             {
                 if (violation.Read())
                 {

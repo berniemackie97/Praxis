@@ -1,4 +1,5 @@
 using Praxis.Inference;
+using Praxis.Inference.Ollama;
 using Praxis.Storage.Models;
 
 namespace Praxis.Storage.Enrichment.Semantic;
@@ -17,7 +18,7 @@ public sealed class ModelConnection(IChatModel model, IDisposable? runtime = nul
             throw new NotSupportedException("The model provider is not supported.");
         }
 
-        var ollama = new OllamaRuntime(profile.Endpoint);
+        OllamaRuntime ollama = new OllamaRuntime(profile.Endpoint);
         return new ModelConnection(ollama.CreateChatModel(profile.Model), ollama);
     }
 

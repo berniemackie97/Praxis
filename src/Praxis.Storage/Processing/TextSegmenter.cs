@@ -27,16 +27,16 @@ internal static class TextSegmenter
             return [];
         }
 
-        var segments = new List<TextSegmentSpan>();
-        var start = -1;
-        var end = 0;
+        List<TextSegmentSpan> segments = new List<TextSegmentSpan>();
+        int start = -1;
+        int end = 0;
         string? path = null;
-        foreach (var block in Blocks(text, markdown))
+        foreach (Block block in Blocks(text, markdown))
         {
-            var length = end - start;
-            var breakAtHeading = block.StartsHeading && start >= 0 && length >= MinimumCharacters;
-            var full = start >= 0 && (length >= TargetCharacters ||
-                length + (block.End - block.Start) > MaximumCharacters);
+            int length = end - start;
+            bool breakAtHeading = block.StartsHeading && start >= 0 && length >= MinimumCharacters;
+            bool full = start >= 0 && (length >= TargetCharacters ||
+                                       length + (block.End - block.Start) > MaximumCharacters);
             if (breakAtHeading || full)
             {
                 Emit(text, start, end, path, segments);
@@ -58,28 +58,28 @@ internal static class TextSegmenter
 
     private static IEnumerable<Block> Blocks(string text, bool markdown)
     {
-        var headings = new List<(int Level, string Title)>();
-        var fenced = false;
-        var blockStart = 0;
-        var blockStartsHeading = false;
+        List<(int Level, string Title)> headings = new List<(int Level, string Title)>();
+        bool fenced = false;
+        int blockStart = 0;
+        bool blockStartsHeading = false;
         string? blockPath = null;
-        var previousBlank = false;
-        for (var offset = 0; offset < text.Length;)
+        bool previousBlank = false;
+        for (int offset = 0; offset < text.Length;)
         {
-            var newline = text.IndexOf('\n', offset);
-            var lineEnd = newline < 0 ? text.Length : newline + 1;
-            var line = text.AsSpan(offset, lineEnd - offset).TrimEnd("\r\n");
-            var blank = line.IsWhiteSpace();
-            var insideFence = fenced;
-            var heading = markdown && !insideFence ? HeadingOf(line) : null;
+            int newline = text.IndexOf('\n', offset);
+            int lineEnd = newline < 0 ? text.Length : newline + 1;
+            ReadOnlySpan<char> line = text.AsSpan(offset, lineEnd - offset).TrimEnd("\r\n");
+            bool blank = line.IsWhiteSpace();
+            bool insideFence = fenced;
+            (int Level, string Title)? heading = markdown && !insideFence ? HeadingOf(line) : null;
             if (markdown && IsFence(line))
             {
                 fenced = !fenced;
             }
 
             // Blank lines inside fenced code do not split it; an opening fence can start a block.
-            var boundary = offset > 0 &&
-                (heading is not null || (previousBlank && !blank && !insideFence));
+            bool boundary = offset > 0 &&
+                            (heading is not null || (previousBlank && !blank && !insideFence));
             if (boundary)
             {
                 yield return new Block(blockStart, offset, blockPath, blockStartsHeading);
@@ -121,9 +121,9 @@ internal static class TextSegmenter
         // between the halves of a surrogate pair.
         while (end - start > MaximumCharacters)
         {
-            var limit = start + MaximumCharacters;
-            var lineBreak = text.LastIndexOf('\n', limit - 1, MaximumCharacters - 1);
-            var split = lineBreak > start ? lineBreak + 1 : limit;
+            int limit = start + MaximumCharacters;
+            int lineBreak = text.LastIndexOf('\n', limit - 1, MaximumCharacters - 1);
+            int split = lineBreak > start ? lineBreak + 1 : limit;
             if (char.IsLowSurrogate(text[split]))
             {
                 split--;
@@ -148,7 +148,7 @@ internal static class TextSegmenter
 
     private static (int Level, string Title)? HeadingOf(ReadOnlySpan<char> line)
     {
-        var indent = 0;
+        int indent = 0;
         while (indent < line.Length && indent < 4 && line[indent] == ' ')
         {
             indent++;
@@ -159,8 +159,8 @@ internal static class TextSegmenter
             return null;
         }
 
-        var rest = line[indent..];
-        var level = 0;
+        ReadOnlySpan<char> rest = line[indent..];
+        int level = 0;
         while (level < rest.Length && level < 6 && rest[level] == '#')
         {
             level++;
@@ -171,13 +171,13 @@ internal static class TextSegmenter
             return null;
         }
 
-        var title = rest[level..].Trim().TrimEnd('#').Trim();
+        ReadOnlySpan<char> title = rest[level..].Trim().TrimEnd('#').Trim();
         return title.IsEmpty ? null : (level, title.ToString());
     }
 
     private static bool IsFence(ReadOnlySpan<char> line)
     {
-        var trimmed = line.TrimStart(' ');
+        ReadOnlySpan<char> trimmed = line.TrimStart(' ');
         return line.Length - trimmed.Length <= 3 &&
             (trimmed.StartsWith("```", StringComparison.Ordinal) ||
              trimmed.StartsWith("~~~", StringComparison.Ordinal));
@@ -190,13 +190,13 @@ internal static class TextSegmenter
             return null;
         }
 
-        var path = string.Join(" > ", headings.Select(heading => heading.Title));
+        string path = string.Join(" > ", headings.Select(heading => heading.Title));
         if (path.Length <= MaximumHeadingPath)
         {
             return path;
         }
 
-        var cut = char.IsHighSurrogate(path[MaximumHeadingPath - 1])
+        int cut = char.IsHighSurrogate(path[MaximumHeadingPath - 1])
             ? MaximumHeadingPath - 1 : MaximumHeadingPath;
         return path[..cut];
     }

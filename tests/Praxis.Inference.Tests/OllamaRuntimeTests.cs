@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Praxis.Inference;
+using Praxis.Inference.Ollama;
 using Xunit;
 
 namespace Praxis.Inference.Tests;
@@ -22,29 +23,29 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task CompletionSendsBoundedStructuredRequestAndReadsUsage()
     {
-        var handler = new RecordingHandler(_ => Json("""
-            {"model":"qwen:9b","message":{"role":"assistant","content":"{\"topics\":[\"SQLite\"]}"},
-             "done":true,"done_reason":"stop","prompt_eval_count":37,"eval_count":12,"total_duration":1500000000}
-            """));
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
+        RecordingHandler handler = new RecordingHandler(_ => Json("""
+                                                                  {"model":"qwen:9b","message":{"role":"assistant","content":"{\"topics\":[\"SQLite\"]}"},
+                                                                   "done":true,"done_reason":"stop","prompt_eval_count":37,"eval_count":12,"total_duration":1500000000}
+                                                                  """));
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
 
-        var result = await runtime.CreateChatModel("qwen:9b").CompleteAsync(Request(), CancellationToken.None);
+        ChatResult result = await runtime.CreateChatModel("qwen:9b").CompleteAsync(Request(), CancellationToken.None);
 
         Assert.Equal("""{"topics":["SQLite"]}""", result.Content);
         Assert.Equal(37, result.InputTokens);
         Assert.Equal(12, result.OutputTokens);
         Assert.Equal(TimeSpan.FromSeconds(1.5), result.Duration);
 
-        var sent = Assert.Single(handler.Requests);
+        SentRequest sent = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Post, sent.Method);
         Assert.Equal("http://127.0.0.1:11434/api/chat", sent.Uri);
-        using var body = JsonDocument.Parse(sent.Body!);
-        var root = body.RootElement;
+        using JsonDocument body = JsonDocument.Parse(sent.Body!);
+        JsonElement root = body.RootElement;
         Assert.Equal("qwen:9b", root.GetProperty("model").GetString());
         Assert.False(root.GetProperty("stream").GetBoolean());
         Assert.False(root.GetProperty("think").GetBoolean());
         Assert.Equal(Schema.GetRawText(), root.GetProperty("format").GetRawText());
-        var options = root.GetProperty("options");
+        JsonElement options = root.GetProperty("options");
         Assert.Equal(4096, options.GetProperty("num_ctx").GetInt32());
         Assert.Equal(256, options.GetProperty("num_predict").GetInt32());
         Assert.Equal(0, options.GetProperty("temperature").GetDouble());
@@ -56,10 +57,10 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task UntaggedModelNamesResolveToLatest()
     {
-        var handler = new RecordingHandler(_ => Json(Tags));
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
+        RecordingHandler handler = new RecordingHandler(_ => Json(Tags));
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
 
-        var identity = await runtime.CreateChatModel("other").DescribeAsync(CancellationToken.None);
+        ModelIdentity identity = await runtime.CreateChatModel("other").DescribeAsync(CancellationToken.None);
 
         Assert.Equal(new ModelIdentity("ollama", "other:latest", "def456", null, null, null), identity);
     }
@@ -67,17 +68,17 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task DescribeReportsExactBuildAndMissingModels()
     {
-        var handler = new RecordingHandler(_ => Json(Tags));
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
+        RecordingHandler handler = new RecordingHandler(_ => Json(Tags));
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
 
-        var identity = await runtime.CreateChatModel("qwen:9b").DescribeAsync(CancellationToken.None);
+        ModelIdentity identity = await runtime.CreateChatModel("qwen:9b").DescribeAsync(CancellationToken.None);
         Assert.Equal(new ModelIdentity("ollama", "qwen:9b", "abc123", "qwen35", "9.0B", "Q4_K_M"), identity);
 
-        var missing = await Assert.ThrowsAsync<InferenceException>(() =>
+        InferenceException missing = await Assert.ThrowsAsync<InferenceException>(() =>
             runtime.CreateChatModel("absent:1b").DescribeAsync(CancellationToken.None));
         Assert.Equal(InferenceFailure.ModelMissing, missing.Failure);
 
-        var models = await runtime.ListModelsAsync(CancellationToken.None);
+        IReadOnlyList<InstalledModel> models = await runtime.ListModelsAsync(CancellationToken.None);
         Assert.Equal(["qwen:9b", "other:latest"], models.Select(model => model.Name));
         Assert.Equal(5_600_000_000, models[0].SizeBytes);
     }
@@ -89,13 +90,13 @@ public sealed class OllamaRuntimeTests
     public async Task HttpFailuresMapToCodesWithoutProviderText(
         HttpStatusCode status, InferenceFailure failure, string code)
     {
-        var handler = new RecordingHandler(_ => new HttpResponseMessage(status)
+        RecordingHandler handler = new RecordingHandler(_ => new HttpResponseMessage(status)
         {
             Content = new StringContent("""{"error":"secret provider detail /Users/me/private.txt"}""")
         });
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
 
-        var exception = await Assert.ThrowsAsync<InferenceException>(() =>
+        InferenceException exception = await Assert.ThrowsAsync<InferenceException>(() =>
             runtime.CreateChatModel("qwen:9b").CompleteAsync(Request(), CancellationToken.None));
 
         Assert.Equal(failure, exception.Failure);
@@ -106,10 +107,10 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task UnreachableRuntimeIsUnavailable()
     {
-        var handler = new RecordingHandler(_ => throw new HttpRequestException("connection refused"));
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
+        RecordingHandler handler = new RecordingHandler(_ => throw new HttpRequestException("connection refused"));
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
 
-        var exception = await Assert.ThrowsAsync<InferenceException>(() =>
+        InferenceException exception = await Assert.ThrowsAsync<InferenceException>(() =>
             runtime.ListModelsAsync(CancellationToken.None));
         Assert.Equal(InferenceFailure.Unavailable, exception.Failure);
     }
@@ -119,8 +120,8 @@ public sealed class OllamaRuntimeTests
     {
         async Task<InferenceFailure> FailureFor(string body)
         {
-            using var runtime = new OllamaRuntime(Endpoint, null, new RecordingHandler(_ => Json(body)));
-            var exception = await Assert.ThrowsAsync<InferenceException>(() =>
+            using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, new RecordingHandler(_ => Json(body)));
+            InferenceException exception = await Assert.ThrowsAsync<InferenceException>(() =>
                 runtime.CreateChatModel("qwen:9b").CompleteAsync(Request(), CancellationToken.None));
             return exception.Failure;
         }
@@ -136,18 +137,18 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task DeadlineIsTimeoutButCallerCancellationIsCancellation()
     {
-        var handler = new RecordingHandler(async (_, token) =>
+        RecordingHandler handler = new RecordingHandler(async (_, token) =>
         {
             await Task.Delay(Timeout.Infinite, token);
             return Json("{}");
         });
-        using var runtime = new OllamaRuntime(Endpoint, TimeSpan.FromSeconds(1), handler);
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, TimeSpan.FromSeconds(1), handler);
 
-        var timeout = await Assert.ThrowsAsync<InferenceException>(() =>
+        InferenceException timeout = await Assert.ThrowsAsync<InferenceException>(() =>
             runtime.ListModelsAsync(CancellationToken.None));
         Assert.Equal(InferenceFailure.Timeout, timeout.Failure);
 
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        using CancellationTokenSource cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             runtime.ListModelsAsync(cancellation.Token));
     }
@@ -172,9 +173,9 @@ public sealed class OllamaRuntimeTests
     [Fact]
     public async Task InvalidRequestsAreRejectedBeforeSending()
     {
-        var handler = new RecordingHandler(_ => Json("{}"));
-        using var runtime = new OllamaRuntime(Endpoint, null, handler);
-        var model = runtime.CreateChatModel("qwen:9b");
+        RecordingHandler handler = new RecordingHandler(_ => Json("{}"));
+        using OllamaRuntime runtime = new OllamaRuntime(Endpoint, null, handler);
+        IChatModel model = runtime.CreateChatModel("qwen:9b");
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             model.CompleteAsync(Request() with { MaxOutputTokens = 4096 }, CancellationToken.None));
@@ -210,7 +211,7 @@ public sealed class OllamaRuntimeTests
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+            string? body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             Requests.Add(new SentRequest(request.Method, request.RequestUri!.ToString(), body));
             return await respond(request, cancellationToken);
         }

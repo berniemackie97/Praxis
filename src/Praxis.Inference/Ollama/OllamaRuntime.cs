@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace Praxis.Inference;
+namespace Praxis.Inference.Ollama;
 
 public sealed record InstalledModel(string Name, string Digest, long SizeBytes);
 
@@ -42,32 +42,22 @@ public sealed class OllamaRuntime : IDisposable
 
     public async Task<IReadOnlyList<InstalledModel>> ListModelsAsync(CancellationToken cancellationToken)
     {
-        using var document = await SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
-        if (!document.RootElement.TryGetProperty("models", out var models) ||
-            models.ValueKind != JsonValueKind.Array)
+        using JsonDocument document = await SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
+        if (!document.RootElement.TryGetProperty("models", out JsonElement models) || models.ValueKind != JsonValueKind.Array)
         {
             throw Invalid();
         }
 
-        var installed = new List<InstalledModel>();
-        foreach (var model in models.EnumerateArray())
-        {
-            installed.Add(new InstalledModel(
-                RequiredString(model, "name"), RequiredString(model, "digest"),
-                model.TryGetProperty("size", out var size) && size.TryGetInt64(out var bytes) ? bytes : 0));
-        }
-
-        return installed;
+        return models.EnumerateArray().Select(model => new InstalledModel(RequiredString(model, "name"), RequiredString(model, "digest"), model.TryGetProperty("size", out JsonElement size) && size.TryGetInt64(out long bytes) ? bytes : 0)).ToList();
     }
 
     public IChatModel CreateChatModel(string model) => new OllamaChatModel(this, model);
 
-    internal async Task<JsonDocument> SendAsync(
-        HttpMethod method, string path, byte[]? body, CancellationToken cancellationToken)
+    internal async Task<JsonDocument> SendAsync(HttpMethod method, string path, byte[]? body, CancellationToken cancellationToken)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(requestTimeout);
-        using var request = new HttpRequestMessage(method, path);
+        using HttpRequestMessage request = new HttpRequestMessage(method, path);
         if (body is not null)
         {
             request.Content = new ByteArrayContent(body);
@@ -76,70 +66,61 @@ public sealed class OllamaRuntime : IDisposable
 
         try
         {
-            using var response = await http.SendAsync(
-                request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            using HttpResponseMessage response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (!response.IsSuccessStatusCode)
             {
                 throw StatusFailure(response.StatusCode);
             }
 
-            var payload = await ReadBoundedAsync(response.Content, deadline.Token);
+            byte[] payload = await ReadBoundedAsync(response.Content, deadline.Token);
             try
             {
                 return JsonDocument.Parse(payload);
             }
             catch (JsonException exception)
             {
-                throw new InferenceException(InferenceFailure.InvalidResponse,
-                    "The local model runtime returned malformed JSON.", exception);
+                throw new InferenceException(InferenceFailure.InvalidResponse, "The local model runtime returned malformed JSON.", exception);
             }
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new InferenceException(InferenceFailure.Timeout,
-                "The local model request exceeded its time budget.", exception);
+            throw new InferenceException(InferenceFailure.Timeout, "The local model request exceeded its time budget.", exception);
         }
         catch (Exception exception) when (exception is HttpRequestException or IOException)
         {
-            throw new InferenceException(InferenceFailure.Unavailable,
-                "The local model runtime is not reachable.", exception);
+            throw new InferenceException(InferenceFailure.Unavailable, "The local model runtime is not reachable.", exception);
         }
     }
 
     internal static string RequiredString(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String &&
+        element.TryGetProperty(property, out JsonElement value) && value.ValueKind == JsonValueKind.String &&
         value.GetString() is { Length: > 0 } text ? text : throw Invalid();
 
-    internal static InferenceException Invalid() =>
-        new(InferenceFailure.InvalidResponse, "The local model runtime returned an unexpected response.");
+    internal static InferenceException Invalid() => new(InferenceFailure.InvalidResponse, "The local model runtime returned an unexpected response.");
 
     private static InferenceException StatusFailure(HttpStatusCode status) => status switch
     {
-        HttpStatusCode.NotFound => new(InferenceFailure.ModelMissing,
-            "The requested model is not installed in the local runtime."),
-        >= HttpStatusCode.InternalServerError => new(InferenceFailure.ServerError,
-            "The local model runtime failed to serve the request."),
-        _ => new(InferenceFailure.Rejected, "The local model runtime rejected the request.")
+        HttpStatusCode.NotFound => new InferenceException(InferenceFailure.ModelMissing, "The requested model is not installed in the local runtime."),
+        >= HttpStatusCode.InternalServerError => new InferenceException(InferenceFailure.ServerError, "The local model runtime failed to serve the request."),
+        _ => new InferenceException(InferenceFailure.Rejected, "The local model runtime rejected the request.")
     };
 
     private static async Task<byte[]> ReadBoundedAsync(HttpContent content, CancellationToken cancellationToken)
     {
         if (content.Headers.ContentLength > MaximumResponseBytes)
         {
-            throw new InferenceException(InferenceFailure.InvalidResponse,
-                "The local model response exceeds its size bound.");
+            throw new InferenceException(InferenceFailure.InvalidResponse, "The local model response exceeds its size bound.");
         }
 
-        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[16 * 1024];
+        await using Stream stream = await content.ReadAsStreamAsync(cancellationToken);
+        using MemoryStream buffer = new MemoryStream();
+        byte[] chunk = new byte[16 * 1024];
         int read;
         while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
         {
             if (buffer.Length + read > MaximumResponseBytes)
             {
-                throw new InferenceException(InferenceFailure.InvalidResponse,
-                    "The local model response exceeds its size bound.");
+                throw new InferenceException(InferenceFailure.InvalidResponse, "The local model response exceeds its size bound.");
             }
 
             buffer.Write(chunk, 0, read);

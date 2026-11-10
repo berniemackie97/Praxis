@@ -23,8 +23,8 @@ internal sealed class ScriptedChatModel(Func<ChatRequest, string> respond) : ICh
     /// <summary>The excerpt text inside the user message.</summary>
     public static string Excerpt(ChatRequest request)
     {
-        var user = request.Messages[^1].Content;
-        var start = user.IndexOf("<excerpt>\n", StringComparison.Ordinal) + "<excerpt>\n".Length;
+        string user = request.Messages[^1].Content;
+        int start = user.IndexOf("<excerpt>\n", StringComparison.Ordinal) + "<excerpt>\n".Length;
         return user[start..user.LastIndexOf("\n</excerpt>", StringComparison.Ordinal)];
     }
 }

@@ -25,16 +25,16 @@ public sealed class LocalModelProfileTests : IDisposable
     [Fact]
     public void ProfileIsNormalizedPersistedAndReplaced()
     {
-        using (var catalog = LocalCatalog.Open(root))
+        using (LocalCatalog catalog = LocalCatalog.Open(root))
         {
             Assert.Null(catalog.Models.Get(ModelProfile.LocalEnrichment));
-            var saved = catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment,
+            ModelProfile saved = catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment,
                 "ollama", "http://localhost:11434", " qwen:9b ", 16_384, Enabled: true));
             Assert.Equal("http://localhost:11434/", saved.Endpoint);
             Assert.Equal("qwen:9b", saved.Model);
         }
 
-        using var reopened = LocalCatalog.Open(root);
+        using LocalCatalog reopened = LocalCatalog.Open(root);
         Assert.Equal(new ModelProfile(ModelProfile.LocalEnrichment, "ollama",
             "http://localhost:11434/", "qwen:9b", 16_384, true),
             reopened.Models.Get(ModelProfile.LocalEnrichment));
@@ -54,7 +54,7 @@ public sealed class LocalModelProfileTests : IDisposable
     public void UnsafeOrUnsupportedProfilesAreRejected(
         string provider, string endpoint, string model, int context)
     {
-        using var catalog = LocalCatalog.Open(root);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
         Assert.ThrowsAny<ArgumentException>(() => catalog.Models.Save(new ModelProfile(
             ModelProfile.LocalEnrichment, provider, endpoint, model, context, true)));
         Assert.Null(catalog.Models.Get(ModelProfile.LocalEnrichment));
@@ -63,34 +63,34 @@ public sealed class LocalModelProfileTests : IDisposable
     [Fact]
     public async Task DesktopProtocolReadsAndSavesProfileAndReportsUnreachableRuntime()
     {
-        using var catalog = LocalCatalog.Open(root);
-        var protocol = new LocalDesktopProtocol(catalog);
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        LocalDesktopProtocol protocol = new LocalDesktopProtocol(catalog);
 
-        using (var empty = await Send(protocol, """{"requestId":"1","action":"modelProfile"}"""))
+        using (JsonDocument empty = await Send(protocol, """{"requestId":"1","action":"modelProfile"}"""))
         {
             Assert.Equal(JsonValueKind.Null, empty.RootElement.GetProperty("data").GetProperty("profile").ValueKind);
         }
 
-        using (var saved = await Send(protocol, """
-            {"requestId":"2","action":"modelProfileSave","provider":"ollama",
-             "endpoint":"http://127.0.0.1:11434","model":"qwen:9b","contextTokens":8192,"enabled":true}
-            """))
+        using (JsonDocument saved = await Send(protocol, """
+                                                         {"requestId":"2","action":"modelProfileSave","provider":"ollama",
+                                                          "endpoint":"http://127.0.0.1:11434","model":"qwen:9b","contextTokens":8192,"enabled":true}
+                                                         """))
         {
             Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
             Assert.Equal(8192, saved.RootElement.GetProperty("data").GetProperty("profile")
                 .GetProperty("contextTokens").GetInt32());
         }
 
-        using (var remote = await Send(protocol, """
-            {"requestId":"3","action":"modelProfileSave","provider":"ollama",
-             "endpoint":"http://192.168.1.2:11434","model":"qwen:9b","enabled":true}
-            """))
+        using (JsonDocument remote = await Send(protocol, """
+                                                          {"requestId":"3","action":"modelProfileSave","provider":"ollama",
+                                                           "endpoint":"http://192.168.1.2:11434","model":"qwen:9b","enabled":true}
+                                                          """))
         {
             Assert.False(remote.RootElement.GetProperty("ok").GetBoolean());
         }
 
         // Port 9 (discard) on loopback is not an Ollama runtime: listing fails cleanly.
-        using var unreachable = await Send(protocol,
+        using JsonDocument unreachable = await Send(protocol,
             """{"requestId":"4","action":"localModels","endpoint":"http://127.0.0.1:9"}""");
         Assert.False(unreachable.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("qwen:9b", catalog.Models.Get(ModelProfile.LocalEnrichment)!.Model);
