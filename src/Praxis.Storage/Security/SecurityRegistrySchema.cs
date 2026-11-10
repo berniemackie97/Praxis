@@ -10,7 +10,9 @@ internal static class SecurityRegistrySchema
     {
         using (SqliteCommand options = connection.CreateCommand())
         {
-            options.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000";
+            options.CommandText = "PRAGMA foreign_keys=ON";
+            options.ExecuteNonQuery();
+            options.CommandText = "PRAGMA busy_timeout=5000";
             options.ExecuteNonQuery();
         }
 
