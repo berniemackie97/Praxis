@@ -63,7 +63,7 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
 
             using ClientDeviceTrustStore client = ClientDeviceTrustStore.Open(trustDirectory,
                 installation, ownerDevice, ownerSigner.ExportSubjectPublicKeyInfo());
-            client.Accept(approved, DateTimeOffset.UtcNow);
+            client.Accept(approved);
             IReadOnlyDictionary<Guid, byte[]> trusted = client.TrustedRecipients(space);
             Assert.Equal(2, trusted.Count);
             Assert.Equal(memberSigningKey, trusted[memberDevice]);
@@ -84,9 +84,9 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
             using ECDsa publicOnly = ECDsa.Create();
             publicOnly.ImportSubjectPublicKeyInfo(ownerSigner.ExportSubjectPublicKeyInfo(), out _);
             Assert.Throws<UnauthorizedAccessException>(() =>
-                reopened.Revoke(space, memberDevice, publicOnly, DateTimeOffset.UtcNow));
+                reopened.Revoke(space, memberDevice, publicOnly));
             Assert.Contains(memberDevice, reopened.TrustedRecipients(space).Keys);
-            Assert.True(reopened.Revoke(space, memberDevice, ownerSigner, DateTimeOffset.UtcNow));
+            Assert.True(reopened.Revoke(space, memberDevice, ownerSigner));
             Assert.DoesNotContain(memberDevice, reopened.TrustedRecipients(space).Keys);
         }
 
@@ -203,8 +203,7 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
         using ClientDeviceTrustStore local = ClientDeviceTrustStore.Open(trustDirectory,
             registry.InstallationId, ownerDevice, ownerSigner.ExportSubjectPublicKeyInfo());
         Assert.Throws<UnauthorizedAccessException>(() =>
-            local.Accept(approved with { OwnerSignature = Sign(impostorSigner, challenge.Message) },
-                DateTimeOffset.UtcNow));
+            local.Accept(approved with { OwnerSignature = Sign(impostorSigner, challenge.Message) }));
         Assert.Single(local.TrustedRecipients(space));
         Assert.Throws<UnauthorizedAccessException>(() =>
             ClientSpaceKeys.Protect(registry.InstallationId, space, 1,
@@ -213,7 +212,7 @@ public sealed class ApprovedDeviceEnrollmentTests : IDisposable
                 ClientSpaceKeys.GenerateRecoverySecret()));
 
         Assert.Throws<UnauthorizedAccessException>(() =>
-            local.Revoke(space, approved.DeviceId, impostorSigner, DateTimeOffset.UtcNow));
+            local.Revoke(space, approved.DeviceId, impostorSigner));
     }
 
     [Fact]
