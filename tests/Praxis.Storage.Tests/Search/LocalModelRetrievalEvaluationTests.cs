@@ -10,16 +10,19 @@ namespace Praxis.Storage.Tests.Search;
 public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
 {
     /// <summary>
-    /// An opt-in owner-machine benchmark. Without an explicitly named local model it makes
-    /// no model calls and prints NOT EXECUTED; it must not be cited as a green model benchmark.
+    /// Owner-authorized synthetic corpus measurement. Without an installed model selected
+    /// through the environment, no inference runs and no real-model result is claimed.
     /// </summary>
-    [Fact]
-    public async Task MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments()
+    [Theory]
+    [InlineData("retrieval-corpus-v1.json", "retrieval-judgments-v2.json")]
+    [InlineData("retrieval-corpus-v3.json", "retrieval-judgments-v3.json")]
+    public async Task MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments(
+        string corpusFile, string judgmentsFile)
     {
         string? modelName = Environment.GetEnvironmentVariable("PRAXIS_RETRIEVAL_OLLAMA_MODEL");
         if (string.IsNullOrWhiteSpace(modelName))
         {
-            output.WriteLine("NOT EXECUTED: set PRAXIS_RETRIEVAL_OLLAMA_MODEL to a model already installed in local Ollama.");
+            output.WriteLine("NOT EXECUTED: set PRAXIS_RETRIEVAL_OLLAMA_MODEL to an installed local embedding model.");
             return;
         }
 
@@ -28,7 +31,9 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
         using OllamaRuntime runtime = new(endpoint, TimeSpan.FromMinutes(3));
         IEmbeddingModel model = runtime.CreateEmbeddingModel(modelName);
         ModelIdentity identity = await model.DescribeAsync(CancellationToken.None);
-        using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync();
+        using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync(
+            corpusFile, judgmentsFile);
+
         Stopwatch indexClock = Stopwatch.StartNew();
         SemanticIndexUpdate updated = await fixture.Catalog.Embeddings.RefreshAsync(model,
             rebuild: true, maxSegments: 512);
@@ -36,15 +41,29 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
         Assert.False(updated.HasMore);
         Assert.True(updated.Indexed > 0);
 
-        Dictionary<(string Domain, string Mode), List<RetrievalScore>> scores = new();
-        Stopwatch queryClock = Stopwatch.StartNew();
+        RetrievalRankingReport report = new(output);
+        List<double> lexicalTimes = new();
+        List<double> semanticTimes = new();
+        List<double> hybridTimes = new();
         foreach (RetrievalJudgment judgment in fixture.Judgments.Judgments)
         {
-            Guid[] expected = fixture.Expected(judgment.Relevant);
+            Guid[] relevant = fixture.Expected(judgment.Relevant);
+            Stopwatch clock = Stopwatch.StartNew();
             LocalSearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
-            var semantic = await fixture.Catalog.Embeddings.QueryAsync(judgment.Query, model, 5);
-            HybridSearchResults hybrid = await fixture.Catalog.Hybrid.QueryAsync(
+            clock.Stop();
+            lexicalTimes.Add(clock.Elapsed.TotalMilliseconds);
+
+            clock.Restart();
+            IReadOnlyList<SemanticSearchHit> semantic = await fixture.Catalog.Embeddings.QueryAsync(
                 judgment.Query, model, 5);
+            clock.Stop();
+            semanticTimes.Add(clock.Elapsed.TotalMilliseconds);
+
+            clock.Restart();
+            HybridSearchResults hybrid = await fixture.Catalog.Hybrid.QueryAsync(judgment.Query, model, 5);
+            clock.Stop();
+            hybridTimes.Add(clock.Elapsed.TotalMilliseconds);
+
             Assert.True(hybrid.UsedEmbeddings);
             Assert.Equal(fixture.Expected(judgment.LexicalExpected),
                 lexical.Select(hit => hit.ItemId).OrderBy(id => id).ToArray());
@@ -56,44 +75,41 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
                     lexical: lexical.Any(candidate => candidate.ItemId == hit.ItemId));
             }
 
-            Record(judgment.Domain, "lexical", lexical.Select(hit => hit.ItemId).ToArray());
-            Record(judgment.Domain, "semantic", semantic.Select(hit => hit.Hit.ItemId).ToArray());
-            Record(judgment.Domain, "hybrid", hybrid.Hits.Select(hit => hit.ItemId).ToArray());
-            output.WriteLine($"query={judgment.Name} relevant={expected.Length} " +
-                $"lexical={lexical.Length} semantic={semantic.Count} hybrid={hybrid.Hits.Count}");
+            report.Record(judgment.Domain, "lexical", relevant,
+                lexical.Select(hit => hit.ItemId).ToArray());
+            report.Record(judgment.Domain, "semantic", relevant,
+                semantic.Select(hit => hit.Hit.ItemId).ToArray());
+            report.Record(judgment.Domain, "hybrid", relevant,
+                hybrid.Hits.Select(hit => hit.ItemId).ToArray());
 
-            void Record(string domain, string mode, Guid[] actual)
-            {
-                var key = (domain, mode);
-                if (!scores.TryGetValue(key, out List<RetrievalScore>? domainScores))
-                {
-                    domainScores = new List<RetrievalScore>();
-                    scores.Add(key, domainScores);
-                }
-
-                domainScores.Add(RetrievalScore.AtFive(expected, actual));
-            }
+            output.WriteLine($"query={judgment.Name} relevant=[{string.Join(",", judgment.Relevant)}] " +
+                $"lexical=[{string.Join(",", lexical.Select(hit => fixture.SourceKey(hit.ItemId)))}] " +
+                $"semantic=[{string.Join(",", semantic.Select(hit => fixture.SourceKey(hit.Hit.ItemId)))}] " +
+                $"hybrid=[{string.Join(",", hybrid.Hits.Select(hit => fixture.SourceKey(hit.ItemId)))}] " +
+                $"lexical_ms={lexicalTimes[^1]:F2} semantic_ms={semanticTimes[^1]:F2} " +
+                $"hybrid_ms={hybridTimes[^1]:F2}");
         }
 
-        queryClock.Stop();
-        foreach (var group in scores.OrderBy(pair => pair.Key.Domain)
-            .ThenBy(pair => pair.Key.Mode))
-        {
-            output.WriteLine($"domain={group.Key.Domain} mode={group.Key.Mode} " +
-                $"queries={group.Value.Count} " +
-                $"recall@5={group.Value.Average(score => score.Recall):F3} " +
-                $"precision@5={group.Value.Average(score => score.Precision):F3} " +
-                $"no_answer_correct={group.Value.Count(score => score.NoAnswerCorrect)}");
-        }
-
+        report.WriteSummary();
         output.WriteLine($"model={modelName} digest={identity.Digest} " +
-            $"fixture=v{fixture.Judgments.SchemaVersion} " +
+            $"fixture=v{fixture.Judgments.SchemaVersion} queries={fixture.Judgments.Judgments.Length} " +
             $"index_ms={indexClock.Elapsed.TotalMilliseconds:F2} " +
-            $"query_ms={queryClock.Elapsed.TotalMilliseconds:F2} " +
             $"index_segments={updated.Indexed} catalog_bytes={fixture.DatabaseBytes()} " +
             $"test_process_working_set_bytes={Environment.WorkingSet} " +
             $"runtime={fixture.RuntimeDescription}");
-        output.WriteLine("The working-set figure is for the test process, not Ollama; " +
-            "report Ollama host memory separately. No model ranking threshold is assumed.");
+        WriteLatency("lexical", lexicalTimes);
+        WriteLatency("semantic", semanticTimes);
+        WriteLatency("hybrid", hybridTimes);
+        output.WriteLine("Mode timings are sequential on one host, with separate model calls for " +
+            "semantic and hybrid. They are not concurrent throughput or cold-start measures. " +
+            "The test-process working set excludes Ollama process and GPU memory.");
+    }
+
+    private void WriteLatency(string mode, List<double> samples)
+    {
+        double[] ordered = samples.Order().ToArray();
+        double P(int percent) => ordered[(int)Math.Ceiling(ordered.Length * percent / 100d) - 1];
+        output.WriteLine($"mode={mode} calls={ordered.Length} " +
+            $"total_ms={samples.Sum():F2} p50_ms={P(50):F2} p95_ms={P(95):F2}");
     }
 }
