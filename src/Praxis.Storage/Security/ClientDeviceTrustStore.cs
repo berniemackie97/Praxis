@@ -222,6 +222,53 @@ public sealed class ClientDeviceTrustStore : IDisposable
         }
     }
 
+    /// <summary>Highest authenticated current-key epoch seen by this client, across restarts.</summary>
+    public long MinimumCurrentEpoch(Guid spaceId)
+    {
+        lock (gate)
+        {
+            using SqliteCommand read = SecurityRegistry.Command(connection, null,
+                "SELECT latest_epoch FROM trusted_epochs WHERE space_id=$space",
+                ("$space", SecurityRegistry.Id(spaceId)));
+            return read.ExecuteScalar() is long version ? version : 1;
+        }
+    }
+
+    internal void RecordVerifiedCurrentEpoch(Guid spaceId, long epoch)
+    {
+        if (epoch < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(epoch));
+        }
+
+        lock (gate)
+        {
+            using SqliteCommand write = SecurityRegistry.Command(connection, null, """
+                INSERT INTO trusted_epochs (space_id, latest_epoch)
+                VALUES ($space, $epoch)
+                ON CONFLICT(space_id) DO UPDATE SET latest_epoch=excluded.latest_epoch
+                WHERE trusted_epochs.latest_epoch <= excluded.latest_epoch
+                """,
+                ("$space", SecurityRegistry.Id(spaceId)), ("$epoch", epoch));
+            if (write.ExecuteNonQuery() != 1)
+            {
+                throw new CryptographicException("A previously verified newer key epoch cannot be rolled back.");
+            }
+        }
+    }
+
+    internal ECDsa PinnedOwnerVerifier(Guid installation, Guid signingDeviceId)
+    {
+        if (installation != installationId || signingDeviceId != ownerDeviceId)
+        {
+            throw new UnauthorizedAccessException("The signing owner must match the independently pinned trust root.");
+        }
+
+        ECDsa verifier = ECDsa.Create();
+        verifier.ImportSubjectPublicKeyInfo(ownerPublicKey, out _);
+        return verifier;
+    }
+
     public IReadOnlyDictionary<Guid, byte[]> TrustedRecipients(Guid spaceId)
     {
         string space = SecurityRegistry.Id(spaceId);
@@ -260,7 +307,7 @@ public sealed class ClientDeviceTrustStore : IDisposable
             version = Convert.ToInt32(check.ExecuteScalar());
         }
 
-        if (version is < 0 or > 1)
+        if (version is < 0 or > 2)
         {
             throw new NotSupportedException("The client trust schema version is not supported.");
         }
@@ -293,6 +340,10 @@ public sealed class ClientDeviceTrustStore : IDisposable
                     revoked_utc TEXT,
                     PRIMARY KEY(space_id, device_id)
                 ) STRICT;
+                CREATE TABLE trusted_epochs (
+                    space_id TEXT PRIMARY KEY,
+                    latest_epoch INTEGER NOT NULL CHECK (latest_epoch >= 1)
+                ) STRICT;
                 """;
             create.ExecuteNonQuery();
             using SqliteCommand bootstrap = SecurityRegistry.Command(connection, tx, """
@@ -304,8 +355,24 @@ public sealed class ClientDeviceTrustStore : IDisposable
             bootstrap.ExecuteNonQuery();
             using SqliteCommand setVersion = connection.CreateCommand();
             setVersion.Transaction = tx;
-            setVersion.CommandText = "PRAGMA user_version=1";
+            setVersion.CommandText = "PRAGMA user_version=2";
             setVersion.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        if (version == 1)
+        {
+            using SqliteTransaction tx = connection.BeginTransaction();
+            using SqliteCommand migrate = connection.CreateCommand();
+            migrate.Transaction = tx;
+            migrate.CommandText = """
+                CREATE TABLE trusted_epochs (
+                    space_id TEXT PRIMARY KEY,
+                    latest_epoch INTEGER NOT NULL CHECK (latest_epoch >= 1)
+                ) STRICT;
+                PRAGMA user_version=2;
+                """;
+            migrate.ExecuteNonQuery();
             tx.Commit();
         }
 
