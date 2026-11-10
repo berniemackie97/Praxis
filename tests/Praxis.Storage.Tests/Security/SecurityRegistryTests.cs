@@ -96,7 +96,7 @@ public sealed class SecurityRegistryTests : IDisposable
         DeviceChallenge privateRead = registry.DeviceProofs.IssueChallenge(ownerDevice, privateSpace, privateSource, SecurityPermission.Read);
         Assert.NotNull(registry.DeviceProofs.Authenticate(privateRead.ChallengeId, Sign(ownerKey, privateRead)));
         Assert.Throws<UnauthorizedAccessException>(() =>
-            registry.Operator.Grant(visitor, privateSpace, visitor, SecurityPermission.Read));
+            registry.Operator.Grant(visitor, privateSpace, owner, SecurityPermission.Read));
     }
 
     [Fact]
@@ -122,10 +122,15 @@ public sealed class SecurityRegistryTests : IDisposable
             registry.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Read));
 
         registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+        Assert.False(registry.DeviceProofs.IsCurrent(prior));
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Write));
         DeviceChallenge newRead = registry.DeviceProofs.IssueChallenge(device, space, null, SecurityPermission.Read);
-        Assert.NotNull(registry.DeviceProofs.Authenticate(newRead.ChallengeId, Sign(key, newRead)));
+        VerifiedDeviceProof? renewed = registry.DeviceProofs.Authenticate(newRead.ChallengeId, Sign(key, newRead));
+        Assert.NotNull(renewed);
+        Assert.True(registry.DeviceProofs.IsCurrent(renewed));
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+        Assert.False(registry.DeviceProofs.IsCurrent(renewed));
     }
 
     [Fact]
