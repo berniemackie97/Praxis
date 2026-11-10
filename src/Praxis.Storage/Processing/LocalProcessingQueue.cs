@@ -70,6 +70,9 @@ public sealed class LocalProcessingQueue
                                                                    JOIN items i ON i.item_id = v.item_id
                                                                    JOIN sources s ON s.source_id = i.source_id
                                                                    WHERE v.item_id = $item AND v.revision = $revision AND s.status = 'active'
+                                                                     AND v.revision = (
+                                                                         SELECT MAX(latest.revision) FROM item_versions latest
+                                                                         WHERE latest.item_id = v.item_id)
                                                                    ON CONFLICT(item_id, revision, processor_key) DO NOTHING
                                                                    """);
             ProcessingJobKey.Bind(command, itemId, revision, processorKey);
@@ -108,6 +111,9 @@ public sealed class LocalProcessingQueue
                                                                   JOIN items i ON i.item_id = j.item_id
                                                                   JOIN sources s ON s.source_id = i.source_id
                                                                   WHERE s.status = 'active'
+                                                                    AND j.revision = (
+                                                                        SELECT MAX(latest.revision) FROM item_versions latest
+                                                                        WHERE latest.item_id = j.item_id)
                                                                     AND ($processor IS NULL OR j.processor_key = $processor)
                                                                     AND j.attempt < $maximum
                                                                     AND (j.state = 'queued' OR
@@ -318,7 +324,10 @@ public sealed class LocalProcessingQueue
                                                                      AND state IN ('failed', 'canceled')
                                                                      AND EXISTS (
                                                                          SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                                                                           AND processing_jobs.revision = (
+                                                                               SELECT MAX(latest.revision) FROM item_versions latest
+                                                                               WHERE latest.item_id = processing_jobs.item_id))
                                                                    """);
             command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
             ProcessingJobKey.Bind(command, itemId, revision, processorKey);

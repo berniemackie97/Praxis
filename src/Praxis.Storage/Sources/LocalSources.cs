@@ -10,7 +10,7 @@ public sealed record LocalSourceProvenance(
     string OriginalSha256, long OriginalBytes, string? ProcessorKey,
     string? ProcessingState, string? FailureCode, string? ExtractionOutcome,
     string? ExtractionReasonCode, string? CaptureRoute, string? CaptureAuthorityBasis,
-    string? CaptureScope, DateTimeOffset? CaptureRecordedUtc);
+    string? CaptureScope, DateTimeOffset? CaptureRecordedUtc, bool RetryEligible);
 
 public sealed record LocalCaptureReceipt(
     string RequestKey, int Revision, string? Route, string? AuthorityBasis,
@@ -54,7 +54,13 @@ public sealed class LocalSources
                                                                         s.created_utc, v.revision, v.observed_utc, v.digest,
                                                                         o.byte_length, j.processor_key, j.state, j.failure_code,
                                                                         d.outcome, d.reason_code,
-                                                                        c.route, c.authority_basis, c.scope, c.recorded_utc
+                                                                        c.route, c.authority_basis, c.scope, c.recorded_utc,
+                                                                        CASE WHEN s.status = 'active'
+                                                                          AND j.state IN ('failed', 'canceled')
+                                                                          AND v.revision = (
+                                                                              SELECT MAX(latest.revision)
+                                                                              FROM item_versions latest WHERE latest.item_id = i.item_id)
+                                                                        THEN 1 ELSE 0 END
                                                                  FROM sources s
                                                                  JOIN items i ON i.source_id = s.source_id
                                                                  JOIN item_versions v ON v.item_id = i.item_id
@@ -99,7 +105,8 @@ public sealed class LocalSources
                 reader.IsDBNull(15) ? null : reader.GetString(15),
                 reader.IsDBNull(16) ? null : reader.GetString(16),
                 reader.IsDBNull(17) ? null : reader.GetString(17),
-                reader.IsDBNull(18) ? null : CatalogValues.ParseTimestamp(reader.GetString(18)));
+                reader.IsDBNull(18) ? null : CatalogValues.ParseTimestamp(reader.GetString(18)),
+                reader.GetInt64(19) == 1);
         });
     }
 
