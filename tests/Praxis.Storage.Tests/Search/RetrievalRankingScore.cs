@@ -20,12 +20,8 @@ internal readonly record struct RetrievalRankingScore(
         double Recall(int cutoff) => relevant.Count == 0 ? 0 :
             (double)ranked.Take(cutoff).Count(relevant.Contains) / relevant.Count;
 
-        double Precision(int cutoff)
-        {
-            Guid[] returned = ranked.Take(cutoff).ToArray();
-            return returned.Length == 0 ? 0 :
-                (double)returned.Count(relevant.Contains) / returned.Length;
-        }
+        double Precision(int cutoff) =>
+            (double)ranked.Take(cutoff).Count(relevant.Contains) / cutoff;
 
         int firstRelevant = Array.FindIndex(ranked, relevant.Contains);
         return new RetrievalRankingScore(
