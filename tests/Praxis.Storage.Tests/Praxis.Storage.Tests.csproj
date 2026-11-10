@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Praxis.Storage/Praxis.Storage.csproj" />
     <None Update="Fixtures/retrieval-corpus-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/retrieval-judgments-v2.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
