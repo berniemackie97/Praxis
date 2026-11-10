@@ -40,7 +40,11 @@ public sealed class SecurityOperator
         return id;
     }
 
-    public Guid EnrollDevice(Guid principalId, ReadOnlySpan<byte> subjectPublicKeyInfo)
+    public Guid EnrollDevice(Guid principalId, ReadOnlySpan<byte> subjectPublicKeyInfo) =>
+        EnrollDevice(principalId, subjectPublicKeyInfo, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty);
+
+    public Guid EnrollDevice(Guid principalId, ReadOnlySpan<byte> subjectPublicKeyInfo,
+        ReadOnlySpan<byte> wrappingPublicKey, ReadOnlySpan<byte> wrappingBindingSignature)
     {
         if (subjectPublicKeyInfo.Length is < 80 or > 128)
         {
@@ -57,20 +61,37 @@ public sealed class SecurityOperator
             }
         }
 
+        if ((!wrappingPublicKey.IsEmpty || !wrappingBindingSignature.IsEmpty) &&
+            !DeviceWrappingKey.Verify(subjectPublicKeyInfo, wrappingPublicKey, wrappingBindingSignature))
+        {
+            throw new ArgumentException("The recipient key is not signed by its enrolled identity.", nameof(wrappingPublicKey));
+        }
+
         byte[] key = subjectPublicKeyInfo.ToArray();
+        byte[]? recipientKey = wrappingPublicKey.IsEmpty ? null : wrappingPublicKey.ToArray();
+        byte[]? binding = wrappingBindingSignature.IsEmpty ? null : wrappingBindingSignature.ToArray();
         Guid deviceId = Guid.NewGuid();
         bool inserted = registry.Execute(connection =>
         {
-            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
-                INSERT INTO devices (device_id, principal_id, public_key, enrolled_utc)
-                SELECT $device, principal_id, $key, $now FROM principals
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
+                INSERT INTO devices (device_id, principal_id, public_key, wrapping_public_key, wrapping_signature, enrolled_utc)
+                SELECT $device, principal_id, $key, $wrapping, $binding, $now FROM principals
                 WHERE principal_id = $principal AND disabled_utc IS NULL
                 """,
                 ("$device", SecurityRegistry.Id(deviceId)),
                 ("$principal", SecurityRegistry.Id(principalId)),
-                ("$key", key),
+                ("$key", key), ("$wrapping", recipientKey),
+                ("$binding", binding),
                 ("$now", Now()));
-            return command.ExecuteNonQuery() == 1;
+            bool created = command.ExecuteNonQuery() == 1;
+            if (created)
+            {
+                RequireRekeyForPrincipal(connection, transaction, principalId);
+                transaction.Commit();
+            }
+
+            return created;
         });
         if (!inserted)
         {
@@ -78,6 +99,53 @@ public sealed class SecurityOperator
         }
 
         return deviceId;
+    }
+
+    public void RegisterWrappingKey(Guid deviceId, ReadOnlySpan<byte> wrappingPublicKey,
+        ReadOnlySpan<byte> wrappingBindingSignature)
+    {
+        byte[] key = wrappingPublicKey.ToArray();
+        byte[] signature = wrappingBindingSignature.ToArray();
+        registry.Execute(connection =>
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            Guid principalId;
+            byte[] signingKey;
+            using (SqliteCommand read = SecurityRegistry.Command(connection, transaction, """
+                SELECT principal_id, public_key FROM devices
+                WHERE device_id=$device AND revoked_utc IS NULL AND wrapping_public_key IS NULL
+                """, ("$device", SecurityRegistry.Id(deviceId))))
+            using (SqliteDataReader reader = read.ExecuteReader())
+            {
+                if (!reader.Read())
+                {
+                    throw new InvalidOperationException("The active device has no available wrapping-key slot.");
+                }
+
+                principalId = Guid.Parse(reader.GetString(0));
+                signingKey = (byte[])reader.GetValue(1);
+            }
+
+            if (!DeviceWrappingKey.Verify(signingKey, key, signature))
+            {
+                throw new ArgumentException("The wrapping key binding is invalid.", nameof(wrappingPublicKey));
+            }
+
+            using (SqliteCommand update = SecurityRegistry.Command(connection, transaction, """
+                UPDATE devices SET wrapping_public_key=$wrapping, wrapping_signature=$signature
+                WHERE device_id=$device AND revoked_utc IS NULL AND wrapping_public_key IS NULL
+                """, ("$device", SecurityRegistry.Id(deviceId)), ("$wrapping", key), ("$signature", signature)))
+            {
+                if (update.ExecuteNonQuery() != 1)
+                {
+                    throw new InvalidOperationException("The device wrapping key has already been set.");
+                }
+            }
+
+            RequireRekeyForPrincipal(connection, transaction, principalId);
+            transaction.Commit();
+            return 0;
+        });
     }
 
     public Guid CreateSpace(Guid ownerId, SecurityProcessingClass processingClass)
@@ -125,7 +193,8 @@ public sealed class SecurityOperator
 
         bool inserted = registry.Execute(connection =>
         {
-            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
                 INSERT INTO space_grants (space_id, principal_id, permissions, revoked_utc)
                 SELECT s.space_id, p.principal_id, $permissions, NULL
                 FROM security_spaces s
@@ -141,7 +210,17 @@ public sealed class SecurityOperator
                 ("$member", SecurityRegistry.Id(memberId)),
                 ("$owner", SecurityRegistry.Id(ownerId)),
                 ("$permissions", bits));
-            return command.ExecuteNonQuery() == 1;
+            bool granted = command.ExecuteNonQuery() == 1;
+            if (granted)
+            {
+                using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction,
+                    "UPDATE security_spaces SET rekey_required=1 WHERE space_id=$space",
+                    ("$space", SecurityRegistry.Id(spaceId)));
+                rotate.ExecuteNonQuery();
+                transaction.Commit();
+            }
+
+            return granted;
         });
         if (!inserted)
         {
@@ -153,7 +232,8 @@ public sealed class SecurityOperator
     {
         return registry.Execute(connection =>
         {
-            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
                 UPDATE space_grants SET revoked_utc=$now, grant_version=grant_version + 1
                 WHERE space_id=$space AND principal_id=$member AND revoked_utc IS NULL
                   AND EXISTS (SELECT 1 FROM security_spaces s
@@ -163,7 +243,17 @@ public sealed class SecurityOperator
                 ("$member", SecurityRegistry.Id(memberId)),
                 ("$owner", SecurityRegistry.Id(ownerId)),
                 ("$now", Now()));
-            return command.ExecuteNonQuery() == 1;
+            bool revoked = command.ExecuteNonQuery() == 1;
+            if (revoked)
+            {
+                using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction,
+                    "UPDATE security_spaces SET rekey_required=1 WHERE space_id=$space",
+                    ("$space", SecurityRegistry.Id(spaceId)));
+                rotate.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            return revoked;
         });
     }
 
@@ -184,6 +274,11 @@ public sealed class SecurityOperator
                     "DELETE FROM proof_challenges WHERE device_id=$device",
                     ("$device", SecurityRegistry.Id(deviceId)));
                 purge.ExecuteNonQuery();
+                using SqliteCommand principal = SecurityRegistry.Command(connection, transaction,
+                    "SELECT principal_id FROM devices WHERE device_id=$device",
+                    ("$device", SecurityRegistry.Id(deviceId)));
+                Guid owner = Guid.Parse((string)principal.ExecuteScalar()!);
+                RequireRekeyForPrincipal(connection, transaction, owner);
             }
 
             transaction.Commit();
@@ -209,6 +304,7 @@ public sealed class SecurityOperator
                         (SELECT device_id FROM devices WHERE principal_id=$principal)
                     """, ("$principal", SecurityRegistry.Id(principalId)));
                 purge.ExecuteNonQuery();
+                RequireRekeyForPrincipal(connection, transaction, principalId);
             }
 
             transaction.Commit();
@@ -254,6 +350,19 @@ public sealed class SecurityOperator
             transaction.Commit();
             return 0;
         });
+    }
+
+    private static void RequireRekeyForPrincipal(SqliteConnection connection,
+        SqliteTransaction transaction, Guid principalId)
+    {
+        using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction, """
+            UPDATE security_spaces SET rekey_required=1
+            WHERE owner_id=$principal OR space_id IN
+                (SELECT space_id FROM space_grants
+                 WHERE principal_id=$principal AND revoked_utc IS NULL
+                   AND (permissions & 1)=1)
+            """, ("$principal", SecurityRegistry.Id(principalId)));
+        rotate.ExecuteNonQuery();
     }
 
     private string Now() => registry.UtcNow.UtcDateTime.ToString("O");
