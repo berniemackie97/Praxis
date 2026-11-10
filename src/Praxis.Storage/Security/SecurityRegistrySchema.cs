@@ -245,6 +245,7 @@ internal static class SecurityRegistrySchema
             }
         }
     }
+
     internal static void VerifySchema(SqliteConnection connection)
     {
         foreach ((string table, string columns) in new (string, string)[]
