@@ -21,6 +21,13 @@ public sealed class RetrievalRankingEvaluationTests(ITestOutputHelper output)
             LocalSearchHit[] hits = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
             Assert.Equal(expected, hits.Select(hit => hit.ItemId).OrderBy(id => id).ToArray());
             fixture.VerifyHits(hits, lexical: true);
+            if (judgment.Name == "lexical-distractor")
+            {
+                Guid irrelevantHit = Assert.Single(hits).ItemId;
+                Assert.Equal("keyword-distractor", fixture.SourceKey(irrelevantHit));
+                Assert.DoesNotContain(irrelevantHit, fixture.Expected(judgment.Relevant));
+            }
+
             report.Record(judgment.Domain, "lexical",
                 fixture.Expected(judgment.Relevant), hits.Select(hit => hit.ItemId).ToArray());
             output.WriteLine($"query={judgment.Name} domain={judgment.Domain} " +
