@@ -205,7 +205,10 @@ public sealed class LocalProcessingQueue
                                                                      AND lease_key = $lease AND lease_until_utc > $now
                                                                      AND EXISTS (
                                                                          SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
-                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                                                                           AND processing_jobs.revision = (
+                                                                               SELECT MAX(latest.revision) FROM item_versions latest
+                                                                               WHERE latest.item_id = processing_jobs.item_id))
                                                                    """);
             command.Transaction = transaction;
             command.Parameters.AddWithValue("$state", state);
@@ -304,6 +307,12 @@ public sealed class LocalProcessingQueue
                                                                        lease_key = NULL, lease_until_utc = NULL, updated_utc = $now
                                                                    WHERE item_id = $item AND revision = $revision AND processor_key = $processor
                                                                      AND state = 'running' AND lease_key = $lease
+                                                                     AND EXISTS (
+                                                                         SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
+                                                                           AND processing_jobs.revision = (
+                                                                               SELECT MAX(latest.revision) FROM item_versions latest
+                                                                               WHERE latest.item_id = processing_jobs.item_id))
                                                                    """);
             ProcessingJobKey.BindLease(command, lease);
             command.Parameters.AddWithValue("$now", now);
@@ -388,7 +397,10 @@ public sealed class LocalProcessingQueue
                                                                     SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
                                                                     JOIN item_versions v ON v.item_id = i.item_id
                                                                     WHERE i.item_id = processing_jobs.item_id AND s.status = 'active'
-                                                                      AND v.revision = processing_jobs.revision AND v.digest = $digest)
+                                                                      AND v.revision = processing_jobs.revision AND v.digest = $digest
+                                                                      AND v.revision = (
+                                                                          SELECT MAX(latest.revision) FROM item_versions latest
+                                                                          WHERE latest.item_id = v.item_id))
                                                               """);
         finish.Transaction = transaction;
         ProcessingJobKey.BindLease(finish, lease);
