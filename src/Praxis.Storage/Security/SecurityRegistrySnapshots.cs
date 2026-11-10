@@ -86,17 +86,21 @@ public static class SecurityRegistrySnapshots
             stream.Flush(flushToDisk: true);
         }
 
-        SecuritySnapshotReport report = await VerifyAsync(staging, maxBytes, cancellationToken);
+        SecuritySnapshotReport report = await VerifyContentsAsync(staging, maxBytes, allowIncomplete: true, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         Directory.Move(staging, destination);
         return report;
     }
 
-    public static async Task<SecuritySnapshotReport> VerifyAsync(string backupDirectory, long maxBytes,
-        CancellationToken cancellationToken = default)
+    public static Task<SecuritySnapshotReport> VerifyAsync(string backupDirectory, long maxBytes,
+        CancellationToken cancellationToken = default) =>
+        VerifyContentsAsync(backupDirectory, maxBytes, allowIncomplete: false, cancellationToken);
+
+    private static async Task<SecuritySnapshotReport> VerifyContentsAsync(string backupDirectory,
+        long maxBytes, bool allowIncomplete, CancellationToken cancellationToken)
     {
         SnapshotFiles.ValidateBudget(maxBytes);
-        string backup = SecuritySnapshotFiles.ValidateBackup(backupDirectory);
+        string backup = SecuritySnapshotFiles.ValidateBackup(backupDirectory, allowIncomplete);
         SecuritySnapshotManifest manifest = SecuritySnapshotFiles.ReadManifest(backup);
         if (manifest.DatabaseLength > maxBytes)
         {
@@ -134,7 +138,7 @@ public static class SecurityRegistrySnapshots
             output.Flush(flushToDisk: true);
         }
 
-        await VerifyAsync(staging, maxBytes, cancellationToken);
+        await VerifyContentsAsync(staging, maxBytes, allowIncomplete: true, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // The restored registry is deliberately not opened here: its first owner-controlled
         // startup must acquire the normal exclusive registry lease.
