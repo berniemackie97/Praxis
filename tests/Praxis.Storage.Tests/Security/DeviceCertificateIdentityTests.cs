@@ -31,8 +31,8 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
         Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
         using X509Certificate2 certificate = IssueClient(issuer, enrolled);
 
-        VerifiedCertificateIdentity? session = registry.Certificates.Authenticate(
-            certificate, issuer, device, X509RevocationMode.NoCheck);
+        VerifiedCertificateIdentity? session = registry.Certificates.AuthenticateForTest(
+            certificate, issuer, device);
         Assert.NotNull(session);
         Assert.Equal(owner, session.PrincipalId);
         Assert.Equal(device, session.DeviceId);
@@ -44,8 +44,8 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
         Assert.True(registry.Certificates.MatchesOperation(session, proof));
 
         Assert.True(registry.Operator.RevokeDevice(device));
-        Assert.Null(registry.Certificates.Authenticate(
-            certificate, issuer, device, X509RevocationMode.NoCheck));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            certificate, issuer, device));
         Assert.False(registry.Certificates.MatchesOperation(session, proof));
     }
 
@@ -62,12 +62,12 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
         using X509Certificate2 certificate = IssueClient(issuer, enrolled);
         using X509Certificate2 wrongKeyCertificate = IssueClient(issuer, attacker);
 
-        Assert.Null(registry.Certificates.Authenticate(
-            certificate, wrongRoot, device, X509RevocationMode.NoCheck));
-        Assert.Null(registry.Certificates.Authenticate(
-            wrongKeyCertificate, issuer, device, X509RevocationMode.NoCheck));
-        Assert.Null(registry.Certificates.Authenticate(
-            certificate, issuer, Guid.NewGuid(), X509RevocationMode.NoCheck));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            certificate, wrongRoot, device));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            wrongKeyCertificate, issuer, device));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            certificate, issuer, Guid.NewGuid()));
     }
 
     [Fact]
@@ -86,12 +86,12 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
         using X509Certificate2 serverOnly = IssueClient(issuer, key,
             now.AddMinutes(-5), now.AddHours(1), clientAuth: false);
 
-        Assert.Null(registry.Certificates.Authenticate(
-            expired, issuer, device, X509RevocationMode.NoCheck));
-        Assert.Null(registry.Certificates.Authenticate(
-            longLived, issuer, device, X509RevocationMode.NoCheck));
-        Assert.Null(registry.Certificates.Authenticate(
-            serverOnly, issuer, device, X509RevocationMode.NoCheck));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            expired, issuer, device));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            longLived, issuer, device));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            serverOnly, issuer, device));
     }
 
     [Fact]
@@ -109,8 +109,8 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
         registry.Operator.Grant(first, space, second, SecurityPermission.Read);
         using X509Certificate2 secondCertificate = IssueClient(issuer, secondSigner);
 
-        VerifiedCertificateIdentity? secondSession = registry.Certificates.Authenticate(
-            secondCertificate, issuer, secondDevice, X509RevocationMode.NoCheck);
+        VerifiedCertificateIdentity? secondSession = registry.Certificates.AuthenticateForTest(
+            secondCertificate, issuer, secondDevice);
         Assert.NotNull(secondSession);
         DeviceChallenge firstChallenge = registry.DeviceProofs.IssueChallenge(
             firstDevice, space, null, SecurityPermission.Read);
@@ -120,8 +120,8 @@ public sealed class DeviceCertificateIdentityTests : IDisposable
 
         Assert.False(registry.Certificates.MatchesOperation(secondSession, ownerProof));
         Assert.True(registry.Operator.DisablePrincipal(second));
-        Assert.Null(registry.Certificates.Authenticate(
-            secondCertificate, issuer, secondDevice, X509RevocationMode.NoCheck));
+        Assert.Null(registry.Certificates.AuthenticateForTest(
+            secondCertificate, issuer, secondDevice));
     }
 
     private static X509Certificate2 IssueRoot()
