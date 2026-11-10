@@ -169,6 +169,7 @@ public sealed class OfflineNoteSynchronizer(LocalNoteJournal journal,
                         throw new InvalidDataException("The reset snapshot is incompatible with durable local state.");
                     }
 
+                    ValidateSnapshot(restored.Snapshot, journal);
                     journal.Rebootstrap(restored.Snapshot);
                     snapshotApplied = true;
                     continue;
@@ -209,19 +210,58 @@ public sealed class OfflineNoteSynchronizer(LocalNoteJournal journal,
         }
     }
 
+    private static void ValidateSnapshot(LocalNoteSnapshot snapshot, LocalNoteJournal local)
+    {
+        if (snapshot.Records is null)
+        {
+            throw new InvalidDataException("The reset snapshot does not contain a record projection.");
+        }
+
+        Dictionary<Guid, LocalNoteState> incoming = new();
+        foreach (LocalNoteState record in snapshot.Records)
+        {
+            if (record is null || !incoming.TryAdd(record.Id, record))
+            {
+                throw new InvalidDataException("The reset snapshot contains duplicate or invalid records.");
+            }
+        }
+
+        // An already accepted mutation cannot disappear in a rebootstrap.
+        foreach (AcceptedNoteReceipt receipt in local.AcknowledgedChanges)
+        {
+            if (receipt.Sequence > snapshot.Cursor ||
+                !incoming.TryGetValue(receipt.Record.Id, out LocalNoteState? current) ||
+                current.Revision < receipt.Record.Revision ||
+                current.Revision == receipt.Record.Revision && current != receipt.Record)
+            {
+                throw new InvalidDataException("The reset snapshot contradicts a durable accepted receipt.");
+            }
+        }
+
+        foreach (LocalNoteState existing in local.Records)
+        {
+            if (!incoming.TryGetValue(existing.Id, out LocalNoteState? remote) ||
+                remote.Revision < existing.Revision)
+            {
+                throw new InvalidDataException("The reset snapshot rolls back a durable local record.");
+            }
+        }
+    }
+
     private static void RequireNoPrivateResponse(NoteSubmitResult response)
     {
-        if (response.Current is not null)
+        if (response.Current is not null || response.Sequence != 0)
         {
-            throw new InvalidDataException("A rejected operation disclosed private content.");
+            throw new InvalidDataException("A rejected operation disclosed private state.");
         }
     }
 
     private static void RequireEmptyErrorPage(NotePullResult response)
     {
-        if (response.Changes.Count != 0)
+        if (response.Changes.Count != 0 || response.HeadSequence != 0 ||
+            response.NextCursor != response.RequestedCursor)
         {
-            throw new InvalidDataException("A rejected pull disclosed private content.");
+            throw new InvalidDataException("A rejected pull disclosed private state.");
         }
     }
 }
