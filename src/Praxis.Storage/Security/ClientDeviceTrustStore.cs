@@ -123,7 +123,7 @@ public sealed class ClientDeviceTrustStore : IDisposable
     /// Approvals have short validity. Once accepted, the signing-key pin survives
     /// expiry and process restart until the owner explicitly revokes it.
     /// </summary>
-    public void Accept(ApprovedDeviceIdentity approval, DateTimeOffset now)
+    public void Accept(ApprovedDeviceIdentity approval)
     {
         ArgumentNullException.ThrowIfNull(approval);
         if (approval.InstallationId != installationId ||
@@ -131,7 +131,7 @@ public sealed class ClientDeviceTrustStore : IDisposable
             approval.DeviceId == ownerDeviceId ||
             approval.SpaceId == Guid.Empty ||
             approval.PrincipalId == Guid.Empty ||
-            !ApprovedDeviceEnrollment.VerifyApproval(approval, ownerPublicKey, now))
+            !ApprovedDeviceEnrollment.VerifyApproval(approval, ownerPublicKey, DateTimeOffset.UtcNow))
         {
             throw new UnauthorizedAccessException("A current, independently verified owner approval is required.");
         }
@@ -170,7 +170,7 @@ public sealed class ClientDeviceTrustStore : IDisposable
         }
     }
 
-    public bool Revoke(Guid spaceId, Guid deviceId, ECDsa ownerSigner, DateTimeOffset now)
+    public bool Revoke(Guid spaceId, Guid deviceId, ECDsa ownerSigner)
     {
         ArgumentNullException.ThrowIfNull(ownerSigner);
         if (deviceId == ownerDeviceId)
@@ -184,6 +184,7 @@ public sealed class ClientDeviceTrustStore : IDisposable
             throw new UnauthorizedAccessException("Only the local pinned owner can revoke trusted recipients.");
         }
 
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         byte[] message = System.Text.Encoding.UTF8.GetBytes("Praxis.ClientPinRevocation.v1\n" +
             $"{installationId:N}\n{ownerDeviceId:N}\n{spaceId:N}\n{deviceId:N}\n" +
             $"{now.ToUnixTimeSeconds()}\n");
