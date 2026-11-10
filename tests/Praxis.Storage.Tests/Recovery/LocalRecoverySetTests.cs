@@ -187,6 +187,11 @@ public sealed class LocalRecoverySetTests : IDisposable
         await File.WriteAllTextAsync(manifest, invalid.ToJsonString());
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+        invalid["FormatVersion"] = 1;
+        invalid["Identity"]!.AsObject()["DatabaseSha256"] = new string('0', 64);
+        await File.WriteAllTextAsync(manifest, invalid.ToJsonString());
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            LocalRecoverySet.VerifyAsync(Backup, Budget));
         await File.WriteAllBytesAsync(manifest, originalManifest);
 
         File.WriteAllText(Path.Combine(Backup, "extra"), "unexpected");
