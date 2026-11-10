@@ -15,10 +15,12 @@ public static class ClientSpaceKeys
 
     public static SpaceKeyPublication Protect(Guid installationId, Guid spaceId, long epoch,
         Guid signerDeviceId, ECDsa signer, IReadOnlyList<RecipientWrappingKey> recipients,
+        IReadOnlyDictionary<Guid, byte[]> pinnedSigningKeys,
         ReadOnlySpan<byte> contentKey, ReadOnlySpan<byte> recoverySecret)
     {
         ArgumentNullException.ThrowIfNull(signer);
         ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentNullException.ThrowIfNull(pinnedSigningKeys);
         if (installationId == Guid.Empty || spaceId == Guid.Empty || signerDeviceId == Guid.Empty ||
             epoch < 1 || contentKey.Length != 32 || recoverySecret.Length != 32 ||
             signer.KeySize != 256 || recipients.Count is < 1 or > 64)
@@ -35,6 +37,13 @@ public static class ClientSpaceKeys
                 !DeviceWrappingKey.Verify(target.SigningPublicKey, target.PublicKey, target.BindingSignature))
             {
                 throw new ArgumentException("The recipient key is not uniquely attested.");
+            }
+
+            if (!pinnedSigningKeys.TryGetValue(target.DeviceId, out byte[]? trustedKey) ||
+                trustedKey is null ||
+                !CryptographicOperations.FixedTimeEquals(trustedKey, target.SigningPublicKey))
+            {
+                throw new UnauthorizedAccessException("The recipient identity is not independently approved.");
             }
 
             using RSA rsa = RSA.Create();
@@ -89,14 +98,33 @@ public static class ClientSpaceKeys
         ReadOnlySpan<byte> recoverySecret, ECDsa trustedSignerPublicKey, long minimumEpoch)
     {
         ArgumentNullException.ThrowIfNull(offered);
-        ValidateEpoch(offered, minimumEpoch);
-        ArgumentNullException.ThrowIfNull(trustedSignerPublicKey);
-        if (recoverySecret.Length != 32 || offered.OwnerRecovery is null)
+        if (offered.OwnerRecovery is null)
         {
             throw new CryptographicException("The owner recovery material is unavailable.");
         }
 
-        RecoveryKeyEnvelope envelope = offered.OwnerRecovery;
+        return UnlockWithRecovery(installationId,
+            new OwnerRecoveryArchive(offered.SpaceId, offered.Epoch, offered.SignerDeviceId,
+                offered.KeyCommitment, offered.OwnerRecovery),
+            recoverySecret, trustedSignerPublicKey, minimumEpoch);
+    }
+
+    public static byte[] UnlockWithRecovery(Guid installationId, OwnerRecoveryArchive offered,
+        ReadOnlySpan<byte> recoverySecret, ECDsa trustedSignerPublicKey, long minimumEpoch)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        if (offered.Epoch < 1 || minimumEpoch < 1 || offered.Epoch < minimumEpoch)
+        {
+            throw new CryptographicException("The key epoch is older than trusted client state.");
+        }
+
+        ArgumentNullException.ThrowIfNull(trustedSignerPublicKey);
+        if (recoverySecret.Length != 32)
+        {
+            throw new CryptographicException("The owner recovery material is unavailable.");
+        }
+
+        RecoveryKeyEnvelope envelope = offered.Recovery;
         if (envelope.Nonce.Length != 12 || envelope.CiphertextAndTag.Length != 48 ||
             !Verify(trustedSignerPublicKey, RecoveryMessage(installationId, offered.SpaceId,
                 offered.Epoch, offered.SignerDeviceId, offered.KeyCommitment,

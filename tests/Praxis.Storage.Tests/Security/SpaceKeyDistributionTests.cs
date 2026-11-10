@@ -41,7 +41,8 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] key = ClientSpaceKeys.GenerateContentKey();
         byte[] secret = ClientSpaceKeys.GenerateRecoverySecret();
         SpaceKeyPublication package = ClientSpaceKeys.Protect(
-            registry.InstallationId, space, 1, ownerDevice, signer, recipients, key, secret);
+            registry.InstallationId, space, 1, ownerDevice, signer, recipients,
+            Trusted((ownerDevice, signer), (memberDevice, memberSigner)), key, secret);
 
         registry.SpaceKeys.Publish(ownerWrite, package);
         AvailableSpaceKey? ownerView = registry.SpaceKeys.Download(
@@ -98,7 +99,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] secret = ClientSpaceKeys.GenerateRecoverySecret();
         SpaceKeyPublication package = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 1, device, signer,
-            registry.SpaceKeys.Recipients(ownerWrite), key, secret);
+            registry.SpaceKeys.Recipients(ownerWrite), Trusted((device, signer)), key, secret);
         registry.SpaceKeys.Publish(ownerWrite, package);
         AvailableSpaceKey? available = registry.SpaceKeys.Download(
             Prove(registry, signer, device, space, SecurityPermission.Read));
@@ -124,7 +125,8 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] key = ClientSpaceKeys.GenerateContentKey();
         byte[] recovery = ClientSpaceKeys.GenerateRecoverySecret();
         SpaceKeyPublication original = ClientSpaceKeys.Protect(registry.InstallationId,
-            space, 1, device, signer, registry.SpaceKeys.Recipients(write), key, recovery);
+            space, 1, device, signer, registry.SpaceKeys.Recipients(write),
+            Trusted((device, signer)), key, recovery);
         byte[] modifiedCiphertext = original.Recipients[0].WrappedKey.ToArray();
         modifiedCiphertext[17] ^= 1;
         SpaceKeyPublication tampered = original with
@@ -178,6 +180,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] oldKey = ClientSpaceKeys.GenerateContentKey();
         SpaceKeyPublication first = ClientSpaceKeys.Protect(registry.InstallationId, space, 1,
             ownerDevice, signer, registry.SpaceKeys.Recipients(write),
+            Trusted((ownerDevice, signer), (memberDevice, memberSigner)),
             oldKey, ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(write, first);
         VerifiedDeviceProof readMember = Prove(registry, memberSigner, memberDevice, space, SecurityPermission.Read);
@@ -191,7 +194,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] newKey = ClientSpaceKeys.GenerateContentKey();
         SpaceKeyPublication rotated = ClientSpaceKeys.Protect(registry.InstallationId, space, 2,
             ownerDevice, signer, registry.SpaceKeys.Recipients(write),
-            newKey, ClientSpaceKeys.GenerateRecoverySecret());
+            Trusted((ownerDevice, signer)), newKey, ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(write, rotated);
 
         AvailableSpaceKey? current = registry.SpaceKeys.Download(
@@ -228,18 +231,20 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         SpaceKeyPublication missing = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 1, ownerDevice, signer,
             all.Where(x => x.DeviceId == ownerDevice).ToArray(),
-            ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
+            Trusted((ownerDevice, signer)), ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         Assert.Throws<UnauthorizedAccessException>(() => registry.SpaceKeys.Publish(write, missing));
         Assert.Null(registry.SpaceKeys.Download(
             Prove(registry, signer, ownerDevice, space, SecurityPermission.Read)));
 
         SpaceKeyPublication first = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 1, ownerDevice, signer, all,
+            Trusted((ownerDevice, signer), (memberDevice, memberSigner)),
             ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(write, first);
         Assert.Throws<InvalidOperationException>(() => registry.SpaceKeys.Publish(write, first));
         SpaceKeyPublication skipped = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 3, ownerDevice, signer, all,
+            Trusted((ownerDevice, signer), (memberDevice, memberSigner)),
             ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         Assert.Throws<InvalidOperationException>(() => registry.SpaceKeys.Publish(write, skipped));
         Assert.Equal(1, registry.SpaceKeys.Download(
@@ -260,8 +265,8 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         VerifiedDeviceProof firstWrite = Prove(registry, firstSigner, firstDevice, space, SecurityPermission.Write);
         SpaceKeyPublication first = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 1, firstDevice, firstSigner,
-            registry.SpaceKeys.Recipients(firstWrite), ClientSpaceKeys.GenerateContentKey(),
-            ClientSpaceKeys.GenerateRecoverySecret());
+            registry.SpaceKeys.Recipients(firstWrite), Trusted((firstDevice, firstSigner)),
+            ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(firstWrite, first);
         Guid secondDevice = Enroll(registry, owner, secondSigner, secondRsa);
         Assert.Null(registry.SpaceKeys.Download(
@@ -270,7 +275,8 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         byte[] nextKey = ClientSpaceKeys.GenerateContentKey();
         SpaceKeyPublication second = ClientSpaceKeys.Protect(
             registry.InstallationId, space, 2, firstDevice, firstSigner,
-            registry.SpaceKeys.Recipients(firstWrite), nextKey,
+            registry.SpaceKeys.Recipients(firstWrite),
+            Trusted((firstDevice, firstSigner), (secondDevice, secondSigner)), nextKey,
             ClientSpaceKeys.GenerateRecoverySecret());
         registry.SpaceKeys.Publish(firstWrite, second);
         AvailableSpaceKey? newDevice = registry.SpaceKeys.Download(
@@ -298,7 +304,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
             space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
             VerifiedDeviceProof write = Prove(registry, signer, device, space, SecurityPermission.Write);
             SpaceKeyPublication publication = ClientSpaceKeys.Protect(
-                installation, space, 1, device, signer, registry.SpaceKeys.Recipients(write), key, secret);
+                installation, space, 1, device, signer, registry.SpaceKeys.Recipients(write), Trusted((device, signer)), key, secret);
             registry.SpaceKeys.Publish(write, publication);
             offlineRecovery = registry.SpaceKeys.Download(
                 Prove(registry, signer, device, space, SecurityPermission.Read));
@@ -358,6 +364,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         VerifiedDeviceProof ownerWrite = Prove(registry, signer, ownerDevice, space, SecurityPermission.Write);
         SpaceKeyPublication pub = ClientSpaceKeys.Protect(registry.InstallationId, space, 1,
             ownerDevice, signer, registry.SpaceKeys.Recipients(ownerWrite),
+            Trusted((ownerDevice, signer), (memberDevice, memberSigner)),
             ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
         Assert.Throws<ArgumentException>(() => registry.SpaceKeys.Publish(memberWrite, pub));
         registry.SpaceKeys.Publish(ownerWrite, pub);
@@ -367,6 +374,48 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         Assert.Null(memberView.OwnerRecovery);
         Assert.Equal(memberDevice, memberView.DeviceKey.DeviceId);
     }
+
+    [Fact]
+    public void HostIntroducedDeviceCannotReceiveAKeyWithoutIndependentOwnerApproval()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        Guid owner = registry.Operator.CreatePrincipal();
+        Guid member = registry.Operator.CreatePrincipal();
+        using ECDsa ownerSigner = NewSigner();
+        using ECDsa memberSigner = NewSigner();
+        using ECDsa unapprovedSigner = NewSigner();
+        using RSA ownerRecipient = NewRecipient();
+        using RSA memberRecipient = NewRecipient();
+        using RSA unapprovedRecipient = NewRecipient();
+        Guid ownerDevice = Enroll(registry, owner, ownerSigner, ownerRecipient);
+        Guid memberDevice = Enroll(registry, member, memberSigner, memberRecipient);
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
+
+        VerifiedDeviceProof ownerWrite = Prove(registry, ownerSigner, ownerDevice,
+            space, SecurityPermission.Write);
+        IReadOnlyDictionary<Guid, byte[]> approved =
+            Trusted((ownerDevice, ownerSigner), (memberDevice, memberSigner));
+        SpaceKeyPublication first = ClientSpaceKeys.Protect(registry.InstallationId,
+            space, 1, ownerDevice, ownerSigner, registry.SpaceKeys.Recipients(ownerWrite),
+            approved, ClientSpaceKeys.GenerateContentKey(), ClientSpaceKeys.GenerateRecoverySecret());
+        registry.SpaceKeys.Publish(ownerWrite, first);
+
+        Guid unapprovedDevice = Enroll(registry, member, unapprovedSigner, unapprovedRecipient);
+        IReadOnlyList<RecipientWrappingKey> nowPresented = registry.SpaceKeys.Recipients(ownerWrite);
+        Assert.Contains(nowPresented, x => x.DeviceId == unapprovedDevice);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            ClientSpaceKeys.Protect(registry.InstallationId, space, 2, ownerDevice,
+                ownerSigner, nowPresented, approved, ClientSpaceKeys.GenerateContentKey(),
+                ClientSpaceKeys.GenerateRecoverySecret()));
+
+        Assert.Null(registry.SpaceKeys.Download(
+            Prove(registry, ownerSigner, ownerDevice, space, SecurityPermission.Read)));
+    }
+
+    private static IReadOnlyDictionary<Guid, byte[]> Trusted(
+        params (Guid DeviceId, ECDsa Signer)[] devices) =>
+        devices.ToDictionary(x => x.DeviceId, x => x.Signer.ExportSubjectPublicKeyInfo());
 
     private static ECDsa NewSigner() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

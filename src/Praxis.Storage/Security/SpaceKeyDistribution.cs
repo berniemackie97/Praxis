@@ -150,6 +150,39 @@ public sealed class SpaceKeyDistribution(SecurityRegistry registry)
         });
     }
 
+    /// <summary>
+    /// Allows an enrolled owner to fetch an old encrypted recovery package after
+    /// replacing a lost device. Does not remove the rekey fence or return plaintext.
+    /// </summary>
+    public OwnerRecoveryArchive? DownloadOwnerRecovery(VerifiedDeviceProof ownerProof)
+    {
+        RequireSpaceProof(ownerProof, SecurityPermission.Read);
+        return registry.Execute(connection =>
+        {
+            RequireCurrent(ownerProof);
+            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+                SELECT e.epoch, e.signer_device_id, e.commitment,
+                       e.recovery_nonce, e.recovery_ciphertext, e.recovery_signature
+                FROM space_key_epochs e
+                JOIN security_spaces s ON s.space_id=e.space_id AND s.owner_id=$principal
+                WHERE e.space_id=$space
+                ORDER BY e.epoch DESC LIMIT 1
+                """,
+                ("$principal", SecurityRegistry.Id(ownerProof.PrincipalId)),
+                ("$space", SecurityRegistry.Id(ownerProof.SpaceId)));
+            using SqliteDataReader reader = command.ExecuteReader();
+            if (!reader.Read())
+            {
+                return null;
+            }
+
+            return new OwnerRecoveryArchive(ownerProof.SpaceId, reader.GetInt64(0),
+                Guid.Parse(reader.GetString(1)), (byte[])reader.GetValue(2),
+                new RecoveryKeyEnvelope((byte[])reader.GetValue(3),
+                    (byte[])reader.GetValue(4), (byte[])reader.GetValue(5)));
+        });
+    }
+
     private void RequireCurrent(VerifiedDeviceProof proof)
     {
         if (!registry.DeviceProofs.IsCurrent(proof))

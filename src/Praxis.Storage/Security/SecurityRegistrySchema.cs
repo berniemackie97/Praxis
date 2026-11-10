@@ -4,7 +4,7 @@ namespace Praxis.Storage.Security;
 
 internal static class SecurityRegistrySchema
 {
-    internal const int Version = 2;
+    internal const int Version = 3;
 
     internal static void Prepare(SqliteConnection connection)
     {
@@ -151,6 +151,37 @@ internal static class SecurityRegistrySchema
             transaction.Commit();
         }
 
+        if (version <= 2)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText = """
+                CREATE TABLE principal_recovery (
+                    principal_id TEXT PRIMARY KEY REFERENCES principals(principal_id),
+                    public_key BLOB NOT NULL CHECK (length(public_key) BETWEEN 80 AND 128),
+                    version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+                    registered_utc TEXT NOT NULL
+                ) STRICT;
+                CREATE TABLE recovery_enrollments (
+                    enrollment_id TEXT PRIMARY KEY,
+                    principal_id TEXT NOT NULL REFERENCES principals(principal_id),
+                    signing_key BLOB NOT NULL CHECK (length(signing_key) BETWEEN 80 AND 128),
+                    wrapping_key BLOB NOT NULL CHECK (length(wrapping_key) BETWEEN 350 AND 600),
+                    wrapping_signature BLOB NOT NULL CHECK (length(wrapping_signature) = 64),
+                    recovery_version INTEGER NOT NULL CHECK (recovery_version >= 1),
+                    nonce BLOB NOT NULL CHECK (length(nonce) = 32),
+                    expires_utc TEXT NOT NULL,
+                    consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
+                ) STRICT;
+                CREATE INDEX recovery_enrollments_principal
+                    ON recovery_enrollments(principal_id, expires_utc);
+                PRAGMA user_version=3;
+                """;
+            upgrade.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
         foreach ((string table, string columns) in new (string, string)[]
         {
             ("installation", "singleton, installation_id"),
@@ -161,7 +192,9 @@ internal static class SecurityRegistrySchema
             ("source_spaces", "source_id, space_id"),
             ("proof_challenges", "challenge_id, device_id, space_id, source_id, permission, grant_version, nonce, expires_utc, consumed"),
             ("space_key_epochs", "space_id, epoch, commitment, signer_device_id, recovery_nonce, recovery_ciphertext, recovery_signature, created_utc"),
-            ("device_key_envelopes", "space_id, epoch, device_id, wrapped_key, signature")
+            ("device_key_envelopes", "space_id, epoch, device_id, wrapped_key, signature"),
+            ("principal_recovery", "principal_id, public_key, version, registered_utc"),
+            ("recovery_enrollments", "enrollment_id, principal_id, signing_key, wrapping_key, wrapping_signature, recovery_version, nonce, expires_utc, consumed")
         })
         {
             using SqliteCommand check = connection.CreateCommand();
