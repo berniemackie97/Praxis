@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using Microsoft.Data.Sqlite;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Recovery;
@@ -116,6 +117,44 @@ public sealed class LocalRecoverySetTests : IDisposable
             Assert.Equal(contentKey, ClientSpaceKeys.UnlockForDevice(
                 installation, memberKey, memberRecipient, ownerSigner, 1));
         }
+    }
+
+    [Fact]
+    public async Task LegacyCatalogSchemaIsPreservedInBackupAndUpgradedOnlyDuringRestore()
+    {
+        string databasePath = Path.Combine(Catalog, "catalog.sqlite");
+        using (SqliteConnection database = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Pooling = false
+        }.ToString()))
+        {
+            database.Open();
+            foreach (string name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql" })
+            {
+                using Stream schema = typeof(LocalCatalog).Assembly
+                    .GetManifestResourceStream("Praxis.Storage." + name)!;
+                using StreamReader reader = new(schema);
+                using SqliteCommand migration = database.CreateCommand();
+                migration.CommandText = await reader.ReadToEndAsync();
+                migration.ExecuteNonQuery();
+            }
+        }
+
+        using (SecurityRegistry identity = SecurityRegistry.Open(Identity))
+        {
+            identity.Operator.CreatePrincipal();
+        }
+
+        await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
+        Assert.Equal(2, ReadSchemaVersion(databasePath));
+        Assert.Equal(2, ReadSchemaVersion(Path.Combine(Backup, "catalog", "catalog.sqlite")));
+        RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(Backup, Budget);
+        Assert.Equal(0, verified.Catalog.ObjectCount);
+        await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget);
+        using LocalCatalog restored = LocalCatalog.Open(Path.Combine(Restored, "catalog"));
+        Assert.True(restored.SchemaVersion > 2);
+        Assert.Equal(2, ReadSchemaVersion(databasePath));
     }
 
     [Fact]
@@ -238,6 +277,20 @@ public sealed class LocalRecoverySetTests : IDisposable
         }
 
         await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
+    }
+
+    private static long ReadSchemaVersion(string databasePath)
+    {
+        using SqliteConnection connection = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
+        }.ToString());
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        return Convert.ToInt64(command.ExecuteScalar());
     }
 
     private static string ObjectPath(string directory, string digest) =>
