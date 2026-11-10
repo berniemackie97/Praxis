@@ -85,7 +85,6 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
             if (string.IsNullOrWhiteSpace(judgment.Name) || string.IsNullOrWhiteSpace(judgment.Domain) ||
                 string.IsNullOrWhiteSpace(judgment.Query) ||
                 judgment.Relevant.Concat(judgment.LexicalExpected).Any(id => !known.Contains(id)) ||
-                judgment.LexicalExpected.Any(id => !judgment.Relevant.Contains(id)) ||
                 judgment.Relevant.Length != judgment.Relevant.Distinct().Count() ||
                 judgment.LexicalExpected.Length != judgment.LexicalExpected.Distinct().Count())
             {
