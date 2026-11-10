@@ -66,9 +66,10 @@ public static class ClientSpaceKeys
     }
 
     public static byte[] UnlockForDevice(Guid installationId, AvailableSpaceKey offered,
-        RSA recipientPrivateKey, ECDsa trustedSignerPublicKey)
+        RSA recipientPrivateKey, ECDsa trustedSignerPublicKey, long minimumEpoch)
     {
         ArgumentNullException.ThrowIfNull(offered);
+        ValidateEpoch(offered, minimumEpoch);
         ArgumentNullException.ThrowIfNull(recipientPrivateKey);
         ArgumentNullException.ThrowIfNull(trustedSignerPublicKey);
         DeviceKeyEnvelope envelope = offered.DeviceKey;
@@ -85,9 +86,10 @@ public static class ClientSpaceKeys
     }
 
     public static byte[] UnlockWithRecovery(Guid installationId, AvailableSpaceKey offered,
-        ReadOnlySpan<byte> recoverySecret, ECDsa trustedSignerPublicKey)
+        ReadOnlySpan<byte> recoverySecret, ECDsa trustedSignerPublicKey, long minimumEpoch)
     {
         ArgumentNullException.ThrowIfNull(offered);
+        ValidateEpoch(offered, minimumEpoch);
         ArgumentNullException.ThrowIfNull(trustedSignerPublicKey);
         if (recoverySecret.Length != 32 || offered.OwnerRecovery is null)
         {
@@ -146,6 +148,14 @@ public static class ClientSpaceKeys
         Encoding.ASCII.GetBytes("Praxis.RecoveryKey.v1\n" +
             $"{installation:N}\n{spaceId:N}\n{epoch.ToString(CultureInfo.InvariantCulture)}\n" +
             $"{signerDevice:N}\n{Convert.ToHexString(commitment)}\n");
+
+    private static void ValidateEpoch(AvailableSpaceKey offered, long minimumEpoch)
+    {
+        if (offered.Epoch < 1 || minimumEpoch < 1 || offered.Epoch < minimumEpoch)
+        {
+            throw new CryptographicException("The key epoch is older than the trusted client state.");
+        }
+    }
 
     internal static bool Verify(ECDsa signer, ReadOnlySpan<byte> message,
         ReadOnlySpan<byte> signature) =>
