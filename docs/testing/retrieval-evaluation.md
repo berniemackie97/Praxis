@@ -104,7 +104,6 @@ The endpoint defaults to `http://127.0.0.1:11434`, and an alternate **loopback-o
 - **CI:** deterministic tests are part of the full `Praxis.slnx` test suite; #137's owner-deferred runners prevent claims that the Linux/macOS/Windows jobs actually executed. Neither a queued check nor a local macOS pass substitutes for the matrix.
 - **Scope:** source/item/revision/digest attribution is source-level retrieval provenance, not statement-level or answer-level citation fidelity (#33). Model relevance, valid no-answer behavior, human judgment review and documented host budgets remain open acceptance work under #29.
 
-
 ## November 10, 2026 — owner-run v2 regression and SQLite repair
 
 After merged #230, the owner ran locked restore, a fresh Release build and the full Release suite on macOS with .NET SDK 10.0.403. **Restore and build passed; 593 tests ran, 592 passed and one failed.** `CorruptDerivedVectorsFailClosedAndMissingOriginalsFailVerification` attempted to inject `x'00'` into a `semantic_vectors.vector` BLOB. Schema v16 correctly enforces `length(vector) = dimensions * 4` and rejected the malformed-length UPDATE with SQLite error 19; the test therefore never exercised the actual invalid-float retrieval guard. The fail-fast chain stopped before format, which **has not yet passed on this head**.
