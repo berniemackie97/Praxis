@@ -40,18 +40,16 @@ internal readonly record struct RetrievalScore(double Recall, double Precision, 
 /// </summary>
 internal sealed class RetrievalBenchmarkFixture : IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string workspace;
 
     private RetrievalBenchmarkFixture(LocalCatalog catalog,
-        RetrievalJudgmentSet judgments, Dictionary<string, CapturedOriginal> originals)
+        RetrievalJudgmentSet judgments, Dictionary<string, CapturedOriginal> originals, string workspace)
     {
         Catalog = catalog;
         Judgments = judgments;
         Originals = originals;
+        this.workspace = workspace;
     }
 
     public LocalCatalog Catalog { get; }
@@ -135,10 +133,6 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
             throw;
         }
     }
-
-    private RetrievalBenchmarkFixture(LocalCatalog catalog, RetrievalJudgmentSet judgments,
-        Dictionary<string, CapturedOriginal> originals, string workspace)
-        : this(catalog, judgments, originals) => this.workspace = workspace;
 
     public static async Task ProcessSegmentsAsync(LocalCatalog catalog)
     {
