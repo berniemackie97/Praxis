@@ -73,6 +73,8 @@ Backup opens the existing database read-only and holds the normal catalog lock. 
 
 Keep snapshots private because they contain plaintext originals and catalog data. The byte limit covers the snapshot database and its recorded originals. A failed or interrupted operation can leave a private `.incomplete-...` directory. Use the independently verified backup for a retry. Native recovery controls and removable-media acceptance remain open. See [ADR 0018](../decisions/0018-coherent-local-backup.md) and the [physical recovery checklist](../testing/physical-catalog-recovery.md).
 
+The separate host identity registry requires its **own** backup and restore. See [security registry recovery](../operations/security-registry-recovery.md) for the new offline `recovery identity-*` commands, verified fresh-root restore and limits. The catalog and registry commands are not a coordinated system-wide recovery set.
+
 ## Protocol boundaries
 
 A request is newline-delimited JSON containing a `requestId`, an allowlisted `action`, and bounded action-specific fields. The initial actions were `library`, `search`, `preview`, `verify`, `retry`, `revoke` and `stop`; merged work has added bounded collection, note, export, model, entity and verifier operations through the same allowlisted private protocol. The desktop handler limits request JSON to 16 KiB, pages to 200 records, search results to 30 and preview content to 12,000 characters. Underlying search and catalog APIs retain their own input validation and source-revocation checks.
