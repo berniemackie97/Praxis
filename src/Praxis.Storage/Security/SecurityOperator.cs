@@ -134,7 +134,8 @@ public sealed class SecurityOperator
                   AND EXISTS (SELECT 1 FROM principals o
                               WHERE o.principal_id=s.owner_id AND o.disabled_utc IS NULL)
                 ON CONFLICT(space_id, principal_id)
-                DO UPDATE SET permissions=excluded.permissions, revoked_utc=NULL
+                DO UPDATE SET permissions=excluded.permissions, revoked_utc=NULL,
+                                  grant_version=space_grants.grant_version + 1
                 """,
                 ("$space", SecurityRegistry.Id(spaceId)),
                 ("$member", SecurityRegistry.Id(memberId)),
@@ -153,7 +154,7 @@ public sealed class SecurityOperator
         return registry.Execute(connection =>
         {
             using SqliteCommand command = SecurityRegistry.Command(connection, null, """
-                UPDATE space_grants SET revoked_utc=$now
+                UPDATE space_grants SET revoked_utc=$now, grant_version=grant_version + 1
                 WHERE space_id=$space AND principal_id=$member AND revoked_utc IS NULL
                   AND EXISTS (SELECT 1 FROM security_spaces s
                               WHERE s.space_id=$space AND s.owner_id=$owner)
