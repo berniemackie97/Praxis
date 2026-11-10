@@ -222,7 +222,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         using RSA ownerRsa = NewRecipient();
         using RSA memberRsa = NewRecipient();
         Guid ownerDevice = Enroll(registry, owner, signer, ownerRsa);
-        Enroll(registry, member, memberSigner, memberRsa);
+        Guid memberDevice = Enroll(registry, member, memberSigner, memberRsa);
         Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.TrustedHost);
         registry.Operator.Grant(owner, space, member, SecurityPermission.Read);
         VerifiedDeviceProof write = Prove(registry, signer, ownerDevice, space, SecurityPermission.Write);
