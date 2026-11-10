@@ -7,14 +7,14 @@ namespace Praxis.Storage.Security;
 /// Independently bootstrapped, owner-private recipient pins. Never populate it by
 /// copying a host-returned recipient directory without a verified owner approval.
 /// </summary>
-public sealed class ClientDeviceTrustStore : IDisposable
+public sealed partial class ClientDeviceTrustStore : IDisposable
 {
     private readonly object gate = new();
     private readonly FileStream lease;
     private readonly SqliteConnection connection;
     private readonly Guid installationId;
-    private readonly Guid ownerDeviceId;
-    private readonly byte[] ownerPublicKey;
+    private Guid ownerDeviceId;
+    private byte[] ownerPublicKey;
 
     private ClientDeviceTrustStore(FileStream lease, SqliteConnection connection,
         Guid installation, Guid ownerDevice, byte[] key)
@@ -344,6 +344,11 @@ public sealed class ClientDeviceTrustStore : IDisposable
                     space_id TEXT PRIMARY KEY,
                     latest_epoch INTEGER NOT NULL CHECK (latest_epoch >= 1)
                 ) STRICT;
+                CREATE TABLE recovery_authority (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    public_key BLOB NOT NULL,
+                    version INTEGER NOT NULL CHECK (version >= 1)
+                ) STRICT;
                 """;
             create.ExecuteNonQuery();
             using SqliteCommand bootstrap = SecurityRegistry.Command(connection, tx, """
@@ -369,6 +374,11 @@ public sealed class ClientDeviceTrustStore : IDisposable
                 CREATE TABLE trusted_epochs (
                     space_id TEXT PRIMARY KEY,
                     latest_epoch INTEGER NOT NULL CHECK (latest_epoch >= 1)
+                ) STRICT;
+                CREATE TABLE recovery_authority (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    public_key BLOB NOT NULL,
+                    version INTEGER NOT NULL CHECK (version >= 1)
                 ) STRICT;
                 PRAGMA user_version=2;
                 """;
