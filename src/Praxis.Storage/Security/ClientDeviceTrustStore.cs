@@ -184,6 +184,30 @@ public sealed class ClientDeviceTrustStore : IDisposable
             throw new UnauthorizedAccessException("Only the local pinned owner can revoke trusted recipients.");
         }
 
+        byte[] message = System.Text.Encoding.UTF8.GetBytes("Praxis.ClientPinRevocation.v1\n" +
+            $"{installationId:N}\n{ownerDeviceId:N}\n{spaceId:N}\n{deviceId:N}\n" +
+            $"{now.ToUnixTimeSeconds()}\n");
+        byte[] signature;
+        try
+        {
+            signature = ownerSigner.SignData(message, HashAlgorithmName.SHA256,
+                DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        }
+        catch (CryptographicException exception)
+        {
+            throw new UnauthorizedAccessException("Private-key possession is required for revocation.", exception);
+        }
+
+        using (ECDsa verifier = ECDsa.Create())
+        {
+            verifier.ImportSubjectPublicKeyInfo(ownerPublicKey, out _);
+            if (!verifier.VerifyData(message, signature, HashAlgorithmName.SHA256,
+                DSASignatureFormat.IeeeP1363FixedFieldConcatenation))
+            {
+                throw new UnauthorizedAccessException("The owner revocation signature is invalid.");
+            }
+        }
+
         lock (gate)
         {
             using SqliteCommand revoke = SecurityRegistry.Command(connection, null, """
