@@ -1,25 +1,29 @@
 # Praxis
 
-Praxis is a local-first, independent Second Brain for capturing, preserving, finding, organizing and eventually using knowledge through explicitly authorized agents. **Obsidian is optional**: it is an editor adapter, not the primary application or required storage. The active delivery priority is a standalone local Inbox/Library/Search experience, followed by voice dictation, browser save, reviewable enrichment and scoped MCP agent access.
+Praxis is a local-first, independent Second Brain for preserving and using owner-approved knowledge. Obsidian is an optional editor and derived-knowledge destination, not Praxis's canonical store. The first product MVP is an **integrated, source-grounded, permissioned assistant**; a working Inbox/Library/Search app is its necessary foundation, not the release itself.
 
 ## Current state
 
-The repository has an owner-local SQLite catalog, verified original-file preservation, revision-aware processing, bounded Markdown/text extraction, local FTS5 search and an automatically reconciling watched-folder worker. The worker is merged, and its source/test baseline was locally verified on macOS; the full watched-folder hardware acceptance is still open. The .NET API exposes liveness only and does not expose private knowledge over HTTP.
+**Merged on `main`:** a private owner-local SQLite catalog; verified immutable originals and revision/receipt history; supervised watched-folder intake with source-rename and path-alias handling; bounded text extraction and segmentation; FTS5 search; owner-authored collections and quick-note capture; original export; and explicit verified catalog backup/restore commands. Unsupported formats remain preserved without fabricated extraction.
 
-The [macOS workbench development slice](docs/delivery/macos-workbench.md) adds a first-party SwiftUI window that supervises that same worker through a private child-process pipe, with Inbox/Library/Search inspection and explicit source actions. **The workbench was merged without fresh native UI verification and is not yet released.** Source-backed URL capture, reviewable organization and enrichment, external agent grants, mobile clients and integrated first-run acceptance remain open. No cloud account or model provider is required for the local intake path.
+The first-party SwiftUI workbench is now a **checked-in Xcode macOS application**. It supervises the .NET 10 worker through private inherited pipes and exposes Inbox, Library, Search, Knowledge, Verification and Models workflows. The application build publishes the .NET worker into its bundle. Merged PRs #216–#220 address Xcode packaging, SwiftUI compilation and assembly-name collisions; **an actual successful owner-Mac Xcode build, window launch, worker session and first-run acceptance are still outstanding** (#215/#130).
+
+**Intelligence now implemented in bounded slices:** a loopback-only Ollama inference adapter; versioned, quote-checked topic/entity/relation proposals; cross-source entity identities and owner corrections; instruction-like evidence withholding; and owner-approved Codex/Claude CLI verification with inspectable, redactable requests. These are not evidence of perfect factual classification, unrestricted subscription APIs, general-purpose agent chat or autonomous tool authority. Source capture/search does not require a model. The .NET API currently exposes liveness rather than private knowledge over HTTP.
 
 ## Product direction and delivery status
 
-The [product experience](docs/product/second-brain-experience.md) defines the intended sources, original-versus-derived model, user-facing flows, microphone/browser capture and agent access. The [standalone local MVP plan](docs/delivery/standalone-mvp.md) defines a dependency-aware sequence of first useful slices and their acceptance criteria.
+The [product experience](docs/product/second-brain-experience.md) defines the intended first release; [foundation and intelligent MVP delivery](docs/delivery/standalone-mvp.md) tracks the independent acceptance gates.
 
-**Implemented on `main`:** portable note/attachment archives, optional Obsidian desktop interoperability, durable local catalog/originals, revision/receipt processing, bounded text derivatives, source-aware text search and a supervised automatic intake worker (merged PRs #123, #125, #132, #134, #135, #138, #140 and #144). **On `main`:** a macOS first-party application backed by the existing worker (merged PR #145, native smoke unverified). **On `main`:** persistent user-authored collections, source membership editing and filtered library navigation (merged PR #147; GUI acceptance still outstanding). **In the active draft:** trusted, keyboard-first quick note capture through the same preserved-original and indexing pipeline (#113). **Still open:** real UI acceptance (#108/#130), safe rename attribution (#105), physical recovery (#128), PDF/media processing (#103/#114), URL capture (#104), reviewed organization (#115/#116), scoped agents/MCP (#117–#119), remote sync and production release. Existing code and passing library tests are not proof of end-to-end release readiness.
+**Foundation #130 remains open** for verified macOS first run, mixed-source lifecycle, original recovery, denial/security and real device behavior. **Intelligent MVP #170 remains open** for evaluated cited technical answers, playable source-linked video excerpts, reconciled editable budgeting through the assistant, governed agent tasks, safe Obsidian knowledge projections and measured routing. Initial caption evidence, media-header inspection and single-source financial analysis are not substitutes for those complete workflows. URL/browser capture, speech, agent/MCP access, remote sync and production distribution remain separately gated.
+
+**Verification status:** targeted backend and model runs are documented in individual PRs; no current all-platform GitHub Actions success can be claimed while #137 has no provisioned runners. Merged code, local test evidence, first-party hardware acceptance and release readiness are distinct statuses. [Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board, with the [repository issue plan](scripts/github/roadmap.json) as its versioned reconciliation input.
 
 ## Development
 
 Requires the .NET 10 SDK.
 
 ```sh
-dotnet restore Praxis.slnx
+dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release
 dotnet test Praxis.slnx -c Release
 dotnet format Praxis.slnx --verify-no-changes
