@@ -15,6 +15,7 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
     public bool DropNextPullResponse { get; set; }
     public Func<NoteSubmitResult, NoteSubmitResult>? AlterNextSubmit { get; set; }
     public Func<NotePullResult, NotePullResult>? AlterNextPull { get; set; }
+    public Func<NoteSnapshotResult, NoteSnapshotResult>? AlterNextSnapshot { get; set; }
     public int TotalSubmits { get; private set; }
     public int TotalPulls { get; private set; }
 
@@ -119,8 +120,15 @@ internal sealed class JournalSyncExchangeFixture(Guid securitySpaceId, Guid epoc
         }
 
         SyncSnapshot snapshot = Server.Snapshot();
-        return Task.FromResult(new NoteSnapshotResult(securitySpaceId,
-            new LocalNoteSnapshot(epoch, snapshot.Cursor, snapshot.Records.Select(Convert).ToArray())));
+        NoteSnapshotResult result = new(securitySpaceId,
+            new LocalNoteSnapshot(epoch, snapshot.Cursor, snapshot.Records.Select(Convert).ToArray()));
+        if (AlterNextSnapshot is { } alter)
+        {
+            AlterNextSnapshot = null;
+            result = alter(result);
+        }
+
+        return Task.FromResult(result);
     }
 
     private static LocalNoteState Convert(SyncRecord record) =>
