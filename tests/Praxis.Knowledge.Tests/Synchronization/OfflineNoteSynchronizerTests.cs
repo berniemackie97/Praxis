@@ -155,6 +155,7 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
             Assert.Single(second.Conflicts).Reason);
         Assert.Equal(rename.OperationId, Assert.Single(second.Pending).OperationId);
         Assert.Equal("TWO.md", Assert.Single(second.Pending).Path);
+        Assert.Contains(second.Records, note => note.Id == b && note.Path == "two.md");
 
         second.Resolve(rename.OperationId, LocalNoteAction.Upsert,
             "three.md", "renamed one");
