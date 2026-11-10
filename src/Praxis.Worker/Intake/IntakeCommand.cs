@@ -1,6 +1,7 @@
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Verification;
 using Praxis.Worker.Desktop;
 
 namespace Praxis.Worker.Intake;
@@ -43,13 +44,14 @@ internal static class IntakeCommand
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog, status: Report);
         LocalWatchedIntake monitor = new(catalog, inbox, status: Report, onCaptured: processing.Wake);
+        LocalVerificationRunner verification = LocalVerificationRunner.CreateDefault(catalog, Report);
         if (desktopMode)
         {
-            await DesktopStdioSession.RunAsync(catalog, monitor, processing, inbox, cancellationToken);
+            await DesktopStdioSession.RunAsync(catalog, monitor, processing, verification, inbox, cancellationToken);
         }
         else
         {
-            await WorkerServices.RunAsync(cancellationToken, monitor.RunAsync, processing.RunAsync);
+            await WorkerServices.RunAsync(cancellationToken, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
         }
 
         return 0;

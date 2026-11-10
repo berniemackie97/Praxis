@@ -4,10 +4,11 @@ using Praxis.Storage.Catalog;
 using Praxis.Storage.Intake;
 using Praxis.Storage.Models;
 using Praxis.Storage.Processing;
+using Praxis.Storage.Verification;
 
 namespace Praxis.Storage.Desktop;
 
-public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null)
+public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
@@ -154,6 +155,15 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                     relationId = catalog.Knowledge.Relate(fields.RequireGuid("entityId"),
                         fields.RequireString("predicate", 32), fields.RequireGuid("targetEntityId"))
                 },
+                "verificationProviders" => new { providers = catalog.Verification.Providers(), discovered = ProviderModels.Discover() },
+                "verificationProviderSave" => new { provider = SaveVerificationProvider(fields) },
+                "verifications" => new { requests = catalog.Verification.List(fields.IntegerOrDefault("limit", 50, 1, 200)) },
+                "verification" => new { request = catalog.Verification.Get(fields.RequireGuid("verificationId")) },
+                "verificationPlan" => new { planned = catalog.Verification.Plan() },
+                "verificationRequestSource" => new { verificationId = catalog.Verification.RequestForSource(fields.RequireGuid("sourceId")) },
+                "verificationRequestEntity" => new { verificationId = catalog.Verification.RequestForEntity(fields.RequireGuid("entityId")) },
+                "verificationApprove" => new { request = ApproveVerification(fields) },
+                "verificationDecline" => new { declined = catalog.Verification.Decline(fields.RequireGuid("verificationId")) },
                 "modelProfile" => new { profile = catalog.Models.Get(ModelProfile.LocalEnrichment) },
                 "modelProfileSave" => new { profile = SaveModelProfile(fields) },
                 "localModels" => new { models = await ListLocalModelsAsync(fields, cancellationToken) },
@@ -174,7 +184,9 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
         {
             var failure = new
             {
-                requestId, ok = false, error = exception.Message
+                requestId,
+                ok = false,
+                error = exception.Message
             };
             return JsonSerializer.Serialize(failure, JsonOptions);
         }
@@ -231,6 +243,34 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
     {
         using var runtime = new OllamaRuntime(fields.RequireString("endpoint", 256), TimeSpan.FromSeconds(10));
         return await runtime.ListModelsAsync(cancellationToken);
+    }
+
+    private VerificationProvider SaveVerificationProvider(DesktopRequestFields fields)
+    {
+        VerificationProvider saved = catalog.Verification.SaveProvider(new VerificationProvider(
+            fields.RequireString("providerId", 32),
+            fields.RequireString("executable", 1024),
+            fields.OptionalText("model", 100, "The provider model is invalid."),
+            fields.IntegerOrDefault("costWeight", 10, 0, 1000),
+            fields.IntegerOrDefault("dailyLimit", 20, 1, 500),
+            fields.RequireBoolean("enabled")));
+        verification?.Wake();
+        return saved;
+    }
+
+    /// <summary>
+    /// Approves exactly the reviewed payload: excluded items are removed and phrases redacted
+    /// before anything can be sent; the runner is woken to send it.
+    /// </summary>
+    private VerificationRequestView ApproveVerification(DesktopRequestFields fields)
+    {
+        VerificationRequestView approved = catalog.Verification.Approve(
+            fields.RequireGuid("verificationId"),
+            fields.OptionalText("providerId", 32, "The provider is invalid."),
+            fields.OptionalIntegers("excludedOrdinals", 1, LocalVerification.MaximumItemsPerRequest, LocalVerification.MaximumItemsPerRequest),
+            fields.OptionalStrings("redactions", 200, 50));
+        verification?.Wake();
+        return approved;
     }
 
     private object Retry(DesktopRequestFields fields)
