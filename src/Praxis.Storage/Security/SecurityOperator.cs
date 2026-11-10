@@ -190,7 +190,8 @@ public sealed class SecurityOperator
 
         bool inserted = registry.Execute(connection =>
         {
-            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
                 INSERT INTO space_grants (space_id, principal_id, permissions, revoked_utc)
                 SELECT s.space_id, p.principal_id, $permissions, NULL
                 FROM security_spaces s
@@ -206,7 +207,17 @@ public sealed class SecurityOperator
                 ("$member", SecurityRegistry.Id(memberId)),
                 ("$owner", SecurityRegistry.Id(ownerId)),
                 ("$permissions", bits));
-            return command.ExecuteNonQuery() == 1;
+            bool granted = command.ExecuteNonQuery() == 1;
+            if (granted)
+            {
+                using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction,
+                    "UPDATE security_spaces SET rekey_required=1 WHERE space_id=$space",
+                    ("$space", SecurityRegistry.Id(spaceId)));
+                rotate.ExecuteNonQuery();
+                transaction.Commit();
+            }
+
+            return granted;
         });
         if (!inserted)
         {
@@ -218,7 +229,8 @@ public sealed class SecurityOperator
     {
         return registry.Execute(connection =>
         {
-            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand command = SecurityRegistry.Command(connection, transaction, """
                 UPDATE space_grants SET revoked_utc=$now, grant_version=grant_version + 1
                 WHERE space_id=$space AND principal_id=$member AND revoked_utc IS NULL
                   AND EXISTS (SELECT 1 FROM security_spaces s
@@ -228,7 +240,17 @@ public sealed class SecurityOperator
                 ("$member", SecurityRegistry.Id(memberId)),
                 ("$owner", SecurityRegistry.Id(ownerId)),
                 ("$now", Now()));
-            return command.ExecuteNonQuery() == 1;
+            bool revoked = command.ExecuteNonQuery() == 1;
+            if (revoked)
+            {
+                using SqliteCommand rotate = SecurityRegistry.Command(connection, transaction,
+                    "UPDATE security_spaces SET rekey_required=1 WHERE space_id=$space",
+                    ("$space", SecurityRegistry.Id(spaceId)));
+                rotate.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+            return revoked;
         });
     }
 
@@ -249,6 +271,11 @@ public sealed class SecurityOperator
                     "DELETE FROM proof_challenges WHERE device_id=$device",
                     ("$device", SecurityRegistry.Id(deviceId)));
                 purge.ExecuteNonQuery();
+                using SqliteCommand principal = SecurityRegistry.Command(connection, transaction,
+                    "SELECT principal_id FROM devices WHERE device_id=$device",
+                    ("$device", SecurityRegistry.Id(deviceId)));
+                Guid owner = Guid.Parse((string)principal.ExecuteScalar()!);
+                RequireRekeyForPrincipal(connection, transaction, owner);
             }
 
             transaction.Commit();
@@ -274,6 +301,7 @@ public sealed class SecurityOperator
                         (SELECT device_id FROM devices WHERE principal_id=$principal)
                     """, ("$principal", SecurityRegistry.Id(principalId)));
                 purge.ExecuteNonQuery();
+                RequireRekeyForPrincipal(connection, transaction, principalId);
             }
 
             transaction.Commit();
