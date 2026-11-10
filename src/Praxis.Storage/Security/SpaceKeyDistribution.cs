@@ -32,22 +32,25 @@ public sealed class SpaceKeyDistribution(SecurityRegistry registry)
     {
         RequireSpaceProof(ownerProof, SecurityPermission.Write);
         ArgumentNullException.ThrowIfNull(publication);
-        SpaceKeyPublication signed = Snapshot(publication);
-        if (signed.SpaceId != ownerProof.SpaceId ||
-            signed.SignerDeviceId != ownerProof.DeviceId ||
-            signed.Epoch < 1 || signed.KeyCommitment.Length != 32 ||
-            signed.Recovery.Nonce.Length != 12 ||
-            signed.Recovery.CiphertextAndTag.Length != 48 ||
-            signed.Recovery.Signature.Length != 64 ||
-            signed.Recipients.Count is < 1 or > 64)
+        if (publication.Recipients is null || publication.Recovery is null ||
+            publication.SpaceId != ownerProof.SpaceId ||
+            publication.SignerDeviceId != ownerProof.DeviceId ||
+            publication.Epoch < 1 || publication.KeyCommitment?.Length != 32 ||
+            publication.Recovery.Nonce?.Length != 12 ||
+            publication.Recovery.CiphertextAndTag?.Length != 48 ||
+            publication.Recovery.Signature?.Length != 64 ||
+            publication.Recipients.Count is < 1 or > 64 ||
+            publication.Recipients.Any(x => x is null ||
+                x.WrappedKey?.Length != 384 || x.Signature?.Length != 64))
         {
             throw new ArgumentException("The space key publication is invalid.", nameof(publication));
         }
 
+        SpaceKeyPublication signed = Snapshot(publication);
         registry.Execute(connection =>
         {
-            using SqliteTransaction transaction = connection.BeginTransaction();
             RequireCurrent(ownerProof);
+            using SqliteTransaction transaction = connection.BeginTransaction();
             byte[] signer = LoadOwnerSigningKey(connection, transaction, ownerProof);
             IReadOnlyList<RecipientWrappingKey> expected =
                 LoadRecipients(connection, transaction, signed.SpaceId);
