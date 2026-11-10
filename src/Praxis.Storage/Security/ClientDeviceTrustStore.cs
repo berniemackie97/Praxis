@@ -97,7 +97,9 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
             string path = Path.Combine(root, "trust.sqlite");
             connection = new SqliteConnection(new SqliteConnectionStringBuilder
             {
-                DataSource = path, Mode = SqliteOpenMode.ReadWriteCreate, Pooling = false
+                DataSource = path,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = false
             }.ToString());
             connection.Open();
             ClientTrustSchema.Prepare(connection, installation, ownerDevice, independentlyVerifiedOwnerPublicKey);

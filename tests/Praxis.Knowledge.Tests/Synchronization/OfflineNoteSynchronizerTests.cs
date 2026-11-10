@@ -209,7 +209,9 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
 
         server.AlterNextSubmit = result => result with
         {
-            Status = NoteSubmitStatus.WrongCollectionEpoch, Sequence = 0, Current = null
+            Status = NoteSubmitStatus.WrongCollectionEpoch,
+            Sequence = 0,
+            Current = null
         };
         Assert.Equal(NoteSyncState.EpochChanged, (await synchronizer.ReconcileAsync()).State);
         Assert.Equal(pending.OperationId, Assert.Single(first.Pending).OperationId);
@@ -218,7 +220,9 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         first.Reject(pending.OperationId, LocalNoteConflictReason.StaleRevision, null);
         server.AlterNextPull = result => result with
         {
-            Status = NotePullStatus.InvalidCursor, Changes = [], HeadSequence = 0,
+            Status = NotePullStatus.InvalidCursor,
+            Changes = [],
+            HeadSequence = 0,
             NextCursor = result.RequestedCursor
         };
         Assert.Equal(NoteSyncState.CursorResetRequired,
@@ -247,7 +251,8 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         {
             Changes = [new AppliedNoteChange(4, new LocalNoteState(
                 Guid.NewGuid(), 1, "fake.md", "injected", false))],
-            NextCursor = 4, HeadSequence = 4
+            NextCursor = 4,
+            HeadSequence = 4
         };
         await Assert.ThrowsAsync<InvalidDataException>(() => secondSync.ReconcileAsync());
         Assert.Equal(0, second.Cursor);
@@ -383,7 +388,9 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
         OfflineNoteSynchronizer sync = new(journal, Space, server);
         server.AlterNextPull = response => response with
         {
-            Status = NotePullStatus.Unauthorized, HeadSequence = 42, Changes = []
+            Status = NotePullStatus.Unauthorized,
+            HeadSequence = 42,
+            Changes = []
         };
         await Assert.ThrowsAsync<InvalidDataException>(() => sync.ReconcileAsync());
         Assert.Equal(0, journal.Cursor);
