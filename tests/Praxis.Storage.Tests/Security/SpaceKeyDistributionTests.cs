@@ -132,7 +132,7 @@ public sealed class SpaceKeyDistributionTests : IDisposable
             Recipients = [original.Recipients[0] with { WrappedKey = modifiedCiphertext }]
         };
         Assert.Throws<UnauthorizedAccessException>(() => registry.SpaceKeys.Publish(write, tampered));
-        Assert.Throws<UnauthorizedAccessException>(() =>
+        Assert.Throws<ArgumentException>(() =>
             registry.SpaceKeys.Publish(write, original with { SignerDeviceId = Guid.NewGuid() }));
         Assert.Throws<UnauthorizedAccessException>(() =>
             registry.SpaceKeys.Publish(write, original with { Recovery = original.Recovery with
