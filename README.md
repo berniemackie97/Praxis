@@ -124,7 +124,7 @@ For a practical local trial using the current desktop adapter, see the [Mac firs
 
 ## Release verification
 
-The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions verifies the backend build and tests on Linux, macOS and Windows; the Linux job additionally smokes the published API on loopback and checks a [declared-license/dependency inventory](docs/dependencies/README.md). See [release verification](docs/release-verification.md) for update commands, evidence and limitations. These checks do not imply that mobile clients or production synchronization are implemented.
+The repository uses an exact .NET SDK and locked NuGet package graph. GitHub Actions is configured for Linux, macOS and Windows backend verification; the Linux workflow also checks API liveness and the [dependency inventory](docs/dependencies/README.md). **Current workflows are queued without eligible runners (#137), not verified green.** See [release verification](docs/release-verification.md) for commands, evidence and release limitations.
 
 ## Owner-authored organization
 
@@ -132,22 +132,19 @@ First-use collections are persisted in the same source catalog (schema v6) and r
 
 ## Direct thoughts and paste capture
 
-The first-party Quick note workflow (under [#113](https://github.com/berniemackie97/Praxis/issues/113)) saves an explicit authored Markdown note into the selected Inbox with exact-byte original preservation, idempotent receipt and automatic downstream indexing. This draft does not monitor or transmit clipboard contents, fetch pasted URLs or invoke any model. See [the owner-local workbench guide](docs/delivery/macos-workbench.md). Native GUI/build verification remains open.
+Merged #148 implements first-party Quick note capture (#113) through the existing authorized Inbox/original/indexing path. It writes an explicitly authored Markdown note with an idempotent receipt; intentional paste is not a background clipboard watcher, and a pasted URL is not automatically fetched. #113 remains open for actual keyboard, failure, duplicate/restart and native-app acceptance.
 
- 
 ## Reviewable enrichment (development)
 
-Under #115, the proposal foundation stores source/revision/digest-bound literal Markdown-heading candidates and append-only owner review events in catalog schema v7. These are **not machine-understood topics or automatically accepted tags**. No model provider is required, and no external tool or agent receives new permissions. See [ADR 0024](docs/decisions/0024-reviewable-enrichment.md) and the [macOS workbench guide](docs/delivery/macos-workbench.md). Native acceptance and end-to-end release gates remain open.
-
+The heading-only schema-v7 proposal lifecycle (#165) is a historical foundation. Merged #205–#212 add loopback Ollama, versioned quoted topic/entity/relation proposals, cross-source entity identities, owner correction, flagged-evidence withholding and approved redactable stronger-model CLI verification. These remain **unverified inferred knowledge** until separately reviewed or corroborated; a quote is not proof of truth. #115/#116/#31 remain open for quality, revocation and current-app acceptance. No external agent or model acquires new rights from imported text.
 
 ## Exporting preserved originals (L0 development)
 
-The first-party Library now has a draft owner-selected **Export original…** action for the exact active source version, backed by the content-addressed original store rather than the watched source file. It verifies SHA-256 while streaming to a new, non-overwriting destination. Supported and unsupported formats use the same path, and owner approval is required for each destination. This does not create a remote sharing API, an agent grant or a full catalog backup. See the [workbench smoke guide](docs/delivery/macos-workbench.md) and tracked [#166](https://github.com/berniemackie97/Praxis/issues/166). The new feature is not yet locally compiled/accepted.
-
+Merged #167/#192 implement owner-selected, integrity-verified **Export original…** for the active source version, independent of the watched input file. Output is staged and published without overwriting an existing destination, and source revocation invalidates access. The path does not authorize remote/agent reads or replace coherent catalog backup. #166 remains open for current native Save dialog, physical/symlinked destinations and race/security acceptance.
 
 ## Observed file moves (development)
 
-Praxis now has a draft opt-in-folder rename continuity implementation for already captured files. It preserves source identity only when a filesystem move event is independently verified against the current original digest and an unoccupied target; historical paths are recorded in schema v8. Copies and missed moves are not inferred as the same source. See [ADR 0025](docs/decisions/0025-file-source-relocations.md) for evidence limits, security and migration requirements. First-party and physical hardware acceptance remain open.
+Merged #169 preserves stable source identity for verified observed file renames inside the approved Inbox, and #213 canonicalizes alternate path spellings. Copies or unobserved moves are not guessed to be the same source; prior locators remain traceable. Physical watch notifications, unplug/reattach, missed events, restart and security acceptance are still open under #105/#130.
 
 ### Multidomain MVP direction
 
