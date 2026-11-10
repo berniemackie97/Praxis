@@ -28,7 +28,7 @@ public sealed class LocalOriginals
     public Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
         CaptureFileAsync(sourcePath, content, maxBytes, requestKey, CaptureRequestContext.Unattributed, cancellationToken);
 
-    internal async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken = default)
+    internal async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken = default, string? expectedDigest = null, long? expectedLength = null)
     {
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -44,6 +44,11 @@ public sealed class LocalOriginals
             throw new ArgumentOutOfRangeException(nameof(requestKey), "Request keys cannot exceed 128 characters.");
         }
 
+        if ((expectedDigest is null) != (expectedLength is null) || expectedLength is < 0)
+        {
+            throw new ArgumentException("The expected captured source identity is incomplete or invalid.");
+        }
+
         string locator = Path.GetFullPath(sourcePath);
         capture.Validate(locator);
         CatalogDirectory.Validate(dataDirectory);
@@ -51,11 +56,13 @@ public sealed class LocalOriginals
         CapturedOriginal? receipt = database.Execute(connection => ReadReceipt(connection, null, requestKey, locator, capture));
         if (receipt is not null)
         {
+            ValidateExpected(receipt.Sha256, receipt.Length, expectedDigest, expectedLength);
             await objects.VerifyAsync(new OriginalObject(receipt.Sha256, receipt.Length), cancellationToken);
             return receipt;
         }
 
         OriginalObject original = await objects.PublishAsync(content, maxBytes, cancellationToken);
+        ValidateExpected(original.Digest, original.Length, expectedDigest, expectedLength);
         cancellationToken.ThrowIfCancellationRequested();
 
         return database.Execute(connection =>
@@ -76,6 +83,15 @@ public sealed class LocalOriginals
             transaction.Commit();
             return recorded;
         });
+    }
+
+    private static void ValidateExpected(string digest, long length, string? expectedDigest, long? expectedLength)
+    {
+        if (expectedDigest is not null &&
+            (!string.Equals(digest, expectedDigest, StringComparison.Ordinal) || length != expectedLength))
+        {
+            throw new InvalidDataException("The source bytes changed between observation and capture.");
+        }
     }
 
     private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original, CaptureRequestContext capture)

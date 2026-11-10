@@ -48,10 +48,10 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
     public Task<CapturedOriginal> ImportFileAsync(string sourcePath, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
         ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.SelectedFile(sourcePath), cancellationToken);
 
-    internal Task<CapturedOriginal> ImportWatchedFileAsync(string sourcePath, string approvedRoot, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
-        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.WatchedFolder(approvedRoot), cancellationToken);
+    internal Task<CapturedOriginal> ImportWatchedFileAsync(string sourcePath, string approvedRoot, long maxBytes, string requestKey, string expectedDigest, long expectedLength, CancellationToken cancellationToken = default) =>
+        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.WatchedFolder(approvedRoot), cancellationToken, expectedDigest, expectedLength);
 
-    private async Task<CapturedOriginal> ImportFileCoreAsync(string sourcePath, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken)
+    private async Task<CapturedOriginal> ImportFileCoreAsync(string sourcePath, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken, string? expectedDigest = null, long? expectedLength = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestKey);
         if (requestKey.Length > 128)
@@ -64,7 +64,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
         string path = ValidateSourcePath(sourcePath, expectDirectory: false);
         cancellationToken.ThrowIfCancellationRequested();
         await using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, capture, cancellationToken);
+        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, capture, cancellationToken, expectedDigest, expectedLength);
         return accepted.Length > maxBytes
             ? throw new InvalidDataException("The committed original exceeds the import byte limit.")
             : accepted;
