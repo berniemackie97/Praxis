@@ -66,38 +66,31 @@ Do not modify fixture labels until the owner resolves these judgments. For the o
 
 ### Capture actual Ollama host memory (Apple Silicon)
 
-Use the built-in macOS `footprint` utility for kernel-accounted **physical footprint**, which is more informative than only the `ps` RSS field. `vmmap -summary` provides region-level details. To estimate model-related *incremental* host usage, measure the same Ollama server process after stopping only EmbeddingGemma, then after explicitly loading it, while keeping other workload constant. `lsof` identifies the process actually listening on the local API port; `ps` lists any additional Ollama/llama runner PIDs that need separate capture. Preserve raw output; never call the displayed `ollama ps` model size a measured memory footprint.
+**Measured owner sample, November 10, 2026 (macOS 26.6.2; Ollama 0.40.15):** With EmbeddingGemma unloaded, Ollama API server PID 3373 showed RSS **30,896 KiB (30.2 MiB)** and `footprint` **16 MB**. With the model loaded, the *same API server* showed RSS **36,480 KiB (35.6 MiB)** and `footprint` **16 MB**, but the **actual embedding runner is a separate child**, `llama-server` PID 11142, RSS **739,504 KiB (722.2 MiB)** while running 100% GPU. The `ollama ps` **685 MB** is a displayed model size, *not* measured physical residence. This confirms loaded runner RSS; **runner `footprint` and GPU allocations were not measured** because the first capture script targeted only the API listener. `vmmap` for the API listener cannot substitute for a runner footprint. Do not add RSS + footprint + model size together.
+
+Use the built-in macOS `footprint` utility on **the model runner PID**, rather than only on the API listener; use `vmmap -summary` for mapped-memory details. The sample below loads the installed embedding model and captures the actual runner, using a process-command match to distinguish it from any independent Llama.app daemon. Preserve the raw output even if `footprint` cannot inspect the process.
 
 ```bash
 OUT="$HOME/Desktop/Praxis-29-evidence"
 mkdir -p "$OUT"
-capture_ollama_memory() {
-  phase="$1"
-  pid="$(lsof -nP -tiTCP:11434 -sTCP:LISTEN | head -n 1)"
-  if [[ -z "$pid" ]]; then echo "Ollama is not listening on port 11434"; return 1; fi
-  {
-    date -u '+UTC %Y-%m-%dT%H:%M:%SZ'
-    sw_vers
-    sysctl hw.memsize
-    ollama --version
-    ollama ps
-    ps -axo pid,ppid,rss,%mem,command | grep -E '[o]llama|[l]lama|[g]gml'
-    echo "Ollama listener PID: $pid"
-  } > "$OUT/ollama-$phase-environment.txt"
-  footprint -p "$pid" > "$OUT/ollama-$phase-footprint.txt" 2>&1
-  vmmap -summary "$pid" > "$OUT/ollama-$phase-vmmap.txt" 2>&1
-}
-
-ollama stop embeddinggemma:latest
-capture_ollama_memory idle
 curl --fail --silent --show-error http://127.0.0.1:11434/api/embed \
   -H 'Content-Type: application/json' \
   -d '{"model":"embeddinggemma:latest","input":"Praxis memory measurement","keep_alive":"15m"}' \
   > /dev/null
-capture_ollama_memory loaded
+RUNNER_PID="$(pgrep -f '/Ollama.app/Contents/Resources/llama-server --model' | head -n 1)"
+if [[ -z "$RUNNER_PID" ]]; then
+  echo 'Ollama embedding runner was not found'; exit 1
+fi
+{
+  date -u '+UTC %Y-%m-%dT%H:%M:%SZ'
+  ollama ps
+  ps -p "$RUNNER_PID" -o pid,ppid,rss,%mem,command
+} > "$OUT/embeddinggemma-runner-environment.txt"
+footprint -p "$RUNNER_PID" > "$OUT/embeddinggemma-runner-footprint.txt" 2>&1
+vmmap -summary "$RUNNER_PID" > "$OUT/embeddinggemma-runner-vmmap.txt" 2>&1
 ```
 
-If `footprint` or `vmmap` cannot inspect the process, capture their error and use **Activity Monitor → Memory**, choosing the **Ollama server process** (plus any runner), recording its PID and Memory/Real Memory while loaded and the system memory-pressure graph. For deeper **Metal** allocation attribution, Xcode Instruments' **Game Memory** template offers VM Tracker and Metal Resource Events, but requires Xcode tooling and does not make a single universal per-process GPU-memory figure from every allocation. Apple's documentation distinguishes allocated resources from resident/physical footprint. Report each measured category and an idle-versus-loaded change; do not sum RSS, model bytes and graphics allocations because they can overlap.
+If `footprint` or `vmmap` cannot inspect the process, capture their error and use **Activity Monitor → Memory**, choosing the **Ollama embedding runner process**, not just the API server, recording its PID and Memory/Real Memory while loaded and the system memory-pressure graph. For deeper **Metal** allocation attribution, Xcode Instruments' **Game Memory** template offers VM Tracker and Metal Resource Events, but requires Xcode tooling and does not make a single universal per-process GPU-memory figure from every allocation. Apple's documentation distinguishes allocated resources from resident/physical footprint. Report each measured category and an idle-versus-loaded change; do not sum RSS, model bytes and graphics allocations because they can overlap.
 
 ### Generate and return review materials
 
