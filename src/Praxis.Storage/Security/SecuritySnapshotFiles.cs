@@ -10,7 +10,7 @@ internal sealed record SecuritySnapshotManifest(int FormatVersion, int SchemaVer
 
 internal static class SecuritySnapshotFiles
 {
-    internal static string ValidateBackup(string directory)
+    internal static string ValidateBackup(string directory, bool allowIncomplete = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         if (!Path.IsPathFullyQualified(directory))
@@ -19,7 +19,7 @@ internal static class SecuritySnapshotFiles
         }
 
         string root = SnapshotFiles.CheckPrivateDirectory(Path.GetFullPath(directory));
-        if (Path.GetFileName(Path.TrimEndingDirectorySeparator(root)).Contains(".incomplete-", StringComparison.Ordinal))
+        if (!allowIncomplete && Path.GetFileName(Path.TrimEndingDirectorySeparator(root)).Contains(".incomplete-", StringComparison.Ordinal))
         {
             throw new InvalidDataException("An incomplete staging directory is not a backup.");
         }
