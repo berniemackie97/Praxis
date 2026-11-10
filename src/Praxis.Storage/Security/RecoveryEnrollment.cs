@@ -206,7 +206,7 @@ public sealed class RecoveryEnrollment(SecurityRegistry registry)
 
         byte[] recovered = recoverySignature.ToArray();
         byte[] deviceSigned = replacementDeviceSignature.ToArray();
-        return registry.Execute(connection =>
+        return registry.Execute<Guid?>(connection =>
         {
             using SqliteTransaction tx = connection.BeginTransaction();
             Guid principalId;
