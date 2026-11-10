@@ -24,14 +24,15 @@ public sealed class LocalCatalogTests : IDisposable
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using LocalCatalog catalog = LocalCatalog.Open(root);
-        Assert.Equal(14, catalog.SchemaVersion);
+        Assert.Equal(15, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
         using SqliteConnection reader = Connect(catalog.DatabasePath);
-        Assert.Equal(14L, Scalar(reader, "PRAGMA user_version"));
+        Assert.Equal(15L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
         Assert.Equal(14L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('original_objects', 'sources', 'items', 'item_versions', 'ingest_requests', 'processing_jobs', 'text_derivatives', 'search_index_keys', 'source_collections', 'source_collection_memberships', 'enrichment_runs', 'enrichment_proposals', 'enrichment_reviews', 'source_locator_moves')"));
+        Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='capture_request_context'"));
         Assert.Equal("ok", Scalar(reader, "PRAGMA integrity_check"));
         Assert.Equal(0L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
     }
@@ -106,13 +107,13 @@ public sealed class LocalCatalogTests : IDisposable
         string path = Path.Combine(root, "catalog.sqlite");
         using (SqliteConnection connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 15");
+            Execute(connection, "PRAGMA user_version = 16");
         }
 
         Assert.Throws<NotSupportedException>(() => LocalCatalog.Open(root));
         using (SqliteConnection connection = Connect(path))
         {
-            Assert.Equal(15L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(16L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
@@ -149,9 +150,9 @@ public sealed class LocalCatalogTests : IDisposable
 
         using (LocalCatalog upgraded = LocalCatalog.Open(root))
         {
-            Assert.Equal(14, upgraded.SchemaVersion);
+            Assert.Equal(15, upgraded.SchemaVersion);
             using SqliteConnection connection = Connect(upgraded.DatabasePath);
-            Assert.Equal(14L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(15L, Scalar(connection, "PRAGMA user_version"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
             Assert.Equal(1L, Scalar(connection,
@@ -160,7 +161,7 @@ public sealed class LocalCatalogTests : IDisposable
 
         using LocalCatalog reopened = LocalCatalog.Open(root);
         using SqliteConnection verified = Connect(reopened.DatabasePath);
-        Assert.Equal(14L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(15L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM text_derivatives"));
