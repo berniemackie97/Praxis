@@ -19,7 +19,7 @@ internal static class RecoveryCheck
     public static async Task<string> CreateAsync(string scratchRoot, CancellationToken cancellationToken)
     {
         string root = RequireExistingDirectory(scratchRoot);
-        EnsureCapacity(root);
+        EnsureCapacity(root, checked(LargeBytes * 4 + 1024L * 1024 * 1024));
         string workspace = Path.Combine(root, "praxis-recovery-" + Guid.NewGuid().ToString("N"));
         CreatePrivateDirectory(workspace);
         string livePath = Path.Combine(workspace, "live");
@@ -121,7 +121,7 @@ internal static class RecoveryCheck
         File.Move(temporary, Path.Combine(workspace, EvidenceFile));
     }
 
-    private static string RequireExistingDirectory(string path)
+    internal static string RequireExistingDirectory(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!Path.IsPathFullyQualified(path))
@@ -138,7 +138,7 @@ internal static class RecoveryCheck
         return full;
     }
 
-    private static void CreatePrivateDirectory(string path)
+    internal static void CreatePrivateDirectory(string path)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -150,7 +150,7 @@ internal static class RecoveryCheck
         }
     }
 
-    private static void EnsureCapacity(string path)
+    internal static void EnsureCapacity(string path, long required)
     {
         DriveInfo? drive = DriveInfo.GetDrives()
             .Where(d => d.IsReady)
@@ -161,7 +161,6 @@ internal static class RecoveryCheck
             throw new IOException("The selected external volume is not mounted.");
         }
 
-        long required = checked(LargeBytes * 4 + 1024L * 1024 * 1024);
         if (drive is null || drive.AvailableFreeSpace < required)
         {
             throw new IOException("The selected drive lacks the verified free space for this check.");
