@@ -317,6 +317,7 @@ public sealed class DesktopProtocolTests : IDisposable
         Assert.Equal(0, initialBacklog.GetProperty("queued").GetInt64());
         Assert.Equal(0, initialBacklog.GetProperty("running").GetInt64());
         Assert.Equal(0, initialBacklog.GetProperty("failed").GetInt64());
+        Assert.Equal(0, initial.RootElement.GetProperty("data").GetProperty("incidents").GetArrayLength());
 
         using MemoryStream pending = new([7, 8]);
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
