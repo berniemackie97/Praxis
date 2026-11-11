@@ -220,6 +220,7 @@ public sealed class PrivateSyncHostTests
         private readonly X509Certificate2 secondCertificate;
         private readonly ECDsa firstSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         private readonly ECDsa secondSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        private readonly ECDsa serverSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         private readonly byte[] contentKey = ClientSpaceKeys.GenerateContentKey();
         private OpaqueSyncStore store;
         private WebApplication? app;
@@ -263,7 +264,6 @@ public sealed class PrivateSyncHostTests
                 ClientSpaceKeys.GenerateRecoverySecret());
             Registry.SpaceKeys.Publish(write, publication);
 
-            using ECDsa serverSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             serverCertificate = IssueLeaf(authority, serverSigner, isServer: true);
             firstCertificate = IssueLeaf(authority, firstSigner, isServer: false);
             secondCertificate = IssueLeaf(authority, secondSigner, isServer: false);
@@ -467,6 +467,7 @@ public sealed class PrivateSyncHostTests
             authority.Dispose();
             firstSigner.Dispose();
             secondSigner.Dispose();
+            serverSigner.Dispose();
             store.Dispose();
             Registry.Dispose();
             if (Directory.Exists(root))
