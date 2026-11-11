@@ -48,6 +48,25 @@ Start the **current branch's** packaged/Xcode Praxis.app, configure \`CatalogPar
 
 Record the exact commit SHA, SDK/Xcode/macOS versions, \`TEST SUCCEEDED\`/Release test results, the UI's success/error state, source IDs and digests, target filesystem type, and any retained staging files. Avoid posting raw personal paths or binary contents to public GitHub issues.
 
+## Apple Silicon native interop regression
+
+An owner-local macOS ARM64 Release run reported a test-host `FailFast` while executing
+`OriginalExportDestination.ValidateDirectory()`. The old code called variadic `fcntl` and
+`openat` through fixed-signature managed imports. On Apple Silicon, their optional C
+arguments use the variadic ABI, which is not the ordinary fixed-function P/Invoke ABI.
+
+The repair uses non-variadic `proc_pidfdinfo` to inspect the pinned directory descriptor
+and `mkostempsat_np` for mode-0600 descriptor-relative staging; exclusive publication
+still uses `renameatx_np` and symlink/late-directory substitution tests remain required.
+The Linux descriptor-relative stage and Windows managed path are unchanged.
+
+Run the focused `OriginalExportTests` **first on a clean, exact-SHA checkout**,
+including pinned-directory replacement, movement into the catalog, late symlinks,
+non-overwrite, and the new macOS private-staging regression. A fully passing suite
+must follow; the prior host crash is **not** a completed test or evidence that the
+#19 synchronization branch passed. Do not change export logic to a path-only
+create/copy operation that would reintroduce the directory-swap race.
+
 ## Code validation
 
 \`\`\`bash
