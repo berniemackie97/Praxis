@@ -125,12 +125,12 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
     private async Task<(long Hashed, bool Complete)> RelocateDirectoryAsync(PendingRename entry,
         Dictionary<string, LocalObservedFile> byPath, long remaining, CancellationToken cancellationToken)
     {
+        long hashed = 0;
         try
         {
             intake.ValidateSourcePath(entry.Current, expectDirectory: true);
             string previousPrefix = Path.TrimEndingDirectorySeparator(entry.Previous) + Path.DirectorySeparatorChar;
-            long hashed = 0;
-            foreach ((_, string locator, _) in catalog.Sources.ActiveFileLocators())
+            foreach (var (_, locator, _) in catalog.Sources.ActiveFileLocators())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!locator.StartsWith(previousPrefix, StringComparison.Ordinal))
@@ -160,7 +160,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
         {
             report("Observed directory move could not preserve identities: " +
                 JsonSerializer.Serialize(entry.Current) + ": " + JsonSerializer.Serialize(exception.Message));
-            return (0, true);
+            return (hashed, true);
         }
     }
 

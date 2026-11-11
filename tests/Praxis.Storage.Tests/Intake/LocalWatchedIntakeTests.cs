@@ -496,6 +496,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(3)));
         Assert.Equal("watching", watcher.Snapshot().State);
         Assert.Empty(watcher.Snapshot().FileErrors);
+        Assert.Equal("completed", Assert.Single(catalog.Library.List()).ExtractionOutcome);
         Assert.Single(catalog.Search.Query("violet"));
     }
 

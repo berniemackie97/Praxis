@@ -1,6 +1,6 @@
 # ADR 0025: Event-confirmed file source relocation
 
-**Status:** Proposed, implemented in draft under #105; cross-platform and hardware acceptance pending.
+**Status:** Implemented under #105; cross-platform and physical watcher acceptance pending.
 
 ## Context
 

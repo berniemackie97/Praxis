@@ -380,6 +380,31 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 
+
+    [Fact]
+    public async Task MissedDirectoryMoveEventNeverGuessesContinuity()
+    {
+        string previous = Path.Combine(inbox, "before");
+        string destination = Path.Combine(inbox, "after");
+        Directory.CreateDirectory(previous);
+        File.WriteAllText(Path.Combine(previous, "note.md"), "violet unobserved move");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewWatcher(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        LocalLibraryItem prior = Assert.Single(catalog.Library.List());
+
+        Directory.Move(previous, destination);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
+        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.Equal(prior.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(previous, StringComparison.Ordinal)).SourceId);
+        Assert.NotEqual(prior.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(destination, StringComparison.Ordinal)).SourceId);
+        Assert.Equal(0L, Count("source_locator_moves"));
+    }
+
     [Fact]
     public async Task ChangedFileInsideMovedDirectoryDoesNotInheritOldIdentity()
     {
