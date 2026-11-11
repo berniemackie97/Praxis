@@ -54,8 +54,10 @@ public sealed class ProcessingLifecycleTests : IDisposable
     [Fact]
     public async Task BacklogCountsOnlyCurrentJobsForActiveSourcesAcrossRestart()
     {
-        using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        Assert.Equal(new ProcessingBacklog(0, 0, 0), catalog.Processing.Backlog());
+        Guid preserved;
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            Assert.Equal(new ProcessingBacklog(0, 0, 0), catalog.Processing.Backlog());
 
         using MemoryStream original = new([1]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("backlog"), original, 10, "backlog-first");
@@ -76,8 +78,14 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(new ProcessingBacklog(2, 0, 0), catalog.Processing.Backlog());
         Assert.True(catalog.Sources.Revoke(independent.SourceId));
         Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
-        await catalog.Originals.VerifyAsync(first.ItemId);
-        await catalog.Originals.VerifyAsync(independent.ItemId);
+            await catalog.Originals.VerifyAsync(first.ItemId);
+            await catalog.Originals.VerifyAsync(independent.ItemId);
+            preserved = first.ItemId;
+        }
+
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
+        Assert.Equal(new ProcessingBacklog(1, 0, 0), reopened.Processing.Backlog());
+        await reopened.Originals.VerifyAsync(preserved);
     }
 
     [Fact]
