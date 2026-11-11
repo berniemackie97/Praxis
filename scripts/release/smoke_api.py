@@ -89,8 +89,10 @@ def main():
         env=invalid_environment,
         check=False,
     )
-    if invalid.returncode == 0:
-        raise SystemExit("Invalid health listener port unexpectedly started.")
+    if invalid.returncode == 0 or b"PRAXIS_HEALTH_PORT must be" not in (
+        invalid.stdout + invalid.stderr
+    ):
+        raise SystemExit("Invalid health listener port was not explicitly rejected.")
 
     print("Published API: liveness and readiness passed, private routes absent, "
           "wildcard override rejected, invalid port rejected.")
