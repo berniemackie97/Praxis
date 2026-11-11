@@ -146,28 +146,28 @@ public sealed class DesktopProtocolTests : IDisposable
         Assert.True(catalog.Collections.AddSource(collectionId, allowed.SourceId));
         DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument search = await Send(protocol,
-            $"""{"requestId":"find","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"find","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
         Assert.True(search.RootElement.GetProperty("ok").GetBoolean());
         JsonElement hit = Assert.Single(search.RootElement.GetProperty("data").GetProperty("hits").EnumerateArray());
         Assert.Equal(allowed.SourceId.ToString("D"), hit.GetProperty("sourceId").GetString());
         Assert.DoesNotContain("secret", hit.GetProperty("snippet").GetString()!);
 
         using JsonDocument preview = await Send(protocol,
-            $"""{"requestId":"peek","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"peek","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Equal("completed", preview.RootElement.GetProperty("data").GetProperty("outcome").GetString());
         Assert.Contains("approved", preview.RootElement.GetProperty("data").GetProperty("content").GetString()!);
 
         using JsonDocument mismatched = await Send(protocol,
-            $"""{"requestId":"wrong","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{excluded.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"wrong","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{excluded.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Equal("unavailable", mismatched.RootElement.GetProperty("data").GetProperty("outcome").GetString());
 
         Assert.True(catalog.Collections.RemoveSource(collectionId, allowed.SourceId));
         using JsonDocument removed = await Send(protocol,
-            $"""{"requestId":"removed","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"removed","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Equal("unavailable", removed.RootElement.GetProperty("data").GetProperty("outcome").GetString());
 
         using JsonDocument deniedSearch = await Send(protocol,
-            $"""{"requestId":"denied","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"denied","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
         Assert.Empty(deniedSearch.RootElement.GetProperty("data").GetProperty("hits").EnumerateArray());
 
         Assert.True(catalog.Collections.AddSource(collectionId, allowed.SourceId));
@@ -178,17 +178,17 @@ public sealed class DesktopProtocolTests : IDisposable
         Assert.Equal(2, revised.Revision);
 
         using JsonDocument stale = await Send(protocol,
-            $"""{"requestId":"stale","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"stale","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Equal("unavailable", stale.RootElement.GetProperty("data").GetProperty("outcome").GetString());
 
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         using JsonDocument current = await Send(protocol,
-            $"""{"requestId":"latest","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"latest","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Contains("updated", current.RootElement.GetProperty("data").GetProperty("content").GetString()!);
 
         Assert.True(catalog.Sources.Revoke(allowed.SourceId));
         using JsonDocument revoked = await Send(protocol,
-            $"""{"requestId":"revoked","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+            $$"""{"requestId":"revoked","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
         Assert.Equal("unavailable", revoked.RootElement.GetProperty("data").GetProperty("outcome").GetString());
     }
 
