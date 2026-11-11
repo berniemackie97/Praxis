@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Application.Sources;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -15,7 +15,7 @@ internal sealed record WatchedScanResult(int ObservedFiles, int Imported, TimeSp
 /// deterministic request key. Unchanged verified files are re-hashed only periodically.
 /// Not thread-safe; the owning intake serializes passes.
 /// </summary>
-internal sealed class WatchedFileReconciler(SqliteCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
+internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
 {
     private const int MaximumFiles = 5_000;
     private const int MaximumQueuedChanges = 512;
@@ -91,7 +91,7 @@ internal sealed class WatchedFileReconciler(SqliteCatalog catalog, LocalSourceIn
         {
             // Before the first scan, so canonical paths match existing sources instead of
             // being captured again under a second identity.
-            new SourceLocatorCanonicalizer(catalog, report).Run();
+            new SourceLocatorCanonicalizer(sources, report).Run();
             locatorsNormalized = true;
         }
 
@@ -187,7 +187,7 @@ internal sealed class WatchedFileReconciler(SqliteCatalog catalog, LocalSourceIn
                 return false;
             }
 
-            SourceFileVersion? latest = catalog.Sources.FindLatestFile(file.SourcePath);
+            SourceFileVersion? latest = sources.FindLatestFile(file.SourcePath);
             if (latest?.Status == "revoked")
             {
                 throw new InvalidOperationException("Revoked sources require explicit owner authorization to reimport.");
@@ -227,5 +227,5 @@ internal sealed class WatchedFileReconciler(SqliteCatalog catalog, LocalSourceIn
     }
 
     private string MakeRequestKey(string path, int previousRevision, string digest) =>
-        "watch-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{catalog.Sources.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
+        "watch-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-watched-file-v2\n{path}\n{sources.CountMovesFrom(path)}\n{previousRevision}\n{digest}")));
 }

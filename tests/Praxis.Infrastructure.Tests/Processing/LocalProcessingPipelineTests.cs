@@ -56,7 +56,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         BlockingHandler blocking = new(ProcessorKeys.SourceText, maxConcurrency: 1);
         ProcessingPipeline pipeline = new(catalog.Processing, [blocking], TimeProvider.System, TimeSpan.FromMilliseconds(50));
-        LocalWatchedIntake intake = new(catalog, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
+        WatchedFolderIntake intake = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
 

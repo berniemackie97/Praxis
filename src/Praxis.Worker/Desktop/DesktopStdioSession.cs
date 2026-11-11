@@ -9,7 +9,7 @@ namespace Praxis.Worker.Desktop;
 
 internal static class DesktopStdioSession
 {
-    internal static async Task RunAsync(SqliteCatalog catalog, LocalWatchedIntakeGroup monitors, ProcessingPipeline processing, VerificationRunner verification, string inbox, CancellationToken cancellationToken)
+    internal static async Task RunAsync(SqliteCatalog catalog, WatchedFolderIntakeGroup monitors, ProcessingPipeline processing, VerificationRunner verification, string inbox, CancellationToken cancellationToken)
     {
         using StreamReader reader = new(Console.OpenStandardInput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false);
         using StreamWriter writer = new(Console.OpenStandardOutput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
@@ -17,7 +17,7 @@ internal static class DesktopStdioSession
             AutoFlush = true
         };
         DesktopRequestReader frames = new(reader);
-        LocalDesktopProtocol protocol = new(catalog, new LocalQuickCapture(catalog, inbox), processing: processing, verification: verification, group: monitors);
+        LocalDesktopProtocol protocol = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox), processing: processing, verification: verification, group: monitors);
 
         async Task ServeAsync(CancellationToken token)
         {

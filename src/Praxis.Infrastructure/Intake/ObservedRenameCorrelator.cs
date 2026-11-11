@@ -1,5 +1,5 @@
+using Praxis.Application.Sources;
 using Praxis.Domain.Intake;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -9,7 +9,7 @@ namespace Praxis.Infrastructure.Intake;
 /// re-hashed and match the source's current revision. The event queue is bounded; overflow
 /// falls back to ordinary capture of the scanned paths.
 /// </summary>
-internal sealed class ObservedRenameCorrelator(SqliteCatalog catalog, LocalSourceIntake intake, string root, Action<string> report, Action signal)
+internal sealed class ObservedRenameCorrelator(ISourceRepository sources, FileSourceIntake intake, string root, Action<string> report, Action signal)
 {
     private const int MaximumPending = 128;
     private static readonly TimeSpan MaximumEventAge = TimeSpan.FromMinutes(1);
@@ -130,7 +130,7 @@ internal sealed class ObservedRenameCorrelator(SqliteCatalog catalog, LocalSourc
         {
             intake.ValidateSourcePath(entry.Current, expectDirectory: true);
             string previousPrefix = Path.TrimEndingDirectorySeparator(entry.Previous) + Path.DirectorySeparatorChar;
-            foreach (var (_, locator, _) in catalog.Sources.ActiveFileLocators())
+            foreach (var (_, locator, _) in sources.ActiveFileLocators())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!locator.StartsWith(previousPrefix, StringComparison.Ordinal))
@@ -174,7 +174,7 @@ internal sealed class ObservedRenameCorrelator(SqliteCatalog catalog, LocalSourc
             }
 
             string digest = await IntakeFileRules.HashAsync(current, cancellationToken);
-            if (IntakeFileRules.IsStable(file) && catalog.Sources.RelocateObservedFile(previous, current, digest))
+            if (IntakeFileRules.IsStable(file) && sources.RelocateObservedFile(previous, current, digest))
             {
                 report("Preserved file source identity after observed rename.");
             }

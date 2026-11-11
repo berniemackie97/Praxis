@@ -16,7 +16,7 @@ internal static class IntakeCommand
         int argumentCount = args.Length - (desktopMode ? 1 : 0);
         if (argumentCount < 4 || argumentCount % 2 != 0 ||
             args[0] != "--data-root" || !Path.IsPathFullyQualified(args[1]) ||
-            args[2] != "--intake" || (argumentCount - 2) / 2 > LocalWatchedIntakeGroup.MaximumRoots)
+            args[2] != "--intake" || (argumentCount - 2) / 2 > WatchedFolderIntakeGroup.MaximumRoots)
         {
             await Console.Error.WriteLineAsync("Usage: Praxis.Worker --data-root <absolute-private-data-directory> --intake <absolute-inbox> [--intake <another-approved-folder> ...] [--stdio]");
             return 2;
@@ -59,7 +59,7 @@ internal static class IntakeCommand
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog, status: Report);
-        LocalWatchedIntakeGroup monitors = new(catalog, roots, status: Report, onCaptured: processing.Wake);
+        WatchedFolderIntakeGroup monitors = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, roots, status: Report, onCaptured: processing.Wake);
         VerificationRunner verification = new(catalog.Verification, new SubscriptionVerifierModelFactory(), TimeProvider.System, status: Report);
         if (desktopMode)
         {

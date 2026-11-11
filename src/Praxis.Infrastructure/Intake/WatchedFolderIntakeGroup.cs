@@ -1,7 +1,8 @@
+using Praxis.Application.Originals;
+using Praxis.Application.Sources;
 using Praxis.Domain.Common;
 using Praxis.Domain.Intake;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -9,24 +10,26 @@ namespace Praxis.Infrastructure.Intake;
 /// Supervises a bounded set of individually approved intake roots. Each root retains its own
 /// watcher, rename evidence and health, while scans share one catalog and one hashing lane.
 /// </summary>
-public sealed class LocalWatchedIntakeGroup
+public sealed class WatchedFolderIntakeGroup
 {
     public const int MaximumRoots = 4;
 
-    private readonly LocalWatchedIntake[] monitors;
+    private readonly WatchedFolderIntake[] monitors;
 
-    public LocalWatchedIntakeGroup(SqliteCatalog catalog, IReadOnlyList<string> approvedRoots,
+    public WatchedFolderIntakeGroup(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, IReadOnlyList<string> approvedRoots,
         Action<string>? status = null, Action? onCaptured = null,
         TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null)
     {
-        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(originals);
+        ArgumentException.ThrowIfNullOrWhiteSpace(catalogDirectory);
         ArgumentNullException.ThrowIfNull(approvedRoots);
         if (approvedRoots.Count is < 1 or > MaximumRoots)
         {
             throw new ArgumentOutOfRangeException(nameof(approvedRoots), "Select between one and four watched folders.");
         }
 
-        string dataRoot = FileSystemPaths.Canonicalize(catalog.DataDirectory);
+        string dataRoot = FileSystemPaths.Canonicalize(catalogDirectory);
         List<string> roots = new(approvedRoots.Count);
         foreach (string candidate in approvedRoots)
         {
@@ -52,7 +55,7 @@ public sealed class LocalWatchedIntakeGroup
         }
 
         SemaphoreSlim sharedScanLock = new(1, 1);
-        monitors = roots.Select(path => new LocalWatchedIntake(catalog, path, quietPeriod, rescanInterval,
+        monitors = roots.Select(path => new WatchedFolderIntake(sources, originals, catalogDirectory, path, quietPeriod, rescanInterval,
             status, onCaptured, sharedScanLock)).ToArray();
     }
 
@@ -63,7 +66,7 @@ public sealed class LocalWatchedIntakeGroup
 
     public IntakeStatus SetPaused(bool paused)
     {
-        foreach (LocalWatchedIntake monitor in monitors)
+        foreach (WatchedFolderIntake monitor in monitors)
         {
             monitor.SetPaused(paused);
         }
@@ -82,7 +85,7 @@ public sealed class LocalWatchedIntakeGroup
     public IntakeStatus ApproveRoot(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
-        LocalWatchedIntake? monitor = monitors.FirstOrDefault(candidate =>
+        WatchedFolderIntake? monitor = monitors.FirstOrDefault(candidate =>
             Path.IsPathFullyQualified(selectedPath) &&
             FileSystemPaths.Canonicalize(selectedPath) == candidate.RootPath);
         if (monitor is null)
@@ -96,7 +99,7 @@ public sealed class LocalWatchedIntakeGroup
 
     public IntakeStatus RequestRescan()
     {
-        foreach (LocalWatchedIntake monitor in monitors)
+        foreach (WatchedFolderIntake monitor in monitors)
         {
             monitor.RequestRescan();
         }
@@ -107,7 +110,7 @@ public sealed class LocalWatchedIntakeGroup
     public async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         int imported = 0;
-        foreach (LocalWatchedIntake monitor in monitors)
+        foreach (WatchedFolderIntake monitor in monitors)
         {
             imported = checked(imported + await monitor.ReconcileAsync(now, cancellationToken));
         }

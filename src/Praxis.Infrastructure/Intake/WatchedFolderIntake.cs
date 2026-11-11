@@ -1,6 +1,7 @@
+using Praxis.Application.Originals;
+using Praxis.Application.Sources;
 using Praxis.Domain.Intake;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -9,7 +10,7 @@ namespace Praxis.Infrastructure.Intake;
 /// survives the folder going offline, honors owner pause and signals the processing pipeline
 /// after each capture. Scanning, rename correlation and status are separate components.
 /// </summary>
-public sealed class LocalWatchedIntake
+public sealed class WatchedFolderIntake
 {
     private const string OfflineProblem = "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
     private static readonly TimeSpan MinimumScanSpacing = TimeSpan.FromMilliseconds(250);
@@ -30,9 +31,11 @@ public sealed class LocalWatchedIntake
     private int requiresApproval;
     private long approvedCreationTicks;
 
-    public LocalWatchedIntake(SqliteCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
+    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
     {
-        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(originals);
+        ArgumentException.ThrowIfNullOrWhiteSpace(catalogDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);
         if (!Path.IsPathFullyQualified(intakeDirectory))
         {
@@ -57,9 +60,9 @@ public sealed class LocalWatchedIntake
         this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
-        LocalSourceIntake intake = new(catalog);
-        renames = new ObservedRenameCorrelator(catalog, intake, root, report, Signal);
-        reconciler = new WatchedFileReconciler(catalog, intake, root, quiet, renames, this.status, report);
+        FileSourceIntake intake = new(originals, catalogDirectory);
+        renames = new ObservedRenameCorrelator(sources, intake, root, report, Signal);
+        reconciler = new WatchedFileReconciler(sources, intake, root, quiet, renames, this.status, report);
     }
 
     public string RootPath => root;

@@ -1,14 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Application.Originals;
 using Praxis.Domain.Common;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed class LocalSourceIntake(SqliteCatalog catalog)
+public sealed class FileSourceIntake(IOriginalStore originals, string catalogDirectory)
 {
     public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
     {
@@ -64,7 +64,7 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
         string path = ValidateSourcePath(sourcePath, expectDirectory: false);
         cancellationToken.ThrowIfCancellationRequested();
         await using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(path, input, maxBytes, requestKey, capture, cancellationToken, expectedDigest, expectedLength);
+        CapturedOriginal accepted = await originals.CaptureFileAsync(path, input, maxBytes, requestKey, capture, cancellationToken, expectedDigest, expectedLength);
         return accepted.Length > maxBytes
             ? throw new InvalidDataException("The committed original exceeds the import byte limit.")
             : accepted;
@@ -130,7 +130,7 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
         }
 
         string full = Path.GetFullPath(sourcePath);
-        string dataRoot = FileSystemPaths.ResolveExisting(catalog.DataDirectory);
+        string dataRoot = FileSystemPaths.ResolveExisting(catalogDirectory);
         if (PathScope.Contains(dataRoot, FileSystemPaths.ResolveExisting(full)))
         {
             throw new InvalidOperationException("The data store cannot be imported as a source.");

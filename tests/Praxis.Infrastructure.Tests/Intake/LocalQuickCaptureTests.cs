@@ -38,7 +38,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         QuickCaptureReceipt receipt;
         using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
-            LocalQuickCapture capture = new(catalog, inbox);
+            QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
             receipt = await capture.CaptureAsync(id, "Project Ideas", "The violet compass.");
             Assert.Equal(Path.Combine(inbox, "Project-Ideas-" + id.ToString("N") + ".md"),
                 receipt.SourcePath);
@@ -59,7 +59,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         LibraryItem item = Assert.Single(reopened.Library.List());
         Assert.Equal(receipt.Original.ItemId, item.ItemId);
         Assert.Single(reopened.Search.Query("violet"));
-        Assert.Equal(receipt.Original, (await new LocalQuickCapture(reopened, inbox)
+        Assert.Equal(receipt.Original, (await new QuickNoteCapture(reopened.Originals, reopened.DataDirectory, inbox)
             .CaptureAsync(id, "Project Ideas", "The violet compass.")).Original);
         await reopened.Originals.VerifyAsync(item.ItemId);
         Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
@@ -69,7 +69,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     public async Task IdenticalRetriesNeverMakeAnotherNoteOrRevision()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalQuickCapture capture = new(catalog, inbox);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
         Guid id = Guid.NewGuid();
         QuickCaptureReceipt first = await capture.CaptureAsync(id, null, "Original thought");
         QuickCaptureReceipt second = await capture.CaptureAsync(id, null, "Original thought");
@@ -89,7 +89,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     public async Task ChangedRetryCannotOverwriteOrDuplicateAnAcceptedNote()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalQuickCapture capture = new(catalog, inbox);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
         Guid id = Guid.NewGuid();
         QuickCaptureReceipt original = await capture.CaptureAsync(id, "Research", "This text is preserved.");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -109,7 +109,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         Guid id = Guid.NewGuid();
         string target = Path.Combine(inbox, "Recover-" + id.ToString("N") + ".md");
         File.WriteAllText(target, "# Recover\n\nOffline thought");
-        QuickCaptureReceipt result = await new LocalQuickCapture(catalog, inbox)
+        QuickCaptureReceipt result = await new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
             .CaptureAsync(id, "Recover", "Offline thought");
         Assert.Equal(target, result.SourcePath);
         Assert.Equal(result.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
@@ -121,7 +121,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Guid id = Guid.NewGuid();
-        LocalQuickCapture capture = new(catalog, inbox);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
         QuickCaptureReceipt saved = await capture.CaptureAsync(id, "Topic", "Keep these bytes.");
         File.WriteAllText(saved.SourcePath, "external revision");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -135,7 +135,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     public async Task RejectedInputsCannotWriteAnInboxFile()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalQuickCapture capture = new(catalog, inbox);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
         Guid id = Guid.NewGuid();
         await Assert.ThrowsAsync<ArgumentException>(() =>
             capture.CaptureAsync(Guid.Empty, "Notes", "hello"));
@@ -160,7 +160,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new LocalQuickCapture(catalog, dataRoot)
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, dataRoot)
                 .CaptureAsync(Guid.NewGuid(), "Private", "Cannot write into the catalog."));
         Assert.Empty(catalog.Library.List());
 
@@ -172,7 +172,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         string link = Path.Combine(workspace, "linked-inbox");
         Directory.CreateSymbolicLink(link, inbox);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            new LocalQuickCapture(catalog, link)
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, link)
                 .CaptureAsync(Guid.NewGuid(), "Linked", "Cannot follow a linked root."));
         Assert.Empty(Directory.EnumerateFiles(inbox));
     }
@@ -184,7 +184,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         using CancellationTokenSource cts = new();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new LocalQuickCapture(catalog, inbox)
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
                 .CaptureAsync(Guid.NewGuid(), "Cancelled", "text", cts.Token));
         Assert.Empty(catalog.Library.List());
         Assert.Empty(Directory.EnumerateFiles(inbox));
@@ -195,7 +195,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         string url = "https://example.invalid/private?token=abc";
-        QuickCaptureReceipt saved = await new LocalQuickCapture(catalog, inbox)
+        QuickCaptureReceipt saved = await new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
             .CaptureAsync(Guid.NewGuid(), "Reference", url);
         Assert.Equal("# Reference\n\n" + url, File.ReadAllText(saved.SourcePath));
         Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);

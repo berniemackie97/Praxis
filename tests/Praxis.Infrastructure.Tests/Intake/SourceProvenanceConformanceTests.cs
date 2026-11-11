@@ -51,15 +51,15 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Guid watchedSourceId;
         using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
-            LocalSourceIntake intake = new(catalog);
+            FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
             manual = await intake.ImportFileAsync(manualPath,
                 Encoding.UTF8.GetByteCount(sharedText), "manual-request-1");
             Guid captureId = Guid.NewGuid();
-            QuickCaptureReceipt quickReceipt = await new LocalQuickCapture(catalog, inbox)
+            QuickCaptureReceipt quickReceipt = await new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
                 .CaptureAsync(captureId, "Shared", "violet blueprint");
             quick = quickReceipt.Original;
 
-            LocalWatchedIntake watcher = new(catalog, inbox, TimeSpan.Zero);
+            WatchedFolderIntake watcher = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, inbox, TimeSpan.Zero);
             DateTimeOffset now = DateTimeOffset.UtcNow;
             Assert.Equal(0, await watcher.ReconcileAsync(now));
             Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(1)));
@@ -110,7 +110,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             Assert.True(catalog.Sources.Revoke(quick.SourceId));
             Assert.Equal("revoked", catalog.Sources.ReadProvenance(quick.SourceId)!.Status);
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                new LocalQuickCapture(catalog, inbox).CaptureAsync(captureId, "Shared", "violet blueprint"));
+                new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox).CaptureAsync(captureId, "Shared", "violet blueprint"));
             Assert.Empty(catalog.Search.Query("violet"));
             Assert.Equal(2, catalog.Search.Rebuild());
             Assert.Equal(updated.SourceId, Assert.Single(catalog.Search.Query("amber")).SourceId);
@@ -137,7 +137,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         File.WriteAllBytes(invalidPath, [0xc3, 0x28]);
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalSourceIntake intake = new(catalog);
+        FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
         CapturedOriginal unsupported = await intake.ImportFileAsync(unsupportedPath, 4, "unknown-file");
         CapturedOriginal malformed = await intake.ImportFileAsync(invalidPath, 2, "invalid-utf8");
         Assert.Equal("queued", catalog.Sources.ReadProvenance(unsupported.SourceId)!.ProcessingState);
@@ -181,14 +181,14 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         CapturedOriginal first;
         using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
-            first = await new LocalSourceIntake(catalog).ImportFileAsync(path, 100, "author-first");
+            first = await new FileSourceIntake(catalog.Originals, catalog.DataDirectory).ImportFileAsync(path, 100, "author-first");
             Assert.NotNull(catalog.Sources.ReadProvenance(first.SourceId));
         }
 
         File.WriteAllText(path, "later amber evidence");
         using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
-            LocalSourceIntake intake = new(catalog);
+            FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
             Assert.Equal(first, await intake.ImportFileAsync(path, 100, "author-first"));
             Assert.Equal(1, catalog.Sources.ReadProvenance(first.SourceId)!.Revision);
             CapturedOriginal later = await intake.ImportFileAsync(path, 100, "author-second");

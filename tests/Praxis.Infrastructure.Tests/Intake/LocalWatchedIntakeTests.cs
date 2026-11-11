@@ -278,7 +278,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         string outside = Path.Combine(workspace, "queued.txt");
         File.WriteAllText(outside, "violet from existing queue");
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        CapturedOriginal original = await new LocalSourceIntake(catalog)
+        CapturedOriginal original = await new FileSourceIntake(catalog.Originals, catalog.DataDirectory)
             .ImportFileAsync(outside, 100, "offline-queued");
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
 

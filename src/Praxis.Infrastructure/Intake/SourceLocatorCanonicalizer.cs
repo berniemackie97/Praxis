@@ -1,5 +1,5 @@
+using Praxis.Application.Sources;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -9,13 +9,13 @@ namespace Praxis.Infrastructure.Intake;
 /// spelling already belongs to another source, the alias is folded into it. Paths that cannot
 /// be inspected right now (for example on an unavailable drive) are left for a later run.
 /// </summary>
-internal sealed class SourceLocatorCanonicalizer(SqliteCatalog catalog, Action<string> report)
+internal sealed class SourceLocatorCanonicalizer(ISourceRepository sources, Action<string> report)
 {
     internal (int Relocated, int Folded) Run()
     {
         int relocated = 0;
         int folded = 0;
-        foreach ((Guid sourceId, string locator, string digest) in catalog.Sources.ActiveFileLocators())
+        foreach ((Guid sourceId, string locator, string digest) in sources.ActiveFileLocators())
         {
             string canonical;
             try
@@ -32,11 +32,11 @@ internal sealed class SourceLocatorCanonicalizer(SqliteCatalog catalog, Action<s
                 continue;
             }
 
-            if (catalog.Sources.RelocateObservedFile(locator, canonical, digest))
+            if (sources.RelocateObservedFile(locator, canonical, digest))
             {
                 relocated++;
             }
-            else if (catalog.Sources.FoldAlias(sourceId, canonical))
+            else if (sources.FoldAlias(sourceId, canonical))
             {
                 folded++;
             }

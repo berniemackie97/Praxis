@@ -138,7 +138,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(data);
-        LocalDesktopProtocol service = new(catalog, new LocalQuickCapture(catalog, inbox));
+        LocalDesktopProtocol service = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox));
         Guid captureId = Guid.NewGuid();
         string payload =
             $$"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";

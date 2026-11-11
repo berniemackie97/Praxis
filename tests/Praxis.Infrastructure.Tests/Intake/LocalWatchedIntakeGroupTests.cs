@@ -41,7 +41,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         File.WriteAllText(b, "amber secondary content");
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog);
-        LocalWatchedIntakeGroup group = new(catalog, [first, second], onCaptured: processing.Wake,
+        WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, second], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await group.ReconcileAsync(now));
@@ -82,24 +82,24 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     public void RejectsDuplicateNestedCatalogAndExcessiveRootsBeforeStartingWatchers()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, [first, first]));
+        Assert.Throws<ArgumentException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, first]));
         string child = Path.Combine(first, "nested");
         Directory.CreateDirectory(child);
-        Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, [first, child]));
-        Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, [workspace]));
-        Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, [dataRoot]));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new LocalWatchedIntakeGroup(catalog, []));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new LocalWatchedIntakeGroup(catalog,
+        Assert.Throws<ArgumentException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, child]));
+        Assert.Throws<ArgumentException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, [workspace]));
+        Assert.Throws<ArgumentException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, [dataRoot]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, []));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory,
             [first, second, Path.Combine(workspace, "three"), Path.Combine(workspace, "four"),
                 Path.Combine(workspace, "five")]));
-        Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, ["relative-inbox"]));
+        Assert.Throws<ArgumentException>(() => new WatchedFolderIntakeGroup(catalog.Sources, catalog.Originals, catalog.DataDirectory, ["relative-inbox"]));
     }
 
     [Fact]
     public async Task PauseAndResumeApplyToEveryApprovedRootWithoutDuplicates()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalWatchedIntakeGroup group = new(catalog, [first, second], quietPeriod: TimeSpan.Zero);
+        WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, second], quietPeriod: TimeSpan.Zero);
         group.SetPaused(true);
         File.WriteAllText(Path.Combine(first, "a.txt"), "violet paused");
         File.WriteAllText(Path.Combine(second, "b.txt"), "amber paused");
@@ -120,7 +120,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         string disconnected = Path.Combine(workspace, "not-present");
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog);
-        LocalWatchedIntakeGroup group = new(catalog, [first, disconnected], onCaptured: processing.Wake,
+        WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, disconnected], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero, rescanInterval: TimeSpan.FromMilliseconds(100));
         using CancellationTokenSource cancellation = new();
         Task running = group.RunAsync(cancellation.Token);
@@ -158,7 +158,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalWatchedIntakeGroup group = new(catalog, [first, second],
+        WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, second],
             quietPeriod: TimeSpan.FromMilliseconds(300), rescanInterval: TimeSpan.FromMinutes(5));
         using CancellationTokenSource cancellation = new();
         Task running = group.RunAsync(cancellation.Token);
@@ -185,7 +185,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     public async Task PrivateProtocolReportsIndividualRootsAndRestrictsApprovalAndQuickCapture()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalWatchedIntakeGroup group = new(catalog, [first, second], quietPeriod: TimeSpan.Zero);
+        WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, second], quietPeriod: TimeSpan.Zero);
         LocalDesktopProtocol protocol = new(catalog, group: group);
         using JsonDocument initial = await Send(protocol, """{"requestId":"status","action":"intakeStatus"}""");
         JsonElement roots = initial.RootElement.GetProperty("data").GetProperty("roots");
@@ -202,8 +202,8 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         Assert.True(approved.RootElement.GetProperty("ok").GetBoolean());
 
         string missing = Path.Combine(workspace, "not-trusted");
-        LocalWatchedIntakeGroup absent = new(catalog, [missing]);
-        LocalDesktopProtocol guarded = new(catalog, new LocalQuickCapture(catalog, missing), group: absent);
+        WatchedFolderIntakeGroup absent = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [missing]);
+        LocalDesktopProtocol guarded = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, missing), group: absent);
         using JsonDocument deniedNote = await Send(guarded,
             $$"""{"requestId":"note","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","text":"violet no write"}""");
         Assert.False(deniedNote.RootElement.GetProperty("ok").GetBoolean());

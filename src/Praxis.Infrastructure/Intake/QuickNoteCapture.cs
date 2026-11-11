@@ -1,18 +1,18 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Application.Originals;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed class LocalQuickCapture(SqliteCatalog catalog, string intakeDirectory)
+public sealed class QuickNoteCapture(IOriginalStore originals, string catalogDirectory, string intakeDirectory)
 {
     private const int MaximumTextCharacters = 8_000;
     private const int MaximumOriginalBytes = 32 * 1024;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly UnixFileMode PrivateFile = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-    private readonly LocalSourceIntake intake = new(catalog);
+    private readonly FileSourceIntake intake = new(originals, catalogDirectory);
 
     public async Task<QuickCaptureReceipt> CaptureAsync(Guid captureId, string? title, string text, CancellationToken cancellationToken = default)
     {
@@ -36,7 +36,7 @@ public sealed class LocalQuickCapture(SqliteCatalog catalog, string intakeDirect
 
         await VerifyPublishedAsync(destination, bytes, cancellationToken);
         using MemoryStream content = new(bytes, writable: false);
-        CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), capture, cancellationToken);
+        CapturedOriginal original = await originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), capture, cancellationToken);
         return new QuickCaptureReceipt(destination, original);
     }
 

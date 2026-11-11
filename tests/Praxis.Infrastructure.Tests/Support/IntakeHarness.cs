@@ -17,11 +17,11 @@ internal sealed class IntakeHarness
         TimeSpan? rescanInterval = null, Action<string>? status = null)
     {
         Processing = CatalogProcessing.CreatePipeline(catalog, TimeSpan.FromMilliseconds(100));
-        Monitor = new LocalWatchedIntake(catalog, inbox, quietPeriod, rescanInterval, status,
+        Monitor = new WatchedFolderIntake(catalog.Sources, catalog.Originals, catalog.DataDirectory, inbox, quietPeriod, rescanInterval, status,
             onCaptured: Processing.Wake);
     }
 
-    internal LocalWatchedIntake Monitor { get; }
+    internal WatchedFolderIntake Monitor { get; }
     internal ProcessingPipeline Processing { get; }
 
     /// <summary>One intake scan followed by processing everything it made available.</summary>

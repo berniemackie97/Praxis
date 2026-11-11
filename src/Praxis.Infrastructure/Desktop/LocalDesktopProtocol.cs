@@ -17,7 +17,7 @@ using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Desktop;
 
-public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, ProcessingPipeline? processing = null, VerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
+public sealed class LocalDesktopProtocol(SqliteCatalog catalog, QuickNoteCapture? quickCapture = null, WatchedFolderIntake? monitor = null, ProcessingPipeline? processing = null, VerificationRunner? verification = null, WatchedFolderIntakeGroup? group = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
@@ -210,9 +210,9 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
         }
     }
 
-    private LocalWatchedIntake RequireMonitor() => monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+    private WatchedFolderIntake RequireMonitor() => monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
 
-    private LocalWatchedIntakeGroup RequireGroup() => group ?? throw new InvalidOperationException("Folder reapproval requires supervised intake.");
+    private WatchedFolderIntakeGroup RequireGroup() => group ?? throw new InvalidOperationException("Folder reapproval requires supervised intake.");
 
     private IntakeStatus IntakeStatus() => group?.Snapshot() ?? RequireMonitor().Snapshot();
 
