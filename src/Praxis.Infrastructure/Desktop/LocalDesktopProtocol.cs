@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
 using Praxis.Application.Processing;
+using Praxis.Application.Search;
 using Praxis.Application.Verification;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Models;
@@ -275,7 +276,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
         try
         {
             using OllamaRuntime runtime = new(profile.Endpoint, TimeSpan.FromSeconds(30));
-            HybridSearchResults result = await catalog.Hybrid.QueryAsync(
+            HybridSearchResults result = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync(
                 query, runtime.CreateEmbeddingModel(profile.Model), 30, cancellationToken);
             return new
             {
@@ -305,7 +306,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
         }
 
         using OllamaRuntime runtime = new(profile.Endpoint);
-        SemanticIndexUpdate updated = await catalog.Embeddings.RefreshAsync(
+        SemanticIndexUpdate updated = await new SemanticIndexer(catalog.Embeddings).RefreshAsync(
             runtime.CreateEmbeddingModel(profile.Model), fields.RequireBoolean("rebuild"),
             maxSegments: 512, cancellationToken);
         return new { index = updated };

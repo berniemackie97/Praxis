@@ -1,20 +1,25 @@
-using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Collections;
 using Praxis.Domain.Collections;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Collections;
+namespace Praxis.Infrastructure.Persistence.Collections;
 
 /// <summary>Owner-authored named collections with explicit many-to-many source membership.</summary>
-public sealed class LocalCollections
+public sealed class SqliteCollectionRepository : ICollectionRepository
 {
     private readonly CatalogDatabase database;
 
-    internal LocalCollections(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteCollectionRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     public SourceCollection Create(string name)
     {
-        (string display, string key) = NormalizeCollectionName(name);
+        (string display, string key) = CollectionName.Normalize(name);
         Guid id = Guid.NewGuid();
         database.Execute(connection =>
         {
@@ -25,7 +30,7 @@ public sealed class LocalCollections
             command.Parameters.AddWithValue("$id", id.ToString("D"));
             command.Parameters.AddWithValue("$name", display);
             command.Parameters.AddWithValue("$key", key);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             try
             {
                 command.ExecuteNonQuery();
@@ -42,7 +47,7 @@ public sealed class LocalCollections
     public bool Rename(Guid collectionId, string name)
     {
         ValidateCollectionId(collectionId);
-        (string display, string key) = NormalizeCollectionName(name);
+        (string display, string key) = CollectionName.Normalize(name);
         return database.Execute(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
@@ -73,7 +78,7 @@ public sealed class LocalCollections
                                                                    WHERE collection_id = $id AND archived_utc IS NULL
                                                                    """);
             command.Parameters.AddWithValue("$id", collectionId.ToString("D"));
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             return command.ExecuteNonQuery() != 0;
         });
     }
@@ -158,7 +163,7 @@ public sealed class LocalCollections
                                                                    """);
             command.Parameters.AddWithValue("$collection", collectionId.ToString("D"));
             command.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             return command.ExecuteNonQuery() != 0;
         });
     }
@@ -197,18 +202,5 @@ public sealed class LocalCollections
         {
             throw new ArgumentOutOfRangeException(limit is < 1 or > 200 ? nameof(limit) : nameof(offset));
         }
-    }
-
-    private static (string Display, string Key) NormalizeCollectionName(string name)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        string display = name.Trim().Normalize(NormalizationForm.FormC);
-        string key = display.ToUpperInvariant();
-        if (display.Length is < 1 or > 80 || key.Length > 80 || display.Any(char.IsControl))
-        {
-            throw new ArgumentException("Collection names must be one to eighty printable characters.", nameof(name));
-        }
-
-        return (display, key);
     }
 }

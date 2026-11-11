@@ -38,7 +38,7 @@ internal sealed class OllamaChatModel : IChatModel
         foreach (JsonElement candidate in models.EnumerateArray().Where(candidate => OllamaRuntime.RequiredString(candidate, "name") == model))
         {
             candidate.TryGetProperty("details", out JsonElement details);
-            return new ModelIdentity(OllamaRuntime.ProviderName, model, OllamaRuntime.RequiredString(candidate, "digest"),
+            return new ModelIdentity(ModelProfile.OllamaProvider, model, OllamaRuntime.RequiredString(candidate, "digest"),
                 OptionalString(details, "family"), OptionalString(details, "parameter_size"),
                 OptionalString(details, "quantization_level"));
         }

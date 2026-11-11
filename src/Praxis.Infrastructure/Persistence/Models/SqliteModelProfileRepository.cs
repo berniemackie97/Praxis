@@ -1,25 +1,24 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Application.Inference;
+using Praxis.Application.Models;
 using Praxis.Domain.Models;
-using Praxis.Infrastructure.Inference.Ollama;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Models;
+namespace Praxis.Infrastructure.Persistence.Models;
 
-/// <summary>
-/// Persists the owner's model choices in the private catalog so they travel with backups and
-/// can be changed from the workbench. Only loopback endpoints of supported local providers
-/// are accepted.
-/// </summary>
-public sealed class LocalModelProfiles
+/// <summary>SQLite persistence of the owner's model profiles; only normalized, valid profiles are stored.</summary>
+public sealed class SqliteModelProfileRepository : IModelProfileRepository
 {
     private readonly CatalogDatabase database;
+    private readonly TimeProvider clock;
 
-    internal LocalModelProfiles(CatalogDatabase database) => this.database = database;
+    internal SqliteModelProfileRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     public ModelProfile? Get(string role)
     {
-        ValidateRole(role);
+        ModelProfile.ValidateRole(role);
         return database.Execute(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
@@ -38,25 +37,7 @@ public sealed class LocalModelProfiles
     public ModelProfile Save(ModelProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        ValidateRole(profile.Role);
-        if (profile.Provider != OllamaRuntime.ProviderName)
-        {
-            throw new ArgumentException("The model provider is not supported.", nameof(profile));
-        }
-
-        string endpoint = LoopbackEndpoint.Validate(profile.Endpoint).GetLeftPart(UriPartial.Authority) + "/";
-        string model = profile.Model?.Trim() ?? "";
-        if (model.Length is < 1 or > 200 || model.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)))
-        {
-            throw new ArgumentException("The model name is invalid.", nameof(profile));
-        }
-
-        if (profile.ContextTokens is < 2_048 or > 262_144)
-        {
-            throw new ArgumentOutOfRangeException(nameof(profile), "Context must be 2,048 to 262,144 tokens.");
-        }
-
-        ModelProfile saved = profile with { Endpoint = endpoint, Model = model };
+        ModelProfile saved = profile.Normalized();
         database.Execute(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
@@ -74,17 +55,9 @@ public sealed class LocalModelProfiles
             command.Parameters.AddWithValue("$model", saved.Model);
             command.Parameters.AddWithValue("$context", saved.ContextTokens);
             command.Parameters.AddWithValue("$enabled", saved.Enabled ? 1 : 0);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             command.ExecuteNonQuery();
         });
         return saved;
-    }
-
-    private static void ValidateRole(string role)
-    {
-        if (role is not (ModelProfile.LocalEnrichment or ModelProfile.LocalEmbedding))
-        {
-            throw new ArgumentException("The model role is not supported.", nameof(role));
-        }
     }
 }

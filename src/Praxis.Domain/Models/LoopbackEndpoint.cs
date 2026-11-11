@@ -1,4 +1,4 @@
-namespace Praxis.Application.Inference;
+namespace Praxis.Domain.Models;
 
 /// <summary>
 /// Validates endpoints for local runtimes. Only loopback HTTP(S) origins are accepted, so a

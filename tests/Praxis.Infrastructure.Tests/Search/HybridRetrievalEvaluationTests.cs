@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Application.Search;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Search;
@@ -17,7 +18,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
     {
         using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync();
         TopicEmbeddingModel model = new();
-        Assert.True((await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed > 0);
+        Assert.True((await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, rebuild: true)).Indexed > 0);
         Dictionary<(string Domain, string Mode), List<RetrievalScore>> scores = new();
         int expectedNoAnswers = 0;
         int semanticFalseAnswers = 0;
@@ -27,8 +28,8 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
             Guid[] relevant = fixture.Expected(judgment.Relevant);
             Stopwatch watch = Stopwatch.StartNew();
             SearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
-            var semantic = await fixture.Catalog.Embeddings.QueryAsync(judgment.Query, model, 5);
-            HybridSearchResults fused = await fixture.Catalog.Hybrid.QueryAsync(judgment.Query, model, 5);
+            var semantic = await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync(judgment.Query, model, 5);
+            HybridSearchResults fused = await new HybridSearch(fixture.Catalog.Search, new SemanticRetriever(fixture.Catalog.Embeddings)).QueryAsync(judgment.Query, model, 5);
             watch.Stop();
 
             Assert.Equal(fixture.Expected(judgment.LexicalExpected),
@@ -110,7 +111,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         int indexed = 0;
         for (int iteration = 0; iteration < expectedSegments; iteration++)
         {
-            SemanticIndexUpdate update = await fixture.Catalog.Embeddings.RefreshAsync(
+            SemanticIndexUpdate update = await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(
                 model, maxSegments: 1);
             indexed += update.Indexed;
             Assert.Equal(1, update.Indexed);
@@ -119,16 +120,16 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
 
         Assert.Equal(expectedSegments, indexed);
         Assert.Equal(new SemanticIndexUpdate(0, false),
-            await fixture.Catalog.Embeddings.RefreshAsync(model, maxSegments: 1));
+            await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, maxSegments: 1));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true, maxSegments: 1));
+            new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, rebuild: true, maxSegments: 1));
         Assert.Equal(fixture.Originals["mesh"].ItemId,
-            (await fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model))[0].Hit.ItemId);
+            (await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("triangulation geometry", model))[0].Hit.ItemId);
 
         CapturedOriginal revoked = fixture.Originals["conflict"];
         Assert.True(fixture.Catalog.Sources.Revoke(revoked.SourceId));
-        Assert.DoesNotContain((await fixture.Catalog.Embeddings.QueryAsync("orbital physics", model)),
+        Assert.DoesNotContain((await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("orbital physics", model)),
             hit => hit.Hit.SourceId == revoked.SourceId);
         Assert.Empty(fixture.Catalog.Search.Query("contradiction"));
 
@@ -142,22 +143,22 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         Assert.Equal(original.ItemId, revised.ItemId);
         Assert.Equal(original.Revision + 1, revised.Revision);
         Assert.Empty(fixture.Catalog.Search.Query("ParseMesh"));
-        Assert.DoesNotContain((await fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model)),
+        Assert.DoesNotContain((await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("triangulation geometry", model)),
             hit => hit.Hit.ItemId == revised.ItemId);
 
         Assert.True(await Praxis.Infrastructure.Tests.Support.ProcessingDriver.Text(fixture.Catalog)
             .ProcessNextAsync());
         await RetrievalBenchmarkFixture.ProcessSegmentsAsync(fixture.Catalog);
-        Assert.Equal(1, (await fixture.Catalog.Embeddings.RefreshAsync(model)).Indexed);
+        Assert.Equal(1, (await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model)).Indexed);
         Assert.Empty(fixture.Catalog.Search.Query("ParseMesh"));
         Assert.Equal(revised.ItemId, Assert.Single(fixture.Catalog.Search.Query("UploadGeometry")).ItemId);
 
         int currentSegments = fixture.Originals.Values.Sum(captured =>
             fixture.Catalog.Segments.List(captured.ItemId, captured.Revision).Count) +
             fixture.Catalog.Segments.List(revised.ItemId, revised.Revision).Count;
-        int refreshed = (await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed;
+        int refreshed = (await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, rebuild: true)).Indexed;
         Assert.Equal(currentSegments, refreshed);
-        Assert.DoesNotContain((await fixture.Catalog.Embeddings.QueryAsync("orbital physics", model)),
+        Assert.DoesNotContain((await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("orbital physics", model)),
             hit => hit.Hit.SourceId == revoked.SourceId);
         await fixture.Catalog.Originals.VerifyAsync(revised.ItemId);
         await fixture.Catalog.Originals.VerifyAsync(revoked.ItemId);
@@ -168,7 +169,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
     {
         using RetrievalBenchmarkFixture fixture = await RetrievalBenchmarkFixture.CreateAsync();
         TopicEmbeddingModel model = new();
-        Assert.True((await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed > 0);
+        Assert.True((await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, rebuild: true)).Indexed > 0);
         CapturedOriginal mesh = fixture.Originals["mesh"];
 
         using (SqliteConnection db = new(new SqliteConnectionStringBuilder
@@ -199,10 +200,10 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         }
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model));
-        Assert.True((await fixture.Catalog.Embeddings.RefreshAsync(model, rebuild: true)).Indexed > 0);
+            new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("triangulation geometry", model));
+        Assert.True((await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model, rebuild: true)).Indexed > 0);
         Assert.Equal(mesh.ItemId,
-            (await fixture.Catalog.Embeddings.QueryAsync("triangulation geometry", model))[0].Hit.ItemId);
+            (await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync("triangulation geometry", model))[0].Hit.ItemId);
 
         string digest = mesh.Sha256;
         string originalPath = Path.Combine(fixture.Catalog.DataDirectory, "objects",

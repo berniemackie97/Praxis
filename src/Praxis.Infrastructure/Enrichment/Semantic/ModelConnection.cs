@@ -13,7 +13,7 @@ public sealed class ModelConnection(IChatModel model, IDisposable? runtime = nul
     public static ModelConnection Open(ModelProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        if (profile.Provider != OllamaRuntime.ProviderName)
+        if (profile.Provider != ModelProfile.OllamaProvider)
         {
             throw new NotSupportedException("The model provider is not supported.");
         }

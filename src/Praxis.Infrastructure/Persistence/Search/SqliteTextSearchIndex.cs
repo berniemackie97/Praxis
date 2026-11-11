@@ -1,20 +1,20 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Search;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Search;
+namespace Praxis.Infrastructure.Persistence.Search;
 
 /// <summary>
 /// Rebuildable FTS5 index over the latest verified text of active sources. Query-time joins
 /// re-check canonical visibility, so a stale index row cannot bypass revocation or supersession.
 /// </summary>
-public sealed class LocalTextSearch
+public sealed class SqliteTextSearchIndex : ITextSearchIndex
 {
     private readonly CatalogDatabase database;
 
-    internal LocalTextSearch(CatalogDatabase database) => this.database = database;
+    internal SqliteTextSearchIndex(CatalogDatabase database) => this.database = database;
 
     public IReadOnlyList<SearchHit> Query(string query, int limit = 20)
     {

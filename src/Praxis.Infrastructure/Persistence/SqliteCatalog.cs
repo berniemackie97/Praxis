@@ -1,18 +1,18 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Collections;
 using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Media;
-using Praxis.Infrastructure.Models;
+using Praxis.Infrastructure.Persistence.Collections;
 using Praxis.Infrastructure.Persistence.Library;
+using Praxis.Infrastructure.Persistence.Models;
 using Praxis.Infrastructure.Persistence.Originals;
 using Praxis.Infrastructure.Persistence.Processing;
+using Praxis.Infrastructure.Persistence.Search;
 using Praxis.Infrastructure.Persistence.Sources;
 using Praxis.Infrastructure.Persistence.Text;
 using Praxis.Infrastructure.Persistence.Verification;
 using Praxis.Infrastructure.Recovery;
-using Praxis.Infrastructure.Search;
 
 namespace Praxis.Infrastructure.Persistence;
 
@@ -35,16 +35,15 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteProcessingQueue Processing { get; }
     public SqliteTextDerivativeRepository Text { get; }
     public SqliteTextSegmentRepository Segments { get; }
-    public LocalTextSearch Search { get; }
-    public LocalSemanticIndex Embeddings { get; }
-    public LocalHybridSearch Hybrid { get; }
+    public SqliteTextSearchIndex Search { get; }
+    public SqliteSemanticVectorStore Embeddings { get; }
     public LocalProposals Proposals { get; }
     public LocalKnowledge Knowledge { get; }
     public SqliteVerificationRepository Verification { get; }
-    public LocalCollections Collections { get; }
+    public SqliteCollectionRepository Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
-    public LocalModelProfiles Models { get; }
+    public SqliteModelProfileRepository Models { get; }
 
     private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, TimeProvider clock)
     {
@@ -60,16 +59,15 @@ public sealed class SqliteCatalog : IDisposable
         Library = new SqliteLibraryReader(database);
         Text = new SqliteTextDerivativeRepository(database, clock);
         Segments = new SqliteTextSegmentRepository(database, clock);
-        Search = new LocalTextSearch(database);
-        Embeddings = new LocalSemanticIndex(database);
-        Hybrid = new LocalHybridSearch(Search, Embeddings);
+        Search = new SqliteTextSearchIndex(database);
+        Embeddings = new SqliteSemanticVectorStore(database, clock);
         Proposals = new LocalProposals(database);
         Knowledge = new LocalKnowledge(database);
         Verification = new SqliteVerificationRepository(database, clock);
-        Collections = new LocalCollections(database);
+        Collections = new SqliteCollectionRepository(database, clock);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
-        Models = new LocalModelProfiles(database);
+        Models = new SqliteModelProfileRepository(database, clock);
     }
 
     public static SqliteCatalog Open(string dataDirectory, TimeProvider? clock = null) =>

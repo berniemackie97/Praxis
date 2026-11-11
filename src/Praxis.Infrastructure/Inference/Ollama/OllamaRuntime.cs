@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 
 namespace Praxis.Infrastructure.Inference.Ollama;
 
@@ -15,7 +16,7 @@ public sealed record InstalledModel(string Name, string Digest, long SizeBytes);
 /// </summary>
 public sealed class OllamaRuntime : IDisposable
 {
-    public const string ProviderName = "ollama";
+    public const string ProviderName = ModelProfile.OllamaProvider;
     internal const int MaximumResponseBytes = 1024 * 1024;
     private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromMinutes(3);
     private readonly HttpClient http;

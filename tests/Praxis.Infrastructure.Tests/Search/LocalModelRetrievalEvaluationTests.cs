@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Praxis.Application.Inference;
+using Praxis.Application.Search;
 using Praxis.Domain.Models;
 using Praxis.Domain.Search;
 using Praxis.Infrastructure.Inference.Ollama;
@@ -36,7 +37,7 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
             corpusFile, judgmentsFile);
 
         Stopwatch indexClock = Stopwatch.StartNew();
-        SemanticIndexUpdate updated = await fixture.Catalog.Embeddings.RefreshAsync(model,
+        SemanticIndexUpdate updated = await new SemanticIndexer(fixture.Catalog.Embeddings).RefreshAsync(model,
             rebuild: true, maxSegments: 512);
         indexClock.Stop();
         Assert.False(updated.HasMore);
@@ -58,13 +59,13 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
             lexicalTimes.Add(clock.Elapsed.TotalMilliseconds);
 
             clock.Restart();
-            var semantic = await fixture.Catalog.Embeddings.QueryAsync(
+            var semantic = await new SemanticRetriever(fixture.Catalog.Embeddings).QueryAsync(
                 judgment.Query, model, 5);
             clock.Stop();
             semanticTimes.Add(clock.Elapsed.TotalMilliseconds);
 
             clock.Restart();
-            HybridSearchResults hybrid = await fixture.Catalog.Hybrid.QueryAsync(judgment.Query, model, 5);
+            HybridSearchResults hybrid = await new HybridSearch(fixture.Catalog.Search, new SemanticRetriever(fixture.Catalog.Embeddings)).QueryAsync(judgment.Query, model, 5);
             clock.Stop();
             hybridTimes.Add(clock.Elapsed.TotalMilliseconds);
 

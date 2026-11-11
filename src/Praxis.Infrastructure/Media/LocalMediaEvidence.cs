@@ -5,9 +5,9 @@ using Praxis.Domain.Search;
 using Praxis.Domain.Sources;
 using Praxis.Domain.Text;
 using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence.Search;
 using Praxis.Infrastructure.Persistence.Sources;
 using Praxis.Infrastructure.Persistence.Text;
-using Praxis.Infrastructure.Search;
 
 namespace Praxis.Infrastructure.Media;
 
@@ -18,11 +18,11 @@ namespace Praxis.Infrastructure.Media;
 public sealed class LocalMediaEvidence
 {
     private readonly SqliteSourceRepository sources;
-    private readonly LocalTextSearch search;
+    private readonly SqliteTextSearchIndex search;
     private readonly SqliteTextDerivativeRepository text;
     private readonly OriginalFileStore objects;
 
-    internal LocalMediaEvidence(SqliteSourceRepository sources, LocalTextSearch search, SqliteTextDerivativeRepository text, OriginalFileStore objects)
+    internal LocalMediaEvidence(SqliteSourceRepository sources, SqliteTextSearchIndex search, SqliteTextDerivativeRepository text, OriginalFileStore objects)
     {
         this.sources = sources;
         this.search = search;

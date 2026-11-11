@@ -1,13 +1,13 @@
 using Praxis.Application.Inference;
 using Praxis.Domain.Search;
 
-namespace Praxis.Infrastructure.Search;
+namespace Praxis.Application.Search;
 
 /// <summary>
 /// Combines independently ranked lexical and semantic source matches without treating a
 /// model similarity score as permission, truth or evidence of an answer.
 /// </summary>
-public sealed class LocalHybridSearch(LocalTextSearch lexical, LocalSemanticIndex semantic)
+public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever semantic)
 {
     private const int PoolSize = 100;
     private const double RankOffset = 60;

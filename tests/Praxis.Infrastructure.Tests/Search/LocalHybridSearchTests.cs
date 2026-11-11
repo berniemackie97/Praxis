@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Application.Search;
 using Praxis.Application.Text;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
@@ -41,10 +42,10 @@ public sealed class LocalHybridSearchTests : IDisposable
 
         FixtureEmbeddingModel model = new();
         Assert.Equal(new SemanticIndexUpdate(2, false),
-            await catalog.Embeddings.RefreshAsync(model, rebuild: true));
+            await new SemanticIndexer(catalog.Embeddings).RefreshAsync(model, rebuild: true));
         Assert.Empty(catalog.Search.Query("citrus"));
 
-        var hybrid = await catalog.Hybrid.QueryAsync("citrus", model);
+        var hybrid = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus", model);
         Assert.True(hybrid.UsedEmbeddings);
         Assert.Equal(orchard.SourceId, hybrid.Hits[0].SourceId);
         Assert.Equal(orchard.ItemId, hybrid.Hits[0].ItemId);
@@ -53,7 +54,7 @@ public sealed class LocalHybridSearchTests : IDisposable
         Assert.Equal(2, hybrid.Hits.Select(hit => hit.SourceId).Distinct().Count());
         Assert.Contains("tangerine", hybrid.Hits[0].Snippet);
 
-        var lexical = await catalog.Hybrid.QueryAsync("invoice", model: null);
+        var lexical = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("invoice", model: null);
         Assert.False(lexical.UsedEmbeddings);
         Assert.Equal(ledger.ItemId, Assert.Single(lexical.Hits).ItemId);
     }
@@ -71,10 +72,10 @@ public sealed class LocalHybridSearchTests : IDisposable
             secondSourceId = second.SourceId;
             await SegmentNext(catalog);
             await SegmentNext(catalog);
-            Assert.Equal(2, (await catalog.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
+            Assert.Equal(2, (await new SemanticIndexer(catalog.Embeddings).RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
 
             Assert.True(catalog.Sources.Revoke(firstSourceId));
-            var hits = await catalog.Hybrid.QueryAsync("citrus", new FixtureEmbeddingModel());
+            var hits = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus", new FixtureEmbeddingModel());
             Assert.DoesNotContain(hits.Hits, hit => hit.SourceId == firstSourceId);
             Assert.Contains(hits.Hits, hit => hit.SourceId == secondSourceId);
             await catalog.Originals.VerifyAsync(first.ItemId);
@@ -82,10 +83,10 @@ public sealed class LocalHybridSearchTests : IDisposable
             CapturedOriginal revised = await Capture(catalog, "two.md", "invoice ledger balances", "two-revised");
             Assert.Equal(secondSourceId, revised.SourceId);
             Assert.Equal(2, revised.Revision);
-            Assert.Empty((await catalog.Hybrid.QueryAsync("tangerine")).Hits);
+            Assert.Empty((await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("tangerine")).Hits);
             await SegmentNext(catalog);
-            Assert.Empty((await catalog.Hybrid.QueryAsync("tangerine")).Hits);
-            Assert.Equal(1, (await catalog.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
+            Assert.Empty((await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("tangerine")).Hits);
+            Assert.Equal(1, (await new SemanticIndexer(catalog.Embeddings).RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
         }
 
         using (SqliteConnection connection = new(new SqliteConnectionStringBuilder
@@ -101,9 +102,9 @@ public sealed class LocalHybridSearchTests : IDisposable
         }
 
         using SqliteCatalog reopened = SqliteCatalog.Open(catalogRoot);
-        Assert.False((await reopened.Hybrid.QueryAsync("citrus", new FixtureEmbeddingModel())).UsedEmbeddings);
-        Assert.Equal(1, (await reopened.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
-        var rebuilt = await reopened.Hybrid.QueryAsync("finances", new FixtureEmbeddingModel());
+        Assert.False((await new HybridSearch(reopened.Search, new SemanticRetriever(reopened.Embeddings)).QueryAsync("citrus", new FixtureEmbeddingModel())).UsedEmbeddings);
+        Assert.Equal(1, (await new SemanticIndexer(reopened.Embeddings).RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
+        var rebuilt = await new HybridSearch(reopened.Search, new SemanticRetriever(reopened.Embeddings)).QueryAsync("finances", new FixtureEmbeddingModel());
         Assert.True(rebuilt.UsedEmbeddings);
         Assert.Equal(secondSourceId, Assert.Single(rebuilt.Hits).SourceId);
     }
@@ -118,20 +119,20 @@ public sealed class LocalHybridSearchTests : IDisposable
         await SegmentNext(catalog);
         FixtureEmbeddingModel valid = new();
 
-        Assert.Equal(2, (await catalog.Embeddings.RefreshAsync(valid, rebuild: true)).Indexed);
+        Assert.Equal(2, (await new SemanticIndexer(catalog.Embeddings).RefreshAsync(valid, rebuild: true)).Indexed);
         Assert.Throws<InvalidOperationException>(() =>
-            catalog.Embeddings.RefreshAsync(valid, rebuild: true, maxSegments: 1).GetAwaiter().GetResult());
+            new SemanticIndexer(catalog.Embeddings).RefreshAsync(valid, rebuild: true, maxSegments: 1).GetAwaiter().GetResult());
         FixtureEmbeddingModel invalid = new(invalid: true);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            catalog.Embeddings.RefreshAsync(invalid, rebuild: true));
+            new SemanticIndexer(catalog.Embeddings).RefreshAsync(invalid, rebuild: true));
 
-        var preserved = await catalog.Hybrid.QueryAsync("citrus", valid);
+        var preserved = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus", valid);
         Assert.True(preserved.UsedEmbeddings);
         Assert.Equal("orchard.md", preserved.Hits[0].Title);
-        Assert.False((await catalog.Hybrid.QueryAsync("citrus",
+        Assert.False((await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus",
             new FixtureEmbeddingModel(digest: "different-model"))).UsedEmbeddings);
         Assert.Equal(new SemanticIndexUpdate(0, false),
-            await catalog.Embeddings.RefreshAsync(valid));
+            await new SemanticIndexer(catalog.Embeddings).RefreshAsync(valid));
     }
 
     [Fact]
@@ -144,11 +145,11 @@ public sealed class LocalHybridSearchTests : IDisposable
         FixtureEmbeddingModel revoking = new(onIndex: () =>
             Assert.True(catalog.Sources.Revoke(original.SourceId)));
 
-        SemanticIndexUpdate result = await catalog.Embeddings.RefreshAsync(
+        SemanticIndexUpdate result = await new SemanticIndexer(catalog.Embeddings).RefreshAsync(
             revoking, rebuild: true);
         Assert.Equal(0, result.Indexed);
         Assert.Empty(catalog.Search.Query("tangerine"));
-        Assert.False((await catalog.Hybrid.QueryAsync("citrus",
+        Assert.False((await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus",
             new FixtureEmbeddingModel())).UsedEmbeddings);
         await catalog.Originals.VerifyAsync(original.ItemId);
     }
@@ -159,13 +160,13 @@ public sealed class LocalHybridSearchTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal original = await Capture(catalog, "violet.md", "violet tangerine orchard", "one");
         await SegmentNext(catalog);
-        await catalog.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true);
+        await new SemanticIndexer(catalog.Embeddings).RefreshAsync(new FixtureEmbeddingModel(), rebuild: true);
         FixtureEmbeddingModel revoking = new(onQuery: () =>
         {
             Assert.True(catalog.Sources.Revoke(original.SourceId));
         });
 
-        var result = await catalog.Hybrid.QueryAsync("violet", revoking);
+        var result = await new HybridSearch(catalog.Search, new SemanticRetriever(catalog.Embeddings)).QueryAsync("violet", revoking);
         Assert.Empty(result.Hits);
         Assert.False(result.UsedEmbeddings);
         Assert.Empty(catalog.Search.Query("violet"));
