@@ -131,8 +131,15 @@ public sealed class PrivateSyncHostTests
         await host.StartAsync();
 
         using HttpClient verified = host.RawFirst();
-        Assert.Equal(host.ExpectedProtocol.ToString(),
-            await verified.GetStringAsync("__test/tls-protocol"));
+        string[] negotiated = (await verified.GetStringAsync("__test/tls-protocol")).Split('|');
+        Assert.Equal(2, negotiated.Length);
+        Assert.Equal(host.ExpectedProtocol.ToString(), negotiated[0]);
+        Assert.True(negotiated[1].Contains("GCM", StringComparison.Ordinal) ||
+            negotiated[1].Contains("CHACHA20_POLY1305", StringComparison.Ordinal));
+        if (host.ExpectedProtocol == SslProtocols.Tls12)
+        {
+            Assert.Contains("ECDHE", negotiated[1]);
+        }
 
         SslProtocols unsupported = host.ExpectedProtocol == SslProtocols.Tls12
             ? SslProtocols.Tls13 : SslProtocols.Tls12;
@@ -163,6 +170,18 @@ public sealed class PrivateSyncHostTests
         using HttpResponseMessage accepted = await trusted.PostAsJsonAsync(
             "v1/sync/challenge", request);
         Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProductionListenerCannotSilentlyDowngradeOnMacOs()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        await using TestHost host = new();
+        host.VerifyProductionListenerIsUnsupported();
     }
 
     [Fact]
@@ -261,10 +280,22 @@ public sealed class PrivateSyncHostTests
                 : PrivateSyncHost.Build(IPAddress.Loopback, 0,
                     serverCertificate, authority, Registry, store);
             app.MapGet("/__test/tls-protocol", (HttpContext context) =>
-                Results.Text(context.Features.Get<ITlsHandshakeFeature>()?.Protocol.ToString()
-                    ?? "TLS handshake information unavailable"));
+            {
+                ITlsHandshakeFeature? tls = context.Features.Get<ITlsHandshakeFeature>();
+                return tls is null ? Results.Problem() :
+                    Results.Text($"{tls.Protocol}|{tls.NegotiatedCipherSuite}");
+            });
             await app.StartAsync();
             endpoint = new Uri(app.Urls.Single().TrimEnd('/') + "/");
+        }
+
+        public void VerifyProductionListenerIsUnsupported()
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => PrivateSyncHost.Build(
+                IPAddress.Loopback, 0, serverCertificate, authority, Registry, store));
+            Assert.Throws<InvalidOperationException>(() =>
+                PrivateSyncHost.BuildMacOsLoopback(IPAddress.Any, 0,
+                    serverCertificate, authority, Registry, store));
         }
 
         public async Task RestartAsync()
