@@ -4,13 +4,13 @@
 
 ## Prerequisites and evidence
 
-Record `git rev-parse HEAD`, `dotnet --info`, macOS/Xcode versions, exact worker and app bundle identity, the output of the Release build/tests/format/publish gates, and the native app's presented per-root status. A queued GitHub Actions job is not passing evidence. Keep all sensitive path names and captured content out of public logs.
+Record `git rev-parse HEAD`, `dotnet --info`, macOS/Xcode versions, exact worker and app bundle identity, the output of the Release build/tests/format/publish gates, the native app's per-root state and global durable processing backlog, and relevant source revision IDs. A queued GitHub Actions job is not passing evidence. Keep all sensitive path names and captured content out of public logs.
 
 Before real filesystem experiments, create a coherent backup of any existing private catalog. Use a **fresh** test catalog to avoid migration or accidental retention impact.
 
 ## Headless and native checks
 
-1. Select a primary folder and one extra folder in the Xcode app. Verify that both appear in Configuration, each has its own state/counts, and an unknown binary is preserved but not indexed. Drop a `.md` and `.txt` source into different roots; confirm automatic capture, preserved source IDs and searchable content. Restart the worker and confirm no duplicate receipt or source.
+1. Select a primary folder and one extra folder in the Xcode app. Verify that both appear in Configuration, each has its own state/counts, the global queued/running/failed backlog changes as processing advances, and an unknown binary is preserved but not indexed. Drop a `.md` and `.txt` source into different roots; confirm automatic capture, preserved source IDs and searchable content. Restart the worker and confirm no duplicate receipt or source.
 2. Pause globally, add a source to each root, and confirm neither is imported while paused. Resume and verify both are captured exactly once. Change one file, atomically replace another, rename a directory, and verify revision/source continuity and old-term invalidation.
 3. While both roots are running, make one root unavailable (rename a disposable directory). Confirm only that root reports offline while the other continues importing. Restore the same directory; confirm it is not scanned without reapproval. In the app, matching device/inode can trigger automatic approval; otherwise use the folder picker. Verify original integrity throughout.
 4. Repeat with a **different** disposable directory or removable volume mounted at the original path. The reattached path must not import before deliberate owner reapproval. Try Quick note while the primary root is unavailable/reapproval-required: no file is created. After reapproval, Quick note should capture normally.
