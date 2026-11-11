@@ -52,10 +52,12 @@ struct WorkerLaunch {
 
         let candidates = [
             dotnetExecutable.isEmpty ? nil : dotnetExecutable,
+            ProcessInfo.processInfo.environment["PRAXIS_DOTNET_EXECUTABLE"],
             ProcessInfo.processInfo.environment["DOTNET_ROOT"].map { $0 + "/dotnet" },
             files.homeDirectoryForCurrentUser.appendingPathComponent(".dotnet/dotnet").path,
             "/usr/local/share/dotnet/dotnet",
             "/opt/homebrew/bin/dotnet",
+            "/opt/homebrew/opt/dotnet/libexec/dotnet",
             "/usr/local/bin/dotnet"
         ].compactMap { $0 }
         guard let executable = candidates.first(where: files.isExecutableFile(atPath:)) else {
@@ -71,7 +73,7 @@ struct WorkerLaunch {
         )
     }
 
-    private enum LaunchError: LocalizedError {
+    enum LaunchError: LocalizedError, Equatable {
         case overlappingPaths, invalidRoots, approvalRequired
         case missingInbox, missingCatalog, missingWorker, missingRuntime
 

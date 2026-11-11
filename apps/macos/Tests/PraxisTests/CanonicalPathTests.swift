@@ -39,37 +39,68 @@ struct CanonicalPathTests {
         #expect(identity == WatchedFolderSettings.identity(canonical))
     }
 
-    @Test func unchangedPathStillNeedsOwnerApprovalAndNestedRootsAreDenied() throws {
-        let parent = FileManager.default.temporaryDirectory
-            .appendingPathComponent("praxis-launch-\(UUID().uuidString)")
+    @Test func approvedFoldersLaunchAndUnapprovedOrReplacedFoldersFailClosed() throws {
+        let files = FileManager.default
+        let parent = files.temporaryDirectory.appendingPathComponent("praxis-launch-\(UUID().uuidString)")
         let source = parent.appendingPathComponent("inbox")
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: parent) }
+        let catalog = parent.appendingPathComponent("catalog")
+        let privateMode: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        try files.createDirectory(at: parent, withIntermediateDirectories: false, attributes: privateMode)
+        defer { try? files.removeItem(at: parent) }
+        try files.createDirectory(at: source, withIntermediateDirectories: false, attributes: privateMode)
+        try files.createDirectory(at: catalog, withIntermediateDirectories: false, attributes: privateMode)
 
         let sourcePath = CanonicalPath.of(source.path).path
-        let metadata = try #require(WatchedFolderSettings.identity(CanonicalPath.of(source.path)))
-        let good = WatchedFolderSettings.encode([sourcePath: metadata])
+        let identity = try #require(WatchedFolderSettings.identity(CanonicalPath.of(source.path)))
+        let approvals = WatchedFolderSettings.encode([sourcePath: identity])
 
-        do {
-            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
-                inbox: sourcePath, additionalInboxes: "[]",
-                rootApprovals: "{}", initialize: false, dotnetExecutable: "")
-            Issue.record("A folder without an owner approval was accepted.")
-        } catch { }
+        func expectDenied(_ expected: WorkerLaunch.LaunchError, _ action: () throws -> Void) {
+            do {
+                try action()
+                Issue.record("Launch unexpectedly succeeded instead of failing with \(expected).")
+            } catch let error as WorkerLaunch.LaunchError {
+                #expect(error == expected)
+            } catch {
+                Issue.record("Launch failed with \(error), not \(expected).")
+            }
+        }
 
-        do {
-            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
-                inbox: sourcePath, additionalInboxes: "[]",
-                rootApprovals: WatchedFolderSettings.encode([sourcePath: "untrusted"]),
-                initialize: false, dotnetExecutable: "")
-            Issue.record("A folder with a changed identity was accepted.")
-        } catch { }
+        expectDenied(.approvalRequired) {
+            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+                additionalInboxes: "[]", rootApprovals: "{}", initialize: false,
+                dotnetExecutable: "/usr/bin/true")
+        }
+        expectDenied(.approvalRequired) {
+            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+                additionalInboxes: "[]", rootApprovals: WatchedFolderSettings.encode([sourcePath: "untrusted"]),
+                initialize: false, dotnetExecutable: "/usr/bin/true")
+        }
+        expectDenied(.overlappingPaths) {
+            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+                additionalInboxes: WatchedFolderSettings.encode([sourcePath]),
+                rootApprovals: approvals, initialize: false, dotnetExecutable: "/usr/bin/true")
+        }
+        expectDenied(.overlappingPaths) {
+            _ = try WorkerLaunch.prepare(dataRoot: source.appendingPathComponent("Catalog").path,
+                inbox: sourcePath, additionalInboxes: "[]", rootApprovals: approvals,
+                initialize: false, dotnetExecutable: "/usr/bin/true")
+        }
 
-        do {
-            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
-                inbox: sourcePath, additionalInboxes: WatchedFolderSettings.encode([sourcePath]),
-                rootApprovals: good, initialize: false, dotnetExecutable: "")
-            Issue.record("Overlapping watched folders were accepted.")
-        } catch { }
+        let launch = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+            additionalInboxes: "[]", rootApprovals: approvals,
+            initialize: false, dotnetExecutable: "/usr/bin/true")
+        #expect(launch.executable.path == "/usr/bin/true")
+        #expect(launch.watchedRoots.map(\.path) == [sourcePath])
+        #expect(launch.arguments.contains(sourcePath))
+
+        let moved = parent.appendingPathComponent("moved")
+        try files.moveItem(at: source, to: moved)
+        try files.createDirectory(at: source, withIntermediateDirectories: false, attributes: privateMode)
+        expectDenied(.approvalRequired) {
+            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+                additionalInboxes: "[]", rootApprovals: approvals,
+                initialize: false, dotnetExecutable: "/usr/bin/true")
+        }
     }
+
 }
