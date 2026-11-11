@@ -296,6 +296,149 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         }
     }
 
+
+    [Fact]
+    public async Task ChangedNotificationRehashesWhenSizeAndTimestampAreUnchanged()
+    {
+        string path = Path.Combine(inbox, "metadata.md");
+        DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(path, "violet contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
+        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+
+        File.WriteAllText(path, "orange contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        watcher.Monitor.QueueChanged(path);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
+
+        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        Assert.Equal(before.ItemId, after.ItemId);
+        Assert.Equal(before.SourceId, after.SourceId);
+        Assert.Equal(2, after.Revision);
+        Assert.Equal(2L, Count(catalog.DatabasePath, "ingest_requests"));
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("orange"));
+        await catalog.Originals.VerifyAsync(after.ItemId);
+    }
+
+    [Fact]
+    public async Task WatcherErrorForcesFullRecheckEvenWithUnchangedMetadata()
+    {
+        string path = Path.Combine(inbox, "overflow.md");
+        DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(path, "violet contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
+
+        File.WriteAllText(path, "orange contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        watcher.Monitor.NotifyWatcherError();
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
+
+        LocalLibraryItem latest = Assert.Single(catalog.Library.List());
+        Assert.Equal(2, latest.Revision);
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("orange"));
+        await catalog.Originals.VerifyAsync(latest.ItemId);
+    }
+
+    [Fact]
+    public async Task ExplicitScanHonorsOwnerPauseWithoutCreatingReceipts()
+    {
+        string path = Path.Combine(inbox, "paused.txt");
+        File.WriteAllText(path, "violet pause gate");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        Assert.True(watcher.SetPaused(true).Paused);
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(5));
+        Assert.Empty(catalog.Library.List());
+        Assert.Equal("paused", watcher.Snapshot().State);
+
+        Assert.False(watcher.SetPaused(false).Paused);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(6)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(8)));
+        Assert.Single(catalog.Search.Query("violet"));
+        Assert.Equal(1L, Count(catalog.DatabasePath, "ingest_requests"));
+    }
+
+    [Fact]
+    public async Task AtomicReplacementCreatesOneRevisionAndRetractsOldSearch()
+    {
+        string path = Path.Combine(inbox, "atomic.md");
+        string staging = Path.Combine(inbox, "atomic.part");
+        File.WriteAllText(path, "violet preserved version");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
+        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+
+        File.WriteAllText(staging, "orange replacement version");
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        File.Move(staging, path, overwrite: true);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
+
+        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        Assert.Equal(before.ItemId, after.ItemId);
+        Assert.Equal(before.SourceId, after.SourceId);
+        Assert.Equal(2, after.Revision);
+        Assert.Equal(2L, Count(catalog.DatabasePath, "ingest_requests"));
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("orange"));
+        await catalog.Originals.VerifyAsync(after.ItemId);
+    }
+
+    [Fact]
+    public async Task OversizedSparseFileReportsAnErrorAndRecoversAfterReplacement()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string path = Path.Combine(inbox, "large.bin");
+        using (FileStream file = new(path, FileMode.CreateNew, FileAccess.Write))
+        {
+            file.SetLength(2L * 1024 * 1024 * 1024 + 1);
+        }
+
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Equal(0, await watcher.ReconcileAsync(now));
+        Assert.Empty(catalog.Library.List());
+        LocalIntakeStatus rejected = watcher.Snapshot();
+        Assert.Equal("degraded", rejected.State);
+        Assert.Equal(1, rejected.ErrorCount);
+        Assert.Contains("byte limit", Assert.Single(rejected.FileErrors).Message);
+
+        File.Delete(path);
+        File.WriteAllText(path, "violet recovered");
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(1)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        Assert.Equal("watching", watcher.Snapshot().State);
+        Assert.Empty(watcher.Snapshot().FileErrors);
+        Assert.Single(catalog.Search.Query("violet"));
+    }
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         DateTime deadline = DateTime.UtcNow.AddSeconds(10);

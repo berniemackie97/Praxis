@@ -18,11 +18,15 @@ internal sealed record WatchedScanResult(int ObservedFiles, int Imported);
 internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
 {
     private const int MaximumFiles = 5_000;
+    private const int MaximumQueuedChanges = 512;
     private const int MaximumDepth = 12;
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
     private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
     private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
     private bool locatorsNormalized;
+    private bool invalidateEverything;
+    private readonly Lock pendingChangesGate = new();
+    private readonly HashSet<string> pendingChanges = new(StringComparer.Ordinal);
 
     private readonly Dictionary<string, ObservedState> observations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, VerifiedState> verified = new(StringComparer.Ordinal);
@@ -31,8 +35,58 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
     private sealed record ObservedState(FileStamp Stamp, DateTimeOffset FirstSeen);
     private sealed record VerifiedState(FileStamp Stamp, DateTimeOffset LastVerified);
 
+    internal void Invalidate(string path)
+    {
+        lock (pendingChangesGate)
+        {
+            if (invalidateEverything || !pendingChanges.Add(path))
+            {
+                return;
+            }
+
+            if (pendingChanges.Count > MaximumQueuedChanges)
+            {
+                pendingChanges.Clear();
+                invalidateEverything = true;
+            }
+        }
+    }
+
+    internal void InvalidateAll()
+    {
+        lock (pendingChangesGate)
+        {
+            pendingChanges.Clear();
+            invalidateEverything = true;
+        }
+    }
+
+    private void ApplyInvalidations()
+    {
+        lock (pendingChangesGate)
+        {
+            if (invalidateEverything)
+            {
+                observations.Clear();
+                verified.Clear();
+            }
+            else
+            {
+                foreach (string path in pendingChanges)
+                {
+                    observations.Remove(path);
+                    verified.Remove(path);
+                }
+            }
+
+            pendingChanges.Clear();
+            invalidateEverything = false;
+        }
+    }
+
     internal async Task<WatchedScanResult> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
+        ApplyInvalidations();
         if (!locatorsNormalized)
         {
             // Before the first scan, so canonical paths match existing sources instead of
@@ -52,6 +106,14 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
             cancellationToken.ThrowIfCancellationRequested();
             if (IntakeFileRules.IsTemporaryName(file.SourcePath))
             {
+                continue;
+            }
+
+            if (file.Length > IntakeFileRules.MaximumFileBytes)
+            {
+                observations.Remove(file.SourcePath);
+                verified.Remove(file.SourcePath);
+                RecordFileError(file.SourcePath, "The file exceeds the intake byte limit.");
                 continue;
             }
 
@@ -99,11 +161,6 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
     {
         try
         {
-            if (file.Length > IntakeFileRules.MaximumFileBytes)
-            {
-                throw new InvalidDataException("The file exceeds the intake byte limit.");
-            }
-
             if (!IntakeFileRules.IsStable(file))
             {
                 observations.Remove(file.SourcePath);
@@ -144,13 +201,17 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
         {
-            if (status.RecordFileError(file.SourcePath, exception.Message))
-            {
-                report("Intake error: " + JsonSerializer.Serialize(file.SourcePath) +
-                    ": " + JsonSerializer.Serialize(exception.Message));
-            }
-
+            RecordFileError(file.SourcePath, exception.Message);
             return false;
+        }
+    }
+
+    private void RecordFileError(string path, string message)
+    {
+        if (status.RecordFileError(path, message))
+        {
+            report("Intake error: " + JsonSerializer.Serialize(path) +
+                ": " + JsonSerializer.Serialize(message));
         }
     }
 
