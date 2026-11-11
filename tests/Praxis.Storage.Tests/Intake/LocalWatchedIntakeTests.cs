@@ -474,7 +474,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             return;
         }
 
-        string path = Path.Combine(inbox, "large.bin");
+        string path = Path.Combine(inbox, "large.txt");
         using (FileStream file = new(path, FileMode.CreateNew, FileAccess.Write))
         {
             file.SetLength(2L * 1024 * 1024 * 1024 + 1);

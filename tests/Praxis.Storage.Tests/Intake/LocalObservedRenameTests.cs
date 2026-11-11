@@ -300,6 +300,116 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 
+
+    [Fact]
+    public async Task ObservedDirectoryMovePreservesNestedSourcesAndCollectionMembership()
+    {
+        string previous = Path.Combine(inbox, "previous");
+        string nested = Path.Combine(previous, "nested");
+        Directory.CreateDirectory(nested);
+        string first = Path.Combine(previous, "first.md");
+        string second = Path.Combine(nested, "second.txt");
+        File.WriteAllText(first, "violet folder note");
+        File.WriteAllText(second, "amber nested note");
+
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewWatcher(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        Assert.Equal(2, await watcher.ReconcileAsync(now.AddSeconds(2)));
+        LocalLibraryItem[] original = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
+        Assert.Equal(2, original.Length);
+        LocalSourceCollection group = catalog.Collections.Create("Moved sources");
+        Assert.True(catalog.Collections.AddSource(group.CollectionId, original[0].SourceId));
+
+        string destination = Path.Combine(inbox, "destination");
+        Directory.Move(previous, destination);
+        watcher.Monitor.QueueRename(previous, destination);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(5)));
+        LocalLibraryItem[] moved = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
+        Assert.Equal(2, moved.Length);
+        Assert.Equal(original.Select(item => item.SourceId).OrderBy(id => id), moved.Select(item => item.SourceId).OrderBy(id => id));
+        Assert.Equal(original.Select(item => item.ItemId).OrderBy(id => id), moved.Select(item => item.ItemId).OrderBy(id => id));
+        Assert.All(moved, item => Assert.Equal(1, item.Revision));
+        Assert.All(moved, item => Assert.StartsWith(destination + Path.DirectorySeparatorChar, item.SourceLocator));
+        Assert.Equal(2L, Count("source_locator_moves"));
+        Assert.Single(catalog.Library.List(collectionId: group.CollectionId));
+        Assert.Single(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("amber"));
+        foreach (LocalLibraryItem item in moved)
+        {
+            await catalog.Originals.VerifyAsync(item.ItemId);
+        }
+
+        string revised = Path.Combine(destination, "nested", "second.txt");
+        File.WriteAllText(revised, "cobalt nested revision");
+        File.SetLastWriteTimeUtc(revised, DateTime.UtcNow.AddSeconds(20));
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(6)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(8)));
+        LocalLibraryItem updated = Assert.Single(catalog.Library.List(), item => item.SourceLocator == revised);
+        Assert.Equal(2, updated.Revision);
+        Assert.Empty(catalog.Search.Query("amber"));
+        Assert.Single(catalog.Search.Query("cobalt"));
+    }
+
+    [Fact]
+    public async Task DirectoryCopyCannotInheritIdentitiesEvenWithSyntheticMoveHint()
+    {
+        string previous = Path.Combine(inbox, "original");
+        string destination = Path.Combine(inbox, "copy");
+        Directory.CreateDirectory(previous);
+        string path = Path.Combine(previous, "note.md");
+        File.WriteAllText(path, "violet independent copy");
+
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewWatcher(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        LocalLibraryItem first = Assert.Single(catalog.Library.List());
+
+        Directory.CreateDirectory(destination);
+        File.Copy(path, Path.Combine(destination, "note.md"));
+        watcher.Monitor.QueueRename(previous, destination);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
+        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.NotEqual(first.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(destination, StringComparison.Ordinal)).SourceId);
+        Assert.Equal(0L, Count("source_locator_moves"));
+    }
+
+    [Fact]
+    public async Task ChangedFileInsideMovedDirectoryDoesNotInheritOldIdentity()
+    {
+        string previous = Path.Combine(inbox, "old");
+        string destination = Path.Combine(inbox, "new");
+        Directory.CreateDirectory(previous);
+        string path = Path.Combine(previous, "note.md");
+        File.WriteAllText(path, "violet original file");
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewWatcher(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        LocalLibraryItem first = Assert.Single(catalog.Library.List());
+
+        Directory.Move(previous, destination);
+        string movedPath = Path.Combine(destination, "note.md");
+        File.WriteAllText(movedPath, "orange modified file");
+        watcher.Monitor.QueueRename(previous, destination);
+        await watcher.ReconcileAsync(now.AddSeconds(3));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
+        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.Equal(first.SourceId, Assert.Single(items, item => item.SourceLocator == path).SourceId);
+        Assert.NotEqual(first.SourceId, Assert.Single(items, item => item.SourceLocator == movedPath).SourceId);
+        Assert.Empty(catalog.Sources.ListMovements(first.SourceId));
+        Assert.Equal(0L, Count("source_locator_moves"));
+        await catalog.Originals.VerifyAsync(first.ItemId);
+    }
+
     [Fact]
     public async Task RenameHistorySurvivesCoherentSnapshotRestore()
     {
