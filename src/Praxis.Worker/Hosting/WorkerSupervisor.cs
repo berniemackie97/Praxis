@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Praxis.Application.Processing;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Intake;
@@ -13,12 +14,14 @@ namespace Praxis.Worker.Hosting;
 /// </summary>
 internal sealed class WorkerSupervisor(
     WorkerOptions options, WatchedFolderIntakeGroup intake, ProcessingPipeline processing, VerificationRunner verification,
-    DesktopStdioSession session, WorkerOutcome outcome, IHostApplicationLifetime lifetime) : BackgroundService
+    DesktopStdioSession session, WorkerOutcome outcome, IHostApplicationLifetime lifetime,
+    ILogger<WorkerSupervisor> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
+            logger.LogInformation("Worker supervisor started.");
             if (options.DesktopMode)
             {
                 await WorkerServices.RunAsync(stoppingToken, allowDesktopExit: true,
@@ -39,6 +42,7 @@ internal sealed class WorkerSupervisor(
         }
         finally
         {
+            logger.LogInformation("Worker supervisor stopped.");
             lifetime.StopApplication();
         }
     }
