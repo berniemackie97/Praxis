@@ -9,6 +9,7 @@ public sealed class OpaqueSyncGateway(SecurityRegistry registry, OpaqueSyncStore
         VerifiedDeviceProof proof, OpaqueSyncMutation mutation)
     {
         ArgumentNullException.ThrowIfNull(mutation);
+        ArgumentNullException.ThrowIfNull(proof);
         if (proof.DeviceId != mutation.DeviceId || proof.SpaceId != mutation.SpaceId)
         {
             throw new UnauthorizedAccessException("The requested private resource is not authorized.");
@@ -22,6 +23,7 @@ public sealed class OpaqueSyncGateway(SecurityRegistry registry, OpaqueSyncStore
         VerifiedDeviceProof proof, OpaqueSyncPull request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(proof);
         if (proof.DeviceId != request.DeviceId || proof.SpaceId != request.SpaceId)
         {
             throw new UnauthorizedAccessException("The requested private resource is not authorized.");
