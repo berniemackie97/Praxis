@@ -127,6 +127,36 @@ public sealed class SqliteCatalogTests : IDisposable
     }
 
     [Fact]
+    public void VersionSixteenUpgradesIncidentJournalWithoutChangingSourceData()
+    {
+        string databasePath;
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            databasePath = catalog.DatabasePath;
+            using SqliteConnection connection = Connect(databasePath);
+            InsertSource(connection, "preserved-source", "original.md");
+        }
+
+        using (SqliteConnection connection = Connect(databasePath))
+        {
+            Execute(connection, """
+                DROP INDEX intake_incidents_recent;
+                DROP INDEX intake_incidents_open_root;
+                DROP TABLE intake_incidents;
+                PRAGMA user_version = 16;
+                """);
+        }
+
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
+        Assert.Equal(17, upgraded.SchemaVersion);
+        using SqliteConnection verified = Connect(upgraded.DatabasePath);
+        Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM sources"));
+        Assert.Equal("preserved-source", Scalar(verified, "SELECT source_id FROM sources"));
+        Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM intake_incidents"));
+        Assert.Equal(17L, Scalar(verified, "PRAGMA user_version"));
+    }
+
+    [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
         string path = Path.Combine(root, "catalog.sqlite");
