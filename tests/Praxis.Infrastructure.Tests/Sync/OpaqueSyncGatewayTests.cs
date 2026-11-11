@@ -34,7 +34,8 @@ public sealed class OpaqueSyncGatewayTests : IDisposable
         using OpaqueSyncStore store = OpaqueSyncStore.Open(syncRoot);
         Guid owner = registry.Operator.CreatePrincipal();
         using ECDsa signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        using RSA recipient = RSA.Create(3072);
+        using RSA recipient = RSA.Create();
+        recipient.KeySize = 3072;
         byte[] signing = signer.ExportSubjectPublicKeyInfo();
         byte[] wrapping = recipient.ExportSubjectPublicKeyInfo();
         Guid device = registry.Operator.EnrollDevice(owner, signing, wrapping,
