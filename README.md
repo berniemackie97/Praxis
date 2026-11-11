@@ -18,6 +18,12 @@ The [product experience](docs/product/second-brain-experience.md) defines the in
 
 **Verification status:** targeted backend and model runs are documented in individual PRs; no current all-platform GitHub Actions success can be claimed while #137 has no provisioned runners. Merged code, local test evidence, first-party hardware acceptance and release readiness are distinct statuses. [Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board, with the [repository issue plan](scripts/github/roadmap.json) as its versioned reconciliation input.
 
+## Approved deployment direction
+
+[ADR 0041](docs/decisions/0041-hybrid-local-first-deployment.md) selects **hybrid local-first**: the first certifiable class is a macOS desktop using the existing private-pipe .NET worker; an optional owner-managed private-network host follows, and user-selected remote/cloud hosting remains a later, separately certified option. This is a product decision, **not** a claim that the current development app is release-certified or that a private-data listener exists. #41 tracks owner-local operations acceptance; parent #65 tracks broader hosted and encrypted-recovery operations.
+
+**Local-first is not local-LLM-only.** Offline capture/search and supported local inference must work without an external model. When online, the owner can approve scoped disclosure to supported remote models and tools (including existing bounded Codex/Claude CLI verification), or later providers such as DeepSeek and Grok under independently tested integrations. Approval, source security class, routing, cost and tool permissions are separate; no silent source upload or assumption that a consumer subscription includes API credentials.
+
 ## Development
 
 Requires the .NET 10 SDK.

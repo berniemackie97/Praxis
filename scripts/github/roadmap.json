@@ -1038,9 +1038,10 @@
         113,
         166,
         215,
+        41,
         130
       ],
-      "exit": "On the owner's Mac, launch a trusted local Praxis workbench, automatically capture approved inputs, preserve exact originals, inspect/search supported data, organize collections, restore and verify after interruption, and deny unauthorized access. Passing this gate does not establish the complete agent-powered Praxis MVP (#170)."
+      "exit": "On the owner's Mac, verify owner-local D0 deployment (#41) alongside native first run, safe private-pipe worker, explicitly approved source capture, exact original retention, inspect/search/organize, offline functionality, access denial and real recovery/failure evidence (#130/#128/#215). Remote model escalation remains optional and per-request authorized, never an offline dependency. Passing this gate is not the full agent-powered MVP (#170) or a hosted-service certification (#65)."
     },
     {
       "id": "L1",
@@ -1128,7 +1129,7 @@
         178,
         179
       ],
-      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured provider escalation, and reliability/privacy/revocation/cost tests."
+      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured, consented local-or-remote model and agent routing with provider outage/denial tests, and reliability/privacy/revocation/cost tests."
     }
   ]
 }
