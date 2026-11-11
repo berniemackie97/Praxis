@@ -70,7 +70,8 @@ def main():
         require(existing.returncode == 1 and not existing.stdout,
                 "Restore accepted an existing destination", existing)
         low_budget = recover("verify", backup, max_bytes=1)
-        require(low_budget.returncode == 1 and not low_budget.stdout and b"byte budget" in low_budget.stderr,
+        require(low_budget.returncode == 1 and not low_budget.stdout and
+                low_budget.stderr.strip() == b"Praxis worker failed (invalid_input).",
                 "Verification accepted a snapshot above its budget", low_budget)
 
         invalid = recover("verify", backup, max_bytes=0)
