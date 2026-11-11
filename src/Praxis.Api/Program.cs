@@ -14,6 +14,7 @@ if (configuredPort is not null &&
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(server =>
 {
+    server.Configure(new ConfigurationBuilder().Build(), reloadOnChange: false);
     server.Listen(IPAddress.Loopback, port);
     server.Limits.MaxConcurrentConnections = 64;
     server.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(10);
