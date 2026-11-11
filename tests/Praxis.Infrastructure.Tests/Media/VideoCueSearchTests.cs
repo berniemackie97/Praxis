@@ -133,7 +133,7 @@ public sealed class VideoCueSearchTests : IDisposable
 
         DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument scoped = JsonDocument.Parse(await protocol.HandleAsync(
-            $"""{"requestId":"scoped","action":"mediaCues","query":"violet","collectionId":"{{group:D}}"}"""));
+            $$"""{"requestId":"scoped","action":"mediaCues","query":"violet","collectionId":"{{group:D}}"}"""));
         Assert.True(scoped.RootElement.GetProperty("ok").GetBoolean());
         Assert.Single(scoped.RootElement.GetProperty("data").GetProperty("clips").EnumerateArray());
 
