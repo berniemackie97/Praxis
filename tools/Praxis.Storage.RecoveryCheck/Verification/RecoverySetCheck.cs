@@ -266,7 +266,7 @@ internal static class RecoverySetCheck
             Directory.Move(held, identity);
         }
 
-        await File.WriteAllBytesAsync(Path.Combine(identity, "identity.sqlite"), [0, 1, 2],
+        await File.WriteAllBytesAsync(Path.Combine(identity, "identity.sqlite"), new byte[] { 0, 1, 2 },
             cancellationToken);
         await ExpectFailureAsync<InvalidDataException>(() =>
             LocalRecoverySet.RestoreAsync(damaged, Path.Combine(workspace, "rejected"),
