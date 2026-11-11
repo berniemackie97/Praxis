@@ -171,13 +171,14 @@ internal sealed class SealedNoteOutbox
         string[] entries = Directory.EnumerateFiles(root, "*.json", SearchOption.TopDirectoryOnly).ToArray();
         foreach (string path in entries)
         {
-            VerifyRegularPrivateFile(path);
             string name = Path.GetFileName(path);
             if (name != ContextFileName &&
                 !Guid.TryParseExact(Path.GetFileNameWithoutExtension(name), "N", out _))
             {
                 throw new InvalidDataException("The encrypted outbox contains an unrelated JSON file.");
             }
+
+            VerifyRegularPrivateFile(path);
         }
 
         foreach (string path in entries)
