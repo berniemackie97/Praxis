@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 16;
+    internal const int CurrentVersion = 17;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -37,6 +37,7 @@ internal static class CatalogSchema
         (14, "verification_items", "request_id, ordinal, proposal_id, entity_id, included, verdict, corrected_type, note"),
         (15, "capture_request_context", "request_key, route, authority_basis, scope, recorded_utc"),
         (16, "semantic_vectors", "item_id, revision, ordinal, model_digest, source_digest, dimensions, vector, segment_text, recorded_utc"),
+        (17, "intake_incidents", "incident_id, root_path, state, started_utc, resolved_utc"),
         (12, "enrichment_runs", "model_provider, model_name, model_digest, input_tokens, output_tokens, duration_ms, segments_examined, segments_total, rejected_count")
     ];
 
