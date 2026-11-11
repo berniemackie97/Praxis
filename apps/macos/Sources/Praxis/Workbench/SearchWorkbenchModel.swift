@@ -49,12 +49,10 @@ final class SearchWorkbenchModel: ObservableObject {
             model.mode = response.data?.mode == "hybrid" ? "Hybrid search" : "Keyword search"
             model.notice = response.data?.notice
         }
-        // Media cue queries do not yet accept collection scopes. Never mix unscoped
-        // caption results into a source-restricted search.
-        if selectedCollectionId == nil {
-            request("mediaCues", ["query": term, "limit": 20]) { model, response in
-                model.videoClips = response.data?.clips ?? []
-            }
+        var mediaFields = fields
+        mediaFields["limit"] = 20
+        request("mediaCues", mediaFields) { model, response in
+            model.videoClips = response.data?.clips ?? []
         }
     }
 
