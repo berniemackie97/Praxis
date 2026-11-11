@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Praxis.Storage.Catalog;
 
 namespace Praxis.Storage.Intake;
@@ -227,23 +226,23 @@ public sealed class LocalWatchedIntake
             Interlocked.Exchange(ref watcherFaulted, 0);
             FileSystemWatcher created = CreateWatcher();
             status.SetState("resuming");
-            report("Watching the approved directory: " + JsonSerializer.Serialize(root));
+            report("Watching the approved directory.");
             return created;
         }
-        catch (IOException exception)
+        catch (IOException)
         {
-            status.SetState("degraded", "Filesystem notifications are unavailable; polling and retrying: " + exception.Message);
-            report("Watcher setup will retry: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState("degraded", "Filesystem notifications are unavailable; polling and retrying.");
+            report("Watcher setup will retry.");
         }
-        catch (UnauthorizedAccessException exception)
+        catch (UnauthorizedAccessException)
         {
-            status.SetState("degraded", "Watcher access denied: " + exception.Message);
-            report("Watcher setup denied: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState("degraded", "Watcher access denied.");
+            report("Watcher setup denied.");
         }
-        catch (InvalidDataException exception)
+        catch (InvalidDataException)
         {
-            status.SetState("degraded", "Watcher configuration rejected: " + exception.Message);
-            report("Watcher setup rejected: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState("degraded", "Watcher configuration rejected.");
+            report("Watcher setup rejected.");
         }
 
         return null;
@@ -255,21 +254,21 @@ public sealed class LocalWatchedIntake
         {
             return await ReconcileCoreAsync(DateTimeOffset.UtcNow, cancellationToken);
         }
-        catch (IOException exception)
+        catch (IOException)
         {
             bool offline = !Directory.Exists(root);
-            status.SetState(offline ? "offline" : "degraded", offline ? OfflineProblem : "Intake scan will retry: " + exception.Message);
-            report("Intake scan will retry: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState(offline ? "offline" : "degraded", offline ? OfflineProblem : "Intake scan will retry.");
+            report("Intake scan will retry.");
         }
-        catch (UnauthorizedAccessException exception)
+        catch (UnauthorizedAccessException)
         {
-            status.SetState("degraded", "Intake scan access denied: " + exception.Message);
-            report("Intake scan denied: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState("degraded", "Intake scan access denied.");
+            report("Intake scan denied.");
         }
-        catch (InvalidDataException exception)
+        catch (InvalidDataException)
         {
-            status.SetState("degraded", "Intake scan rejected input: " + exception.Message);
-            report("Intake scan rejected input: " + JsonSerializer.Serialize(exception.Message));
+            status.SetState("degraded", "Intake scan rejected input.");
+            report("Intake scan rejected input.");
         }
 
         return null;

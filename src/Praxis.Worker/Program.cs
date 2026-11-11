@@ -27,10 +27,21 @@ catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 
     return 0;
 }
-catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException
-                                      or ArgumentException or NotSupportedException or SqliteException)
+catch (Exception exception)
 {
-    Console.Error.WriteLine("Praxis worker failed: " + exception.Message);
+    string code = exception switch
+    {
+        UnauthorizedAccessException => "access_denied",
+        DirectoryNotFoundException => "directory_unavailable",
+        SqliteException => "storage_error",
+        IOException => "io_error",
+        InvalidDataException => "invalid_input",
+        ArgumentException => "invalid_argument",
+        NotSupportedException => "unsupported",
+        InvalidOperationException => "invalid_state",
+        _ => "unexpected_failure"
+    };
+    Console.Error.WriteLine("Praxis worker failed (" + code + ").");
     return 1;
 }
 finally

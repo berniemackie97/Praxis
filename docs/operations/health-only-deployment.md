@@ -2,7 +2,7 @@
 
 **Scope:** #41 deployment hardening, initial diagnostic surface. The sole published HTTP host exposes two fixed diagnostic strings on IPv4 loopback. This is not a remote Praxis installation, private-data API, browser bridge, TLS endpoint, MCP server, agent service or network synchronization service.
 
-The SwiftUI first-party app continues to launch a private .NET worker over inherited local pipes, documented in [the macOS workbench](../delivery/macos-workbench.md) and ADR 0021. The first-party application does not need the health listener.
+The SwiftUI first-party app continues to launch a private .NET worker over inherited local pipes, documented in [the macOS workbench](../delivery/macos-workbench.md), [owner-local worker lifecycle](owner-local-worker.md) and ADR 0021. The first-party application does not need the health listener.
 
 ## Manual operator deployment
 

@@ -51,7 +51,7 @@ internal static class IntakeCommand
         }
         else
         {
-            await WorkerServices.RunAsync(cancellationToken, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
+            await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: false, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
         }
 
         return 0;

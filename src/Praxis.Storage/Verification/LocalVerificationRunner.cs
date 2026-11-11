@@ -80,20 +80,18 @@ public sealed class LocalVerificationRunner(
                 MaximumOutputTokens, ContextTokens), cancellationToken);
             var verdicts = VerdictReader.Read(result.Content, claim.Ordinals);
             catalog.Verification.Complete(claim, identity, result, verdicts);
-            report($"Verification {claim.RequestId:D} completed by {claim.Provider.ProviderId}: " +
-                $"{verdicts.Count} of {claim.Ordinals.Count} item(s) judged.");
+            report($"Verification completed: {verdicts.Count} of {claim.Ordinals.Count} item(s) judged.");
         }
         catch (InferenceException exception) when (RetryDelay(exception.Failure) is { } delay)
         {
             catalog.Verification.Release(claim, DateTimeOffset.UtcNow + delay, exception.Code);
-            report($"Verification with {claim.Provider.ProviderId} is waiting ({exception.Code}); " +
-                $"retrying after {delay.TotalMinutes:0} min." +
+            report($"Verification runtime unavailable; retrying after {delay.TotalMinutes:0} min." +
                 (exception.Failure == InferenceFailure.Unauthenticated ? " Sign in to the provider CLI to resume." : ""));
         }
         catch (InferenceException exception)
         {
             catalog.Verification.Fail(claim, exception.Code);
-            report($"Verification {claim.RequestId:D} failed: {exception.Code}.");
+            report("Verification failed; inspect owner-local verification status.");
         }
 
         return true;
