@@ -6,8 +6,6 @@ using Praxis.Infrastructure.Persistence.Sync;
 
 namespace Praxis.Infrastructure.Security.Cryptography;
 
-public sealed record OpaqueNoteContent(string Path, string Markdown);
-
 public static class ClientOpaqueNoteCipher
 {
     private const byte Version = 1;

@@ -13,17 +13,20 @@ public sealed class OpaqueSyncTransportClient : IDisposable
     private readonly HttpClient http;
     private readonly ECDsa signer;
     private readonly Guid deviceId;
+    private readonly TimeProvider clock;
 
-    private OpaqueSyncTransportClient(HttpClient http, ECDsa signer, Guid deviceId)
+    private OpaqueSyncTransportClient(HttpClient http, ECDsa signer, Guid deviceId,
+        TimeProvider clock)
     {
         this.http = http;
         this.signer = signer;
         this.deviceId = deviceId;
+        this.clock = clock;
     }
 
     public static OpaqueSyncTransportClient Connect(Uri endpoint,
         X509Certificate2 clientCertificate, X509Certificate2 pinnedServerRoot,
-        Guid deviceId, ECDsa deviceSigningKey)
+        Guid deviceId, ECDsa deviceSigningKey, TimeProvider? clock = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(clientCertificate);
@@ -48,7 +51,8 @@ public sealed class OpaqueSyncTransportClient : IDisposable
         };
         handler.ClientCertificates.Add(clientCertificate);
         HttpClient client = new(handler) { BaseAddress = endpoint, Timeout = TimeSpan.FromSeconds(20) };
-        return new OpaqueSyncTransportClient(client, deviceSigningKey, deviceId);
+        return new OpaqueSyncTransportClient(client, deviceSigningKey, deviceId,
+            clock ?? TimeProvider.System);
     }
 
     public async Task<OpaqueSyncReceipt> SubmitAsync(
@@ -107,7 +111,7 @@ public sealed class OpaqueSyncTransportClient : IDisposable
             cancellationToken);
         if (challenge is null || challenge.ChallengeId == Guid.Empty ||
             challenge.Message.Length is < 32 or > 1024 ||
-            challenge.ExpiresUtc <= DateTimeOffset.UtcNow)
+            challenge.ExpiresUtc <= clock.GetUtcNow())
         {
             throw new InvalidDataException("The device challenge is invalid.");
         }
