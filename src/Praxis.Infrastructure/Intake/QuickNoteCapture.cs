@@ -1,12 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Application.Intake;
 using Praxis.Application.Originals;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed class QuickNoteCapture(IOriginalStore originals, string catalogDirectory, string intakeDirectory)
+public sealed class QuickNoteCapture(IOriginalStore originals, string catalogDirectory, string intakeDirectory) : IQuickNoteCapture
 {
     private const int MaximumTextCharacters = 8_000;
     private const int MaximumOriginalBytes = 32 * 1024;

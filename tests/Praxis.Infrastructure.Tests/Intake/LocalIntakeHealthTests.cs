@@ -1,8 +1,8 @@
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -182,7 +182,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         try
         {
             await WaitForAsync(() => monitor.Snapshot().State == "offline");
-            LocalDesktopProtocol service = new(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
+            DesktopProtocol service = TestDesktop.Protocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
             using JsonDocument status = System.Text.Json.JsonDocument.Parse(
                 await service.HandleAsync(
                     """{"requestId":"status","action":"intakeStatus"}"""));

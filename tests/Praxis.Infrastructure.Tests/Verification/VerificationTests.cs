@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Praxis.Application.Desktop;
 using Praxis.Application.Inference;
 using Praxis.Application.Text;
 using Praxis.Application.Verification;
@@ -8,7 +9,6 @@ using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -234,7 +234,7 @@ public sealed class VerificationTests : IDisposable
     {
         using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
-        var protocol = new LocalDesktopProtocol(catalog);
+        var protocol = TestDesktop.Protocol(catalog);
 
         using JsonDocument relative = await Send(protocol,
             """{"requestId":"1","action":"verificationProviderSave","providerId":"codex","executable":"codex","enabled":true}""");
@@ -349,7 +349,7 @@ public sealed class VerificationTests : IDisposable
         return captured;
     }
 
-    private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string request) =>
+    private static async Task<JsonDocument> Send(DesktopProtocol protocol, string request) =>
         JsonDocument.Parse(await protocol.HandleAsync(request));
 
     public void Dispose()

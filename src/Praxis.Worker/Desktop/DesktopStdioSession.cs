@@ -1,15 +1,12 @@
 using System.Text;
-using Praxis.Application.Processing;
-using Praxis.Application.Verification;
-using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Application.Desktop;
 
 namespace Praxis.Worker.Desktop;
 
-internal static class DesktopStdioSession
+/// <summary>Serves the desktop protocol over the parent process's stdin and stdout pipes until EOF or a stop request.</summary>
+internal sealed class DesktopStdioSession(DesktopProtocol protocol)
 {
-    internal static async Task RunAsync(SqliteCatalog catalog, WatchedFolderIntakeGroup monitors, ProcessingPipeline processing, VerificationRunner verification, string inbox, CancellationToken cancellationToken)
+    internal async Task RunAsync(CancellationToken cancellationToken)
     {
         using StreamReader reader = new(Console.OpenStandardInput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false);
         using StreamWriter writer = new(Console.OpenStandardOutput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
@@ -17,23 +14,16 @@ internal static class DesktopStdioSession
             AutoFlush = true
         };
         DesktopRequestReader frames = new(reader);
-        LocalDesktopProtocol protocol = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox), processing: processing, verification: verification, group: monitors);
-
-        async Task ServeAsync(CancellationToken token)
+        while (!cancellationToken.IsCancellationRequested && !protocol.StopRequested)
         {
-            while (!token.IsCancellationRequested && !protocol.StopRequested)
+            string? request = await frames.ReadAsync(cancellationToken);
+            if (request is null)
             {
-                string? request = await frames.ReadAsync(token);
-                if (request is null)
-                {
-                    return;
-                }
-
-                string response = await protocol.HandleAsync(request, token);
-                await writer.WriteLineAsync(response.AsMemory(), token);
+                return;
             }
-        }
 
-        await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: true, ServeAsync, monitors.RunAsync, processing.RunAsync, verification.RunAsync);
+            string response = await protocol.HandleAsync(request, cancellationToken);
+            await writer.WriteLineAsync(response.AsMemory(), cancellationToken);
+        }
     }
 }

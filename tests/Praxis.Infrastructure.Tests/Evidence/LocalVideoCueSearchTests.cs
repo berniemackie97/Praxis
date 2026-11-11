@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Application.Media;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -119,7 +119,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument result = JsonDocument.Parse(await protocol.HandleAsync(
             """{"requestId":"clip","action":"mediaCues","query":"violet"}"""));
         Assert.True(result.RootElement.GetProperty("ok").GetBoolean());

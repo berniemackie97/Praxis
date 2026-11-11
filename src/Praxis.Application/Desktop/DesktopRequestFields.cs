@@ -1,8 +1,9 @@
 using System.Text.Json;
 
-namespace Praxis.Infrastructure.Desktop;
+namespace Praxis.Application.Desktop;
 
-internal readonly struct DesktopRequestFields(JsonElement root)
+/// <summary>Validated access to the fields of one desktop request object.</summary>
+public readonly struct DesktopRequestFields(JsonElement root)
 {
     public bool RequireBoolean(string property)
     {

@@ -1,0 +1,43 @@
+using Praxis.Infrastructure.Intake;
+
+namespace Praxis.Worker.Hosting;
+
+/// <summary>The catalog and approved folders a serving worker owns, parsed and validated from its arguments.</summary>
+internal sealed record WorkerOptions(string DataRoot, IReadOnlyList<string> IntakeRoots, bool DesktopMode)
+{
+    internal const string Usage =
+        "Usage: Praxis.Worker --data-root <absolute-private-data-directory> --intake <absolute-inbox> [--intake <another-approved-folder> ...] [--stdio]";
+
+    /// <summary>The folder that receives quick notes.</summary>
+    internal string PrimaryIntakeRoot => IntakeRoots[0];
+
+    internal static bool TryParse(IReadOnlyList<string> args, out WorkerOptions? options, out string? error)
+    {
+        options = null;
+        bool desktopMode = args.Count > 0 && args[^1] == "--stdio";
+        int argumentCount = args.Count - (desktopMode ? 1 : 0);
+        if (argumentCount < 4 || argumentCount % 2 != 0 ||
+            args[0] != "--data-root" || !Path.IsPathFullyQualified(args[1]) ||
+            args[2] != "--intake" || (argumentCount - 2) / 2 > WatchedFolderIntakeGroup.MaximumRoots)
+        {
+            error = Usage;
+            return false;
+        }
+
+        List<string> roots = new();
+        for (int index = 2; index < argumentCount; index += 2)
+        {
+            if (args[index] != "--intake" || !Path.IsPathFullyQualified(args[index + 1]))
+            {
+                error = "Each watched folder must be supplied as --intake <absolute-path>.";
+                return false;
+            }
+
+            roots.Add(Path.GetFullPath(args[index + 1]));
+        }
+
+        options = new WorkerOptions(Path.GetFullPath(args[1]), roots, desktopMode);
+        error = null;
+        return true;
+    }
+}

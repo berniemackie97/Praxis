@@ -1,4 +1,4 @@
-namespace Praxis.Worker;
+namespace Praxis.Worker.Hosting;
 
 /// <summary>
 /// Stops all cooperating services when one ends, then awaits every service before releasing

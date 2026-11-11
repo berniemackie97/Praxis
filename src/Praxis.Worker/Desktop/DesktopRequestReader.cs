@@ -1,5 +1,5 @@
 using System.Text;
-using Praxis.Infrastructure.Desktop;
+using Praxis.Application.Desktop;
 
 namespace Praxis.Worker.Desktop;
 
@@ -27,7 +27,7 @@ internal sealed class DesktopRequestReader(TextReader input)
 
             int newline = Array.IndexOf(buffer, '\n', start, end - start);
             int length = (newline < 0 ? end : newline) - start;
-            if (length > LocalDesktopProtocol.MaximumRequestCharacters - (frame?.Length ?? 0))
+            if (length > DesktopProtocol.MaximumRequestCharacters - (frame?.Length ?? 0))
             {
                 throw new InvalidDataException("The desktop request exceeds its size limit.");
             }

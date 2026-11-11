@@ -1,8 +1,8 @@
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Application.Processing;
 using Praxis.Domain.Library;
 using Praxis.Infrastructure.Composition;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -186,7 +186,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         WatchedFolderIntakeGroup group = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [first, second], quietPeriod: TimeSpan.Zero);
-        LocalDesktopProtocol protocol = new(catalog, group: group);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog, group: group);
         using JsonDocument initial = await Send(protocol, """{"requestId":"status","action":"intakeStatus"}""");
         JsonElement roots = initial.RootElement.GetProperty("data").GetProperty("roots");
         Assert.Equal(2, roots.GetArrayLength());
@@ -203,14 +203,14 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
 
         string missing = Path.Combine(workspace, "not-trusted");
         WatchedFolderIntakeGroup absent = new(catalog.Sources, catalog.Originals, catalog.DataDirectory, [missing]);
-        LocalDesktopProtocol guarded = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, missing), group: absent);
+        DesktopProtocol guarded = TestDesktop.Protocol(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, missing), group: absent);
         using JsonDocument deniedNote = await Send(guarded,
             $$"""{"requestId":"note","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","text":"violet no write"}""");
         Assert.False(deniedNote.RootElement.GetProperty("ok").GetBoolean());
         Assert.False(Directory.Exists(missing));
     }
 
-    private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string request) =>
+    private static async Task<JsonDocument> Send(DesktopProtocol protocol, string request) =>
         JsonDocument.Parse(await protocol.HandleAsync(request));
 
     private static async Task WaitForAsync(Func<bool> condition)

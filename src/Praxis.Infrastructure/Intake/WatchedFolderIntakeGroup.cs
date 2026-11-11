@@ -1,3 +1,4 @@
+using Praxis.Application.Intake;
 using Praxis.Application.Originals;
 using Praxis.Application.Sources;
 using Praxis.Domain.Common;
@@ -10,7 +11,7 @@ namespace Praxis.Infrastructure.Intake;
 /// Supervises a bounded set of individually approved intake roots. Each root retains its own
 /// watcher, rename evidence and health, while scans share one catalog and one hashing lane.
 /// </summary>
-public sealed class WatchedFolderIntakeGroup
+public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
 {
     public const int MaximumRoots = 4;
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -33,7 +33,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         IntakeHarness watcher = new(catalog, inbox, TimeSpan.Zero);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow.AddSeconds(1));
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
 
         using JsonDocument library = await Send(protocol,
             """{"requestId":"one","action":"library","limit":10}""");
@@ -84,7 +84,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using MemoryStream original = new(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "source.txt"), original, 100, "source");
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
 
         using JsonDocument created = await Send(protocol,
             """{"requestId":"one","action":"collectionCreate","name":"Project"}""");
@@ -138,7 +138,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(data);
-        LocalDesktopProtocol service = new(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox));
+        DesktopProtocol service = TestDesktop.Protocol(catalog, new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox));
         Guid captureId = Guid.NewGuid();
         string payload =
             $$"""{"requestId":"save","action":"noteCapture","captureId":"{{captureId:D}}","title":"Inbox Thought","text":"A violet first thought."}""";
@@ -178,7 +178,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument response = await Send(protocol,
             $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
@@ -203,7 +203,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             Path.Combine(root, "topic.md"), stream, 4_096, "topic");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
 
         using JsonDocument listing = await Send(protocol,
             $$"""{"requestId":"topics","action":"topics","sourceId":"{{captured.SourceId:D}}"}""");
@@ -258,7 +258,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using MemoryStream input = new([0, 255, 17, 42, 99]);
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "missing", "binary.bin"), input, 100, "original");
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         string destination = Path.Combine(exports, "recovered.bin");
         string request = JsonSerializer.Serialize(new
         {
@@ -307,7 +307,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         IntakeHarness intake = new(catalog,
             Path.Combine(root, "not-started"), TimeSpan.Zero);
-        LocalDesktopProtocol service = new(catalog, monitor: intake.Monitor, processing: intake.Processing);
+        DesktopProtocol service = TestDesktop.Protocol(catalog, monitor: intake.Monitor, processing: intake.Processing);
 
         using JsonDocument initial = await Send(service,
             """{"requestId":"initial","action":"intakeStatus"}""");
@@ -334,7 +334,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             """{"requestId":"malformed","action":"intakePause","paused":"true"}""");
         Assert.False(malformed.RootElement.GetProperty("ok").GetBoolean());
 
-        LocalDesktopProtocol unconfigured = new(catalog);
+        DesktopProtocol unconfigured = TestDesktop.Protocol(catalog);
         using JsonDocument denied = await Send(unconfigured,
             """{"requestId":"denied","action":"intakeStatus"}""");
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
@@ -368,7 +368,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         monitor.Monitor.QueueRename(previous, current);
         await monitor.ReconcileAsync(time.AddSeconds(2));
 
-        LocalDesktopProtocol protocol = new(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog, monitor: monitor.Monitor, processing: monitor.Processing);
         using JsonDocument listed = await Send(protocol,
             $$"""{"requestId":"moves","action":"sourceMoves","sourceId":"{{source.SourceId:D}}"}""");
         Assert.True(listed.RootElement.GetProperty("ok").GetBoolean());
@@ -410,7 +410,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument response = await Send(protocol, payload);
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
     }
@@ -428,7 +428,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument result = await Send(protocol, $$"""
                                                            {"requestId":"retired","action":"{{action}}"}
                                                            """);
@@ -438,7 +438,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.False(result.RootElement.TryGetProperty("data", out _));
     }
 
-    private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string payload) =>
+    private static async Task<JsonDocument> Send(DesktopProtocol protocol, string payload) =>
         JsonDocument.Parse(await protocol.HandleAsync(payload));
 
     public void Dispose()

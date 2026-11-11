@@ -1,6 +1,6 @@
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Domain.Models;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -64,7 +64,7 @@ public sealed class LocalModelProfileTests : IDisposable
     public async Task DesktopProtocolReadsAndSavesProfileAndReportsUnreachableRuntime()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalDesktopProtocol protocol = new LocalDesktopProtocol(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
 
         using (JsonDocument empty = await Send(protocol, """{"requestId":"1","action":"modelProfile"}"""))
         {
@@ -100,7 +100,7 @@ public sealed class LocalModelProfileTests : IDisposable
     public async Task EmbeddingProfileIsOptInAndCannotAuthorizeRemoteInference()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         Assert.Null(catalog.Models.Get(ModelProfile.LocalEmbedding));
 
         using JsonDocument initiallyDenied = await Send(protocol,
@@ -134,7 +134,7 @@ public sealed class LocalModelProfileTests : IDisposable
         Assert.False(catalog.Models.Get(ModelProfile.LocalEmbedding)!.Enabled);
     }
 
-    private static async Task<JsonDocument> Send(LocalDesktopProtocol protocol, string request) =>
+    private static async Task<JsonDocument> Send(DesktopProtocol protocol, string request) =>
         JsonDocument.Parse(await protocol.HandleAsync(request));
 
     public void Dispose()

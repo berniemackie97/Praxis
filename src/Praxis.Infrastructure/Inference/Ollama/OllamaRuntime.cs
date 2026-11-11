@@ -7,8 +7,6 @@ using Praxis.Domain.Models;
 
 namespace Praxis.Infrastructure.Inference.Ollama;
 
-public sealed record InstalledModel(string Name, string Digest, long SizeBytes);
-
 /// <summary>
 /// A local Ollama runtime reached over a loopback origin. Lists installed models and creates
 /// chat models. Every request is bounded in time and response size, and failures surface as

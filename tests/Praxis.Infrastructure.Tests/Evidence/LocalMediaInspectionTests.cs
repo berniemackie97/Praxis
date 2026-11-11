@@ -1,10 +1,10 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Application.Media;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -127,7 +127,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "lesson.mp4", FastStartMovie(), "video");
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using (JsonDocument response = JsonDocument.Parse(await protocol.HandleAsync($$"""
                      {"requestId":"inspect","action":"mediaInspection","sourceId":"{{video.SourceId:D}}"}
                      """)))
@@ -164,7 +164,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         Assert.Equal(first.SourceId, revised.SourceId);
         Assert.Equal(2, revised.Revision);
 
-        LocalDesktopProtocol protocol = new(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         using JsonDocument stale = JsonDocument.Parse(await protocol.HandleAsync($$"""
               {"requestId":"stale","action":"mediaInspection","sourceId":"{{first.SourceId:D}}","revision":1}
               """));

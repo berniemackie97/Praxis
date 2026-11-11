@@ -1,13 +1,13 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Desktop;
 using Praxis.Application.Inference;
 using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -184,7 +184,7 @@ public sealed class KnowledgeLayerTests : IDisposable
     {
         using SqliteCatalog catalog = Open();
         await Enrich(catalog, Model(), "a.md", "# Code\nOpenConquerClient uses PHY.");
-        LocalDesktopProtocol protocol = new LocalDesktopProtocol(catalog);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         EntitySummary client = Single(catalog, "OpenConquerClient");
 
         using JsonDocument set = JsonDocument.Parse(await protocol.HandleAsync(
