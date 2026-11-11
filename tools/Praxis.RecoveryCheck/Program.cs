@@ -38,8 +38,13 @@ try
 
     return 0;
 }
-catch (Exception exception)
+catch (OperationCanceledException)
 {
-    Console.Error.WriteLine(exception);
+    Console.Error.WriteLine("Praxis recovery check cancelled.");
+    return 130;
+}
+catch (Exception)
+{
+    Console.Error.WriteLine("Praxis recovery check failed.");
     return 1;
 }
