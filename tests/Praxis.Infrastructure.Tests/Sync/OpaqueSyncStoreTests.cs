@@ -197,6 +197,36 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             store.Provision(firstSpace, Guid.NewGuid()));
     }
 
+    [Fact]
+    public void ContentKeyRotationRequiresExplicitEncryptedRebootstrap()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid();
+        Guid epoch = Guid.NewGuid();
+        Guid device = Guid.NewGuid();
+        Guid record = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope writer = Scope(device, space, SecurityPermission.Write);
+        OpaqueSyncMutation initial = Request(space, epoch, device, Guid.NewGuid(),
+            record, 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, initial).Status);
+
+        AuthorizedSpaceScope rotatedWriter = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Write, 2);
+        AuthorizedSpaceScope rotatedReader = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Read, 2);
+        Assert.Equal(OpaqueSyncStatus.ResetRequired,
+            store.Submit(rotatedWriter, initial with
+            {
+                OperationId = Guid.NewGuid(), ExpectedRevision = 1, ContentEpoch = 2
+            }).Status);
+        Assert.Equal(OpaqueSyncStatus.ResetRequired,
+            store.Pull(rotatedReader,
+                new OpaqueSyncPull(1, space, epoch, device, 2, 0, 100)).Status);
+        Assert.Equal(1, store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
