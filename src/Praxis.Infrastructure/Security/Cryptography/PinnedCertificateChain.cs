@@ -14,6 +14,15 @@ public static class PinnedCertificateChain
         ArgumentNullException.ThrowIfNull(certificate);
         ArgumentNullException.ThrowIfNull(pinnedRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(usageOid);
+        if (certificate.Extensions.OfType<X509BasicConstraintsExtension>()
+                .Any(extension => extension.CertificateAuthority) ||
+            !certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>()
+                .Any(extension => extension.EnhancedKeyUsages.Cast<Oid>()
+                    .Any(oid => oid.Value == usageOid)))
+        {
+            return false;
+        }
+
         using X509Chain chain = new();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.Add(pinnedRoot);
