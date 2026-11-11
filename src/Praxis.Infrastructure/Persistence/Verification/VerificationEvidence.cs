@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Application.Verification;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Infrastructure.Persistence.Verification;
 
 /// <summary>
 /// Builds the minimal evidence a verifier needs for each item: the proposal or entity, its

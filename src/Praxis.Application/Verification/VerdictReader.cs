@@ -1,14 +1,14 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Domain.Knowledge;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Knowledge;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Application.Verification;
 
 /// <summary>Validates a verifier's answer against the ordinals that were actually sent.</summary>
-internal static class VerdictReader
+public static class VerdictReader
 {
-    internal static IReadOnlyList<VerificationVerdict> Read(string json, IReadOnlySet<int> sent)
+    public static IReadOnlyList<VerificationVerdict> Read(string json, IReadOnlySet<int> sent)
     {
         try
         {

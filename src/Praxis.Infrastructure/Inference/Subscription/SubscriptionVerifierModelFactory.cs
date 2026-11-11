@@ -1,12 +1,13 @@
 using Praxis.Application.Inference;
+using Praxis.Application.Verification;
 using Praxis.Domain.Verification;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Infrastructure.Inference.Subscription;
 
-/// <summary>Creates the adapter for an owner-configured verification provider.</summary>
-public static class ProviderModels
+/// <summary>Creates subscription CLI adapters (Codex, Claude Code) for owner-configured verification providers.</summary>
+public sealed class SubscriptionVerifierModelFactory : IVerifierModelFactory
 {
-    public static IChatModel Create(VerificationProvider provider)
+    public IChatModel Create(VerificationProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
         return provider.ProviderId switch
@@ -17,21 +18,17 @@ public static class ProviderModels
         };
     }
 
-    /// <summary>
-    /// Absolute paths of provider CLIs found on the worker's PATH, as suggestions for the owner
-    /// to confirm. Nothing is enabled automatically.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> Discover()
+    public IReadOnlyDictionary<string, string> DiscoverExecutables()
     {
-        var found = new Dictionary<string, string>(StringComparer.Ordinal);
-        var directories = (Environment.GetEnvironmentVariable("PATH") ?? "")
+        Dictionary<string, string> found = new(StringComparer.Ordinal);
+        IEnumerable<string> directories = (Environment.GetEnvironmentVariable("PATH") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Where(Path.IsPathFullyQualified);
-        foreach (var (provider, command) in new[] { (VerificationProvider.Codex, "codex"), (VerificationProvider.ClaudeCode, "claude") })
+        foreach ((string provider, string command) in new[] { (VerificationProvider.Codex, "codex"), (VerificationProvider.ClaudeCode, "claude") })
         {
-            foreach (var directory in directories)
+            foreach (string directory in directories)
             {
-                var candidate = Path.Combine(directory, command);
+                string candidate = Path.Combine(directory, command);
                 if (File.Exists(candidate))
                 {
                     // Keep the PATH entry rather than its link target: package managers replace

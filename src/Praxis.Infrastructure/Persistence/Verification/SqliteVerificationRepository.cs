@@ -1,30 +1,33 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Application.Verification;
 using Praxis.Domain.Models;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Infrastructure.Persistence.Verification;
 
 /// <summary>
-/// Owner-approved verification of local results by a stronger model. Requests are planned from
-/// deterministic signals (instruction-like evidence, entity type conflicts) or asked for by the
-/// owner, wait for approval with their exact payload visible, and are routed to the cheapest
-/// enabled provider with remaining daily allowance. Verdicts act on the machine layer: they can
-/// hide or release proposals and set verified entity types, but never override owner review.
+/// SQLite persistence of owner-approved verification. Requests are planned from deterministic
+/// signals (instruction-like evidence, entity type conflicts) or asked for by the owner, wait
+/// for approval with their exact payload visible, and are leased to a runner. Verdicts act on
+/// the machine layer: they can hide or release proposals and set verified entity types, but
+/// never override owner review.
 /// </summary>
-public sealed class LocalVerification
+public sealed class SqliteVerificationRepository : IVerificationRepository
 {
-    public const int MaximumItemsPerRequest = 12;
-    public const int MaximumAwaitingRequests = 20;
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
     private readonly CatalogDatabase database;
+    private readonly TimeProvider clock;
 
-    internal LocalVerification(CatalogDatabase database) => this.database = database;
+    internal SqliteVerificationRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
-    public IReadOnlyList<VerificationProvider> Providers() => database.Execute(connection =>
+    public IReadOnlyList<VerificationProvider> ListProviders() => database.Execute(connection =>
     {
         using var query = connection.CreateCommand("""
             SELECT provider_id, executable, model, cost_weight, daily_limit, enabled
@@ -42,22 +45,10 @@ public sealed class LocalVerification
         return providers;
     });
 
-    public VerificationProvider SaveProvider(VerificationProvider provider)
+    public void SaveProvider(VerificationProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
-        if (provider.ProviderId is not (VerificationProvider.Codex or VerificationProvider.ClaudeCode))
-        {
-            throw new ArgumentException("The verification provider is not supported.", nameof(provider));
-        }
-
-        if (provider.CostWeight is < 0 or > 1000 || provider.DailyLimit is < 1 or > 500)
-        {
-            throw new ArgumentOutOfRangeException(nameof(provider), "Weights are 0–1000 and daily limits 1–500.");
-        }
-
-        // Constructing the adapter validates the executable path and model name.
-        _ = ProviderModels.Create(provider);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -80,24 +71,47 @@ public sealed class LocalVerification
                 """, ("$id", provider.ProviderId));
             transaction.Commit();
         });
-        return provider;
     }
 
-    /// <summary>
-    /// Creates requests awaiting approval for unverified instruction-like proposals and for
-    /// unresolved entity type conflicts. Items already in a request (other than a failed one)
-    /// are not planned again; declining a request therefore silences its items.
-    /// </summary>
+    public IReadOnlyList<ProviderAllowance> ListEnabledProviderAllowances()
+    {
+        var now = clock.GetUtcNow();
+        return database.Execute(connection =>
+        {
+            using var transaction = connection.BeginTransaction();
+            using var query = connection.CreateCommand("""
+                SELECT provider_id, executable, model, cost_weight, daily_limit FROM verification_providers
+                WHERE enabled = 1 ORDER BY cost_weight, provider_id
+                """);
+            query.Transaction = transaction;
+            var providers = new List<VerificationProvider>();
+            using (var reader = query.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    providers.Add(new VerificationProvider(reader.GetString(0), reader.GetString(1),
+                        reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4), true));
+                }
+            }
+
+            var allowances = providers
+                .Select(provider => new ProviderAllowance(provider, StartedToday(connection, transaction, provider.ProviderId, now)))
+                .ToArray();
+            transaction.Commit();
+            return allowances;
+        });
+    }
+
     public int Plan()
     {
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             var awaiting = Count(connection, transaction,
                 "SELECT COUNT(*) FROM verification_requests WHERE status = 'awaiting_approval'");
             var created = 0;
-            if (awaiting < MaximumAwaitingRequests)
+            if (awaiting < VerificationLimits.MaximumAwaitingRequests)
             {
                 var flagged = Ids(connection, transaction, """
                     SELECT p.proposal_id FROM eligible_enrichment_proposals p
@@ -110,7 +124,7 @@ public sealed class LocalVerification
                 created += Create(connection, transaction, "instruction_like", flagged, [], now) ? 1 : 0;
             }
 
-            if (awaiting + created < MaximumAwaitingRequests)
+            if (awaiting + created < VerificationLimits.MaximumAwaitingRequests)
             {
                 var conflicts = Ids(connection, transaction, """
                     SELECT e.entity_id FROM knowledge_entities e
@@ -130,11 +144,10 @@ public sealed class LocalVerification
         });
     }
 
-    /// <summary>Owner request to verify a source's current entity and relation proposals.</summary>
     public Guid? RequestForSource(Guid sourceId)
     {
         RequireId(sourceId);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -145,7 +158,7 @@ public sealed class LocalVerification
                 """);
             query.Transaction = transaction;
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
-            query.Parameters.AddWithValue("$limit", MaximumItemsPerRequest);
+            query.Parameters.AddWithValue("$limit", VerificationLimits.MaximumItemsPerRequest);
             var proposals = ReadIds(query);
             var request = Create(connection, transaction, "owner_request", proposals, [], now, out var id) ? id : (Guid?)null;
             transaction.Commit();
@@ -153,11 +166,10 @@ public sealed class LocalVerification
         });
     }
 
-    /// <summary>Owner request to settle an entity's type with a stronger model.</summary>
     public Guid? RequestForEntity(Guid entityId)
     {
         RequireId(entityId);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -168,7 +180,7 @@ public sealed class LocalVerification
         });
     }
 
-    public IReadOnlyList<VerificationRequestView> List(int limit = 50)
+    public IReadOnlyList<VerificationRequestView> List(int limit)
     {
         if (limit is < 1 or > 200)
         {
@@ -190,57 +202,60 @@ public sealed class LocalVerification
         return database.Execute(connection => Read(connection, null, requestId.ToString("D")));
     }
 
-    /// <summary>
-    /// Approves a request after the owner has reviewed its payload: excluded items are removed,
-    /// phrases are redacted, and the request is routed to <paramref name="providerId"/> or the
-    /// cheapest enabled provider with remaining daily allowance.
-    /// </summary>
-    public VerificationRequestView Approve(
-        Guid requestId, string? providerId = null, IReadOnlyCollection<int>? excludedOrdinals = null,
-        IReadOnlyCollection<string>? redactions = null)
+    public string? ReadAwaitingPayload(Guid requestId)
     {
         RequireId(requestId);
-        var now = DateTimeOffset.UtcNow;
+        return database.Execute(connection =>
+        {
+            using var request = connection.CreateCommand(
+                "SELECT payload FROM verification_requests WHERE request_id = $id AND status = 'awaiting_approval'");
+            request.Parameters.AddWithValue("$id", requestId.ToString("D"));
+            return request.ExecuteScalar() as string;
+        });
+    }
+
+    public VerificationRequestView? Approve(
+        Guid requestId, string reviewedPayload, string providerId, string approvedPayload, IReadOnlySet<int> includedOrdinals)
+    {
+        RequireId(requestId);
+        ArgumentException.ThrowIfNullOrEmpty(reviewedPayload);
+        ArgumentException.ThrowIfNullOrEmpty(providerId);
+        ArgumentException.ThrowIfNullOrEmpty(approvedPayload);
+        ArgumentNullException.ThrowIfNull(includedOrdinals);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             var id = requestId.ToString("D");
-            using var request = connection.CreateCommand(
-                "SELECT payload FROM verification_requests WHERE request_id = $id AND status = 'awaiting_approval'");
-            request.Transaction = transaction;
-            request.Parameters.AddWithValue("$id", id);
-            if (request.ExecuteScalar() is not string payload)
+            if (connection.Run(transaction, """
+                    UPDATE verification_requests SET status = 'approved', provider_id = $provider, payload = $approved,
+                        decided_utc = $now, retry_after_utc = NULL
+                    WHERE request_id = $id AND status = 'awaiting_approval' AND payload = $reviewed
+                    """, ("$provider", providerId), ("$approved", approvedPayload), ("$now", now), ("$id", id),
+                    ("$reviewed", reviewedPayload)) != 1)
             {
-                throw new InvalidOperationException("Only a request awaiting approval can be approved.");
+                return null;
             }
 
-            var provider = Route(connection, transaction, providerId, now)
-                ?? throw new InvalidOperationException("No enabled verifier has allowance left today.");
-            var (narrowed, kept) = VerificationPayload.Narrow(payload, excludedOrdinals ?? [], redactions ?? []);
             connection.Run(transaction, """
                 UPDATE verification_items SET included = 0 WHERE request_id = $id
                 """, ("$id", id));
-            foreach (var ordinal in kept)
+            foreach (var ordinal in includedOrdinals)
             {
                 connection.Run(transaction,
                     "UPDATE verification_items SET included = 1 WHERE request_id = $id AND ordinal = $ordinal",
                     ("$id", id), ("$ordinal", ordinal));
             }
 
-            connection.Run(transaction, """
-                UPDATE verification_requests SET status = 'approved', provider_id = $provider, payload = $payload,
-                    decided_utc = $now, retry_after_utc = NULL WHERE request_id = $id
-                """, ("$provider", provider.ProviderId), ("$payload", narrowed),
-                ("$now", CatalogValues.Timestamp(now)), ("$id", id));
             transaction.Commit();
-            return Read(connection, null, id)!;
+            return Read(connection, null, id);
         });
     }
 
     public bool Decline(Guid requestId)
     {
         RequireId(requestId);
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -253,9 +268,9 @@ public sealed class LocalVerification
         });
     }
 
-    /// <summary>Leases the oldest approved request whose provider is enabled and not backed off.</summary>
-    internal ClaimedVerification? Claim(DateTimeOffset now) => database.Execute(connection =>
+    public ClaimedVerification? Claim() => database.Execute(connection =>
     {
+        var now = clock.GetUtcNow();
         var time = CatalogValues.Timestamp(now);
         using var transaction = connection.BeginTransaction();
         using var query = connection.CreateCommand("""
@@ -299,14 +314,10 @@ public sealed class LocalVerification
         return new ClaimedVerification(Guid.Parse(id), lease, provider, payload, ordinals);
     });
 
-    /// <summary>
-    /// Records verdicts and their machine-layer effects atomically: item verdicts, and verified
-    /// types for entities whose type the owner has not set.
-    /// </summary>
-    internal bool Complete(
+    public bool Complete(
         ClaimedVerification claim, ModelIdentity model, ChatResult result, IReadOnlyList<VerificationVerdict> verdicts)
     {
-        var now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -353,18 +364,17 @@ public sealed class LocalVerification
         });
     }
 
-    /// <summary>Returns a running request to the approved queue until <paramref name="retryAfter"/>.</summary>
-    internal bool Release(ClaimedVerification claim, DateTimeOffset retryAfter, string failureCode) =>
+    public bool Release(ClaimedVerification claim, DateTimeOffset retryAfter, string failureCode) =>
         Finish(claim, """
             UPDATE verification_requests SET status = 'approved', lease_key = NULL, lease_until_utc = NULL,
                 retry_after_utc = $retry, failure_code = $code WHERE request_id = $id
             """, ("$retry", CatalogValues.Timestamp(retryAfter)), ("$code", failureCode));
 
-    internal bool Fail(ClaimedVerification claim, string failureCode) =>
+    public bool Fail(ClaimedVerification claim, string failureCode) =>
         Finish(claim, """
             UPDATE verification_requests SET status = 'failed', lease_key = NULL, lease_until_utc = NULL,
                 completed_utc = $now, failure_code = $code WHERE request_id = $id
-            """, ("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow)), ("$code", failureCode));
+            """, ("$now", CatalogValues.Timestamp(clock.GetUtcNow())), ("$code", failureCode));
 
     private bool Finish(ClaimedVerification claim, string sql, params (string Name, object? Value)[] parameters) =>
         database.Execute(connection =>
@@ -391,7 +401,7 @@ public sealed class LocalVerification
     {
         requestId = Guid.NewGuid();
         var items = new List<(JsonObject Item, string? Proposal, string? Entity)>();
-        foreach (var proposal in proposals.Take(MaximumItemsPerRequest))
+        foreach (var proposal in proposals.Take(VerificationLimits.MaximumItemsPerRequest))
         {
             if (VerificationEvidence.ForProposal(connection, transaction, items.Count + 1, proposal) is { } item)
             {
@@ -399,7 +409,7 @@ public sealed class LocalVerification
             }
         }
 
-        foreach (var entity in entities.Take(MaximumItemsPerRequest - items.Count))
+        foreach (var entity in entities.Take(VerificationLimits.MaximumItemsPerRequest - items.Count))
         {
             if (VerificationEvidence.ForEntityType(connection, transaction, items.Count + 1, entity) is { } item)
             {
@@ -428,31 +438,6 @@ public sealed class LocalVerification
         }
 
         return true;
-    }
-
-    /// <summary>The requested provider, or the cheapest enabled one with allowance left today.</summary>
-    private static VerificationProvider? Route(
-        SqliteConnection connection, SqliteTransaction transaction, string? providerId, DateTimeOffset now)
-    {
-        using var query = connection.CreateCommand("""
-            SELECT provider_id, executable, model, cost_weight, daily_limit FROM verification_providers
-            WHERE enabled = 1 AND ($provider IS NULL OR provider_id = $provider)
-            ORDER BY cost_weight, provider_id
-            """);
-        query.Transaction = transaction;
-        query.Parameters.AddWithValue("$provider", (object?)providerId ?? DBNull.Value);
-        var candidates = new List<VerificationProvider>();
-        using (var reader = query.ExecuteReader())
-        {
-            while (reader.Read())
-            {
-                candidates.Add(new VerificationProvider(reader.GetString(0), reader.GetString(1),
-                    reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4), true));
-            }
-        }
-
-        return candidates.FirstOrDefault(provider =>
-            StartedToday(connection, transaction, provider.ProviderId, now) < provider.DailyLimit);
     }
 
     private static int StartedToday(
@@ -561,7 +546,7 @@ public sealed class LocalVerification
     {
         using var query = connection.CreateCommand(sql);
         query.Transaction = transaction;
-        query.Parameters.AddWithValue("$limit", MaximumItemsPerRequest);
+        query.Parameters.AddWithValue("$limit", VerificationLimits.MaximumItemsPerRequest);
         return ReadIds(query);
     }
 

@@ -1,9 +1,9 @@
 using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 

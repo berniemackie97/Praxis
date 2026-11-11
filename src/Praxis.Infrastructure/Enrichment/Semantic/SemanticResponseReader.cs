@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
-using Praxis.Infrastructure.Knowledge;
+using Praxis.Domain.Knowledge;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;
 

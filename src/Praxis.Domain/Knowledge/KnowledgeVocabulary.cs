@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Praxis.Infrastructure.Knowledge;
+namespace Praxis.Domain.Knowledge;
 
 /// <summary>Closed vocabularies and name normalization shared by proposals and the entity layer.</summary>
 public static class KnowledgeVocabulary

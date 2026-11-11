@@ -1,6 +1,6 @@
 using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
 using Praxis.Infrastructure.Enrichment.Semantic;
-using Praxis.Infrastructure.Knowledge;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Knowledge;

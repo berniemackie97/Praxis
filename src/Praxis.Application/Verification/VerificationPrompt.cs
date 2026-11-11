@@ -1,19 +1,19 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
-using Praxis.Infrastructure.Knowledge;
+using Praxis.Domain.Knowledge;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Application.Verification;
 
 /// <summary>
 /// Instructions and strict output schema for verifying locally extracted knowledge with a
 /// stronger model. Every object is closed and every field required, which both subscription
 /// CLIs accept for structured output.
 /// </summary>
-internal static class VerificationPrompt
+public static class VerificationPrompt
 {
-    internal const string NoTypeChange = "none";
+    public const string NoTypeChange = "none";
 
-    internal static readonly JsonElement Schema = JsonDocument.Parse($$"""
+    public static readonly JsonElement Schema = JsonDocument.Parse($$"""
         {
           "type": "object", "additionalProperties": false, "required": ["verdicts"],
           "properties": {
@@ -54,7 +54,7 @@ internal static class VerificationPrompt
         Keep each note under 200 characters.
         """;
 
-    internal static IReadOnlyList<ChatMessage> Messages(string payload) =>
+    public static IReadOnlyList<ChatMessage> Messages(string payload) =>
     [
         new ChatMessage(ChatRole.System, Instructions),
         new ChatMessage(ChatRole.User, "Items to verify (JSON):\n" + payload)

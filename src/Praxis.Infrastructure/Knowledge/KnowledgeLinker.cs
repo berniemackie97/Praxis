@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Knowledge;

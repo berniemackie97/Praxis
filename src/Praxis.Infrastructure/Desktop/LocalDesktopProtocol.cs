@@ -1,23 +1,25 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Application.Verification;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Models;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Inference.Ollama;
+using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Verification;
 
 namespace Praxis.Infrastructure.Desktop;
 
-public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
+public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, VerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly SubscriptionVerifierModelFactory verifierModels = new();
 
     public bool StopRequested { get; private set; }
 
@@ -166,7 +168,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
                     relationId = catalog.Knowledge.Relate(fields.RequireGuid("entityId"),
                         fields.RequireString("predicate", 32), fields.RequireGuid("targetEntityId"))
                 },
-                "verificationProviders" => new { providers = catalog.Verification.Providers(), discovered = ProviderModels.Discover() },
+                "verificationProviders" => new { providers = catalog.Verification.ListProviders(), discovered = verifierModels.DiscoverExecutables() },
                 "verificationProviderSave" => new { provider = SaveVerificationProvider(fields) },
                 "verifications" => new { requests = catalog.Verification.List(fields.IntegerOrDefault("limit", 50, 1, 200)) },
                 "verification" => new { request = catalog.Verification.Get(fields.RequireGuid("verificationId")) },
@@ -317,7 +319,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
 
     private VerificationProvider SaveVerificationProvider(DesktopRequestFields fields)
     {
-        VerificationProvider saved = catalog.Verification.SaveProvider(new VerificationProvider(
+        VerificationProvider saved = new VerificationProviderConfiguration(catalog.Verification, verifierModels).Save(new VerificationProvider(
             fields.RequireString("providerId", 32),
             fields.RequireString("executable", 1024),
             fields.OptionalText("model", 100, "The provider model is invalid."),
@@ -334,10 +336,10 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
     /// </summary>
     private VerificationRequestView ApproveVerification(DesktopRequestFields fields)
     {
-        VerificationRequestView approved = catalog.Verification.Approve(
+        VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
             fields.RequireGuid("verificationId"),
             fields.OptionalText("providerId", 32, "The provider is invalid."),
-            fields.OptionalIntegers("excludedOrdinals", 1, LocalVerification.MaximumItemsPerRequest, LocalVerification.MaximumItemsPerRequest),
+            fields.OptionalIntegers("excludedOrdinals", 1, VerificationLimits.MaximumItemsPerRequest, VerificationLimits.MaximumItemsPerRequest),
             fields.OptionalStrings("redactions", 200, 50));
         verification?.Wake();
         return approved;

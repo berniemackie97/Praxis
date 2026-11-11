@@ -1,20 +1,20 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Praxis.Infrastructure.Verification;
+namespace Praxis.Application.Verification;
 
 /// <summary>
 /// The exact JSON a verifier receives. Built deterministically from catalog evidence, then
 /// narrowed by the owner before approval: excluded items are removed and every owner-supplied
 /// phrase is replaced in all text values. What is stored is what is sent.
 /// </summary>
-internal static class VerificationPayload
+public static class VerificationPayload
 {
-    internal const string Redacted = "[REDACTED]";
-    internal const int ContextCharacters = 220;
-    internal const int MaximumBytes = 60_000;
+    public const string Redacted = "[REDACTED]";
+    public const int ContextCharacters = 220;
+    public const int MaximumBytes = 60_000;
 
-    internal static string Serialize(IReadOnlyList<JsonObject> items)
+    public static string Serialize(IReadOnlyList<JsonObject> items)
     {
         var payload = new JsonObject { ["items"] = new JsonArray(items.Select(item => (JsonNode)item).ToArray()) };
         var text = payload.ToJsonString();
@@ -24,7 +24,7 @@ internal static class VerificationPayload
     }
 
     /// <summary>Text surrounding an evidence span, on one line, for the verifier's judgement.</summary>
-    internal static string Context(string content, int offset, int length)
+    public static string Context(string content, int offset, int length)
     {
         var start = Math.Max(0, offset - ContextCharacters);
         var end = Math.Min(content.Length, offset + length + ContextCharacters);
@@ -42,7 +42,7 @@ internal static class VerificationPayload
     }
 
     /// <summary>Removes excluded ordinals and redacts phrases; returns the payload and kept ordinals.</summary>
-    internal static (string Payload, IReadOnlySet<int> Kept) Narrow(
+    public static (string Payload, IReadOnlySet<int> Kept) Narrow(
         string payload, IReadOnlyCollection<int> excluded, IReadOnlyCollection<string> redactions)
     {
         if (redactions.Any(phrase => string.IsNullOrWhiteSpace(phrase) || phrase.Length > 200))
@@ -66,7 +66,7 @@ internal static class VerificationPayload
         return (root.ToJsonString(), items.Select(item => Ordinal(item!)).ToHashSet());
     }
 
-    internal static int Ordinal(JsonNode item) => item["ordinal"]!.GetValue<int>();
+    public static int Ordinal(JsonNode item) => item["ordinal"]!.GetValue<int>();
 
     private static void Redact(JsonNode node, IReadOnlyCollection<string> redactions)
     {

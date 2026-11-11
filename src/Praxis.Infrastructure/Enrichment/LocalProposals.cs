@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
 using Praxis.Infrastructure.Enrichment.Semantic;

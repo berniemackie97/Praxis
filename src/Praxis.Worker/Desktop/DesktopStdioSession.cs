@@ -1,15 +1,15 @@
 using System.Text;
+using Praxis.Application.Verification;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Verification;
 
 namespace Praxis.Worker.Desktop;
 
 internal static class DesktopStdioSession
 {
-    internal static async Task RunAsync(SqliteCatalog catalog, LocalWatchedIntakeGroup monitors, LocalProcessingPipeline processing, LocalVerificationRunner verification, string inbox, CancellationToken cancellationToken)
+    internal static async Task RunAsync(SqliteCatalog catalog, LocalWatchedIntakeGroup monitors, LocalProcessingPipeline processing, VerificationRunner verification, string inbox, CancellationToken cancellationToken)
     {
         using StreamReader reader = new(Console.OpenStandardInput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false);
         using StreamWriter writer = new(Console.OpenStandardOutput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))

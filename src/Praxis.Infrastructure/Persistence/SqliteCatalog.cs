@@ -6,11 +6,11 @@ using Praxis.Infrastructure.Library;
 using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Models;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence.Verification;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Sources;
-using Praxis.Infrastructure.Verification;
 
 namespace Praxis.Infrastructure.Persistence;
 
@@ -38,13 +38,13 @@ public sealed class SqliteCatalog : IDisposable
     public LocalHybridSearch Hybrid { get; }
     public LocalProposals Proposals { get; }
     public LocalKnowledge Knowledge { get; }
-    public LocalVerification Verification { get; }
+    public SqliteVerificationRepository Verification { get; }
     public LocalCollections Collections { get; }
     public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
     public LocalModelProfiles Models { get; }
 
-    private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
+    private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, TimeProvider clock)
     {
         DataDirectory = dataDirectory;
         DatabasePath = Path.Combine(dataDirectory, CatalogDirectory.DatabaseFile);
@@ -63,18 +63,19 @@ public sealed class SqliteCatalog : IDisposable
         Hybrid = new LocalHybridSearch(Search, Embeddings);
         Proposals = new LocalProposals(database);
         Knowledge = new LocalKnowledge(database);
-        Verification = new LocalVerification(database);
+        Verification = new SqliteVerificationRepository(database, clock);
         Collections = new LocalCollections(database);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
         Models = new LocalModelProfiles(database);
     }
 
-    public static SqliteCatalog Open(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
+    public static SqliteCatalog Open(string dataDirectory, TimeProvider? clock = null) =>
+        Open(dataDirectory, SqliteOpenMode.ReadWriteCreate, clock ?? TimeProvider.System);
 
-    internal static SqliteCatalog OpenReadOnly(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadOnly);
+    internal static SqliteCatalog OpenReadOnly(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadOnly, TimeProvider.System);
 
-    private static SqliteCatalog Open(string dataDirectory, SqliteOpenMode mode)
+    private static SqliteCatalog Open(string dataDirectory, SqliteOpenMode mode, TimeProvider clock)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         if (!Path.IsPathFullyQualified(dataDirectory))
@@ -115,19 +116,19 @@ public sealed class SqliteCatalog : IDisposable
             connection.Open();
             if (mode == SqliteOpenMode.ReadOnly)
             {
-                return new SqliteCatalog(root, fileLock, connection);
+                return new SqliteCatalog(root, fileLock, connection, clock);
             }
 
             CatalogSchema.Prepare(connection);
             if (OperatingSystem.IsWindows())
             {
-                return new SqliteCatalog(root, fileLock, connection);
+                return new SqliteCatalog(root, fileLock, connection, clock);
             }
 
             File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
-            return new SqliteCatalog(root, fileLock, connection);
+            return new SqliteCatalog(root, fileLock, connection, clock);
         }
         catch
         {
