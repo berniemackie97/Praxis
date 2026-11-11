@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence.Collections;
-using Praxis.Infrastructure.Persistence.Intake;
 using Praxis.Infrastructure.Persistence.Enrichment;
+using Praxis.Infrastructure.Persistence.Intake;
 using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Library;
 using Praxis.Infrastructure.Persistence.Models;
