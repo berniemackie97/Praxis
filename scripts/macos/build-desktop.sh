@@ -7,13 +7,23 @@ artifacts="$root/.artifacts"
 destination="$artifacts/Praxis.app"
 derived="$artifacts/XcodeDerivedData"
 
-if [[ -e "$destination" || -L "$destination" ]]; then
-  echo "Destination already exists: $destination" >&2
-  echo "Move the previous development app bundle before building again." >&2
-  exit 1
+if [[ $# -ne 0 && ( $# -ne 1 || "$1" != "--archive-existing" ) ]]; then
+  echo "Usage: scripts/macos/build-desktop.sh [--archive-existing]" >&2
+  exit 2
 fi
 
 mkdir -p "$artifacts"
+if [[ -e "$destination" || -L "$destination" ]]; then
+  if [[ "${1:-}" != "--archive-existing" ]]; then
+    echo "Destination already exists: $destination" >&2
+    echo "Use --archive-existing to preserve the previous bundle before building." >&2
+    exit 1
+  fi
+  mkdir -p "$artifacts/previous-builds"
+  archive="$(mktemp -d "$artifacts/previous-builds/Praxis.XXXXXX")"
+  mv "$destination" "$archive/Praxis.app"
+  echo "Preserved previous development app: $archive/Praxis.app"
+fi
 xcodebuild \
   -project "$PRAXIS_XCODE_PROJECT" \
   -scheme "$PRAXIS_XCODE_SCHEME" \
@@ -34,6 +44,16 @@ plutil -lint "$plist"
 identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
 if [[ "$identifier" != 'dev.praxis.renames-preview' ]]; then
   echo "Unexpected development app bundle identifier: $identifier" >&2
+  exit 1
+fi
+minimum="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")"
+if [[ "$minimum" != '13.0' ]]; then
+  echo "Unexpected deployment minimum: $minimum (expected macOS 13.0)" >&2
+  exit 1
+fi
+executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
+if [[ ! -x "$built/Contents/MacOS/$executable" ]]; then
+  echo "Xcode did not package an executable Praxis app." >&2
   exit 1
 fi
 

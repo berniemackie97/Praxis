@@ -16,6 +16,8 @@ struct PresentationTests {
     @Test func xcodeLaunchUsesAnApplicationBundleWithItsWorker() throws {
         #expect(Bundle.main.bundleURL.pathExtension == "app")
         #expect(Bundle.main.bundleIdentifier == "dev.praxis.renames-preview")
+        #expect(Bundle.main.executableURL?.lastPathComponent == "Praxis")
+        #expect(Bundle.main.infoDictionary?["LSMinimumSystemVersion"] as? String == "13.0")
         let worker = try #require(Bundle.main.resourceURL?
             .appendingPathComponent("worker/Praxis.Worker.dll").path)
         #expect(FileManager.default.fileExists(atPath: worker))

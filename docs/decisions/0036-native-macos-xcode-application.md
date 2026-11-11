@@ -1,6 +1,6 @@
 # ADR 0036: Xcode-owned native macOS application with a .NET worker
 
-**Status:** Proposed until actual Xcode 26 / macOS owner verification.
+**Status:** Accepted for owner-local native development; Xcode ⌘R acceptance remains open in #215.
 
 ## Decision
 
@@ -15,3 +15,11 @@ The command-line local development packager and macOS CI use `xcodebuild` agains
 An Xcode build requires the locally installed .NET 10 SDK. The current worker still requires a locally installed compatible .NET runtime; it is not a self-contained distribution. The development app is unsandboxed to preserve explicitly approved filesystem access and child-process launch. Xcode ad-hoc signing and an unsigned CLI development package **do not** meet production signing, hardened runtime, notarization, architecture packaging or App Store restrictions.
 
 These release requirements remain separate acceptance gates (#36, #108, #130). Adding an App Sandbox entitlement without a proper plan for security-scoped bookmarks and the worker process is not an acceptable shortcut. Test-owner data must never be opened by automated app-hosted unit tests.
+
+## Verification and distribution boundary
+
+The owner confirmed that the checked-in Xcode scheme builds the actual macOS app and hosts Swift tests against a bundled .NET worker. The unsigned CLI package also launched a real SwiftUI window, and a disposable two-root catalog captured files and recovered through rename, disappearance and reapproval. These observations establish the **development-app** architecture; they do not yet prove Xcode's interactive ⌘R path on the current head, a signed distributable, or a supported deployment on every macOS 13 host.
+
+Pin the app and hosted-test deployment target to 13.0 in both configurations. The development packaging script checks the built bundle's minimum OS, executable, worker and stable identifier. It refuses to overwrite an existing preview bundle; `--archive-existing` moves that bundle into a uniquely named directory under `.artifacts/previous-builds` before packaging its replacement. This is **not** an application updater and never modifies an installed production app.
+
+The developer must use a disposable catalog and approved scratch roots before interactive Xcode Run: the preview bundle identity intentionally persists owner settings. Signing, hardened runtime/notarization, CPU architecture coverage, security-scoped file access if sandboxing, runtime bundling and update/rollback policy are separate product/release decisions under #36 and #130. No HTTP bridge or Swift duplicate of the backend is introduced.
