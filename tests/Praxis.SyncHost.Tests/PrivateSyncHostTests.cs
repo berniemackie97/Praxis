@@ -103,6 +103,11 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(0, (await client.PullAsync(host.Pull(host.FirstDevice, 0, 10))).HeadSequence);
 
         using HttpClient raw = host.RawFirst();
+        using HttpResponseMessage impersonation = await raw.PostAsJsonAsync(
+            "v1/sync/challenge",
+            new SyncChallengeRequest(host.SecondDevice, host.Space, SecurityPermission.Read));
+        Assert.Equal(HttpStatusCode.Unauthorized, impersonation.StatusCode);
+
         using HttpResponseMessage challengeResponse = await raw.PostAsJsonAsync(
             "v1/sync/challenge",
             new SyncChallengeRequest(host.FirstDevice, host.Space, SecurityPermission.Write));
