@@ -9,6 +9,7 @@ final class WorkbenchModel: ObservableObject {
     @Published private(set) var topicOutcome = "pending"
     @Published private(set) var semanticOutcome = "pending"
     @Published private(set) var intakeStatus: IntakeStatus?
+    @Published private(set) var intakeRoots: [WatchedRootStatus] = []
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published private(set) var sourceMoves: [SourceMovement] = []
     @Published private(set) var selectedCollectionId = ""
@@ -32,7 +33,8 @@ final class WorkbenchModel: ObservableObject {
     let verification: VerificationWorkbenchModel
     let intelligence: IntelligenceSettingsModel
     private let worker: WorkerSession
-    private var watchedInbox: URL?
+    private var watchedInboxes: [URL] = []
+    private var approvedRootIdentities: [String: String] = [:]
     private var workerDiagnostic: String?
 
     init() {
@@ -45,11 +47,13 @@ final class WorkbenchModel: ObservableObject {
         intelligence = IntelligenceSettingsModel(channel: channel)
     }
 
-    func start(dataRoot: String, inbox: String, initialize: Bool, dotnetExecutable: String) {
+    func start(dataRoot: String, inbox: String, additionalInboxes: String,
+               rootApprovals: String, initialize: Bool, dotnetExecutable: String) {
         guard !running else { return }
         do {
             let launch = try WorkerLaunch.prepare(
-                dataRoot: dataRoot, inbox: inbox, initialize: initialize,
+                dataRoot: dataRoot, inbox: inbox, additionalInboxes: additionalInboxes,
+                rootApprovals: rootApprovals, initialize: initialize,
                 dotnetExecutable: dotnetExecutable
             )
             workerDiagnostic = nil
@@ -61,7 +65,8 @@ final class WorkbenchModel: ObservableObject {
                 },
                 onExit: { [weak self] error in self?.workerExited(error: error) }
             )
-            watchedInbox = launch.inbox
+            watchedInboxes = launch.watchedRoots
+            approvedRootIdentities = try WatchedFolderSettings.approvals(rootApprovals)
             running = true
             message = "Praxis started. Checking the approved Inbox; preserved sources remain available if it is offline."
             refresh()
@@ -98,6 +103,11 @@ final class WorkbenchModel: ObservableObject {
 
     func retryIntakeScan() {
         send(.intakeRescan, [:])
+    }
+
+    func approveIntakeRoot(_ path: String, identity: String) {
+        approvedRootIdentities[path] = identity
+        send(.intakeApproveRoot, ["path": path])
     }
 
     func saveNote() {
@@ -208,8 +218,8 @@ final class WorkbenchModel: ObservableObject {
     func exportOriginal(_ item: LibraryItem, destination: URL) {
         guard !exportingOriginal, running, item.sourceStatus == "active" else { return }
         let output = destination.standardizedFileURL.resolvingSymlinksInPath()
-        if let watchedInbox, output.pathComponents.starts(with: watchedInbox.pathComponents) {
-            message = "Choose a destination outside the watched Inbox to avoid capturing an exported duplicate."
+        if watchedInboxes.contains(where: { output.pathComponents.starts(with: $0.pathComponents) }) {
+            message = "Choose a destination outside the watched folders to avoid capturing an exported duplicate."
             return
         }
         exportingOriginal = send(.exportOriginal, [
@@ -242,7 +252,9 @@ final class WorkbenchModel: ObservableObject {
 
     private func workerExited(error: String?) {
         running = false
-        watchedInbox = nil
+        watchedInboxes = []
+        intakeRoots = []
+        approvedRootIdentities = [:]
         intakeStatus = nil
         savingNote = false
         exportingOriginal = false
@@ -294,14 +306,24 @@ final class WorkbenchModel: ObservableObject {
 
         let data = response.data
         switch action {
-        case .intakeStatus, .intakePause, .intakeRescan:
+        case .intakeStatus, .intakePause, .intakeRescan, .intakeApproveRoot:
             if let status = data?.status { intakeStatus = status }
+            if let roots = data?.roots { intakeRoots = roots }
             if action == .intakePause {
                 message = intakeStatus?.paused == true
                     ? "New source capture paused; already queued processing may finish."
                     : "Intake resumed. Changed sources will be reconciled."
             } else if action == .intakeRescan {
-                message = "Intake scan requested. Reconnect an offline Inbox before retrying."
+                message = "Intake scan requested for approved folders."
+            } else if action == .intakeApproveRoot {
+                message = "Folder reapproved. Intake will reconcile its contents."
+            } else {
+                for root in intakeRoots where root.status.state == "reapproval_required" {
+                    let current = WatchedFolderSettings.identity(URL(fileURLWithPath: root.path))
+                    if current != nil && current == approvedRootIdentities[root.path] {
+                        send(.intakeApproveRoot, ["path": root.path])
+                    }
+                }
             }
         case .noteCapture:
             savingNote = false
