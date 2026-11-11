@@ -29,7 +29,7 @@ public sealed partial class OpaqueSyncStore
 
         OpaqueSyncPage Reject(OpaqueSyncStatus status) =>
             new(status, request.SpaceId, request.CollectionEpoch, request.DeviceId,
-                request.AfterSequence, request.AfterSequence, head, []);
+                request.AfterSequence, request.AfterSequence, 0, []);
 
         if (request.CollectionEpoch.ToString("N") != epoch)
         {

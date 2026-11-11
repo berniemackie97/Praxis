@@ -10,6 +10,8 @@ using Praxis.Domain.Security;
 using Praxis.Infrastructure.Persistence.Security.Registry;
 using Praxis.Infrastructure.Persistence.Sync;
 using Praxis.Infrastructure.Security.Cryptography;
+using Praxis.Notes.Journal;
+using Praxis.Notes.Synchronization;
 using Xunit;
 
 namespace Praxis.SyncHost.Tests;
@@ -210,6 +212,203 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(mutation.Ciphertext, page.Changes[0].Ciphertext);
     }
 
+    [Fact]
+    public async Task TwoPersistedNoteJournalsReconcileConflictsAndAuthenticatedTombstonesOverTls()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("journal-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("journal-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstExchange = host.Exchange(first, firstClient, "outbox-first");
+        using AuthenticatedNoteExchange secondExchange = host.Exchange(second, secondClient, "outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstExchange);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondExchange);
+
+        Guid recordId = Guid.NewGuid();
+        first.Queue(recordId, LocalNoteAction.Upsert, "notes/a.md", "original");
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+
+        PendingNoteEdit losing = first.Queue(recordId, LocalNoteAction.Upsert,
+            "notes/a.md", "first offline contribution");
+        second.Queue(recordId, LocalNoteAction.Upsert, "notes/renamed.md", "second accepted");
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        await firstSync.ReconcileAsync();
+        RejectedNoteEdit conflict = Assert.Single(first.Conflicts);
+        Assert.Equal(losing.OperationId, conflict.Edit.OperationId);
+        Assert.Equal("first offline contribution", Assert.Single(first.Pending).Markdown);
+        Assert.Equal("second accepted", conflict.Current?.Markdown);
+        Assert.Equal(2, Assert.Single(first.Records).Revision);
+
+        first.Resolve(losing.OperationId, LocalNoteAction.Upsert,
+            "notes/renamed.md", "resolved contribution");
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+        Assert.Equal(3, Assert.Single(second.Records).Revision);
+
+        first.Queue(recordId, LocalNoteAction.Delete);
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.True(Assert.Single(second.Records).Deleted);
+        Assert.Equal("resolved contribution", Assert.Single(second.Records).Markdown);
+
+        second.Queue(recordId, LocalNoteAction.Restore, "notes/restored.md", "restored body");
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+        Assert.Equal(5, Assert.Single(first.Records).Revision);
+        Assert.False(Assert.Single(first.Records).Deleted);
+        Assert.Empty(first.Pending);
+        Assert.Empty(second.Pending);
+    }
+
+    [Fact]
+    public async Task LostAckAndHostRestartReplayIdenticalEncryptedBytesFromDisk()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        string journalRoot = host.NewClientDirectory("crash-journal");
+        string outboxRoot = host.NewClientDirectory("crash-outbox");
+        Guid recordId = Guid.NewGuid();
+        Guid operationId;
+        using (OfflineNoteJournal journal = OfflineNoteJournal.Open(
+                   journalRoot, host.CollectionEpoch, host.FirstDevice))
+        using (OpaqueSyncTransportClient firstClient = host.ConnectFirst())
+        using (AuthenticatedNoteExchange exchange = host.Exchange(journal, firstClient, outboxRoot))
+        {
+            PendingNoteEdit edit = journal.Queue(recordId, LocalNoteAction.Upsert,
+                "notes/crash.md", "private crash recovery");
+            operationId = edit.OperationId;
+            NoteSubmitResult accepted = await exchange.SubmitAsync(
+                new NoteSubmitRequest(1, host.Space, host.CollectionEpoch,
+                    host.FirstDevice, edit), CancellationToken.None);
+            Assert.Equal(NoteSubmitStatus.Applied, accepted.Status);
+            Assert.Equal(1, accepted.Sequence);
+            Assert.Single(journal.Pending);
+            Assert.True(File.Exists(Path.Combine(outboxRoot, operationId.ToString("N") + ".json")));
+        }
+
+        await host.RestartAsync();
+        using (OfflineNoteJournal journal = OfflineNoteJournal.Open(
+                   journalRoot, host.CollectionEpoch, host.FirstDevice))
+        using (OpaqueSyncTransportClient reconnected = host.ConnectFirst())
+        using (AuthenticatedNoteExchange exchange = host.Exchange(journal, reconnected, outboxRoot))
+        {
+            OfflineNoteSynchronizer synchronizer = new(journal, host.Space, exchange);
+            Assert.Equal(operationId, Assert.Single(journal.Pending).OperationId);
+            Assert.Equal(NoteSyncState.UpToDate, (await synchronizer.ReconcileAsync()).State);
+            Assert.Equal(1, Assert.Single(journal.Records).Revision);
+            Assert.Equal(1, journal.Cursor);
+            Assert.Empty(journal.Pending);
+            Assert.Empty(journal.AcknowledgedChanges);
+            Assert.Empty(journal.Conflicts);
+        }
+
+        using OpaqueSyncTransportClient read = host.ConnectSecond();
+        Assert.Single((await read.PullAsync(host.Pull(host.SecondDevice, 0, 100))).Changes);
+    }
+
+    [Fact]
+    public async Task ChangedLocalKeyCannotRewriteAnAlreadySealedOperation()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        string journalRoot = host.NewClientDirectory("key-journal");
+        string outboxRoot = host.NewClientDirectory("key-outbox");
+        using (OfflineNoteJournal journal = OfflineNoteJournal.Open(
+                   journalRoot, host.CollectionEpoch, host.FirstDevice))
+        using (OpaqueSyncTransportClient client = host.ConnectFirst())
+        using (AuthenticatedNoteExchange exchange = host.Exchange(journal, client, outboxRoot))
+        {
+            PendingNoteEdit pending = journal.Queue(Guid.NewGuid(),
+                LocalNoteAction.Upsert, "notes/secret.md", "never change sealed bytes");
+            Assert.Equal(NoteSubmitStatus.Applied,
+                (await exchange.SubmitAsync(new NoteSubmitRequest(1, host.Space,
+                    host.CollectionEpoch, host.FirstDevice, pending),
+                    CancellationToken.None)).Status);
+        }
+
+        using OfflineNoteJournal reopened = OfflineNoteJournal.Open(
+            journalRoot, host.CollectionEpoch, host.FirstDevice);
+        using OpaqueSyncTransportClient retry = host.ConnectFirst();
+        using AuthenticatedNoteExchange wrongKey = new(reopened, host.Space, 1,
+            ClientSpaceKeys.GenerateContentKey(), retry, outboxRoot);
+        OfflineNoteSynchronizer synchronizer = new(reopened, host.Space, wrongKey);
+        await Assert.ThrowsAnyAsync<CryptographicException>(() => synchronizer.ReconcileAsync());
+        Assert.Single(reopened.Pending);
+        Assert.Equal(0, reopened.Cursor);
+        Assert.Single((await retry.PullAsync(host.Pull(host.FirstDevice, 0, 100))).Changes);
+    }
+
+    [Fact]
+    public async Task LegacyUnsealedRemoteDeletionCannotAdvanceTheOfflineJournal()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient sender = host.ConnectFirst();
+        using OpaqueSyncTransportClient receiver = host.ConnectSecond();
+        using OfflineNoteJournal journal = OfflineNoteJournal.Open(
+            host.NewClientDirectory("legacy-journal"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange exchange = host.Exchange(journal, receiver, "legacy-outbox");
+        OfflineNoteSynchronizer synchronizer = new(journal, host.Space, exchange);
+
+        Guid record = Guid.NewGuid();
+        Assert.Equal(OpaqueSyncStatus.Applied,
+            (await sender.SubmitAsync(host.Mutation(host.FirstDevice, record,
+                Guid.NewGuid(), 0, OpaqueSyncAction.Upsert,
+                host.Encrypt(record, 1, OpaqueSyncAction.Upsert,
+                    new OpaqueNoteContent("notes/legacy.md", "original"))))).Status);
+        await synchronizer.ReconcileAsync();
+        Assert.Equal(1, journal.Cursor);
+
+        Assert.Equal(OpaqueSyncStatus.Applied,
+            (await sender.SubmitAsync(host.Mutation(host.FirstDevice, record,
+                Guid.NewGuid(), 1, OpaqueSyncAction.Delete, []))).Status);
+        await Assert.ThrowsAsync<InvalidDataException>(() => synchronizer.ReconcileAsync());
+        Assert.Equal(1, journal.Cursor);
+        Assert.False(Assert.Single(journal.Records).Deleted);
+    }
+
+    [Fact]
+    public async Task HostOpaquePathCollisionStopsBeforeAdvancingTheClientCheckpoint()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("collision-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("collision-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstExchange = host.Exchange(first, firstClient, "collision-outbox-first");
+        using AuthenticatedNoteExchange secondExchange = host.Exchange(second, secondClient, "collision-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstExchange);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondExchange);
+
+        Guid firstRecord = Guid.NewGuid();
+        Guid secondRecord = Guid.NewGuid();
+        first.Queue(firstRecord, LocalNoteAction.Upsert, "same/path.md", "first contents");
+        second.Queue(secondRecord, LocalNoteAction.Upsert, "same/path.md", "second contents");
+        await firstSync.ReconcileAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => secondSync.ReconcileAsync());
+        Assert.Equal(0, second.Cursor);
+        Assert.Equal(secondRecord, Assert.Single(second.Records).Id);
+        Assert.Single(second.AcknowledgedChanges);
+        Assert.Empty(second.Pending);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => firstSync.ReconcileAsync());
+        Assert.Equal(1, first.Cursor);
+        Assert.Equal(firstRecord, Assert.Single(first.Records).Id);
+        Assert.Empty(first.Pending);
+    }
+
     private sealed class TestHost : IAsyncDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(),
@@ -268,6 +467,17 @@ public sealed class PrivateSyncHostTests
             firstCertificate = IssueLeaf(authority, firstSigner, isServer: false);
             secondCertificate = IssueLeaf(authority, secondSigner, isServer: false);
         }
+
+        public string NewClientDirectory(string label)
+        {
+            string path = Path.Combine(root, label);
+            PrivateDirectory(path);
+            return path;
+        }
+
+        public AuthenticatedNoteExchange Exchange(OfflineNoteJournal journal,
+            OpaqueSyncTransportClient client, string outboxName) =>
+            new(journal, Space, 1, contentKey, client, NewClientDirectory(outboxName));
 
         public SslProtocols ExpectedProtocol =>
             OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13;

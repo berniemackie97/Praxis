@@ -90,7 +90,7 @@ public static class ClientOpaqueNoteCipher
     {
         if (key.Length != 32 || space == Guid.Empty || epoch == Guid.Empty ||
             record == Guid.Empty || revision < 1 || keyEpoch < 1 ||
-            action is not (OpaqueSyncAction.Upsert or OpaqueSyncAction.Restore))
+            action is not (OpaqueSyncAction.Upsert or OpaqueSyncAction.Restore or OpaqueSyncAction.Delete))
         {
             throw new ArgumentException("The encrypted note scope is invalid.");
         }

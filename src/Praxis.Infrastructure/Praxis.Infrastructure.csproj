@@ -4,6 +4,7 @@
     <InternalsVisibleTo Include="Praxis.Infrastructure.Tests" />
     <InternalsVisibleTo Include="Praxis.SyncHost.Tests" />
     <ProjectReference Include="../Praxis.Application/Praxis.Application.csproj" />
+    <ProjectReference Include="../Praxis.Notes/Praxis.Notes.csproj" />
     <EmbeddedResource Include="Persistence/Migrations/Catalog.V*.sql"
                       LogicalName="Praxis.Infrastructure.%(Filename)%(Extension)" />
   </ItemGroup>

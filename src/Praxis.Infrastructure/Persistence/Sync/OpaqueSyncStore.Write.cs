@@ -47,9 +47,9 @@ public sealed partial class OpaqueSyncStore
         if (request.OperationId == Guid.Empty || request.RecordId == Guid.Empty ||
             request.ExpectedRevision < 0 || !Enum.IsDefined(request.Action) ||
             request.ContentEpoch != scope.ContentEpoch ||
-            (request.Action == OpaqueSyncAction.Delete
-                ? payload is not { Length: 0 }
-                : payload is not { Length: >= 28 and <= MaxPayloadBytes }))
+            (payload is null || payload.Length > MaxPayloadBytes ||
+             payload.Length is > 0 and < 28 ||
+             request.Action != OpaqueSyncAction.Delete && payload.Length == 0))
         {
             return Reject(OpaqueSyncStatus.InvalidRequest);
         }
@@ -128,7 +128,7 @@ public sealed partial class OpaqueSyncStore
         {
             reader.Read();
             long stored = reader.GetInt64(1);
-            int acceptedBytes = request.Action == OpaqueSyncAction.Delete ? 0 : payload!.Length;
+            int acceptedBytes = payload!.Length;
             if (reader.GetInt64(0) >= MaximumEvents ||
                 stored + acceptedBytes * 2L > MaximumStoredBytes)
             {
@@ -139,7 +139,7 @@ public sealed partial class OpaqueSyncStore
         long nextSequence = checked(head + 1);
         long nextRevision = checked(revision + 1);
         bool nextDeleted = request.Action == OpaqueSyncAction.Delete;
-        byte[] saved = nextDeleted ? [] : payload!;
+        byte[] saved = payload!;
 
         using (SqliteCommand write = Command(transaction, """
             INSERT INTO sync_records

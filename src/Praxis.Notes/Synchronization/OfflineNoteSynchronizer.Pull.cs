@@ -45,6 +45,9 @@ public sealed partial class OfflineNoteSynchronizer
                 case NotePullStatus.UnsupportedProtocolVersion:
                     RequireEmptyErrorPage(page);
                     throw new NotSupportedException("The note protocol version is unsupported.");
+                case NotePullStatus.ResetRequired:
+                    RequireEmptyErrorPage(page);
+                    return (NoteSyncState.KeyResetRequired, applied, snapshotApplied);
                 case NotePullStatus.InvalidCursor:
                     RequireEmptyErrorPage(page);
                     return (NoteSyncState.CursorResetRequired, applied, snapshotApplied);

@@ -157,7 +157,7 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         Assert.Equal(OpaqueSyncStatus.InvalidRequest,
             store.Submit(writer, valid with { OperationId = Guid.Empty }).Status);
         Assert.Equal(OpaqueSyncStatus.InvalidRequest,
-            store.Submit(writer, valid with { Action = OpaqueSyncAction.Delete }).Status);
+            store.Submit(writer, valid with { Action = OpaqueSyncAction.Delete, Ciphertext = [1] }).Status);
 
         Assert.Equal(OpaqueSyncStatus.WrongCollectionEpoch,
             store.Pull(reader, new OpaqueSyncPull(1, space, Guid.NewGuid(), device, 1, 0, 100)).Status);

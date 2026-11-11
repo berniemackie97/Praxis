@@ -36,6 +36,12 @@ public sealed partial class OfflineNoteSynchronizer
                 return (accepted, NoteSyncState.EpochChanged);
             }
 
+            if (response.Status == NoteSubmitStatus.ResetRequired)
+            {
+                RequireNoPrivateResponse(response);
+                return (accepted, NoteSyncState.KeyResetRequired);
+            }
+
             if (response.CollectionEpoch != epoch)
             {
                 throw new InvalidDataException("The receipt uses a foreign collection epoch.");
@@ -72,6 +78,9 @@ public sealed partial class OfflineNoteSynchronizer
                 case NoteSubmitStatus.UnsupportedProtocolVersion:
                     RequireNoPrivateResponse(response);
                     throw new NotSupportedException("The note protocol version is unsupported.");
+                case NoteSubmitStatus.QuotaExceeded:
+                    RequireNoPrivateResponse(response);
+                    throw new IOException("The encrypted synchronization service has reached its storage limit.");
                 case NoteSubmitStatus.InvalidRequest:
                 case NoteSubmitStatus.OperationKeyReused:
                     RequireNoPrivateResponse(response);

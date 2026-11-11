@@ -233,6 +233,41 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
     }
 
     [Fact]
+    public async Task ContentKeyResetDoesNotDiscardThePendingEditOrAdvanceItsCursor()
+    {
+        JournalSyncExchangeFixture server = new(Space, Epoch);
+        using OfflineNoteJournal journal = Open(DeviceA);
+        OfflineNoteSynchronizer synchronizer = new(journal, Space, server);
+        PendingNoteEdit edit = journal.Queue(Guid.NewGuid(), LocalNoteAction.Upsert,
+            "offline.md", "private unsent content");
+
+        server.AlterNextSubmit = reply => reply with
+        {
+            Status = NoteSubmitStatus.ResetRequired,
+            Sequence = 0,
+            Current = null
+        };
+        Assert.Equal(NoteSyncState.KeyResetRequired,
+            (await synchronizer.ReconcileAsync()).State);
+        Assert.Equal(edit, Assert.Single(journal.Pending));
+        Assert.Equal(0, journal.Cursor);
+
+        journal.Reject(edit.OperationId, LocalNoteConflictReason.StaleRevision, null);
+        server.AlterNextPull = page => page with
+        {
+            Status = NotePullStatus.ResetRequired,
+            HeadSequence = 0,
+            Changes = [],
+            NextCursor = page.RequestedCursor
+        };
+        Assert.Equal(NoteSyncState.KeyResetRequired,
+            (await synchronizer.ReconcileAsync()).State);
+        Assert.Equal(edit, Assert.Single(journal.Pending));
+        Assert.Equal(0, journal.Cursor);
+        Assert.Empty(journal.Records);
+    }
+
+    [Fact]
     public async Task LostPullAndMalformedPagesCannotAdvanceDurableCursor()
     {
         JournalSyncExchangeFixture server = new(Space, Epoch);
