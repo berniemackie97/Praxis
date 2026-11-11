@@ -126,7 +126,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     }
 
     [Fact]
-    public async Task OfflineWatcherReportsDisconnectionAndRecoversWithoutRecreatingOriginals()
+    public async Task OfflineWatcherRequiresTrustedReapprovalWithoutRecreatingOriginals()
     {
         string removable = Path.Combine(workspace, "removable");
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
@@ -142,6 +142,9 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
             Directory.CreateDirectory(removable);
             File.WriteAllText(Path.Combine(removable, "reconnected.md"), "# Reconnected");
+            await WaitForAsync(() => monitor.Snapshot().State == "reapproval_required");
+            Assert.Empty(catalog.Library.List());
+            monitor.Monitor.ApproveRoot(removable);
             await WaitForAsync(() =>
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
                 monitor.Snapshot().State == "watching" &&
