@@ -21,6 +21,19 @@ struct PresentationTests {
         #expect(FileManager.default.fileExists(atPath: worker))
     }
 
+
+    @Test func processingBacklogDecodesFromDesktopReply() throws {
+        let response = """
+            {"requestId":"intake","ok":true,
+             "data":{"backlog":{"queued":2,"running":1,"failed":3}}}
+            """
+        let decoded = try JSONDecoder().decode(WorkerResponse.self, from: Data(response.utf8))
+        let backlog = try #require(decoded.data?.backlog)
+        #expect(backlog.queued == 2)
+        #expect(backlog.running == 1)
+        #expect(backlog.failed == 3)
+    }
+
     @Test func countsUseSingularAndPlural() {
         #expect(Count.label(1, "source") == "1 source")
         #expect(Count.label(3, "mention") == "3 mentions")

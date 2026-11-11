@@ -50,6 +50,36 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.False(catalog.Processing.Queue(Guid.NewGuid(), 1, "another-v2"));
     }
 
+
+    [Fact]
+    public async Task BacklogCountsOnlyCurrentJobsForActiveSourcesAcrossRestart()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        Assert.Equal(new ProcessingBacklog(0, 0, 0), catalog.Processing.Backlog());
+
+        using MemoryStream original = new([1]);
+        CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("backlog"), original, 10, "backlog-first");
+        Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+
+        ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(TimeSpan.FromMinutes(1)));
+        Assert.Equal(new ProcessingBacklog(0, 1, 0), catalog.Processing.Backlog());
+        Assert.True(catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "invalid_content"));
+        Assert.Equal(new ProcessingBacklog(0, 0, 1), catalog.Processing.Backlog());
+
+        using MemoryStream revised = new([2]);
+        CapturedOriginal second = await catalog.Originals.CaptureFileAsync(Source("backlog"), revised, 10, "backlog-second");
+        Assert.Equal(first.ItemId, second.ItemId);
+        Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+
+        using MemoryStream separate = new([3]);
+        CapturedOriginal independent = await catalog.Originals.CaptureFileAsync(Source("other"), separate, 10, "backlog-other");
+        Assert.Equal(new ProcessingBacklog(2, 0, 0), catalog.Processing.Backlog());
+        Assert.True(catalog.Sources.Revoke(independent.SourceId));
+        Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+        await catalog.Originals.VerifyAsync(first.ItemId);
+        await catalog.Originals.VerifyAsync(independent.ItemId);
+    }
+
     [Fact]
     public async Task ClaimedJobSurvivesRestartAndExpiredLeaseIsFenced()
     {
