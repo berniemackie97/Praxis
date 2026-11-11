@@ -312,15 +312,15 @@ public sealed class HybridSearchTests : IDisposable
 
     private sealed class RevokingTextIndex(ITextSearchIndex inner, Action afterQuery) : ITextSearchIndex
     {
-        public IReadOnlyList<SearchHit> Query(string query, int limit)
+        public IReadOnlyList<SearchHit> Query(string query, int limit, Guid? collectionId = null)
         {
-            IReadOnlyList<SearchHit> results = inner.Query(query, limit);
+            IReadOnlyList<SearchHit> results = inner.Query(query, limit, collectionId);
             afterQuery();
             return results;
         }
 
-        public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates) =>
-            inner.RetainCurrent(candidates);
+        public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates,
+            Guid? collectionId = null) => inner.RetainCurrent(candidates, collectionId);
 
         public int Rebuild(int maxDocuments, long maxTextBytes) =>
             inner.Rebuild(maxDocuments, maxTextBytes);
