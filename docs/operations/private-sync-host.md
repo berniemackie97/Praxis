@@ -37,14 +37,26 @@ A VPN does not provide device authorization. Never expose this candidate to the 
 
 ## macOS TLS 1.3 client support (.NET 10)
 
-On macOS, the default .NET 10 outbound TLS implementation uses Secure Transport,
-which does not negotiate TLS 1.3. The private sync host **requires TLS 1.3** and
-must not be made to accept TLS 1.2 merely to get the tests running.
+.NET 10's Network.framework integration enables **client-side only**
+TLS 1.3 on macOS; the inbound Kestrel/SslStream implementation still cannot
+serve TLS 1.3 on macOS. A TLS-1.3-only client and TLS-1.3-only Kestrel listener
+running on the same Mac cannot complete a handshake. Their error -9836 is
+Apple's `errSSLPeerProtocolVersion`; disabling certificate validation cannot fix it.
 
-`OpaqueSyncTransportClient.Connect` enables the .NET 10 Network.framework-backed
-outbound TLS implementation on macOS before constructing its HTTP handler, and
-explicitly restricts its connections to TLS 1.3. This opts the **process** into a
-different outbound TLS backend; it does not modify Kestrel's inbound TLS stack.
+The **production** `PrivateSyncHost.Build` requires TLS 1.3 and rejects macOS.
+Host D1 on a supported Linux/Windows server, not the Mac desktop worker.
+For macOS-only local test execution, an **internal** mode restricted to
+`IPAddress.Loopback` uses TLS 1.2 solely for the disposable mTLS integration
+host and companion local test client. This is not an operator setting,
+production fallback or an Internet-exposed TLS 1.2 listener. The test suite
+asserts the negotiated protocol and rejects the other protocol, and verifies
+both trusted and rejected device certificates; Linux/Windows tests must
+exercise the actual TLS 1.3 production code path.
+
+`OpaqueSyncTransportClient.Connect` enables .NET 10 Network.framework-backed
+outbound TLS on macOS before constructing its HTTP handler, requiring TLS 1.3
+for connections to a supported production host. That setting applies to the
+**whole process's outbound** TLS backend, not Kestrel's inbound backend.
 If a future first-party desktop client has already initialized outbound TLS
 before calling `Connect`, configure the switch at application startup instead:
 
@@ -59,9 +71,11 @@ hostname-handling behavior, so the first-party caller must test those behaviors
 before integrating it with other outbound services. Do not set a machine-wide
 switch without reviewing other outbound HTTPS clients.
 
-The focused TLS regression explicitly attempts a TLS 1.2 handshake against
-the opt-in host and must fail. A passing build, successful in-process gateway
-test or TLS 1.2 connection is **not** evidence that macOS mTLS works.
+The focused regression checks that the test listener negotiates TLS 1.2
+on macOS loopback and TLS 1.3 on a supported server. It also requires an
+actual authenticated request, rejects an unsupported protocol and refuses
+missing/untrusted client certificates. A macOS test-only TLS 1.2 success
+**does not certify production TLS 1.3**; verify that separately on Linux/Windows.
 
 ## Limits and caveats
 

@@ -18,6 +18,34 @@ public static class PrivateSyncHost
         X509Certificate2 serverCertificate, X509Certificate2 trustedDeviceRoot,
         SecurityRegistry registry, OpaqueSyncStore store)
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            throw new PlatformNotSupportedException(
+                "The private TLS 1.3 server requires a supported Linux or Windows host.");
+        }
+
+        return Build(bindAddress, port, serverCertificate, trustedDeviceRoot,
+            registry, store, SslProtocols.Tls13);
+    }
+
+    internal static WebApplication BuildMacOsLoopback(IPAddress bindAddress, int port,
+        X509Certificate2 serverCertificate, X509Certificate2 trustedDeviceRoot,
+        SecurityRegistry registry, OpaqueSyncStore store)
+    {
+        if (!OperatingSystem.IsMacOS() || !IPAddress.IsLoopback(bindAddress))
+        {
+            throw new InvalidOperationException(
+                "The macOS TLS 1.2 compatibility listener is restricted to loopback tests.");
+        }
+
+        return Build(bindAddress, port, serverCertificate, trustedDeviceRoot,
+            registry, store, SslProtocols.Tls12);
+    }
+
+    private static WebApplication Build(IPAddress bindAddress, int port,
+        X509Certificate2 serverCertificate, X509Certificate2 trustedDeviceRoot,
+        SecurityRegistry registry, OpaqueSyncStore store, SslProtocols protocols)
+    {
         ArgumentNullException.ThrowIfNull(bindAddress);
         ArgumentNullException.ThrowIfNull(serverCertificate);
         ArgumentNullException.ThrowIfNull(trustedDeviceRoot);
@@ -40,7 +68,7 @@ public static class PrivateSyncHost
             server.Listen(bindAddress, port, endpoint => endpoint.UseHttps(https =>
             {
                 https.ServerCertificate = serverCertificate;
-                https.SslProtocols = SslProtocols.Tls13;
+                https.SslProtocols = protocols;
                 https.HandshakeTimeout = TimeSpan.FromSeconds(10);
                 https.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
                 // The operator-controlled registry revokes enrolled devices at every request.
