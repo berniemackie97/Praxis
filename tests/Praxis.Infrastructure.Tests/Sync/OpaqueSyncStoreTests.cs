@@ -227,6 +227,78 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
     }
 
+    [Fact]
+    public void FailedEventInsertRollsBackRecordAndReceiptTogether()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid();
+        Guid epoch = Guid.NewGuid();
+        Guid device = Guid.NewGuid();
+        Guid record = Guid.NewGuid();
+        store.Provision(space, epoch);
+        using Microsoft.Data.Sqlite.SqliteConnection fault = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False");
+        fault.Open();
+        using (Microsoft.Data.Sqlite.SqliteCommand trigger = fault.CreateCommand())
+        {
+            trigger.CommandText = """
+                CREATE TRIGGER fail_sync_event BEFORE INSERT ON sync_events
+                BEGIN SELECT RAISE(ABORT, 'synthetic fault'); END;
+                """;
+            trigger.ExecuteNonQuery();
+        }
+
+        OpaqueSyncMutation mutation = Request(space, epoch, device, Guid.NewGuid(),
+            record, 0, OpaqueSyncAction.Upsert);
+        AuthorizedSpaceScope writer = Scope(device, space, SecurityPermission.Write);
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() =>
+            store.Submit(writer, mutation));
+
+        using (Microsoft.Data.Sqlite.SqliteCommand drop = fault.CreateCommand())
+        {
+            drop.CommandText = "DROP TRIGGER fail_sync_event";
+            drop.ExecuteNonQuery();
+        }
+
+        OpaqueSyncPage empty = store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100));
+        Assert.Empty(empty.Changes);
+        Assert.Equal(0, empty.HeadSequence);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, mutation).Status);
+        Assert.Equal(1, store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
+    }
+
+    [Fact]
+    public void PrivateRootAndSchemaVersionAreRequired()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute | UnixFileMode.GroupRead);
+            Assert.Throws<UnauthorizedAccessException>(() => OpaqueSyncStore.Open(root));
+            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
+        }
+
+        using (OpaqueSyncStore created = OpaqueSyncStore.Open(root))
+        {
+            created.Provision(Guid.NewGuid(), Guid.NewGuid());
+        }
+
+        using Microsoft.Data.Sqlite.SqliteConnection corrupt = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False");
+        corrupt.Open();
+        using (Microsoft.Data.Sqlite.SqliteCommand future = corrupt.CreateCommand())
+        {
+            future.CommandText = "PRAGMA user_version=999";
+            future.ExecuteNonQuery();
+        }
+
+        corrupt.Close();
+        Assert.Throws<NotSupportedException>(() => OpaqueSyncStore.Open(root));
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
