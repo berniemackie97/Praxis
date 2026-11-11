@@ -7,7 +7,7 @@ using Praxis.Storage.Sources;
 
 namespace Praxis.Storage.Intake;
 
-internal sealed record WatchedScanResult(int ObservedFiles, int Imported);
+internal sealed record WatchedScanResult(int ObservedFiles, int Imported, TimeSpan? NextScanDelay);
 
 /// <summary>
 /// One reconciliation pass over the approved folder: applies observed renames, waits for each
@@ -100,6 +100,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
         ForgetMissing(files);
 
         int imported = 0;
+        TimeSpan? nextScanDelay = null;
         long remainingHashBytes = HashBudgetPerScan - renameHashBytes;
         foreach (LocalObservedFile file in files)
         {
@@ -122,10 +123,19 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
             {
                 observations[file.SourcePath] = new ObservedState(stamp, now);
                 verified.Remove(file.SourcePath);
+                nextScanDelay = Earlier(nextScanDelay, quietPeriod);
                 continue;
             }
 
-            if (now - observed.FirstSeen < quietPeriod || (verified.TryGetValue(file.SourcePath, out VerifiedState? previous) && previous.Stamp == stamp && now - previous.LastVerified < FullVerificationInterval) || file.Length > remainingHashBytes)
+            TimeSpan elapsed = now - observed.FirstSeen;
+            if (elapsed < quietPeriod)
+            {
+                nextScanDelay = Earlier(nextScanDelay, quietPeriod - elapsed);
+                continue;
+            }
+
+            if ((verified.TryGetValue(file.SourcePath, out VerifiedState? previous) && previous.Stamp == stamp && now - previous.LastVerified < FullVerificationInterval) ||
+                file.Length > remainingHashBytes)
             {
                 continue;
             }
@@ -137,8 +147,11 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
             }
         }
 
-        return new WatchedScanResult(files.Count, imported);
+        return new WatchedScanResult(files.Count, imported, nextScanDelay);
     }
+
+    private static TimeSpan Earlier(TimeSpan? current, TimeSpan candidate) =>
+        current is { } prior && prior < candidate ? prior : candidate;
 
     private void ForgetMissing(IReadOnlyList<LocalObservedFile> files)
     {

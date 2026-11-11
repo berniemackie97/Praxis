@@ -78,14 +78,17 @@ public sealed class LocalWatchedIntake
     }
 
     /// <summary>Runs one reconciliation pass; returns the number of new revisions captured.</summary>
-    public async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    public async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default) =>
+        (await ReconcileCoreAsync(now, cancellationToken)).Imported;
+
+    private async Task<WatchedScanResult> ReconcileCoreAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await scanLock.WaitAsync(cancellationToken);
         try
         {
             if (status.IsPaused)
             {
-                return 0;
+                return new WatchedScanResult(0, 0, null);
             }
 
             WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
@@ -95,7 +98,7 @@ public sealed class LocalWatchedIntake
             }
 
             status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported);
-            return result.Imported;
+            return result;
         }
         finally
         {
@@ -111,6 +114,7 @@ public sealed class LocalWatchedIntake
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                TimeSpan delay = rescanInterval;
                 if (status.IsPaused)
                 {
                     watcher?.Dispose();
@@ -128,13 +132,19 @@ public sealed class LocalWatchedIntake
 
                     lastScanStarted = DateTimeOffset.UtcNow;
                     watcher = MaintainWatcher(watcher);
-                    if (await TryScanAsync(cancellationToken) && watcher is null && Directory.Exists(root))
+                    WatchedScanResult? scan = await TryScanAsync(cancellationToken);
+                    if (scan is { NextScanDelay: { } due })
+                    {
+                        delay = due < rescanInterval ? due : rescanInterval;
+                    }
+
+                    if (scan is not null && watcher is null && Directory.Exists(root))
                     {
                         status.SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
                     }
                 }
 
-                await wakeSignal.WaitAsync(rescanInterval, cancellationToken);
+                await wakeSignal.WaitAsync(delay, cancellationToken);
                 Interlocked.Exchange(ref wakePending, 0);
             }
         }
@@ -239,12 +249,11 @@ public sealed class LocalWatchedIntake
         return null;
     }
 
-    private async Task<bool> TryScanAsync(CancellationToken cancellationToken)
+    private async Task<WatchedScanResult?> TryScanAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await ReconcileAsync(DateTimeOffset.UtcNow, cancellationToken);
-            return true;
+            return await ReconcileCoreAsync(DateTimeOffset.UtcNow, cancellationToken);
         }
         catch (IOException exception)
         {
@@ -263,7 +272,7 @@ public sealed class LocalWatchedIntake
             report("Intake scan rejected input: " + JsonSerializer.Serialize(exception.Message));
         }
 
-        return false;
+        return null;
     }
 
     private FileSystemWatcher CreateWatcher()

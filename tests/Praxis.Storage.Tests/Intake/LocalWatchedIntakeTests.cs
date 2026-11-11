@@ -466,6 +466,36 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         await catalog.Originals.VerifyAsync(latest.ItemId);
     }
 
+
+    [Fact]
+    public async Task ActualMacNotificationCapturesStableDropBeforePeriodicRescan()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog, TimeSpan.FromMilliseconds(350),
+            TimeSpan.FromMinutes(5));
+        using CancellationTokenSource cancellation = new();
+        Task running = watcher.RunAsync(cancellation.Token);
+        try
+        {
+            await WaitForAsync(() => watcher.Snapshot().State == "watching");
+            string path = Path.Combine(inbox, "event-driven.md");
+            File.WriteAllText(path, "violet filesystem event");
+            await WaitForAsync(() => catalog.Search.Query("violet").Count > 0);
+            Assert.Equal(path, Assert.Single(catalog.Library.List()).SourceLocator);
+            Assert.Equal(1, watcher.Snapshot().ImportedSinceStart);
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
     [Fact]
     public async Task OversizedSparseFileReportsAnErrorAndRecoversAfterReplacement()
     {
