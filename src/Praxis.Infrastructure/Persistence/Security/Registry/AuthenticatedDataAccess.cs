@@ -9,6 +9,48 @@ namespace Praxis.Infrastructure.Persistence.Security.Registry;
 /// </summary>
 public sealed class AuthenticatedDataAccess(SecurityRegistry registry)
 {
+    public T ExecuteSpace<T>(VerifiedCertificateIdentity session, VerifiedDeviceProof proof,
+        SecurityPermission permission, long contentEpoch, Func<AuthorizedSpaceScope, T> operation)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(proof);
+        ArgumentNullException.ThrowIfNull(operation);
+        if (permission is not (SecurityPermission.Read or SecurityPermission.Write) ||
+            contentEpoch < 1 || proof.SourceId is not null ||
+            typeof(Task).IsAssignableFrom(typeof(T)) ||
+            typeof(T) == typeof(ValueTask) ||
+            (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(ValueTask<>)))
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        return registry.Execute(connection =>
+        {
+            if (proof.Permission != permission ||
+                !registry.Certificates.MatchesOperation(session, proof))
+            {
+                throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+            }
+
+            using SqliteCommand command = SecurityRegistry.Command(connection, null, """
+                SELECT s.processing_class, s.rekey_required,
+                    (SELECT COALESCE(MAX(epoch), 0)
+                     FROM space_key_epochs WHERE space_id=s.space_id)
+                FROM security_spaces s WHERE s.space_id=$space
+                """, ("$space", SecurityRegistry.Id(proof.SpaceId)));
+            using SqliteDataReader reader = command.ExecuteReader();
+            if (!reader.Read() || reader.GetString(0) != "client-held" ||
+                reader.GetInt64(1) != 0 || reader.GetInt64(2) != contentEpoch)
+            {
+                throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+            }
+
+            reader.Close();
+            return operation(new AuthorizedSpaceScope(session.PrincipalId, session.DeviceId,
+                proof.SpaceId, permission, contentEpoch));
+        });
+    }
+
     public T Execute<T>(VerifiedCertificateIdentity session, VerifiedDeviceProof proof,
         Guid sourceId, SecurityPermission permission, long contentEpoch, Func<AuthorizedDataScope, T> operation)
     {
