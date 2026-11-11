@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "src/Praxis.Worker/bin/Release/net10.0/Praxis.Worker.dll"
 SENTINEL = "private-path-must-not-appear-in-diagnostics"
+UNSUPPORTED_SCHEMA_VERSION = 2**31 - 1
 
 
 def command(catalog, inbox):
@@ -141,10 +142,10 @@ def main():
         assert_private_failure(run(damaged, inbox), "storage_error")
 
         with sqlite3.connect(catalog / "catalog.sqlite") as database:
-            database.execute("PRAGMA user_version = 17")
+            database.execute(f"PRAGMA user_version = {UNSUPPORTED_SCHEMA_VERSION}")
         assert_private_failure(run(catalog, inbox), "unsupported")
         with sqlite3.connect(catalog / "catalog.sqlite") as database:
-            if database.execute("PRAGMA user_version").fetchone()[0] != 17:
+            if database.execute("PRAGMA user_version").fetchone()[0] != UNSUPPORTED_SCHEMA_VERSION:
                 raise AssertionError("An unsupported catalog version was modified.")
 
     print("Worker lifecycle: private failures, lock, EOF/restart, correlated logs, "
