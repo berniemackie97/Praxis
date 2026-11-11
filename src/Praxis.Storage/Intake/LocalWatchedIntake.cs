@@ -66,6 +66,7 @@ public sealed class LocalWatchedIntake
 
     public bool IsApprovedAndAvailable =>
         Volatile.Read(ref requiresApproval) == 0 && Directory.Exists(root) &&
+        (File.GetAttributes(root) & FileAttributes.ReparsePoint) == 0 &&
         Interlocked.Read(ref approvedCreationTicks) == Directory.GetCreationTimeUtc(root).Ticks;
 
     public LocalIntakeStatus ApproveRoot(string selectedPath)
@@ -314,6 +315,13 @@ public sealed class LocalWatchedIntake
         catch (IOException)
         {
             bool offline = !Directory.Exists(root);
+            if (offline)
+            {
+                Interlocked.Exchange(ref requiresApproval, 1);
+                renames.Clear();
+                reconciler.InvalidateAll();
+            }
+
             status.SetState(offline ? "offline" : "degraded", offline ? OfflineProblem : "Intake scan will retry.");
             report("Intake scan will retry.");
         }
