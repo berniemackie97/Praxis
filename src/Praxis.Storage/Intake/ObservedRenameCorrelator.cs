@@ -77,7 +77,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
             cancellationToken.ThrowIfCancellationRequested();
             if (entry.OccurredUtc < DateTimeOffset.UtcNow - MaximumEventAge)
             {
-                Dequeue();
+                Dequeue(entry);
                 continue;
             }
 
@@ -88,7 +88,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
                 break;
             }
 
-            Dequeue();
+            Dequeue(entry);
         }
 
         return hashBudget - remaining;
@@ -198,11 +198,14 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
         }
     }
 
-    private void Dequeue()
+    private void Dequeue(PendingRename entry)
     {
         lock (gate)
         {
-            pending.Dequeue();
+            if (pending.TryPeek(out PendingRename? next) && ReferenceEquals(next, entry))
+            {
+                pending.Dequeue();
+            }
         }
     }
 
