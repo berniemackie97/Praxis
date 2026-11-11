@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
@@ -102,6 +103,11 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(0, (await client.PullAsync(host.Pull(host.FirstDevice, 0, 10))).HeadSequence);
 
         using HttpClient raw = host.RawFirst();
+        using HttpResponseMessage impersonation = await raw.PostAsJsonAsync(
+            "v1/sync/challenge",
+            new SyncChallengeRequest(host.SecondDevice, host.Space, SecurityPermission.Read));
+        Assert.Equal(HttpStatusCode.Unauthorized, impersonation.StatusCode);
+
         using HttpResponseMessage challengeResponse = await raw.PostAsJsonAsync(
             "v1/sync/challenge",
             new SyncChallengeRequest(host.FirstDevice, host.Space, SecurityPermission.Write));
@@ -114,6 +120,20 @@ public sealed class PrivateSyncHostTests
         using HttpResponseMessage replay = await raw.PostAsJsonAsync("v1/sync/submit", once);
         Assert.Equal(HttpStatusCode.Unauthorized, replay.StatusCode);
         Assert.Equal(1, (await client.PullAsync(host.Pull(host.FirstDevice, 0, 100))).HeadSequence);
+    }
+
+    [Fact]
+    public async Task Tls12DoesNotDowngradeThePrivateSyncListener()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+
+        // Enable the same .NET 10 macOS TLS 1.3 client backend used by a real client.
+        using OpaqueSyncTransportClient client = host.ConnectFirst();
+        using HttpClient downgraded = host.RawFirst(SslProtocols.Tls12);
+        await Assert.ThrowsAsync<HttpRequestException>(() => downgraded.PostAsJsonAsync(
+            "v1/sync/challenge",
+            new SyncChallengeRequest(host.FirstDevice, host.Space, SecurityPermission.Read)));
     }
 
     [Fact]
@@ -234,11 +254,12 @@ public sealed class PrivateSyncHostTests
             OpaqueSyncTransportClient.Connect(endpoint!, secondCertificate, authority,
                 SecondDevice, secondSigner);
 
-        public HttpClient RawFirst()
+        public HttpClient RawFirst(SslProtocols protocols = SslProtocols.Tls13)
         {
             HttpClientHandler handler = new()
             {
                 ClientCertificateOptions = ClientCertificateOption.Manual,
+                SslProtocols = protocols,
                 ServerCertificateCustomValidationCallback = (_, cert, _, errors) =>
                     cert is not null &&
                     (errors & (System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch |
