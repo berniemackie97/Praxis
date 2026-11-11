@@ -3,7 +3,7 @@ using Praxis.Domain.Collections;
 using Praxis.Domain.Library;
 using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Recovery;
+using Praxis.Infrastructure.Persistence.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

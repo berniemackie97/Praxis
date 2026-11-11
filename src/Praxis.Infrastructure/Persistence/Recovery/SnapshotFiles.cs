@@ -4,9 +4,8 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Common;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Recovery;
+namespace Praxis.Infrastructure.Persistence.Recovery;
 
 /// <summary>Snapshot layout, manifest and private-file primitives shared by backup and restore.</summary>
 internal static class SnapshotFiles

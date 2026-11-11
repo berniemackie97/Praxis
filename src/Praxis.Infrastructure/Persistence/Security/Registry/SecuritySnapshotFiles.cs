@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Recovery;
+using Praxis.Infrastructure.Persistence.Recovery;
 
 namespace Praxis.Infrastructure.Persistence.Security.Registry;
 

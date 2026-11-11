@@ -4,8 +4,8 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Security;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Persistence.Recovery;
 using Praxis.Infrastructure.Persistence.Security.Registry;
-using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Security.Cryptography;
 
 namespace Praxis.RecoveryCheck.Verification;

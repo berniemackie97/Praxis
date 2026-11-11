@@ -1,8 +1,7 @@
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Recovery;
+namespace Praxis.Infrastructure.Persistence.Recovery;
 
 /// <summary>
 /// Coherent catalog-plus-originals snapshots that do not require an open catalog session:

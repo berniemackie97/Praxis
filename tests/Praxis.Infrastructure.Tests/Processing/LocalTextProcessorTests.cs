@@ -5,7 +5,7 @@ using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Recovery;
+using Praxis.Infrastructure.Persistence.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

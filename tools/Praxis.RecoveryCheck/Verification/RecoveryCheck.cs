@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Recovery;
+using Praxis.Infrastructure.Persistence.Recovery;
 
 namespace Praxis.RecoveryCheck.Verification;
 
