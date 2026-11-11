@@ -1,10 +1,11 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -164,10 +165,10 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
     public string SourceKey(Guid itemId) =>
         Originals.Single(pair => pair.Value.ItemId == itemId).Key;
 
-    public void VerifyHits(IReadOnlyList<LocalSearchHit> hits, bool lexical)
+    public void VerifyHits(IReadOnlyList<SearchHit> hits, bool lexical)
     {
         Assert.Equal(hits.Count, hits.Select(hit => hit.ItemId).Distinct().Count());
-        foreach (LocalSearchHit hit in hits)
+        foreach (SearchHit hit in hits)
         {
             CapturedOriginal original = Assert.Single(Originals.Values,
                 entry => entry.ItemId == hit.ItemId);

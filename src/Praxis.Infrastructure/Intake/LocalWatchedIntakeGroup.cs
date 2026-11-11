@@ -1,8 +1,7 @@
+using Praxis.Domain.Intake;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Intake;
-
-public sealed record WatchedRootStatus(string Path, LocalIntakeStatus Status);
 
 /// <summary>
 /// Supervises a bounded set of individually approved intake roots. Each root retains its own
@@ -58,9 +57,9 @@ public sealed class LocalWatchedIntakeGroup
     public IReadOnlyList<WatchedRootStatus> RootStatuses() =>
         monitors.Select(monitor => new WatchedRootStatus(monitor.RootPath, monitor.Snapshot())).ToArray();
 
-    public LocalIntakeStatus Snapshot() => Aggregate(RootStatuses());
+    public IntakeStatus Snapshot() => Aggregate(RootStatuses());
 
-    public LocalIntakeStatus SetPaused(bool paused)
+    public IntakeStatus SetPaused(bool paused)
     {
         foreach (LocalWatchedIntake monitor in monitors)
         {
@@ -78,7 +77,7 @@ public sealed class LocalWatchedIntakeGroup
         }
     }
 
-    public LocalIntakeStatus ApproveRoot(string selectedPath)
+    public IntakeStatus ApproveRoot(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
         LocalWatchedIntake? monitor = monitors.FirstOrDefault(candidate =>
@@ -93,7 +92,7 @@ public sealed class LocalWatchedIntakeGroup
         return Snapshot();
     }
 
-    public LocalIntakeStatus RequestRescan()
+    public IntakeStatus RequestRescan()
     {
         foreach (LocalWatchedIntake monitor in monitors)
         {
@@ -134,9 +133,9 @@ public sealed class LocalWatchedIntakeGroup
         }
     }
 
-    private static LocalIntakeStatus Aggregate(IReadOnlyList<WatchedRootStatus> roots)
+    private static IntakeStatus Aggregate(IReadOnlyList<WatchedRootStatus> roots)
     {
-        LocalIntakeStatus[] states = roots.Select(root => root.Status).ToArray();
+        IntakeStatus[] states = roots.Select(root => root.Status).ToArray();
         bool paused = states.All(status => status.Paused);
         string state = paused ? "paused" :
             states.All(status => status.State == "offline") ? "offline" :
@@ -145,7 +144,7 @@ public sealed class LocalWatchedIntakeGroup
         int affected = states.Count(status => status.State is "offline" or "degraded" or "reapproval_required" or "stopped");
         DateTimeOffset? lastScan = states.All(status => status.LastSuccessfulScanUtc is not null)
             ? states.Min(status => status.LastSuccessfulScanUtc) : null;
-        return new LocalIntakeStatus(
+        return new IntakeStatus(
             state, paused, lastScan,
             states.Sum(status => status.ObservedFiles),
             states.Sum(status => status.ImportedSinceStart),

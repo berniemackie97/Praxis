@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
-using Praxis.Infrastructure.Enrichment;
+using Praxis.Domain.Enrichment;
 using Praxis.Infrastructure.Knowledge;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;

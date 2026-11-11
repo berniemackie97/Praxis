@@ -1,8 +1,9 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;

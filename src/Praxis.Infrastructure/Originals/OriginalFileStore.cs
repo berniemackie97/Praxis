@@ -1,9 +1,8 @@
 using System.Buffers;
 using System.Security.Cryptography;
+using Praxis.Domain.Originals;
 
 namespace Praxis.Infrastructure.Originals;
-
-internal readonly record struct OriginalObject(string Digest, long Length);
 
 internal sealed class OriginalFileStore
 {

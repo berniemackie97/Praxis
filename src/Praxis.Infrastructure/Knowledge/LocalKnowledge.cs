@@ -1,30 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment.Semantic;
 
 namespace Praxis.Infrastructure.Knowledge;
-
-/// <summary>
-/// An entity and its visible evidence. <see cref="TypeConflict"/> marks an unresolved entity
-/// whose mentions disagree about its type; an owner or verified type resolves it.
-/// </summary>
-public sealed record EntitySummary(
-    Guid EntityId, string Name, string? EntityType, string TypeOrigin, string Status,
-    int Mentions, int Sources, bool TypeConflict);
-
-public sealed record EntityMention(
-    Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string? MentionType,
-    string Evidence, int EvidenceOffset, string Status, string SourceName, string? Verdict);
-
-public sealed record EntityRelation(
-    Guid RelationId, string Predicate, bool Outgoing, Guid OtherEntityId, string OtherName,
-    string Origin, string? Evidence);
-
-public sealed record RelatedEntity(Guid EntityId, string Name, string? EntityType, int SharedSegments);
-
-public sealed record EntityDetail(
-    EntitySummary Summary, IReadOnlyList<string> Aliases, IReadOnlyList<EntityMention> Mentions,
-    IReadOnlyList<EntityRelation> Relations, IReadOnlyList<RelatedEntity> Related);
 
 /// <summary>
 /// Canonical entities across all sources: what is known about a name, where it is mentioned,

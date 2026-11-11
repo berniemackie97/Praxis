@@ -1,9 +1,9 @@
 using System.Text.Json;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Library;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Library;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -39,14 +39,14 @@ public sealed class LocalIntakeHealthTests : IDisposable
         File.WriteAllText(path, "# First\nOriginal text");
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
-        LocalIntakeStatus started = monitor.Snapshot();
+        IntakeStatus started = monitor.Snapshot();
         Assert.Equal("starting", started.State);
         Assert.Null(started.LastSuccessfulScanUtc);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await monitor.ReconcileAsync(now));
         Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(1)));
-        LocalLibraryItem captured = Assert.Single(catalog.Library.List());
+        LibraryItem captured = Assert.Single(catalog.Library.List());
         Assert.Equal("watching", monitor.Snapshot().State);
         Assert.Equal(1, monitor.Snapshot().ObservedFiles);
         Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
@@ -57,7 +57,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(30));
         Assert.Equal(0, await monitor.ReconcileAsync(now.AddSeconds(2)));
         Assert.Equal(0, await monitor.ReconcileAsync(now.AddSeconds(3)));
-        LocalIntakeStatus broken = monitor.Snapshot();
+        IntakeStatus broken = monitor.Snapshot();
         Assert.Equal("degraded", broken.State);
         Assert.Equal(1, broken.ErrorCount);
         Assert.Single(broken.FileErrors);
@@ -68,7 +68,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
 
         File.Delete(path);
         await monitor.ReconcileAsync(now.AddSeconds(4));
-        LocalIntakeStatus resumed = monitor.Snapshot();
+        IntakeStatus resumed = monitor.Snapshot();
         Assert.Equal("watching", resumed.State);
         Assert.Equal(0, resumed.ErrorCount);
         Assert.Empty(resumed.FileErrors);
@@ -149,7 +149,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
                 monitor.Snapshot().State == "watching" &&
                 monitor.Snapshot().ImportedSinceStart == 1);
-            LocalLibraryItem saved = Assert.Single(catalog.Library.List());
+            LibraryItem saved = Assert.Single(catalog.Library.List());
             Assert.NotNull(monitor.Snapshot().LastSuccessfulScanUtc);
             Assert.Single(catalog.Search.Query("Reconnected"));
 

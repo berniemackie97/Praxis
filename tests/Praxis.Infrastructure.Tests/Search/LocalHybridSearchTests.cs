@@ -1,10 +1,12 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

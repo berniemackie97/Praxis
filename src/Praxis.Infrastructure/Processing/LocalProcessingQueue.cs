@@ -1,18 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Processing;
-
-public enum ProcessingCompletion
-{
-    Completed,
-    Unsupported,
-    Failed
-}
-
-public sealed record ProcessingJob(Guid ItemId, int Revision, string ProcessorKey, string State, int Attempt, int TotalAttempts, DateTimeOffset? LeaseUntil, string? FailureCode);
-
-public sealed record ProcessingLease(Guid ItemId, int Revision, string ProcessorKey, Guid LeaseKey, DateTimeOffset LeaseUntil);
 
 /// <summary>
 /// Durable, leased processing jobs keyed by immutable item revision and processor.

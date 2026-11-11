@@ -1,8 +1,7 @@
 using System.Text.Json;
-using Praxis.Infrastructure;
+using Praxis.Domain.Models;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Models;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

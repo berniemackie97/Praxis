@@ -1,8 +1,6 @@
+using Praxis.Domain.Intake;
+
 namespace Praxis.Infrastructure.Intake;
-
-public sealed record LocalIntakeFileError(string SourcePath, string Message);
-
-public sealed record LocalIntakeStatus(string State, bool Paused, DateTimeOffset? LastSuccessfulScanUtc, int ObservedFiles, int ImportedSinceStart, int ErrorCount, IReadOnlyList<LocalIntakeFileError> FileErrors, string? Problem);
 
 /// <summary>
 /// Owner-visible watched-intake state: lifecycle state, pause request and the latest error
@@ -13,12 +11,12 @@ internal sealed class IntakeStatusTracker
     private const int ReportedFileErrors = 8;
     private readonly Lock gate = new();
     private readonly Dictionary<string, string> fileErrors = new(StringComparer.Ordinal);
-    private LocalIntakeStatus current = new("starting", false, null, 0, 0, 0, [], null);
+    private IntakeStatus current = new("starting", false, null, 0, 0, 0, [], null);
     private int pauseRequested;
 
     internal bool IsPaused => Volatile.Read(ref pauseRequested) != 0;
 
-    internal LocalIntakeStatus Snapshot()
+    internal IntakeStatus Snapshot()
     {
         lock (gate)
         {
@@ -72,12 +70,12 @@ internal sealed class IntakeStatusTracker
     {
         lock (gate)
         {
-            LocalIntakeFileError[] reported = fileErrors
+            IntakeFileError[] reported = fileErrors
                 .OrderBy(entry => entry.Key, StringComparer.Ordinal)
                 .Take(ReportedFileErrors)
-                .Select(entry => new LocalIntakeFileError(entry.Key, entry.Value))
+                .Select(entry => new IntakeFileError(entry.Key, entry.Value))
                 .ToArray();
-            current = new LocalIntakeStatus(IsPaused ? "paused" : fileErrors.Count == 0 ? "watching" : "degraded", IsPaused,
+            current = new IntakeStatus(IsPaused ? "paused" : fileErrors.Count == 0 ? "watching" : "degraded", IsPaused,
                 now, observedFiles, checked(current.ImportedSinceStart + imported), fileErrors.Count,
                 Array.AsReadOnly(reported), fileErrors.Count == 0 ? null : $"{fileErrors.Count} source error(s) need attention.");
         }

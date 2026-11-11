@@ -1,6 +1,6 @@
-namespace Praxis.Infrastructure.Media;
+using Praxis.Domain.Media;
 
-internal sealed record TimedCue(int Number, long StartMilliseconds, long EndMilliseconds, int Offset, int Length, string Text);
+namespace Praxis.Infrastructure.Media;
 
 internal static class LocalTimedCaptionParser
 {

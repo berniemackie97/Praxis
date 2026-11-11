@@ -1,4 +1,5 @@
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 
 namespace Praxis.Infrastructure.Tests.Support;
 

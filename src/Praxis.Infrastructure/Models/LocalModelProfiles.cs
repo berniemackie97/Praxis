@@ -1,17 +1,10 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Inference.Ollama;
 
 namespace Praxis.Infrastructure.Models;
-
-/// <summary>Owner-selected local model for one processing role.</summary>
-public sealed record ModelProfile(
-    string Role, string Provider, string Endpoint, string Model, int ContextTokens, bool Enabled)
-{
-    public const string LocalEnrichment = "local-enrichment";
-    public const string LocalEmbedding = "local-embedding";
-}
 
 /// <summary>
 /// Persists the owner's model choices in the private catalog so they travel with backups and

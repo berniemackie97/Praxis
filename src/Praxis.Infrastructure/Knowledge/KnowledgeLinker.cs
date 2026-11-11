@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Enrichment;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
 
 namespace Praxis.Infrastructure.Knowledge;
 

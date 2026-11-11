@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Inference.Ollama;
-using Praxis.Infrastructure.Search;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -52,7 +53,7 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
         {
             Guid[] relevant = fixture.Expected(judgment.Relevant);
             Stopwatch clock = Stopwatch.StartNew();
-            LocalSearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
+            SearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
             clock.Stop();
             lexicalTimes.Add(clock.Elapsed.TotalMilliseconds);
 
@@ -72,7 +73,7 @@ public sealed class LocalModelRetrievalEvaluationTests(ITestOutputHelper output)
                 lexical.Select(hit => hit.ItemId).OrderBy(id => id).ToArray());
             fixture.VerifyHits(lexical, lexical: true);
             fixture.VerifyHits(semantic.Select(hit => hit.Hit).ToArray(), lexical: false);
-            foreach (LocalSearchHit hit in hybrid.Hits)
+            foreach (SearchHit hit in hybrid.Hits)
             {
                 fixture.VerifyHits([hit],
                     lexical: lexical.Any(candidate => candidate.ItemId == hit.ItemId));

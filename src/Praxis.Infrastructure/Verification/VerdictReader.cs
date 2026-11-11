@@ -1,10 +1,9 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Knowledge;
 
 namespace Praxis.Infrastructure.Verification;
-
-internal sealed record VerificationVerdict(int Ordinal, string Verdict, string? CorrectedType, string? Note);
 
 /// <summary>Validates a verifier's answer against the ordinals that were actually sent.</summary>
 internal static class VerdictReader

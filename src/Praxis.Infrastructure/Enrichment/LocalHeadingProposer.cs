@@ -1,3 +1,5 @@
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Processing;
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Praxis.Domain.Models;
 
 namespace Praxis.Application.Inference;
 
@@ -50,9 +51,6 @@ public sealed record ChatRequest(IReadOnlyList<ChatMessage> Messages, JsonElemen
 }
 
 public sealed record ChatResult(string Content, int InputTokens, int OutputTokens, TimeSpan Duration);
-
-/// <summary>Identity recorded with every model-produced result for provenance and cache keys.</summary>
-public sealed record ModelIdentity(string Provider, string Model, string Digest, string? Family, string? ParameterSize, string? Quantization);
 
 /// <summary>A model that completes structured chat requests.</summary>
 public interface IChatModel

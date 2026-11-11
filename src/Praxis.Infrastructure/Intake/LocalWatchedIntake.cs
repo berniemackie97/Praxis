@@ -1,3 +1,4 @@
+using Praxis.Domain.Intake;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Intake;
@@ -62,14 +63,14 @@ public sealed class LocalWatchedIntake
 
     public string RootPath => root;
 
-    public LocalIntakeStatus Snapshot() => status.Snapshot();
+    public IntakeStatus Snapshot() => status.Snapshot();
 
     public bool IsApprovedAndAvailable =>
         Volatile.Read(ref requiresApproval) == 0 && Directory.Exists(root) &&
         (File.GetAttributes(root) & FileAttributes.ReparsePoint) == 0 &&
         Interlocked.Read(ref approvedCreationTicks) == Directory.GetCreationTimeUtc(root).Ticks;
 
-    public LocalIntakeStatus ApproveRoot(string selectedPath)
+    public IntakeStatus ApproveRoot(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
         if (!Path.IsPathFullyQualified(selectedPath) || !Directory.Exists(selectedPath) ||
@@ -88,7 +89,7 @@ public sealed class LocalWatchedIntake
         return status.Snapshot();
     }
 
-    public LocalIntakeStatus SetPaused(bool pause)
+    public IntakeStatus SetPaused(bool pause)
     {
         bool resuming = status.IsPaused && !pause;
         status.SetPaused(pause);
@@ -101,7 +102,7 @@ public sealed class LocalWatchedIntake
         return status.Snapshot();
     }
 
-    public LocalIntakeStatus RequestRescan()
+    public IntakeStatus RequestRescan()
     {
         Signal();
         return status.Snapshot();

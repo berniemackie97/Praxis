@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using Praxis.Domain.Media;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Media;
@@ -37,7 +39,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
             original = await Capture(catalog, "tutorial.mp4", contents, "video");
-            LocalMediaInspection inspected = await catalog.Media.InspectAsync(original.SourceId);
+            MediaInspection inspected = await catalog.Media.InspectAsync(original.SourceId);
             Assert.Equal("header_recognized", inspected.Outcome);
             Assert.Equal("iso-bmff", inspected.ContainerFamily);
             Assert.Equal(12_000L, inspected.DurationMilliseconds);
@@ -52,7 +54,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         }
 
         using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
-        LocalMediaInspection repeated = await reopened.Media.InspectAsync(original.SourceId);
+        MediaInspection repeated = await reopened.Media.InspectAsync(original.SourceId);
         Assert.Equal(original.Sha256, repeated.SourceSha256);
         Assert.Equal(12_000L, repeated.DurationMilliseconds);
     }
@@ -63,7 +65,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         CapturedOriginal fakeVideo = await Capture(catalog, "fake.mp4",
             Encoding.UTF8.GetBytes("not an mp4 video"), "fake");
-        LocalMediaInspection unsupported = await catalog.Media.InspectAsync(fakeVideo.SourceId);
+        MediaInspection unsupported = await catalog.Media.InspectAsync(fakeVideo.SourceId);
         Assert.Equal("unsupported", unsupported.Outcome);
         Assert.Null(unsupported.ContainerFamily);
         Assert.Null(unsupported.DurationMilliseconds);
@@ -73,7 +75,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         CapturedOriginal ebml = await Capture(catalog, "source.webm",
             [0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84,
                 0x77, 0x65, 0x62, 0x6d], "ebml");
-        LocalMediaInspection recognized = await catalog.Media.InspectAsync(ebml.SourceId);
+        MediaInspection recognized = await catalog.Media.InspectAsync(ebml.SourceId);
         Assert.Equal("header_recognized", recognized.Outcome);
         Assert.Equal("ebml", recognized.ContainerFamily);
         Assert.Null(recognized.DurationMilliseconds);
@@ -97,12 +99,12 @@ public sealed class LocalMediaInspectionTests : IDisposable
     {
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         CapturedOriginal original = await Capture(catalog, "changed.mp4", FastStartMovie(), "original");
-        LocalMediaInspection first = await catalog.Media.InspectAsync(original.SourceId);
+        MediaInspection first = await catalog.Media.InspectAsync(original.SourceId);
         CapturedOriginal changed = await Capture(catalog, "changed.mp4",
             Encoding.ASCII.GetBytes("no longer valid media"), "changed");
         Assert.Equal(original.ItemId, changed.ItemId);
         Assert.Equal(original.Revision + 1, changed.Revision);
-        LocalMediaInspection latest = await catalog.Media.InspectAsync(original.SourceId);
+        MediaInspection latest = await catalog.Media.InspectAsync(original.SourceId);
         Assert.Equal(changed.Sha256, latest.SourceSha256);
         Assert.Equal(changed.Revision, latest.Revision);
         Assert.Equal("unsupported", latest.Outcome);
@@ -207,7 +209,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
                 new OriginalObject(video.Sha256, bytes.Length), 64,
                 bytes.Length - 1, CancellationToken.None));
 
-        LocalMediaInspection first = await catalog.Media.InspectAsync(video.SourceId);
+        MediaInspection first = await catalog.Media.InspectAsync(video.SourceId);
         Assert.Equal("header_recognized", first.Outcome);
         Assert.Equal(12_000L, first.DurationMilliseconds);
 

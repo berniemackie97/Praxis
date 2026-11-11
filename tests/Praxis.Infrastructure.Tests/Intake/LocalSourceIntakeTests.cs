@@ -1,7 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -37,20 +38,20 @@ public sealed class LocalSourceIntakeTests : IDisposable
 
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
-        IReadOnlyList<LocalImportedFile> first = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
+        IReadOnlyList<ImportedFile> first = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
         Assert.Equal(2, first.Count);
         Assert.Equal([note, binary], first.Select(x => x.SourcePath));
         Assert.Equal(2, catalog.Processing.List().Count);
-        foreach (LocalImportedFile item in first)
+        foreach (ImportedFile item in first)
         {
             await catalog.Originals.VerifyAsync(item.Original.ItemId);
         }
 
-        IReadOnlyList<LocalImportedFile> replay = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
+        IReadOnlyList<ImportedFile> replay = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
         Assert.Equal(first, replay);
         Assert.Equal(2, catalog.Processing.List().Count);
         File.WriteAllText(note, "idea two");
-        IReadOnlyList<LocalImportedFile> changed = await intake.ImportFolderAsync(selected, "batch-two", 10, 3, 100, 1000);
+        IReadOnlyList<ImportedFile> changed = await intake.ImportFolderAsync(selected, "batch-two", 10, 3, 100, 1000);
         CapturedOriginal before = first.Single(x => x.SourcePath == note).Original;
         CapturedOriginal after = changed.Single(x => x.SourcePath == note).Original;
         Assert.Equal(before.SourceId, after.SourceId);
@@ -170,7 +171,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
 
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
-        IReadOnlyList<LocalImportedFile> original = await intake.ImportFolderAsync(
+        IReadOnlyList<ImportedFile> original = await intake.ImportFolderAsync(
             selected, "folder-request", 2, 0, 4, 6);
 
         File.WriteAllBytes(firstPath, [7]);

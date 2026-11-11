@@ -1,7 +1,8 @@
 using System.Text;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;

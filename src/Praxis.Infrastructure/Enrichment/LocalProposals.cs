@@ -1,34 +1,13 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Application.Inference;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment;
-
-public sealed record LocalProposal(
-    Guid ProposalId, Guid SourceId, Guid ItemId, int Revision, string SourceSha256,
-    string Producer, string Kind, string? EntityType, string Value, string Evidence,
-    int EvidenceOffset, string Status, string? Correction,
-    string? RelationSubject, string? RelationObject, string? Flags);
-
-/// <summary>
-/// A proposed assertion and the exact span of extracted text that supports it. For a relation,
-/// <see cref="Value"/> is the predicate and the subject and object are entity names.
-/// </summary>
-internal sealed record ProposalCandidate(
-    string Kind, string? EntityType, string Value, int EvidenceOffset, int EvidenceLength,
-    string? RelationSubject = null, string? RelationObject = null, string? Flags = null);
-
-/// <summary>Provenance, usage and coverage of a model-produced run.</summary>
-internal sealed record ModelRunRecord(
-    ModelIdentity Model, int InputTokens, int OutputTokens, TimeSpan Duration,
-    int SegmentsExamined, int SegmentsTotal, int Rejected, int SegmentsReused);
-
-/// <summary>A producer's earlier result for the same item, for reusing unchanged segments.</summary>
-internal sealed record PriorExtraction(
-    string Content, IReadOnlyList<TextSegmentSpan> Segments, IReadOnlyList<ProposalCandidate> Candidates);
 
 /// <summary>
 /// Source-grounded proposals (topics and typed entities) with exact evidence spans and
@@ -238,7 +217,7 @@ public sealed class LocalProposals
         }
     }
 
-    public IReadOnlyList<LocalProposal> List(Guid sourceId, int limit = 40)
+    public IReadOnlyList<EnrichmentProposal> List(Guid sourceId, int limit = 40)
     {
         if (sourceId == Guid.Empty)
         {
@@ -263,10 +242,10 @@ public sealed class LocalProposals
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = query.ExecuteReader();
-            List<LocalProposal> result = new List<LocalProposal>();
+            List<EnrichmentProposal> result = new List<EnrichmentProposal>();
             while (reader.Read())
             {
-                result.Add(new LocalProposal(
+                result.Add(new EnrichmentProposal(
                     Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                     Guid.Parse(reader.GetString(2)), reader.GetInt32(3),
                     reader.GetString(4), reader.GetString(5), reader.GetString(6),

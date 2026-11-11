@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Knowledge;
 
 namespace Praxis.Infrastructure.Verification;
 

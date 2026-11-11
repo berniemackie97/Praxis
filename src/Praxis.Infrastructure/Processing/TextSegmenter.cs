@@ -1,6 +1,6 @@
-namespace Praxis.Infrastructure.Processing;
+using Praxis.Domain.Text;
 
-internal readonly record struct TextSegmentSpan(int Start, int Length, string? HeadingPath);
+namespace Praxis.Infrastructure.Processing;
 
 /// <summary>
 /// Deterministic, structure-aware segmentation of extracted text. Blocks start at Markdown

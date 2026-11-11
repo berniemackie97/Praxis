@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Collections;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Collections;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -35,7 +35,7 @@ public sealed class LocalCollectionsTests : IDisposable
         {
             CapturedOriginal first = await Capture(catalog, "first.md", "violet", "one");
             CapturedOriginal second = await Capture(catalog, "second.md", "violet", "two");
-            LocalSourceCollection collection = catalog.Collections.Create(" Project Notes ");
+            SourceCollection collection = catalog.Collections.Create(" Project Notes ");
             collectionId = collection.CollectionId;
             firstSource = first.SourceId;
             secondSource = second.SourceId;
@@ -59,7 +59,7 @@ public sealed class LocalCollectionsTests : IDisposable
 
         using (LocalCatalog reopened = LocalCatalog.Open(dataRoot))
         {
-            LocalSourceCollection collection = Assert.Single(reopened.Collections.List());
+            SourceCollection collection = Assert.Single(reopened.Collections.List());
             Assert.Equal(collectionId, collection.CollectionId);
             Assert.Equal(2, collection.ActiveSourceCount);
             Assert.Equal(2, reopened.Library.List(collectionId: collectionId).Count);
@@ -79,7 +79,7 @@ public sealed class LocalCollectionsTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         CapturedOriginal first = await Capture(catalog, "first.md", "shared", "one");
         CapturedOriginal second = await Capture(catalog, "second.md", "shared", "two");
-        LocalSourceCollection collection = catalog.Collections.Create("Team");
+        SourceCollection collection = catalog.Collections.Create("Team");
         Assert.True(catalog.Collections.AddSource(collection.CollectionId, first.SourceId));
         Assert.True(catalog.Collections.AddSource(collection.CollectionId, second.SourceId));
         Assert.True(catalog.Sources.Revoke(first.SourceId));
@@ -106,7 +106,7 @@ public sealed class LocalCollectionsTests : IDisposable
         using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
             CapturedOriginal item = await Capture(catalog, "book.md", "reviewable", "book");
-            LocalSourceCollection collection = catalog.Collections.Create("Research");
+            SourceCollection collection = catalog.Collections.Create("Research");
             collectionId = collection.CollectionId;
             sourceId = item.SourceId;
             itemId = item.ItemId;
@@ -170,9 +170,9 @@ public sealed class LocalCollectionsTests : IDisposable
         Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Collections.List(offset: -1));
         Assert.Throws<ArgumentException>(() => catalog.Collections.AddSource(Guid.Empty, Guid.NewGuid()));
 
-        LocalSourceCollection first = catalog.Collections.Create("Research");
+        SourceCollection first = catalog.Collections.Create("Research");
         Assert.Throws<InvalidOperationException>(() => catalog.Collections.Create(" research "));
-        LocalSourceCollection second = catalog.Collections.Create("Projects");
+        SourceCollection second = catalog.Collections.Create("Projects");
         Assert.Throws<InvalidOperationException>(() =>
             catalog.Collections.Rename(second.CollectionId, "RESEARCH"));
         Assert.True(catalog.Collections.Rename(second.CollectionId, "Project Notes"));

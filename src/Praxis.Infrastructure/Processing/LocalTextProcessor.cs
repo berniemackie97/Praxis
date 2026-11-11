@@ -1,4 +1,5 @@
 using System.Text;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Processing;

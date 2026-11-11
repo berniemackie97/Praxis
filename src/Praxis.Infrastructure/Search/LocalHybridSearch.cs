@@ -1,8 +1,7 @@
 using Praxis.Application.Inference;
+using Praxis.Domain.Search;
 
 namespace Praxis.Infrastructure.Search;
-
-public sealed record HybridSearchResults(IReadOnlyList<LocalSearchHit> Hits, bool UsedEmbeddings);
 
 /// <summary>
 /// Combines independently ranked lexical and semantic source matches without treating a
@@ -32,22 +31,22 @@ public sealed class LocalHybridSearch(LocalTextSearch lexical, LocalSemanticInde
             await semantic.QueryAsync(query, model, PoolSize, cancellationToken);
         // A source may be revoked or revised during the awaited model call. Read lexical
         // evidence only after the await so the fusion never resurrects an earlier result.
-        IReadOnlyList<LocalSearchHit> keyword = lexical.Query(query, PoolSize);
+        IReadOnlyList<SearchHit> keyword = lexical.Query(query, PoolSize);
         if (vectors.Count == 0)
         {
             return new HybridSearchResults(keyword.Take(limit).ToArray(), false);
         }
 
-        Dictionary<Guid, (LocalSearchHit Hit, double Score)> combined = new();
+        Dictionary<Guid, (SearchHit Hit, double Score)> combined = new();
         for (int index = 0; index < keyword.Count; index++)
         {
-            LocalSearchHit hit = keyword[index];
+            SearchHit hit = keyword[index];
             combined[hit.ItemId] = (hit, 1d / (RankOffset + index + 1));
         }
 
         for (int index = 0; index < vectors.Count; index++)
         {
-            LocalSearchHit hit = vectors[index].Hit;
+            SearchHit hit = vectors[index].Hit;
             double score = 1d / (RankOffset + index + 1);
             if (combined.TryGetValue(hit.ItemId, out var existing))
             {

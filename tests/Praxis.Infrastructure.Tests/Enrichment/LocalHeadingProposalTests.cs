@@ -1,8 +1,9 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
@@ -40,9 +41,9 @@ public sealed class LocalHeadingProposalTests : IDisposable
         Assert.False(proposer.ProcessNext());
         Assert.Equal("generated", catalog.Proposals.Outcome(captured.SourceId));
 
-        IReadOnlyList<LocalProposal> proposals = catalog.Proposals.List(captured.SourceId);
+        IReadOnlyList<EnrichmentProposal> proposals = catalog.Proposals.List(captured.SourceId);
         Assert.Equal(new[] { "Architecture", "Runtime" }, proposals.Select(p => p.Value).ToArray());
-        foreach (LocalProposal proposal in proposals)
+        foreach (EnrichmentProposal proposal in proposals)
         {
             Assert.Equal(captured.ItemId, proposal.ItemId);
             Assert.Equal(captured.Sha256, proposal.SourceSha256);
@@ -72,7 +73,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         CapturedOriginal first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        LocalProposal old = Assert.Single(catalog.Proposals.List(first.SourceId));
+        EnrichmentProposal old = Assert.Single(catalog.Proposals.List(first.SourceId));
         Assert.True(catalog.Proposals.Review(old.ProposalId, "accepted"));
 
         CapturedOriginal revised = await Capture(catalog, "topic.md", "# Updated\nRevised body", "two");
@@ -83,7 +84,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         Assert.False(catalog.Proposals.Review(old.ProposalId, "rejected"));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        LocalProposal current = Assert.Single(catalog.Proposals.List(first.SourceId));
+        EnrichmentProposal current = Assert.Single(catalog.Proposals.List(first.SourceId));
         Assert.Equal("Updated", current.Value);
         Assert.NotEqual(old.ProposalId, current.ProposalId);
         Assert.Equal("pending", current.Status);
@@ -161,8 +162,8 @@ public sealed class LocalHeadingProposalTests : IDisposable
             ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
             Assert.True(proposer.ProcessNext());
             Assert.True(proposer.ProcessNext());
-            LocalProposal firstProposal = Assert.Single(catalog.Proposals.List(first.SourceId));
-            LocalProposal secondProposal = Assert.Single(catalog.Proposals.List(second.SourceId));
+            EnrichmentProposal firstProposal = Assert.Single(catalog.Proposals.List(first.SourceId));
+            EnrichmentProposal secondProposal = Assert.Single(catalog.Proposals.List(second.SourceId));
             Assert.NotEqual(firstProposal.ProposalId, secondProposal.ProposalId);
             Assert.True(catalog.Proposals.Review(firstProposal.ProposalId, "accepted"));
             await catalog.Recovery.BackupAsync(backup, 20_000_000);
@@ -251,7 +252,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         CapturedOriginal item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
-        LocalProposal candidate = Assert.Single(catalog.Proposals.List(item.SourceId));
+        EnrichmentProposal candidate = Assert.Single(catalog.Proposals.List(item.SourceId));
         Assert.Throws<ArgumentException>(() =>
             catalog.Proposals.Review(candidate.ProposalId, "approved"));
         Assert.Throws<ArgumentException>(() =>

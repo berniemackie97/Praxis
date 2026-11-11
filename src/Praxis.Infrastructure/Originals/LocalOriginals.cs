@@ -1,12 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Originals;
-
-public sealed record CapturedOriginal(Guid SourceId, Guid ItemId, int Revision, string Sha256, long Length);
-
-public sealed record LocalOriginalExport(Guid ItemId, int Revision, string Sha256, long Length);
 
 /// <summary>
 /// Captures, verifies and exports immutable content-addressed originals. A capture commits the
@@ -287,7 +284,7 @@ public sealed class LocalOriginals
         await objects.VerifyAsync(original, cancellationToken);
     }
 
-    public async Task<LocalOriginalExport> ExportAsync(Guid itemId, int revision, string destinationPath, CancellationToken cancellationToken = default)
+    public async Task<OriginalExport> ExportAsync(Guid itemId, int revision, string destinationPath, CancellationToken cancellationToken = default)
     {
         if (itemId == Guid.Empty || revision < 1)
         {
@@ -358,7 +355,7 @@ public sealed class LocalOriginals
                 File.Move(pending, destination);
             });
 
-            return new LocalOriginalExport(itemId, revision, original.Digest, original.Length);
+            return new OriginalExport(itemId, revision, original.Digest, original.Length);
         }
         finally
         {

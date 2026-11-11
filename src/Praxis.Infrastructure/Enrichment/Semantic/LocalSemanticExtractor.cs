@@ -1,8 +1,10 @@
 using Praxis.Application.Inference;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Models;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Models;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;

@@ -1,4 +1,5 @@
 using Praxis.Application.Inference;
+using Praxis.Domain.Verification;
 
 namespace Praxis.Infrastructure.Verification;
 

@@ -1,9 +1,9 @@
 using System.Text.Json;
+using Praxis.Domain.Library;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Library;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -41,7 +41,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         Assert.Equal(2, library.RootElement.GetProperty("data")
             .GetProperty("items").GetArrayLength());
 
-        LocalLibraryItem text = Assert.Single(catalog.Library.List(), item =>
+        LibraryItem text = Assert.Single(catalog.Library.List(), item =>
             item.SourceLocator.EndsWith("memory.md", StringComparison.Ordinal));
         using JsonDocument search = await Send(protocol,
             """{"requestId":"two","action":"search","query":"violet"}""");
@@ -362,7 +362,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(time);
         await monitor.ReconcileAsync(time.AddSeconds(1));
-        LocalLibraryItem source = Assert.Single(catalog.Library.List());
+        LibraryItem source = Assert.Single(catalog.Library.List());
 
         File.Move(previous, current);
         monitor.Monitor.QueueRename(previous, current);

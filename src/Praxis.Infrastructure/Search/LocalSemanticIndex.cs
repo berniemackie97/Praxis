@@ -1,12 +1,10 @@
 using System.Buffers.Binary;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Search;
-
-public sealed record SemanticIndexUpdate(int Indexed, bool HasMore);
-internal sealed record SemanticSearchHit(LocalSearchHit Hit, double Similarity);
 
 /// <summary>
 /// A derived, model-versioned index over current active canonical text segments. No source
@@ -266,7 +264,7 @@ public sealed class LocalSemanticIndex
                     snippet = snippet[..480];
                 }
 
-                LocalSearchHit hit = new(Guid.Parse(reader.GetString(0)), item, reader.GetInt32(2),
+                SearchHit hit = new(Guid.Parse(reader.GetString(0)), item, reader.GetInt32(2),
                     Path.GetFileName(locator), locator, reader.GetString(4), snippet);
                 if (!strongest.TryGetValue(item, out SemanticSearchHit? previous) ||
                     similarity > previous.Similarity)

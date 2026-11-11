@@ -1,9 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Collections;
+using Praxis.Domain.Library;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Collections;
-using Praxis.Infrastructure.Library;
 using Praxis.Infrastructure.Recovery;
-using Praxis.Infrastructure.Sources;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -43,15 +43,15 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        LocalLibraryItem before = Assert.Single(catalog.Library.List());
-        LocalSourceCollection group = catalog.Collections.Create("Research");
+        LibraryItem before = Assert.Single(catalog.Library.List());
+        SourceCollection group = catalog.Collections.Create("Research");
         Assert.True(catalog.Collections.AddSource(group.CollectionId, before.SourceId));
 
         File.Move(oldPath, newPath);
         watcher.Monitor.QueueRename(oldPath, newPath);
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        LibraryItem after = Assert.Single(catalog.Library.List());
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(before.Sha256, after.Sha256);
@@ -63,7 +63,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Equal(before.ItemId,
             Assert.Single(catalog.Library.List(collectionId: group.CollectionId)).ItemId);
         Assert.Equal(1L, Count("source_locator_moves"));
-        LocalSourceMovement movement = Assert.Single(catalog.Sources.ListMovements(before.SourceId));
+        SourceMovement movement = Assert.Single(catalog.Sources.ListMovements(before.SourceId));
         Assert.Equal(oldPath, movement.PreviousPath);
         Assert.Equal(newPath, movement.CurrentPath);
         Assert.Equal(before.Sha256, movement.Sha256);
@@ -76,7 +76,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         File.SetLastWriteTimeUtc(newPath, DateTime.UtcNow.AddSeconds(10));
         await watcher.ReconcileAsync(time.AddSeconds(6));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(8)));
-        LocalLibraryItem revised = Assert.Single(catalog.Library.List());
+        LibraryItem revised = Assert.Single(catalog.Library.List());
         Assert.Equal(before.SourceId, revised.SourceId);
         Assert.Equal(before.ItemId, revised.ItemId);
         Assert.Equal(2, revised.Revision);
@@ -96,7 +96,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem original = Assert.Single(catalog.Library.List());
+        LibraryItem original = Assert.Single(catalog.Library.List());
 
         File.Move(oldPath, movedPath);
         watcher.Monitor.QueueRename(oldPath, movedPath);
@@ -106,7 +106,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         File.WriteAllText(oldPath, "same preserved bytes");
         await watcher.ReconcileAsync(now.AddSeconds(4));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
-        LocalFileVersion? recreated = catalog.Sources.FindLatestFile(oldPath);
+        SourceFileVersion? recreated = catalog.Sources.FindLatestFile(oldPath);
         Assert.NotNull(recreated);
         Assert.NotEqual(original.SourceId, recreated.SourceId);
         Assert.NotEqual(original.ItemId, recreated.ItemId);
@@ -128,7 +128,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem original = Assert.Single(catalog.Library.List());
+        LibraryItem original = Assert.Single(catalog.Library.List());
         Assert.True(catalog.Sources.Revoke(original.SourceId));
 
         File.Move(oldPath, movedPath);
@@ -136,7 +136,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         await watcher.ReconcileAsync(now.AddSeconds(3));
         await watcher.ReconcileAsync(now.AddSeconds(5));
 
-        LocalFileVersion? current = catalog.Sources.FindLatestFile(movedPath);
+        SourceFileVersion? current = catalog.Sources.FindLatestFile(movedPath);
         Assert.NotNull(current);
         Assert.NotEqual(original.SourceId, current.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
@@ -156,12 +156,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        LocalLibraryItem captured = Assert.Single(catalog.Library.List());
+        LibraryItem captured = Assert.Single(catalog.Library.List());
 
         File.Copy(first, second);
         await watcher.ReconcileAsync(time.AddSeconds(3));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        IReadOnlyList<LocalLibraryItem> both = catalog.Library.List();
+        IReadOnlyList<LibraryItem> both = catalog.Library.List();
         Assert.Equal(2, both.Count);
         Assert.NotEqual(both[0].SourceId, both[1].SourceId);
         Assert.Equal(captured.Sha256, both[0].Sha256);
@@ -180,12 +180,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        LocalLibraryItem original = Assert.Single(catalog.Library.List());
+        LibraryItem original = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         await watcher.ReconcileAsync(time.AddSeconds(3));
         await watcher.ReconcileAsync(time.AddSeconds(5));
-        IReadOnlyList<LocalLibraryItem> resulting = catalog.Library.List();
+        IReadOnlyList<LibraryItem> resulting = catalog.Library.List();
         Assert.Equal(2, resulting.Count);
         Assert.Contains(resulting, item => item.SourceId == original.SourceId &&
             item.SourceLocator == first);
@@ -207,7 +207,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(now);
         await monitor.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+        LibraryItem before = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         for (int index = 0; index < 129; index++)
@@ -217,7 +217,7 @@ public sealed class LocalObservedRenameTests : IDisposable
 
         await monitor.ReconcileAsync(now.AddSeconds(3));
         Assert.Equal(1, await monitor.ReconcileAsync(now.AddSeconds(5)));
-        LocalFileVersion? after = catalog.Sources.FindLatestFile(next);
+        SourceFileVersion? after = catalog.Sources.FindLatestFile(next);
         Assert.NotNull(after);
         Assert.NotEqual(before.SourceId, after.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
@@ -237,7 +237,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem original = Assert.Single(catalog.Library.List());
+        LibraryItem original = Assert.Single(catalog.Library.List());
 
         File.Copy(first, second);
         watcher.Monitor.QueueRename(first, second);
@@ -258,7 +258,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        LocalLibraryItem prior = Assert.Single(catalog.Library.List());
+        LibraryItem prior = Assert.Single(catalog.Library.List());
 
         File.Move(first, next);
         File.WriteAllText(next, "# Changed\namber");
@@ -266,7 +266,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         await watcher.ReconcileAsync(time.AddSeconds(3));
         await watcher.ReconcileAsync(time.AddSeconds(5));
 
-        LocalFileVersion? current = catalog.Sources.FindLatestFile(next);
+        SourceFileVersion? current = catalog.Sources.FindLatestFile(next);
         Assert.NotNull(current);
         Assert.NotEqual(prior.SourceId, current.SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
@@ -286,9 +286,9 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        IReadOnlyList<LocalLibraryItem> sources = catalog.Library.List();
-        LocalLibraryItem old = Assert.Single(sources, item => item.SourceLocator == first);
-        LocalLibraryItem occupied = Assert.Single(sources, item => item.SourceLocator == second);
+        IReadOnlyList<LibraryItem> sources = catalog.Library.List();
+        LibraryItem old = Assert.Single(sources, item => item.SourceLocator == first);
+        LibraryItem occupied = Assert.Single(sources, item => item.SourceLocator == second);
 
         File.Move(first, second, overwrite: true);
         watcher.Monitor.QueueRename(first, second);
@@ -317,9 +317,9 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         Assert.Equal(2, await watcher.ReconcileAsync(now.AddSeconds(2)));
-        LocalLibraryItem[] original = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
+        LibraryItem[] original = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
         Assert.Equal(2, original.Length);
-        LocalSourceCollection group = catalog.Collections.Create("Moved sources");
+        SourceCollection group = catalog.Collections.Create("Moved sources");
         Assert.True(catalog.Collections.AddSource(group.CollectionId, original[0].SourceId));
 
         string destination = Path.Combine(inbox, "destination");
@@ -327,7 +327,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         watcher.Monitor.QueueRename(previous, destination);
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(5)));
-        LocalLibraryItem[] moved = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
+        LibraryItem[] moved = catalog.Library.List().OrderBy(item => item.SourceLocator).ToArray();
         Assert.Equal(2, moved.Length);
         Assert.Equal(original.Select(item => item.SourceId).OrderBy(id => id), moved.Select(item => item.SourceId).OrderBy(id => id));
         Assert.Equal(original.Select(item => item.ItemId).OrderBy(id => id), moved.Select(item => item.ItemId).OrderBy(id => id));
@@ -337,7 +337,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         Assert.Single(catalog.Library.List(collectionId: group.CollectionId));
         Assert.Single(catalog.Search.Query("violet"));
         Assert.Single(catalog.Search.Query("amber"));
-        foreach (LocalLibraryItem item in moved)
+        foreach (LibraryItem item in moved)
         {
             await catalog.Originals.VerifyAsync(item.ItemId);
         }
@@ -347,7 +347,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         File.SetLastWriteTimeUtc(revised, DateTime.UtcNow.AddSeconds(20));
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(6)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(8)));
-        LocalLibraryItem updated = Assert.Single(catalog.Library.List(), item => item.SourceLocator == revised);
+        LibraryItem updated = Assert.Single(catalog.Library.List(), item => item.SourceLocator == revised);
         Assert.Equal(2, updated.Revision);
         Assert.Empty(catalog.Search.Query("amber"));
         Assert.Single(catalog.Search.Query("cobalt"));
@@ -367,14 +367,14 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem first = Assert.Single(catalog.Library.List());
+        LibraryItem first = Assert.Single(catalog.Library.List());
 
         Directory.CreateDirectory(destination);
         File.Copy(path, Path.Combine(destination, "note.md"));
         watcher.Monitor.QueueRename(previous, destination);
         await watcher.ReconcileAsync(now.AddSeconds(3));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
-        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        LibraryItem[] items = catalog.Library.List().ToArray();
         Assert.Equal(2, items.Length);
         Assert.NotEqual(first.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(destination, StringComparison.Ordinal)).SourceId);
         Assert.Equal(0L, Count("source_locator_moves"));
@@ -393,12 +393,12 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem prior = Assert.Single(catalog.Library.List());
+        LibraryItem prior = Assert.Single(catalog.Library.List());
 
         Directory.Move(previous, destination);
         await watcher.ReconcileAsync(now.AddSeconds(3));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
-        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        LibraryItem[] items = catalog.Library.List().ToArray();
         Assert.Equal(2, items.Length);
         Assert.Equal(prior.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(previous, StringComparison.Ordinal)).SourceId);
         Assert.NotEqual(prior.SourceId, Assert.Single(items, item => item.SourceLocator.StartsWith(destination, StringComparison.Ordinal)).SourceId);
@@ -418,7 +418,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem first = Assert.Single(catalog.Library.List());
+        LibraryItem first = Assert.Single(catalog.Library.List());
 
         Directory.Move(previous, destination);
         string movedPath = Path.Combine(destination, "note.md");
@@ -426,7 +426,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         watcher.Monitor.QueueRename(previous, destination);
         await watcher.ReconcileAsync(now.AddSeconds(3));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
-        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        LibraryItem[] items = catalog.Library.List().ToArray();
         Assert.Equal(2, items.Length);
         Assert.Equal(first.SourceId, Assert.Single(items, item => item.SourceLocator == path).SourceId);
         Assert.NotEqual(first.SourceId, Assert.Single(items, item => item.SourceLocator == movedPath).SourceId);
@@ -451,7 +451,7 @@ public sealed class LocalObservedRenameTests : IDisposable
             DateTimeOffset time = DateTimeOffset.UtcNow;
             await watcher.ReconcileAsync(time);
             await watcher.ReconcileAsync(time.AddSeconds(2));
-            LocalLibraryItem captured = Assert.Single(catalog.Library.List());
+            LibraryItem captured = Assert.Single(catalog.Library.List());
             sourceId = captured.SourceId;
             itemId = captured.ItemId;
 
@@ -465,7 +465,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         await LocalCatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
         using LocalCatalog restored = LocalCatalog.Open(restoredRoot);
         Assert.Equal(16, restored.SchemaVersion);
-        LocalLibraryItem recovered = Assert.Single(restored.Library.List());
+        LibraryItem recovered = Assert.Single(restored.Library.List());
         Assert.Equal(sourceId, recovered.SourceId);
         Assert.Equal(itemId, recovered.ItemId);
         Assert.Equal(newPath, recovered.SourceLocator);

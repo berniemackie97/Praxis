@@ -1,3 +1,5 @@
+using Praxis.Domain.Models;
+
 namespace Praxis.Application.Inference;
 
 /// <summary>A locally configured model that embeds bounded text for retrieval.</summary>

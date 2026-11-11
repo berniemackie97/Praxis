@@ -1,3 +1,5 @@
+using Praxis.Domain.Processing;
+
 namespace Praxis.Infrastructure.Processing;
 
 /// <summary>

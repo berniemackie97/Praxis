@@ -1,11 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Processing;
-
-public sealed record TextSegment(
-    Guid SourceId, Guid ItemId, int Revision, string SourceSha256,
-    int Ordinal, int Start, int Length, string? HeadingPath, string Text);
 
 /// <summary>
 /// Structure-aware segments of a revision's extracted text, stored as offsets into the text

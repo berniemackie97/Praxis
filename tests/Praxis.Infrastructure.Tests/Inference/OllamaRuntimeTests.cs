@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 using Praxis.Infrastructure.Inference.Ollama;
 using Xunit;
 

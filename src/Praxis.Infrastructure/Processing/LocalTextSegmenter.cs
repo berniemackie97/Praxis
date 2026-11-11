@@ -1,3 +1,5 @@
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Processing;

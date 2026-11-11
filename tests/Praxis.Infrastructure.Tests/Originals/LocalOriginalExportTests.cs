@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -37,7 +37,7 @@ public sealed class LocalOriginalExportTests : IDisposable
         using (LocalCatalog catalog = LocalCatalog.Open(catalogRoot))
         {
             captured = await Capture(catalog, "offline.bin", bytes, "one");
-            LocalOriginalExport exported = await catalog.Originals.ExportAsync(
+            OriginalExport exported = await catalog.Originals.ExportAsync(
                 captured.ItemId, captured.Revision, Path.Combine(exportRoot, "copy.bin"));
             Assert.Equal(captured.ItemId, exported.ItemId);
             Assert.Equal(captured.Sha256, exported.Sha256);
@@ -154,7 +154,7 @@ public sealed class LocalOriginalExportTests : IDisposable
 
         string permittedLink = Path.Combine(workspace, "permitted-link");
         Directory.CreateSymbolicLink(permittedLink, exportRoot);
-        LocalOriginalExport receipt = await catalog.Originals.ExportAsync(captured.ItemId, 1,
+        OriginalExport receipt = await catalog.Originals.ExportAsync(captured.ItemId, 1,
             Path.Combine(permittedLink, "safe.bin"));
         Assert.Equal(captured.Sha256, receipt.Sha256);
         Assert.Equal(new byte[] { 1, 2, 3 },
@@ -183,7 +183,7 @@ public sealed class LocalOriginalExportTests : IDisposable
         CapturedOriginal captured = await Capture(catalog, "empty.txt", [], "one");
         string destination = Path.Combine(exportRoot, "empty.txt");
 
-        LocalOriginalExport exported = await catalog.Originals.ExportAsync(captured.ItemId, 1, destination);
+        OriginalExport exported = await catalog.Originals.ExportAsync(captured.ItemId, 1, destination);
         Assert.Equal(0, exported.Length);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(Array.Empty<byte>())), exported.Sha256);
         Assert.Empty(File.ReadAllBytes(destination));

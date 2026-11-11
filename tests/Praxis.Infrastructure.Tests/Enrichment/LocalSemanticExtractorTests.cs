@@ -1,12 +1,12 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
-using Praxis.Infrastructure;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Models;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Enrichment.Semantic;
-using Praxis.Infrastructure.Models;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -47,7 +47,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
 
         Assert.True(await Extractor(catalog, model).ProcessNextAsync());
 
-        IReadOnlyList<LocalProposal> proposals = catalog.Proposals.List(source.SourceId);
+        IReadOnlyList<EnrichmentProposal> proposals = catalog.Proposals.List(source.SourceId);
         Assert.Equal(["Praxis", "Storage", "Search", "SQLite"], proposals.Select(proposal => proposal.Value));
         Assert.All(proposals, proposal =>
         {

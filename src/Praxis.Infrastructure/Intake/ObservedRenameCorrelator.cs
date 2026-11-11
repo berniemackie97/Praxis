@@ -1,3 +1,4 @@
+using Praxis.Domain.Intake;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Intake;
@@ -50,7 +51,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
     }
 
     /// <summary>Applies queued renames within the hash budget; returns the bytes hashed.</summary>
-    internal async Task<long> ReconcileAsync(IReadOnlyList<LocalObservedFile> files, long hashBudget, CancellationToken cancellationToken)
+    internal async Task<long> ReconcileAsync(IReadOnlyList<ObservedFile> files, long hashBudget, CancellationToken cancellationToken)
     {
         bool overflow;
         lock (gate)
@@ -69,7 +70,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
             return 0;
         }
 
-        Dictionary<string, LocalObservedFile> byPath = files.ToDictionary(file => file.SourcePath, StringComparer.Ordinal);
+        Dictionary<string, ObservedFile> byPath = files.ToDictionary(file => file.SourcePath, StringComparer.Ordinal);
         long remaining = hashBudget;
         while (TryPeek() is { } entry)
         {
@@ -94,9 +95,9 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
     }
 
     private async Task<(long Hashed, bool Complete)> ReconcileRenameAsync(PendingRename entry,
-        Dictionary<string, LocalObservedFile> byPath, long remaining, CancellationToken cancellationToken)
+        Dictionary<string, ObservedFile> byPath, long remaining, CancellationToken cancellationToken)
     {
-        if (byPath.TryGetValue(entry.Current, out LocalObservedFile? file))
+        if (byPath.TryGetValue(entry.Current, out ObservedFile? file))
         {
             if (file.Length > remaining)
             {
@@ -122,7 +123,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
     }
 
     private async Task<(long Hashed, bool Complete)> RelocateDirectoryAsync(PendingRename entry,
-        Dictionary<string, LocalObservedFile> byPath, long remaining, CancellationToken cancellationToken)
+        Dictionary<string, ObservedFile> byPath, long remaining, CancellationToken cancellationToken)
     {
         long hashed = 0;
         try
@@ -138,7 +139,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
                 }
 
                 string currentPath = Path.Join(entry.Current, locator[previousPrefix.Length..]);
-                if (!InsideRoot(currentPath) || !byPath.TryGetValue(currentPath, out LocalObservedFile? file) ||
+                if (!InsideRoot(currentPath) || !byPath.TryGetValue(currentPath, out ObservedFile? file) ||
                     IntakeFileRules.IsTemporaryName(currentPath) || file.Length > IntakeFileRules.MaximumFileBytes)
                 {
                     continue;
@@ -162,7 +163,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
         }
     }
 
-    private async Task RelocateAsync(string previous, string current, LocalObservedFile file, CancellationToken cancellationToken)
+    private async Task RelocateAsync(string previous, string current, ObservedFile file, CancellationToken cancellationToken)
     {
         try
         {

@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Recovery;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -41,7 +41,7 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
-        LocalSearchHit hit = Assert.Single(catalog.Search.Query("violet garden"));
+        SearchHit hit = Assert.Single(catalog.Search.Query("violet garden"));
         Assert.Equal(first.ItemId, hit.ItemId);
         Assert.Equal(first.SourceId, hit.SourceId);
         Assert.Equal(first.Revision, hit.Revision);
@@ -89,7 +89,7 @@ public sealed class LocalTextSearchTests : IDisposable
 
         Assert.True(await worker.ProcessNextAsync());
         Assert.Empty(catalog.Search.Query("violet"));
-        LocalSearchHit hit = Assert.Single(catalog.Search.Query("amber"));
+        SearchHit hit = Assert.Single(catalog.Search.Query("amber"));
         Assert.Equal(2, hit.Revision);
         Assert.Equal(second.Sha256, hit.OriginalSha256);
         Assert.Equal("violet first", catalog.Text.Read(initial.ItemId, 1)?.Content);
@@ -109,7 +109,7 @@ public sealed class LocalTextSearchTests : IDisposable
         Assert.Equal(2, catalog.Search.Query("violet").Count);
 
         Assert.True(catalog.Sources.Revoke(first.SourceId));
-        LocalSearchHit hit = Assert.Single(catalog.Search.Query("violet"));
+        SearchHit hit = Assert.Single(catalog.Search.Query("violet"));
         Assert.Equal(second.SourceId, hit.SourceId);
         Assert.Equal(1, catalog.Search.Rebuild());
         Assert.Equal(second.SourceId, Assert.Single(catalog.Search.Query("violet")).SourceId);
@@ -138,7 +138,7 @@ public sealed class LocalTextSearchTests : IDisposable
         using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
         Assert.Empty(reopened.Search.Query("violet"));
         Assert.Equal(1, reopened.Search.Rebuild());
-        LocalSearchHit found = Assert.Single(reopened.Search.Query("violet"));
+        SearchHit found = Assert.Single(reopened.Search.Query("violet"));
         Assert.Equal(captured.ItemId, found.ItemId);
         Assert.Equal(1, reopened.Search.Rebuild());
         Assert.Equal(captured.ItemId, Assert.Single(reopened.Search.Query("violet")).ItemId);
@@ -247,7 +247,7 @@ public sealed class LocalTextSearchTests : IDisposable
 
         using LocalCatalog upgraded = LocalCatalog.Open(dataRoot);
         Assert.Equal(16, upgraded.SchemaVersion);
-        LocalSearchHit hit = Assert.Single(upgraded.Search.Query("violet"));
+        SearchHit hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
         Assert.Equal(1, upgraded.Search.Rebuild());
     }

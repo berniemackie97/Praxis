@@ -1,16 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Originals;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed record LocalImportedFile(string SourcePath, CapturedOriginal Original);
-public sealed record LocalObservedFile(string SourcePath, long Length, DateTime LastWriteUtc);
-
 public sealed class LocalSourceIntake(LocalCatalog catalog)
 {
-    public IReadOnlyList<LocalObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
+    public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
     {
         if (maxFiles is < 1 or > 10_000)
         {
@@ -26,7 +25,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
 
         string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
         List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
-        List<LocalObservedFile> files = new(paths.Count);
+        List<ObservedFile> files = new(paths.Count);
         long remaining = maxTotalBytes;
         foreach (string path in paths)
         {
@@ -39,7 +38,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             }
 
             remaining -= length;
-            files.Add(new LocalObservedFile(path, length, info.LastWriteTimeUtc));
+            files.Add(new ObservedFile(path, length, info.LastWriteTimeUtc));
         }
 
         return files;
@@ -70,7 +69,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             : accepted;
     }
 
-    public async Task<IReadOnlyList<LocalImportedFile>> ImportFolderAsync(string selectedDirectory, string batchKey, int maxFiles, int maxDepth, long maxFileBytes, long maxTotalBytes, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ImportedFile>> ImportFolderAsync(string selectedDirectory, string batchKey, int maxFiles, int maxDepth, long maxFileBytes, long maxTotalBytes, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(batchKey);
         if (batchKey.Length > 128)
@@ -106,7 +105,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             remaining -= length;
         }
 
-        List<LocalImportedFile> imported = new(paths.Count);
+        List<ImportedFile> imported = new(paths.Count);
         CaptureRequestContext capture = CaptureRequestContext.SelectedFolder(root);
         remaining = maxTotalBytes;
         foreach (string path in paths)
@@ -115,7 +114,7 @@ public sealed class LocalSourceIntake(LocalCatalog catalog)
             string scopedKey = "folder-" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"praxis-folder-v1\n{batchKey}\n{path}")));
             CapturedOriginal accepted = await ImportFileCoreAsync(path, Math.Min(maxFileBytes, remaining), scopedKey, capture, cancellationToken);
             remaining -= accepted.Length;
-            imported.Add(new LocalImportedFile(path, accepted));
+            imported.Add(new ImportedFile(path, accepted));
         }
 
         return imported;

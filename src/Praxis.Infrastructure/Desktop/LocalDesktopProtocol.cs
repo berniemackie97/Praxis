@@ -1,11 +1,14 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Models;
+using Praxis.Domain.Search;
+using Praxis.Domain.Text;
+using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Models;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Verification;
 
 namespace Praxis.Infrastructure.Desktop;
@@ -206,11 +209,11 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
 
     private LocalWatchedIntakeGroup RequireGroup() => group ?? throw new InvalidOperationException("Folder reapproval requires supervised intake.");
 
-    private LocalIntakeStatus IntakeStatus() => group?.Snapshot() ?? RequireMonitor().Snapshot();
+    private IntakeStatus IntakeStatus() => group?.Snapshot() ?? RequireMonitor().Snapshot();
 
-    private LocalIntakeStatus PauseIntake(bool paused) => group?.SetPaused(paused) ?? RequireMonitor().SetPaused(paused);
+    private IntakeStatus PauseIntake(bool paused) => group?.SetPaused(paused) ?? RequireMonitor().SetPaused(paused);
 
-    private LocalIntakeStatus RescanIntake() => group?.RequestRescan() ?? RequireMonitor().RequestRescan();
+    private IntakeStatus RescanIntake() => group?.RequestRescan() ?? RequireMonitor().RequestRescan();
 
     private object Preview(DesktopRequestFields fields)
     {
@@ -236,7 +239,7 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
     private async Task<object> CaptureNoteAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
     {
         group?.EnsurePrimaryRootApproved();
-        LocalQuickCaptureReceipt capture = await (quickCapture ?? throw new InvalidOperationException("Quick capture is not configured."))
+        QuickCaptureReceipt capture = await (quickCapture ?? throw new InvalidOperationException("Quick capture is not configured."))
             .CaptureAsync(fields.RequireGuid("captureId"), fields.OptionalText("title", 80, "The note title is invalid."),
                 fields.RequireString("text", 8_000), cancellationToken);
         processing?.Wake();

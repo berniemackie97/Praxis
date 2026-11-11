@@ -1,10 +1,12 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Search;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -286,7 +288,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.Equal("completed", derivative.Outcome);
         Assert.Equal(content, derivative.Content);
         Assert.Equal(source.Sha256, derivative.SourceSha256);
-        LocalSearchHit hit = Assert.Single(catalog.Search.Query("ParseTriangleMesh"),
+        SearchHit hit = Assert.Single(catalog.Search.Query("ParseTriangleMesh"),
             result => result.SourceId == source.SourceId);
         Assert.Equal(source.ItemId, hit.ItemId);
         Assert.Equal(source.Sha256, hit.OriginalSha256);

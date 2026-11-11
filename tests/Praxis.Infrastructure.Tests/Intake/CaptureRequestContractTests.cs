@@ -1,5 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Originals;
@@ -41,12 +44,12 @@ public sealed class CaptureRequestContractTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
 
-        IReadOnlyList<LocalImportedFile> first =
+        IReadOnlyList<ImportedFile> first =
             await intake.ImportFolderAsync(selectedRoot, "batch-a", 10, 1, 100, 1000);
         Assert.Equal(2, first.Count);
         Assert.Equal(2, first.Select(file => file.Original.SourceId).Distinct().Count());
         Assert.Single(first.Select(file => file.Original.Sha256).Distinct());
-        foreach (LocalImportedFile item in first)
+        foreach (ImportedFile item in first)
         {
             var recorded = catalog.Sources.ReadProvenance(item.Original.SourceId)!;
             Assert.Equal("selected_folder", recorded.CaptureRoute);
@@ -57,14 +60,14 @@ public sealed class CaptureRequestContractTests : IDisposable
             await catalog.Originals.VerifyAsync(item.Original.ItemId);
         }
 
-        IReadOnlyList<LocalImportedFile> replay =
+        IReadOnlyList<ImportedFile> replay =
             await intake.ImportFolderAsync(selectedRoot, "batch-a", 10, 1, 100, 1000);
         Assert.Equal(first, replay);
         Assert.All(first, item =>
             Assert.Single(catalog.Sources.ListCaptureReceipts(item.Original.SourceId)));
 
         File.WriteAllText(firstPath, "amber canonical evidence");
-        IReadOnlyList<LocalImportedFile> updated =
+        IReadOnlyList<ImportedFile> updated =
             await intake.ImportFolderAsync(selectedRoot, "batch-b", 10, 1, 100, 1000);
         CapturedOriginal revision = updated.Single(item => item.SourcePath == firstPath).Original;
         Assert.Equal(first.Single(item => item.SourcePath == firstPath).Original.ItemId, revision.ItemId);
@@ -106,7 +109,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
 
-        LocalImportedFile first = Assert.Single(await intake.ImportFolderAsync(
+        ImportedFile first = Assert.Single(await intake.ImportFolderAsync(
             selectedRoot, "same-batch", 10, 1, 100, 100));
         Assert.Equal(selectedRoot,
             Assert.Single(catalog.Sources.ListCaptureReceipts(first.Original.SourceId)).Scope);

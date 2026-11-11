@@ -2,8 +2,9 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Search;
+using Praxis.Domain.Models;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Search;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -25,7 +26,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
         {
             Guid[] relevant = fixture.Expected(judgment.Relevant);
             Stopwatch watch = Stopwatch.StartNew();
-            LocalSearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
+            SearchHit[] lexical = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
             var semantic = await fixture.Catalog.Embeddings.QueryAsync(judgment.Query, model, 5);
             HybridSearchResults fused = await fixture.Catalog.Hybrid.QueryAsync(judgment.Query, model, 5);
             watch.Stop();
@@ -35,7 +36,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
             Assert.True(fused.UsedEmbeddings);
             fixture.VerifyHits(lexical, lexical: true);
             fixture.VerifyHits(semantic.Select(hit => hit.Hit).ToArray(), lexical: false);
-            foreach (LocalSearchHit hit in fused.Hits)
+            foreach (SearchHit hit in fused.Hits)
             {
                 bool fromLexical = lexical.Any(item => item.ItemId == hit.ItemId);
                 fixture.VerifyHits([hit], lexical: fromLexical);
@@ -211,7 +212,7 @@ public sealed class HybridRetrievalEvaluationTests(ITestOutputHelper output)
             fixture.Catalog.Originals.VerifyAsync(mesh.ItemId));
         // A digest is not proof the object still exists. Report cached hits without
         // requiring the current cache-availability policy to remain unchanged.
-        IReadOnlyList<LocalSearchHit> cached = fixture.Catalog.Search.Query("ParseMesh");
+        IReadOnlyList<SearchHit> cached = fixture.Catalog.Search.Query("ParseMesh");
         Assert.All(cached, hit => Assert.Equal(mesh.ItemId, hit.ItemId));
         output.WriteLine($"missing_original_cached_hits={cached.Count} verification=failed");
     }

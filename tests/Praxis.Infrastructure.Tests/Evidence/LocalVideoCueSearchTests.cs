@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Praxis.Domain.Media;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Media;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -41,7 +41,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
         ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        LocalVideoCueHit cue = Assert.Single(catalog.Media.SearchCues("violet"));
+        VideoCueHit cue = Assert.Single(catalog.Media.SearchCues("violet"));
         Assert.Equal(5_000L, cue.StartMilliseconds);
         Assert.Equal(8_000L, cue.EndMilliseconds);
         Assert.Equal("Use a violet soldering jig.", cue.CaptionText);

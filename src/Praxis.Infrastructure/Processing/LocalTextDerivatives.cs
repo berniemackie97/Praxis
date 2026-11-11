@@ -1,13 +1,11 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
 
 namespace Praxis.Infrastructure.Processing;
-
-public sealed record TextDerivative(
-    Guid SourceId, Guid ItemId, int Revision, string ProcessorKey, string SourceSha256,
-    string Outcome, string? Content, string? ReasonCode, DateTimeOffset ProducedUtc);
 
 internal sealed record LeasedTextSource(string SourceKind, string Locator, OriginalObject Original);
 

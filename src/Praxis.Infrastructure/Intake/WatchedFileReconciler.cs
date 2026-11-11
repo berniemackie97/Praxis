@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Sources;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -94,14 +95,14 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
             locatorsNormalized = true;
         }
 
-        IReadOnlyList<LocalObservedFile> files = intake.InspectFolder(root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
+        IReadOnlyList<ObservedFile> files = intake.InspectFolder(root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
         long renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
         ForgetMissing(files);
 
         int imported = 0;
         TimeSpan? nextScanDelay = null;
         long remainingHashBytes = HashBudgetPerScan - renameHashBytes;
-        foreach (LocalObservedFile file in files)
+        foreach (ObservedFile file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (IntakeFileRules.IsTemporaryName(file.SourcePath))
@@ -152,7 +153,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
     private static TimeSpan Earlier(TimeSpan? current, TimeSpan candidate) =>
         current is { } prior && prior < candidate ? prior : candidate;
 
-    private void ForgetMissing(IReadOnlyList<LocalObservedFile> files)
+    private void ForgetMissing(IReadOnlyList<ObservedFile> files)
     {
         HashSet<string> present = files.Select(file => file.SourcePath).ToHashSet(StringComparer.Ordinal);
         string[] removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
@@ -169,7 +170,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
         }
     }
 
-    private async Task<bool> TryImportAsync(LocalObservedFile file, FileStamp stamp, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<bool> TryImportAsync(ObservedFile file, FileStamp stamp, DateTimeOffset now, CancellationToken cancellationToken)
     {
         try
         {
@@ -186,7 +187,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
                 return false;
             }
 
-            LocalFileVersion? latest = catalog.Sources.FindLatestFile(file.SourcePath);
+            SourceFileVersion? latest = catalog.Sources.FindLatestFile(file.SourcePath);
             if (latest?.Status == "revoked")
             {
                 throw new InvalidOperationException("Revoked sources require explicit owner authorization to reimport.");

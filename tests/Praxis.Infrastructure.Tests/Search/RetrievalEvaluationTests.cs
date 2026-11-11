@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 using Xunit.Abstractions;
@@ -33,7 +33,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
 
         foreach (GoldQuery query in corpus.Queries)
         {
-            LocalSearchHit[] hits = catalog.Search.Query(query.Query, 5).ToArray();
+            SearchHit[] hits = catalog.Search.Query(query.Query, 5).ToArray();
             Guid[] expected = query.Expected.Select(key => originals[key].ItemId)
                 .OrderBy(id => id).ToArray();
             Guid[] actual = hits.Select(hit => hit.ItemId).OrderBy(id => id).ToArray();
@@ -49,7 +49,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
                 score.Recall + recall, score.Precision + precision);
 
             Assert.Equal(expected, actual);
-            foreach (LocalSearchHit hit in hits)
+            foreach (SearchHit hit in hits)
             {
                 CapturedOriginal original = originals.Values.Single(entry => entry.ItemId == hit.ItemId);
                 Assert.Equal(original.SourceId, hit.SourceId);
@@ -141,7 +141,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
         Assert.Empty(catalog.Search.Query("BuildTriangles"));
         int expectedDocuments = corpus.Documents.Count(document => document.Searchable) - 1;
         Assert.Equal(expectedDocuments, catalog.Search.Rebuild());
-        LocalSearchHit hit = Assert.Single(catalog.Search.Query("BuildTriangles"));
+        SearchHit hit = Assert.Single(catalog.Search.Query("BuildTriangles"));
         Assert.Equal(revised.SourceId, hit.SourceId);
         Assert.Equal(revised.ItemId, hit.ItemId);
         Assert.Equal(revised.Revision, hit.Revision);

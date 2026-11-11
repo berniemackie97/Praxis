@@ -1,9 +1,9 @@
 using System.Text;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Library;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
-using Praxis.Infrastructure.Library;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Sources;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -60,7 +60,7 @@ public sealed class CanonicalLocatorTests : IDisposable
         await throughReal.ReconcileAsync(time.AddSeconds(2));
         await throughReal.ReconcileAsync(time.AddSeconds(3));
 
-        LocalLibraryItem item = Assert.Single(catalog.Library.List());
+        LibraryItem item = Assert.Single(catalog.Library.List());
         Assert.Equal(Path.Combine(realInbox, "plan.md"), item.SourceLocator);
         Assert.Single(catalog.Search.Query("violet"));
     }
@@ -78,9 +78,9 @@ public sealed class CanonicalLocatorTests : IDisposable
         await intake.ReconcileAsync(time);
         await intake.ReconcileAsync(time.AddSeconds(1));
 
-        LocalLibraryItem item = Assert.Single(catalog.Library.List());
+        LibraryItem item = Assert.Single(catalog.Library.List());
         Assert.Equal((recorded.SourceId, file, 1), (item.SourceId, item.SourceLocator, item.Revision));
-        LocalSourceMovement move = Assert.Single(catalog.Sources.ListMovements(recorded.SourceId));
+        SourceMovement move = Assert.Single(catalog.Sources.ListMovements(recorded.SourceId));
         Assert.Equal((Path.Combine(aliasInbox, "kept.md"), file), (move.PreviousPath, move.CurrentPath));
     }
 
@@ -99,16 +99,16 @@ public sealed class CanonicalLocatorTests : IDisposable
 
         Guid collection = catalog.Collections.Create("Design").CollectionId;
         Assert.True(catalog.Collections.AddSource(collection, alias.SourceId));
-        LocalProposal aliasHeading = Assert.Single(catalog.Proposals.List(alias.SourceId));
+        EnrichmentProposal aliasHeading = Assert.Single(catalog.Proposals.List(alias.SourceId));
         Assert.True(catalog.Proposals.Review(aliasHeading.ProposalId, "corrected", "System architecture"));
 
         IntakeHarness intake = new(catalog, realInbox, TimeSpan.Zero);
         await intake.ReconcileAsync(DateTimeOffset.UtcNow);
 
-        LocalLibraryItem item = Assert.Single(catalog.Library.List(), entry => entry.SourceStatus == "active");
+        LibraryItem item = Assert.Single(catalog.Library.List(), entry => entry.SourceStatus == "active");
         Assert.Equal(canonical.SourceId, item.SourceId);
         Assert.Contains(collection, catalog.Collections.ListForSource(canonical.SourceId));
-        LocalProposal carried = Assert.Single(catalog.Proposals.List(canonical.SourceId));
+        EnrichmentProposal carried = Assert.Single(catalog.Proposals.List(canonical.SourceId));
         Assert.Equal(("corrected", "System architecture"), (carried.Status, carried.Correction));
         Assert.Empty(catalog.Proposals.List(alias.SourceId));
         Assert.Single(catalog.Search.Query("Body"));

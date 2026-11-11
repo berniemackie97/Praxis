@@ -1,6 +1,6 @@
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 using Praxis.Infrastructure.Inference.Ollama;
-using Praxis.Infrastructure.Models;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;
 

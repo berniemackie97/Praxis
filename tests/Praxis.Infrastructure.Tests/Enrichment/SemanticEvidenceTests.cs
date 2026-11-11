@@ -1,6 +1,5 @@
 using Praxis.Application.Inference;
-using Praxis.Infrastructure;
-using Praxis.Infrastructure.Enrichment;
+using Praxis.Domain.Enrichment;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Xunit;
 

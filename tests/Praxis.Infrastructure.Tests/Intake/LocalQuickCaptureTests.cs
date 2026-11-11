@@ -1,8 +1,9 @@
 using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Library;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Library;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -34,7 +35,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     public async Task QuickNoteIsDurableSourceWithSearchableAttributedContent()
     {
         Guid id = Guid.NewGuid();
-        LocalQuickCaptureReceipt receipt;
+        QuickCaptureReceipt receipt;
         using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
             LocalQuickCapture capture = new(catalog, inbox);
@@ -46,7 +47,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
             Assert.Equal(receipt.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
             Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
             Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-            LocalSearchHit hit = Assert.Single(catalog.Search.Query("violet compass"));
+            SearchHit hit = Assert.Single(catalog.Search.Query("violet compass"));
             Assert.Equal(receipt.Original.SourceId, hit.SourceId);
             Assert.Equal(receipt.Original.ItemId, hit.ItemId);
             Assert.Equal(receipt.Original.Sha256, hit.OriginalSha256);
@@ -55,7 +56,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         }
 
         using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
-        LocalLibraryItem item = Assert.Single(reopened.Library.List());
+        LibraryItem item = Assert.Single(reopened.Library.List());
         Assert.Equal(receipt.Original.ItemId, item.ItemId);
         Assert.Single(reopened.Search.Query("violet"));
         Assert.Equal(receipt.Original, (await new LocalQuickCapture(reopened, inbox)
@@ -70,8 +71,8 @@ public sealed class LocalQuickCaptureTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalQuickCapture capture = new(catalog, inbox);
         Guid id = Guid.NewGuid();
-        LocalQuickCaptureReceipt first = await capture.CaptureAsync(id, null, "Original thought");
-        LocalQuickCaptureReceipt second = await capture.CaptureAsync(id, null, "Original thought");
+        QuickCaptureReceipt first = await capture.CaptureAsync(id, null, "Original thought");
+        QuickCaptureReceipt second = await capture.CaptureAsync(id, null, "Original thought");
         Assert.Equal(first, second);
         Assert.Equal("Original thought", File.ReadAllText(first.SourcePath));
         IntakeHarness watcher = new(catalog, inbox, TimeSpan.Zero);
@@ -90,7 +91,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalQuickCapture capture = new(catalog, inbox);
         Guid id = Guid.NewGuid();
-        LocalQuickCaptureReceipt original = await capture.CaptureAsync(id, "Research", "This text is preserved.");
+        QuickCaptureReceipt original = await capture.CaptureAsync(id, "Research", "This text is preserved.");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             capture.CaptureAsync(id, "Research", "Different body"));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -108,7 +109,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         Guid id = Guid.NewGuid();
         string target = Path.Combine(inbox, "Recover-" + id.ToString("N") + ".md");
         File.WriteAllText(target, "# Recover\n\nOffline thought");
-        LocalQuickCaptureReceipt result = await new LocalQuickCapture(catalog, inbox)
+        QuickCaptureReceipt result = await new LocalQuickCapture(catalog, inbox)
             .CaptureAsync(id, "Recover", "Offline thought");
         Assert.Equal(target, result.SourcePath);
         Assert.Equal(result.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
@@ -121,7 +122,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         Guid id = Guid.NewGuid();
         LocalQuickCapture capture = new(catalog, inbox);
-        LocalQuickCaptureReceipt saved = await capture.CaptureAsync(id, "Topic", "Keep these bytes.");
+        QuickCaptureReceipt saved = await capture.CaptureAsync(id, "Topic", "Keep these bytes.");
         File.WriteAllText(saved.SourcePath, "external revision");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             capture.CaptureAsync(id, "Topic", "Keep these bytes."));
@@ -194,7 +195,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     {
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         string url = "https://example.invalid/private?token=abc";
-        LocalQuickCaptureReceipt saved = await new LocalQuickCapture(catalog, inbox)
+        QuickCaptureReceipt saved = await new LocalQuickCapture(catalog, inbox)
             .CaptureAsync(Guid.NewGuid(), "Reference", url);
         Assert.Equal("# Reference\n\n" + url, File.ReadAllText(saved.SourcePath));
         Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);

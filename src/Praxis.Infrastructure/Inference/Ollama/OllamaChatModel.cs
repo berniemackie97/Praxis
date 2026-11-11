@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 
 namespace Praxis.Infrastructure.Inference.Ollama;
 

@@ -1,30 +1,12 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Domain.Models;
+using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Knowledge;
 
 namespace Praxis.Infrastructure.Verification;
-
-/// <summary>A stronger model the owner has enabled, ordered for routing by cost weight.</summary>
-public sealed record VerificationProvider(
-    string ProviderId, string Executable, string? Model, int CostWeight, int DailyLimit, bool Enabled)
-{
-    public const string Codex = "codex";
-    public const string ClaudeCode = "claude-code";
-}
-
-public sealed record VerificationItemView(
-    int Ordinal, Guid? ProposalId, Guid? EntityId, bool Included, string? Verdict,
-    string? CorrectedType, string? Note);
-
-public sealed record VerificationRequestView(
-    Guid RequestId, string Reason, string Status, string? ProviderId, DateTimeOffset CreatedUtc,
-    string? FailureCode, string? ModelName, int? InputTokens, int? OutputTokens, string Payload,
-    IReadOnlyList<VerificationItemView> Items);
-
-internal sealed record ClaimedVerification(
-    Guid RequestId, Guid LeaseKey, VerificationProvider Provider, string Payload, IReadOnlySet<int> Ordinals);
 
 /// <summary>
 /// Owner-approved verification of local results by a stronger model. Requests are planned from

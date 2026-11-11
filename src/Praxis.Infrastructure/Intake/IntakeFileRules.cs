@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Praxis.Domain.Intake;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -17,7 +18,7 @@ internal static class IntakeFileRules
     }
 
     /// <summary>True when the file still has the scanned length and timestamp and is not a link.</summary>
-    internal static bool IsStable(LocalObservedFile file)
+    internal static bool IsStable(ObservedFile file)
     {
         FileInfo info = new(file.SourcePath);
         return info.Exists && (info.Attributes & FileAttributes.ReparsePoint) == 0 && info.Length == file.Length && info.LastWriteTimeUtc == file.LastWriteUtc;

@@ -1,30 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Sources;
-
-public sealed record LocalSourceProvenance(
-    Guid SourceId, Guid ItemId, string SourceKind, string Locator, string Status,
-    DateTimeOffset CreatedUtc, int Revision, DateTimeOffset ObservedUtc,
-    string OriginalSha256, long OriginalBytes, string? ProcessorKey,
-    string? ProcessingState, string? FailureCode, string? ExtractionOutcome,
-    string? ExtractionReasonCode, string? CaptureRoute, string? CaptureAuthorityBasis,
-    string? CaptureScope, DateTimeOffset? CaptureRecordedUtc, bool RetryEligible);
-
-public sealed record LocalCaptureReceipt(
-    string RequestKey, int Revision, string? Route, string? AuthorityBasis,
-    string? Scope, DateTimeOffset? RecordedUtc);
-
-public sealed record LocalSourceProcessingState(
-    string ProcessorKey, string State, int Attempt, int TotalAttempts,
-    string? FailureCode, DateTimeOffset UpdatedUtc, bool RetryEligible);
-
-public sealed record LocalFileVersion(Guid SourceId, Guid ItemId, int Revision, string Sha256, string Status);
-
-internal sealed record CurrentFileVersion(Guid ItemId, int Revision, string Digest, long Length, string Locator);
-
-public sealed record LocalSourceMovement(Guid SourceId, string PreviousPath, string CurrentPath, string Sha256, DateTimeOffset RecordedUtc);
 
 /// <summary>
 /// Identity and lifecycle of captured sources: path lookup, observed relocations and revocation.
@@ -39,7 +18,7 @@ public sealed class LocalSources
     /// Canonical, source-scoped provenance for one recorded revision. Revoked and older
     /// revisions remain inspectable to the trusted local owner, not searchable evidence.
     /// </summary>
-    public LocalSourceProvenance? ReadProvenance(Guid sourceId, int? revision = null)
+    public SourceProvenance? ReadProvenance(Guid sourceId, int? revision = null)
     {
         if (sourceId == Guid.Empty)
         {
@@ -95,7 +74,7 @@ public sealed class LocalSources
                 return null;
             }
 
-            return new LocalSourceProvenance(
+            return new SourceProvenance(
                 Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                 reader.GetString(2), reader.GetString(3), reader.GetString(4),
                 CatalogValues.ParseTimestamp(reader.GetString(5)), reader.GetInt32(6),
@@ -115,7 +94,7 @@ public sealed class LocalSources
     }
 
     /// <summary>All committed receipt routes for one source, including legacy unattributed entries.</summary>
-    public IReadOnlyList<LocalCaptureReceipt> ListCaptureReceipts(Guid sourceId, int? revision = null, int limit = 100)
+    public IReadOnlyList<CaptureReceipt> ListCaptureReceipts(Guid sourceId, int? revision = null, int limit = 100)
     {
         if (sourceId == Guid.Empty)
         {
@@ -143,10 +122,10 @@ public sealed class LocalSources
             query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
             query.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = query.ExecuteReader();
-            List<LocalCaptureReceipt> result = new();
+            List<CaptureReceipt> result = new();
             while (reader.Read())
             {
-                result.Add(new LocalCaptureReceipt(reader.GetString(0), reader.GetInt32(1),
+                result.Add(new CaptureReceipt(reader.GetString(0), reader.GetInt32(1),
                     reader.IsDBNull(2) ? null : reader.GetString(2),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -158,7 +137,7 @@ public sealed class LocalSources
     }
 
     /// <summary>Versioned processing status for all registered processors of one source.</summary>
-    public IReadOnlyList<LocalSourceProcessingState> ListProcessing(Guid sourceId, int? revision = null, int limit = 100)
+    public IReadOnlyList<SourceProcessingState> ListProcessing(Guid sourceId, int? revision = null, int limit = 100)
     {
         if (sourceId == Guid.Empty)
         {
@@ -194,10 +173,10 @@ public sealed class LocalSources
             query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
             query.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = query.ExecuteReader();
-            List<LocalSourceProcessingState> result = new();
+            List<SourceProcessingState> result = new();
             while (reader.Read())
             {
-                result.Add(new LocalSourceProcessingState(
+                result.Add(new SourceProcessingState(
                     reader.GetString(0), reader.GetString(1), reader.GetInt32(2),
                     reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4),
                     CatalogValues.ParseTimestamp(reader.GetString(5)), reader.GetInt64(6) == 1));
@@ -207,7 +186,7 @@ public sealed class LocalSources
         });
     }
 
-    public LocalFileVersion? FindLatestFile(string path)
+    public SourceFileVersion? FindLatestFile(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!Path.IsPathFullyQualified(path))
@@ -227,7 +206,7 @@ public sealed class LocalSources
                                                                    """);
             command.Parameters.AddWithValue("$path", Path.GetFullPath(path));
             using SqliteDataReader reader = command.ExecuteReader();
-            return !reader.Read() ? null : new LocalFileVersion(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+            return !reader.Read() ? null : new SourceFileVersion(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                 reader.GetInt32(2), reader.GetString(3), reader.GetString(4));
         });
     }
@@ -355,7 +334,7 @@ public sealed class LocalSources
         return true;
     }
 
-    public IReadOnlyList<LocalSourceMovement> ListMovements(Guid sourceId, int limit = 20)
+    public IReadOnlyList<SourceMovement> ListMovements(Guid sourceId, int limit = 20)
     {
         if (sourceId == Guid.Empty)
         {
@@ -379,10 +358,10 @@ public sealed class LocalSources
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = query.ExecuteReader();
-            List<LocalSourceMovement> moves = new();
+            List<SourceMovement> moves = new();
             while (reader.Read())
             {
-                moves.Add(new LocalSourceMovement(
+                moves.Add(new SourceMovement(
                     Guid.Parse(reader.GetString(0)), reader.GetString(1),
                     reader.GetString(2), reader.GetString(3),
                     CatalogValues.ParseTimestamp(reader.GetString(4))));

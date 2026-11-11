@@ -1,13 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Domain.Enrichment;
 using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;
-
-/// <summary>Owner-governed knowledge about a name that appears in the excerpt.</summary>
-internal sealed record EntityHint(string Name, string? EntityType, bool Rejected);
 
 /// <summary>
 /// The versioned instructions and output schema for <see cref="LocalProcessors.SemanticExtraction"/>.

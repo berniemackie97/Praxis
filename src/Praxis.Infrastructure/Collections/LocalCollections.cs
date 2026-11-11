@@ -1,10 +1,9 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Collections;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Collections;
-
-public sealed record LocalSourceCollection(Guid CollectionId, string Name, int ActiveSourceCount);
 
 /// <summary>Owner-authored named collections with explicit many-to-many source membership.</summary>
 public sealed class LocalCollections
@@ -13,7 +12,7 @@ public sealed class LocalCollections
 
     internal LocalCollections(CatalogDatabase database) => this.database = database;
 
-    public LocalSourceCollection Create(string name)
+    public SourceCollection Create(string name)
     {
         (string display, string key) = NormalizeCollectionName(name);
         Guid id = Guid.NewGuid();
@@ -37,7 +36,7 @@ public sealed class LocalCollections
             }
         });
 
-        return new LocalSourceCollection(id, display, 0);
+        return new SourceCollection(id, display, 0);
     }
 
     public bool Rename(Guid collectionId, string name)
@@ -79,7 +78,7 @@ public sealed class LocalCollections
         });
     }
 
-    public IReadOnlyList<LocalSourceCollection> List(int limit = 100, int offset = 0)
+    public IReadOnlyList<SourceCollection> List(int limit = 100, int offset = 0)
     {
         ValidateCollectionPage(limit, offset);
         return database.Execute(connection =>
@@ -98,10 +97,10 @@ public sealed class LocalCollections
             command.Parameters.AddWithValue("$limit", limit);
             command.Parameters.AddWithValue("$offset", offset);
             using SqliteDataReader reader = command.ExecuteReader();
-            List<LocalSourceCollection> rows = new();
+            List<SourceCollection> rows = new();
             while (reader.Read())
             {
-                rows.Add(new LocalSourceCollection(Guid.Parse(reader.GetString(0)), reader.GetString(1), checked((int)reader.GetInt64(2))));
+                rows.Add(new SourceCollection(Guid.Parse(reader.GetString(0)), reader.GetString(1), checked((int)reader.GetInt64(2))));
             }
 
             return rows;

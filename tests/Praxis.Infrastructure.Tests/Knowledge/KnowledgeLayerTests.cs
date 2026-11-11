@@ -1,15 +1,13 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
-using Praxis.Application.Inference;
-using Praxis.Infrastructure;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Knowledge;
+using Praxis.Domain.Models;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Enrichment.Semantic;
-using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Models;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -112,7 +110,7 @@ public sealed class KnowledgeLayerTests : IDisposable
 
         Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name == "Hacker Inc");
         Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
-        LocalProposal flagged = catalog.Proposals.List(source.SourceId).Single(proposal => proposal.Value == "Hacker Inc");
+        EnrichmentProposal flagged = catalog.Proposals.List(source.SourceId).Single(proposal => proposal.Value == "Hacker Inc");
         Assert.Equal(InstructionLikeText.Flag, flagged.Flags);
 
         Assert.True(catalog.Proposals.Review(flagged.ProposalId, "accepted"));
@@ -143,7 +141,7 @@ public sealed class KnowledgeLayerTests : IDisposable
         Assert.True(catalog.Knowledge.Rename(compact.EntityId, "Open Conquer"));
         Assert.Equal("Open Conquer", catalog.Knowledge.GetEntity(compact.EntityId)!.Summary.Name);
 
-        LocalProposal proposal = catalog.Proposals.List(first.SourceId).Single(item => item.Value == "C3Reader");
+        EnrichmentProposal proposal = catalog.Proposals.List(first.SourceId).Single(item => item.Value == "C3Reader");
         Assert.True(catalog.Proposals.Review(proposal.ProposalId, "corrected", "C3 Reader"));
         Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "C3 Reader");
         Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name == "C3Reader");
@@ -169,7 +167,7 @@ public sealed class KnowledgeLayerTests : IDisposable
 
         Assert.Equal(3, model.Requests.Count);
         Assert.Contains("Second draft", ScriptedChatModel.Excerpt(model.Requests[^1]), StringComparison.Ordinal);
-        IReadOnlyList<LocalProposal> proposals = catalog.Proposals.List(edited.SourceId);
+        IReadOnlyList<EnrichmentProposal> proposals = catalog.Proposals.List(edited.SourceId);
         Assert.Contains(proposals, proposal => proposal.Value == "Alex Rivera");
         Assert.Contains(proposals, proposal => proposal.Value == "OpenConquerClient");
         Assert.DoesNotContain(proposals, proposal => proposal.Value == "PHY");

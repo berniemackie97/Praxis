@@ -1,9 +1,10 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Library;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Library;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -44,10 +45,10 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Empty(catalog.Library.List());
 
         Assert.Equal(2, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        IReadOnlyList<LocalLibraryItem> items = catalog.Library.List();
+        IReadOnlyList<LibraryItem> items = catalog.Library.List();
         Assert.Equal(2, items.Count);
-        LocalLibraryItem markdown = Assert.Single(items, item => item.SourceLocator == text);
-        LocalLibraryItem unsupported = Assert.Single(items, item => item.SourceLocator == unknown);
+        LibraryItem markdown = Assert.Single(items, item => item.SourceLocator == text);
+        LibraryItem unsupported = Assert.Single(items, item => item.SourceLocator == unknown);
         Assert.Equal("completed", markdown.ProcessingState);
         Assert.Equal("completed", markdown.ExtractionOutcome);
         Assert.Equal("unsupported", unsupported.ProcessingState);
@@ -72,7 +73,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         File.WriteAllText(dumpPath, "C3ChunkReader PROC\\nRET\\nC3ChunkReader ENDP");
         File.WriteAllBytes(opaquePath, [0, 255, 1]);
 
-        LocalSearchHit[] indexed;
+        SearchHit[] indexed;
         DateTimeOffset time = DateTimeOffset.UtcNow;
         using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
@@ -84,14 +85,14 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             Assert.All(indexed, hit => Assert.Equal(1, hit.Revision));
             Assert.Equal("unsupported", catalog.Library.List().Single(
                 item => item.SourceLocator == opaquePath).ExtractionOutcome);
-            foreach (LocalSearchHit hit in indexed)
+            foreach (SearchHit hit in indexed)
             {
                 await catalog.Originals.VerifyAsync(hit.ItemId);
             }
         }
 
         using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
-        IReadOnlyList<LocalSearchHit> restored = reopened.Search.Query("C3ChunkReader");
+        IReadOnlyList<SearchHit> restored = reopened.Search.Query("C3ChunkReader");
         Assert.Equal(indexed.Select(hit => hit.SourceId).OrderBy(id => id),
             restored.Select(hit => hit.SourceId).OrderBy(id => id));
         Assert.Equal(3, reopened.Library.List().Count);
@@ -107,14 +108,14 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(2)));
-        LocalLibraryItem first = Assert.Single(catalog.Library.List());
+        LibraryItem first = Assert.Single(catalog.Library.List());
         Assert.Single(catalog.Search.Query("violet"));
 
         File.WriteAllText(path, "amber revision");
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(5));
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
         Assert.Equal(1, await watcher.ReconcileAsync(time.AddSeconds(5)));
-        LocalLibraryItem second = Assert.Single(catalog.Library.List());
+        LibraryItem second = Assert.Single(catalog.Library.List());
         Assert.Equal(first.ItemId, second.ItemId);
         Assert.Equal(first.SourceId, second.SourceId);
         Assert.Equal(2, second.Revision);
@@ -156,7 +157,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
         await watcher.ReconcileAsync(time.AddSeconds(2));
-        LocalLibraryItem prior = Assert.Single(catalog.Library.List());
+        LibraryItem prior = Assert.Single(catalog.Library.List());
 
         File.Delete(path);
         Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(3)));
@@ -170,7 +171,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         string path = Path.Combine(inbox, "restart.md");
         File.WriteAllText(path, "# violet durable");
-        LocalLibraryItem before;
+        LibraryItem before;
         DateTimeOffset time = DateTimeOffset.UtcNow;
         using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
         {
@@ -185,7 +186,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             IntakeHarness resumed = NewMonitor(reopened);
             await resumed.ReconcileAsync(time.AddSeconds(10));
             Assert.Equal(0, await resumed.ReconcileAsync(time.AddSeconds(12)));
-            LocalLibraryItem after = Assert.Single(reopened.Library.List());
+            LibraryItem after = Assert.Single(reopened.Library.List());
             Assert.Equal(before, after);
             Assert.Single(reopened.Search.Query("violet"));
             Assert.Equal(1L, Count(reopened.DatabasePath, "ingest_requests"));
@@ -231,7 +232,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
                 await Task.Delay(100);
             }
 
-            LocalLibraryItem imported = Assert.Single(catalog.Library.List());
+            LibraryItem imported = Assert.Single(catalog.Library.List());
             Assert.Equal("completed", imported.ProcessingState);
             Assert.Single(catalog.Search.Query("violet"));
         }
@@ -312,7 +313,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
-        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+        LibraryItem before = Assert.Single(catalog.Library.List());
 
         File.WriteAllText(path, "orange contents");
         File.SetLastWriteTimeUtc(path, fixedWrite);
@@ -321,7 +322,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
 
-        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        LibraryItem after = Assert.Single(catalog.Library.List());
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(2, after.Revision);
@@ -351,7 +352,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
 
-        LocalLibraryItem latest = Assert.Single(catalog.Library.List());
+        LibraryItem latest = Assert.Single(catalog.Library.List());
         Assert.Equal(2, latest.Revision);
         Assert.Empty(catalog.Search.Query("violet"));
         Assert.Single(catalog.Search.Query("orange"));
@@ -391,7 +392,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
-        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+        LibraryItem before = Assert.Single(catalog.Library.List());
 
         File.WriteAllText(staging, "orange replacement version");
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
@@ -399,7 +400,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
 
-        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        LibraryItem after = Assert.Single(catalog.Library.List());
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(2, after.Revision);
@@ -422,7 +423,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
         await watcher.ReconcileAsync(now.AddSeconds(2));
-        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+        LibraryItem before = Assert.Single(catalog.Library.List());
 
         watcher.SetPaused(true);
         File.WriteAllText(path, "orange contents");
@@ -431,7 +432,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         watcher.SetPaused(false);
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
-        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        LibraryItem after = Assert.Single(catalog.Library.List());
         Assert.Equal(before.SourceId, after.SourceId);
         Assert.Equal(before.ItemId, after.ItemId);
         Assert.Equal(2, after.Revision);
@@ -462,7 +463,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
 
         Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
         Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
-        LocalLibraryItem latest = Assert.Single(catalog.Library.List());
+        LibraryItem latest = Assert.Single(catalog.Library.List());
         Assert.Equal(2, latest.Revision);
         Assert.Empty(catalog.Search.Query("violet"));
         Assert.Single(catalog.Search.Query("orange"));
@@ -518,7 +519,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(now));
         Assert.Empty(catalog.Library.List());
-        LocalIntakeStatus rejected = watcher.Snapshot();
+        IntakeStatus rejected = watcher.Snapshot();
         Assert.Equal("degraded", rejected.State);
         Assert.Equal(1, rejected.ErrorCount);
         Assert.Contains("byte limit", Assert.Single(rejected.FileErrors).Message);

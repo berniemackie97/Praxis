@@ -1,8 +1,8 @@
 using System.Text.Json;
+using Praxis.Domain.Library;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Library;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -49,7 +49,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         {
         }
 
-        LocalLibraryItem[] items = catalog.Library.List().ToArray();
+        LibraryItem[] items = catalog.Library.List().ToArray();
         Assert.Equal(2, items.Length);
         Assert.NotEqual(items[0].SourceId, items[1].SourceId);
         Assert.Single(catalog.Search.Query("violet"));
@@ -57,7 +57,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         Assert.Equal("watching", group.Snapshot().State);
         Assert.Equal(2, group.Snapshot().ImportedSinceStart);
         Assert.Equal(2, group.RootStatuses().Count);
-        foreach (LocalLibraryItem item in items)
+        foreach (LibraryItem item in items)
         {
             await catalog.Originals.VerifyAsync(item.ItemId);
         }
@@ -70,7 +70,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         while (await processing.ProcessNextAsync())
         {
         }
-        LocalLibraryItem revised = Assert.Single(catalog.Library.List(), item => item.SourceLocator == b);
+        LibraryItem revised = Assert.Single(catalog.Library.List(), item => item.SourceLocator == b);
         Assert.Equal(original, revised.ItemId);
         Assert.Equal(2, revised.Revision);
         Assert.Empty(catalog.Search.Query("amber"));
@@ -136,7 +136,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
             Assert.Throws<ArgumentException>(() => group.ApproveRoot(Path.Combine(workspace, "unapproved")));
             group.ApproveRoot(disconnected);
             await WaitForAsync(() => catalog.Library.List().Count == 2);
-            foreach (LocalLibraryItem item in catalog.Library.List())
+            foreach (LibraryItem item in catalog.Library.List())
             {
                 await catalog.Originals.VerifyAsync(item.ItemId);
             }
@@ -168,7 +168,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
             File.WriteAllText(Path.Combine(second, "event-b.txt"), "amber event");
             await WaitForAsync(() => catalog.Library.List().Count == 2);
             Assert.All(group.RootStatuses(), root => Assert.Equal(1, root.Status.ImportedSinceStart));
-            foreach (LocalLibraryItem item in catalog.Library.List())
+            foreach (LibraryItem item in catalog.Library.List())
             {
                 await catalog.Originals.VerifyAsync(item.ItemId);
             }

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net;
-using Microsoft.Extensions.Configuration;
 
 const int defaultPort = 5080;
 string? configuredPort = Environment.GetEnvironmentVariable("PRAXIS_HEALTH_PORT");

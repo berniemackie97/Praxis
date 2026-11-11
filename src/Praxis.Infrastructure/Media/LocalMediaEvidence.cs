@@ -1,13 +1,14 @@
+using Praxis.Domain.Media;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Search;
+using Praxis.Domain.Sources;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Sources;
 
 namespace Praxis.Infrastructure.Media;
-
-public sealed record LocalMediaInspection(Guid SourceId, Guid ItemId, int Revision, string SourceSha256, long OriginalBytes, string SourceExtension, string Outcome, string? ContainerFamily, long? DurationMilliseconds, string? ReasonCode, string Producer);
-
-public sealed record LocalVideoCueHit(Guid CaptionSourceId, Guid CaptionItemId, int CaptionRevision, string CaptionSha256, int CaptionOffset, int CaptionLength, int CueNumber, long StartMilliseconds, long EndMilliseconds, string CaptionText, string Producer, Guid VideoSourceId, Guid VideoItemId, int VideoRevision, string VideoSha256, string VideoLocator);
 
 /// <summary>
 /// Read-only evidence about captured media: verified header inspection and timecoded caption
@@ -28,9 +29,9 @@ public sealed class LocalMediaEvidence
         this.objects = objects;
     }
 
-    public Task<LocalMediaInspection> InspectAsync(Guid sourceId, CancellationToken cancellationToken = default) => InspectAsync(sourceId, expectedRevision: null, cancellationToken);
+    public Task<MediaInspection> InspectAsync(Guid sourceId, CancellationToken cancellationToken = default) => InspectAsync(sourceId, expectedRevision: null, cancellationToken);
 
-    internal async Task<LocalMediaInspection> InspectAsync(Guid sourceId, int? expectedRevision, CancellationToken cancellationToken)
+    internal async Task<MediaInspection> InspectAsync(Guid sourceId, int? expectedRevision, CancellationToken cancellationToken)
     {
         if (sourceId == Guid.Empty)
         {
@@ -68,12 +69,12 @@ public sealed class LocalMediaEvidence
         }
 
         (string? container, long? duration) = LocalMediaHeaderParser.Read(header, fileExtension);
-        return new LocalMediaInspection(sourceId, source.ItemId, source.Revision, source.Digest, source.Length, fileExtension,
+        return new MediaInspection(sourceId, source.ItemId, source.Revision, source.Digest, source.Length, fileExtension,
             container is null ? "unsupported" : "header_recognized", container, duration, container is null ? "unsupported_signature" : null,
             LocalProcessors.MediaHeader);
     }
 
-    public IReadOnlyList<LocalVideoCueHit> SearchCues(string query, int limit = 20)
+    public IReadOnlyList<VideoCueHit> SearchCues(string query, int limit = 20)
     {
         if (limit is < 1 or > 100)
         {
@@ -88,8 +89,8 @@ public sealed class LocalMediaEvidence
             throw new ArgumentException("Use at most twelve search terms.", nameof(query));
         }
 
-        List<LocalVideoCueHit> results = new();
-        foreach (LocalSearchHit hit in search.Query(query, 40))
+        List<VideoCueHit> results = new();
+        foreach (SearchHit hit in search.Query(query, 40))
         {
             string extension = Path.GetExtension(hit.SourceLocator).ToLowerInvariant();
             if (extension is not (".vtt" or ".srt"))
@@ -103,7 +104,7 @@ public sealed class LocalMediaEvidence
                 continue;
             }
 
-            (LocalFileVersion Source, string Locator)? video = FindPairedVideo(hit.SourceLocator);
+            (SourceFileVersion Source, string Locator)? video = FindPairedVideo(hit.SourceLocator);
             if (video is null)
             {
                 continue;
@@ -127,15 +128,15 @@ public sealed class LocalMediaEvidence
                 }
 
                 // Recheck current attribution after reading the derivative and pairing.
-                LocalFileVersion? current = sources.FindLatestFile(hit.SourceLocator);
-                LocalFileVersion? currentVideo = sources.FindLatestFile(video.Value.Locator);
+                SourceFileVersion? current = sources.FindLatestFile(hit.SourceLocator);
+                SourceFileVersion? currentVideo = sources.FindLatestFile(video.Value.Locator);
                 if (current is null || current.SourceId != hit.SourceId || current.Revision != hit.Revision || current.Sha256 != hit.OriginalSha256
                     || current.Status != "active" || currentVideo != video.Value.Source || currentVideo.Status != "active")
                 {
                     break;
                 }
 
-                results.Add(new LocalVideoCueHit(hit.SourceId, hit.ItemId, hit.Revision, hit.OriginalSha256, cue.Offset, cue.Length, cue.Number,
+                results.Add(new VideoCueHit(hit.SourceId, hit.ItemId, hit.Revision, hit.OriginalSha256, cue.Offset, cue.Length, cue.Number,
                     cue.StartMilliseconds, cue.EndMilliseconds, cue.Text, LocalProcessors.TimedCaption, currentVideo.SourceId, currentVideo.ItemId,
                     currentVideo.Revision, currentVideo.Sha256, video.Value.Locator));
                 if (results.Count == limit)
@@ -148,7 +149,7 @@ public sealed class LocalMediaEvidence
         return results;
     }
 
-    private (LocalFileVersion Source, string Locator)? FindPairedVideo(string captionPath)
+    private (SourceFileVersion Source, string Locator)? FindPairedVideo(string captionPath)
     {
         // The sidecar must name the exact preserved video's SHA-256, not only its
         // filename; a replacement video cannot inherit unrelated old timestamps.
@@ -166,7 +167,7 @@ public sealed class LocalMediaEvidence
             return null;
         }
 
-        LocalFileVersion? video = sources.FindLatestFile(locator);
+        SourceFileVersion? video = sources.FindLatestFile(locator);
         return video?.Status == "active" && video.Sha256.Equals(expectedDigest, StringComparison.OrdinalIgnoreCase)
             ? (video, locator)
             : null;

@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Sources;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -199,7 +199,7 @@ public sealed class LocalCatalogTests : IDisposable
         Assert.Equal(16, upgraded.SchemaVersion);
         Assert.Equal("file", upgraded.Sources.ReadProvenance(sourceId)!.SourceKind);
         Assert.Null(upgraded.Sources.ReadProvenance(sourceId)!.CaptureRoute);
-        LocalCaptureReceipt receipt = Assert.Single(upgraded.Sources.ListCaptureReceipts(sourceId));
+        CaptureReceipt receipt = Assert.Single(upgraded.Sources.ListCaptureReceipts(sourceId));
         Assert.Equal("legacy-key", receipt.RequestKey);
         Assert.Null(receipt.Route);
         Assert.Null(receipt.AuthorityBasis);

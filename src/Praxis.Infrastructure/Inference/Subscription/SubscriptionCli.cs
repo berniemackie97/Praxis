@@ -1,7 +1,5 @@
 using System.Text;
 
-using Praxis.Application.Inference;
-
 namespace Praxis.Application.Inference;
 
 /// <summary>Shared rules for provider CLIs that run on the owner's subscription sign-in.</summary>

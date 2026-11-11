@@ -1,4 +1,4 @@
-using Praxis.Infrastructure.Search;
+using Praxis.Domain.Search;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -18,7 +18,7 @@ public sealed class RetrievalRankingEvaluationTests(ITestOutputHelper output)
         foreach (RetrievalJudgment judgment in fixture.Judgments.Judgments)
         {
             Guid[] expected = fixture.Expected(judgment.LexicalExpected);
-            LocalSearchHit[] hits = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
+            SearchHit[] hits = fixture.Catalog.Search.Query(judgment.Query, 5).ToArray();
             Assert.Equal(expected, hits.Select(hit => hit.ItemId).OrderBy(id => id).ToArray());
             fixture.VerifyHits(hits, lexical: true);
             if (judgment.Name == "lexical-distractor")

@@ -1,9 +1,8 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Library;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Library;
-
-public sealed record LocalLibraryItem(Guid SourceId, Guid ItemId, string SourceKind, string SourceLocator, string SourceStatus, int Revision, string Sha256, long OriginalBytes, string? ProcessingState, string? ExtractionOutcome);
 
 /// <summary>Read model of the latest revision of each item with its text-processing state.</summary>
 public sealed class LocalLibrary
@@ -12,7 +11,7 @@ public sealed class LocalLibrary
 
     internal LocalLibrary(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<LocalLibraryItem> List(int limit = 100, int offset = 0, Guid? collectionId = null)
+    public IReadOnlyList<LibraryItem> List(int limit = 100, int offset = 0, Guid? collectionId = null)
     {
         if (limit is < 1 or > 200 || offset < 0)
         {
@@ -59,10 +58,10 @@ public sealed class LocalLibrary
             command.Parameters.AddWithValue("$offset", offset);
             command.Parameters.AddWithValue("$collection", collectionId.HasValue ? (object)collectionId.Value.ToString("D") : DBNull.Value);
             using SqliteDataReader reader = command.ExecuteReader();
-            List<LocalLibraryItem> result = new();
+            List<LibraryItem> result = new();
             while (reader.Read())
             {
-                result.Add(new LocalLibraryItem(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                result.Add(new LibraryItem(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                     reader.GetString(2), reader.GetString(3), reader.GetString(4),
                     reader.GetInt32(5), reader.GetString(6), reader.GetInt64(7),
                     reader.IsDBNull(8) ? null : reader.GetString(8),

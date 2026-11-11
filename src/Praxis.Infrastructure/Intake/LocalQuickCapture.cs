@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Originals;
 
 namespace Praxis.Infrastructure.Intake;
-
-public sealed record LocalQuickCaptureReceipt(string SourcePath, CapturedOriginal Original);
 
 public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirectory)
 {
@@ -15,7 +15,7 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
     private static readonly UnixFileMode PrivateFile = UnixFileMode.UserRead | UnixFileMode.UserWrite;
     private readonly LocalSourceIntake intake = new(catalog);
 
-    public async Task<LocalQuickCaptureReceipt> CaptureAsync(Guid captureId, string? title, string text, CancellationToken cancellationToken = default)
+    public async Task<QuickCaptureReceipt> CaptureAsync(Guid captureId, string? title, string text, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (captureId == Guid.Empty)
@@ -38,7 +38,7 @@ public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirecto
         await VerifyPublishedAsync(destination, bytes, cancellationToken);
         using MemoryStream content = new(bytes, writable: false);
         CapturedOriginal original = await catalog.Originals.CaptureFileAsync(destination, content, bytes.Length, "quick-" + captureId.ToString("N"), capture, cancellationToken);
-        return new LocalQuickCaptureReceipt(destination, original);
+        return new QuickCaptureReceipt(destination, original);
     }
 
     private static string ValidateTitle(string? title)

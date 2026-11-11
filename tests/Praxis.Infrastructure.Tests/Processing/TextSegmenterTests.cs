@@ -1,5 +1,5 @@
 using System.Text;
-using Praxis.Infrastructure;
+using Praxis.Domain.Text;
 using Praxis.Infrastructure.Processing;
 using Xunit;
 

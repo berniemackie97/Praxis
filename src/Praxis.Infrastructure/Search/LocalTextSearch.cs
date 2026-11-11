@@ -1,11 +1,10 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Search;
 using Praxis.Infrastructure.Catalog;
 
 namespace Praxis.Infrastructure.Search;
-
-public sealed record LocalSearchHit(Guid SourceId, Guid ItemId, int Revision, string Title, string SourceLocator, string OriginalSha256, string Snippet);
 
 /// <summary>
 /// Rebuildable FTS5 index over the latest verified text of active sources. Query-time joins
@@ -17,7 +16,7 @@ public sealed class LocalTextSearch
 
     internal LocalTextSearch(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<LocalSearchHit> Query(string query, int limit = 20)
+    public IReadOnlyList<SearchHit> Query(string query, int limit = 20)
     {
         if (limit is < 1 or > 100)
         {
@@ -57,7 +56,7 @@ public sealed class LocalTextSearch
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = command.ExecuteReader();
-            List<LocalSearchHit> hits = new();
+            List<SearchHit> hits = new();
             while (reader.Read())
             {
                 string locator = reader.GetString(3);
@@ -67,7 +66,7 @@ public sealed class LocalTextSearch
                     snippet = snippet[..480];
                 }
 
-                hits.Add(new LocalSearchHit(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                hits.Add(new SearchHit(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
                     Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture),
                     Path.GetFileName(locator), locator, reader.GetString(4), snippet));
             }

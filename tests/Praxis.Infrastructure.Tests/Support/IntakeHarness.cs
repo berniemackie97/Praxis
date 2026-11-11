@@ -1,3 +1,4 @@
+using Praxis.Domain.Intake;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Processing;
@@ -36,7 +37,7 @@ internal sealed class IntakeHarness
     internal Task RunAsync(CancellationToken cancellationToken) =>
         Task.WhenAll(Monitor.RunAsync(cancellationToken), Processing.RunAsync(cancellationToken));
 
-    internal LocalIntakeStatus Snapshot() => Monitor.Snapshot();
-    internal LocalIntakeStatus SetPaused(bool pause) => Monitor.SetPaused(pause);
-    internal LocalIntakeStatus RequestRescan() => Monitor.RequestRescan();
+    internal IntakeStatus Snapshot() => Monitor.Snapshot();
+    internal IntakeStatus SetPaused(bool pause) => Monitor.SetPaused(pause);
+    internal IntakeStatus RequestRescan() => Monitor.RequestRescan();
 }

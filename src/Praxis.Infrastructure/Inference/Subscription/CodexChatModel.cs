@@ -1,6 +1,5 @@
 using System.Text.Json;
-
-using Praxis.Application.Inference;
+using Praxis.Domain.Models;
 
 namespace Praxis.Application.Inference;
 

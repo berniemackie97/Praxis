@@ -1,10 +1,11 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Processing;
-using Praxis.Infrastructure.Sources;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -54,7 +55,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             manual = await intake.ImportFileAsync(manualPath,
                 Encoding.UTF8.GetByteCount(sharedText), "manual-request-1");
             Guid captureId = Guid.NewGuid();
-            LocalQuickCaptureReceipt quickReceipt = await new LocalQuickCapture(catalog, inbox)
+            QuickCaptureReceipt quickReceipt = await new LocalQuickCapture(catalog, inbox)
                 .CaptureAsync(captureId, "Shared", "violet blueprint");
             quick = quickReceipt.Original;
 
@@ -64,7 +65,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(1)));
             Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(2)));
 
-            LocalFileVersion watched = catalog.Sources.FindLatestFile(watchedPath)!;
+            SourceFileVersion watched = catalog.Sources.FindLatestFile(watchedPath)!;
             watchedSourceId = watched.SourceId;
             Assert.Equal(1, watched.Revision);
             Assert.Equal(3, catalog.Library.List().Count);
@@ -146,8 +147,8 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.True(await worker.ProcessNextAsync());
         Assert.True(await worker.ProcessNextAsync());
 
-        LocalSourceProvenance unknown = catalog.Sources.ReadProvenance(unsupported.SourceId)!;
-        LocalSourceProvenance invalid = catalog.Sources.ReadProvenance(malformed.SourceId)!;
+        SourceProvenance unknown = catalog.Sources.ReadProvenance(unsupported.SourceId)!;
+        SourceProvenance invalid = catalog.Sources.ReadProvenance(malformed.SourceId)!;
         Assert.Equal("unsupported", unknown.ProcessingState);
         Assert.Equal("unsupported", unknown.ExtractionOutcome);
         Assert.Equal("unsupported_format", unknown.ExtractionReasonCode);
@@ -157,12 +158,12 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Null(invalid.ExtractionOutcome);
         Assert.True(invalid.RetryEligible);
         Assert.False(unknown.RetryEligible);
-        LocalSourceProcessingState failed = Assert.Single(catalog.Sources.ListProcessing(
+        SourceProcessingState failed = Assert.Single(catalog.Sources.ListProcessing(
             invalid.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
         Assert.Equal("failed", failed.State);
         Assert.True(failed.RetryEligible);
         Assert.Equal("invalid_utf8", failed.FailureCode);
-        LocalSourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
+        SourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
             unsupported.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
         Assert.Equal("unsupported", unsupportedJob.State);
         Assert.False(unsupportedJob.RetryEligible);
@@ -205,19 +206,19 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
     private static void AssertCapture(LocalCatalog catalog, Guid sourceId,
         string route, string basis, string scope)
     {
-        LocalSourceProvenance source = catalog.Sources.ReadProvenance(sourceId)!;
+        SourceProvenance source = catalog.Sources.ReadProvenance(sourceId)!;
         Assert.Equal(route, source.CaptureRoute);
         Assert.Equal(basis, source.CaptureAuthorityBasis);
         Assert.Equal(scope, source.CaptureScope);
         Assert.NotNull(source.CaptureRecordedUtc);
-        LocalCaptureReceipt receipt = Assert.Single(catalog.Sources.ListCaptureReceipts(sourceId));
+        CaptureReceipt receipt = Assert.Single(catalog.Sources.ListCaptureReceipts(sourceId));
         Assert.Equal(route, receipt.Route);
         Assert.Equal(basis, receipt.AuthorityBasis);
         Assert.Equal(scope, receipt.Scope);
         Assert.Equal(source.CaptureRecordedUtc, receipt.RecordedUtc);
     }
 
-    private static void AssertSource(LocalSourceProvenance source)
+    private static void AssertSource(SourceProvenance source)
     {
         Assert.NotEqual(Guid.Empty, source.SourceId);
         Assert.NotEqual(Guid.Empty, source.ItemId);

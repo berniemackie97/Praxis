@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Catalog;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -41,7 +41,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
         using LocalCatalog catalog = LocalCatalog.Open(root);
 
-        LocalProposal migrated = Assert.Single(catalog.Proposals.List(source));
+        EnrichmentProposal migrated = Assert.Single(catalog.Proposals.List(source));
         Assert.Equal(proposal, migrated.ProposalId);
         Assert.Equal("topic", migrated.Kind);
         Assert.Null(migrated.EntityType);
