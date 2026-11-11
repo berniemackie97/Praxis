@@ -11,5 +11,6 @@ public enum OpaqueSyncStatus
     OperationKeyReused,
     InvalidCursor,
     CursorExpired,
+    ResetRequired,
     QuotaExceeded
 }
