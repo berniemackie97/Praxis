@@ -87,7 +87,7 @@ def main():
         restarted = run(catalog, inbox)
         if restarted.returncode != 0:
             raise AssertionError("The worker could not reopen its catalog after shutdown.")
-        response = json.loads(restarted.stdout.readline())
+        response = json.loads(restarted.stdout)
         if not response["ok"] or response["requestId"] != "probe":
             raise AssertionError("Restarted worker returned an invalid response.")
         if SENTINEL.encode() in restarted.stderr:
