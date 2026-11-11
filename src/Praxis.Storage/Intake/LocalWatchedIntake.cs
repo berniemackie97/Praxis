@@ -20,12 +20,13 @@ public sealed class LocalWatchedIntake
     private readonly ObservedRenameCorrelator renames;
     private readonly WatchedFileReconciler reconciler;
     private readonly SemaphoreSlim scanLock = new(1, 1);
+    private readonly SemaphoreSlim? sharedScanLock;
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
     private int wakePending;
     private int watcherFaulted;
     private bool rootWasOffline;
 
-    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null)
+    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);
@@ -48,12 +49,15 @@ public sealed class LocalWatchedIntake
 
         // Watcher events, scans and stored locators must agree on one spelling of the folder.
         root = CatalogPaths.Canonicalize(intakeDirectory);
+        this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
         LocalSourceIntake intake = new(catalog);
         renames = new ObservedRenameCorrelator(catalog, intake, root, report, Signal);
         reconciler = new WatchedFileReconciler(catalog, intake, root, quiet, renames, this.status, report);
     }
+
+    public string RootPath => root;
 
     public LocalIntakeStatus Snapshot() => status.Snapshot();
 
@@ -83,11 +87,18 @@ public sealed class LocalWatchedIntake
     private async Task<WatchedScanResult> ReconcileCoreAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await scanLock.WaitAsync(cancellationToken);
+        bool sharedHeld = false;
         try
         {
             if (status.IsPaused)
             {
                 return new WatchedScanResult(0, 0, null);
+            }
+
+            if (sharedScanLock is not null)
+            {
+                await sharedScanLock.WaitAsync(cancellationToken);
+                sharedHeld = true;
             }
 
             WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
@@ -101,6 +112,11 @@ public sealed class LocalWatchedIntake
         }
         finally
         {
+            if (sharedHeld)
+            {
+                sharedScanLock!.Release();
+            }
+
             scanLock.Release();
         }
     }
