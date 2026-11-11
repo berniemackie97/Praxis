@@ -243,7 +243,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     }
 
     [Fact]
-    public async Task OfflineApprovedIntakeResumesAfterDirectoryReturns()
+    public async Task OfflineIntakeRequiresReapprovalBeforeResumingAfterDirectoryReturns()
     {
         string removable = Path.Combine(workspace, "offline");
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
@@ -257,6 +257,9 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             Assert.False(Directory.Exists(removable));
             Directory.CreateDirectory(removable);
             File.WriteAllText(Path.Combine(removable, "resumed.md"), "violet reconnected");
+            await WaitForAsync(() => monitor.Snapshot().State == "reapproval_required");
+            Assert.Empty(catalog.Library.List());
+            monitor.Monitor.ApproveRoot(removable);
             await WaitForAsync(() =>
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed");
             Assert.Single(catalog.Search.Query("reconnected"));

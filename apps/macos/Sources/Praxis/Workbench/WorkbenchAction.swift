@@ -3,7 +3,7 @@ enum WorkbenchAction: String {
     case collections, collectionCreate, collectionRename, collectionArchive
     case collectionAdd, collectionRemove, sourceCollections
     case topics, topicReview, sourceMoves
-    case intakeStatus, intakePause, intakeRescan
+    case intakeStatus, intakePause, intakeRescan, intakeApproveRoot
     case noteCapture, exportOriginal, verify, retry, revoke
     case mediaInspection
 }

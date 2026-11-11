@@ -10,18 +10,32 @@ internal static class IntakeCommand
 {
     internal static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
-        bool desktopMode = args is [_, _, _, _, "--stdio"];
-        if ((args.Length != 4 && !desktopMode) || args[0] != "--data-root" || args[2] != "--intake" || !Path.IsPathFullyQualified(args[1]) || !Path.IsPathFullyQualified(args[3]))
+        bool desktopMode = args.Length > 0 && args[^1] == "--stdio";
+        int argumentCount = args.Length - (desktopMode ? 1 : 0);
+        if (argumentCount < 4 || argumentCount % 2 != 0 ||
+            args[0] != "--data-root" || !Path.IsPathFullyQualified(args[1]) ||
+            args[2] != "--intake" || (argumentCount - 2) / 2 > LocalWatchedIntakeGroup.MaximumRoots)
         {
-            await Console.Error.WriteLineAsync("Usage: Praxis.Worker --data-root <absolute-private-data-directory> --intake <absolute-existing-inbox-directory> [--stdio]");
+            await Console.Error.WriteLineAsync("Usage: Praxis.Worker --data-root <absolute-private-data-directory> --intake <absolute-inbox> [--intake <another-approved-folder> ...] [--stdio]");
             return 2;
         }
 
-        string dataRoot = Path.GetFullPath(args[1]);
-        string inbox = Path.GetFullPath(args[3]);
-        if (!Directory.Exists(inbox))
+        List<string> roots = new();
+        for (int index = 2; index < argumentCount; index += 2)
         {
-            await Console.Error.WriteLineAsync("The approved intake path is offline; it will not be created.");
+            if (args[index] != "--intake" || !Path.IsPathFullyQualified(args[index + 1]))
+            {
+                await Console.Error.WriteLineAsync("Each watched folder must be supplied as --intake <absolute-path>.");
+                return 2;
+            }
+
+            roots.Add(Path.GetFullPath(args[index + 1]));
+        }
+
+        string dataRoot = Path.GetFullPath(args[1]);
+        if (roots.Any(root => !Directory.Exists(root)))
+        {
+            await Console.Error.WriteLineAsync("An approved intake path is offline; it will not be created.");
         }
 
         if (!Directory.Exists(dataRoot))
@@ -43,15 +57,16 @@ internal static class IntakeCommand
 
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
         LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog, status: Report);
-        LocalWatchedIntake monitor = new(catalog, inbox, status: Report, onCaptured: processing.Wake);
+        LocalWatchedIntakeGroup monitors = new(catalog, roots, status: Report, onCaptured: processing.Wake);
         LocalVerificationRunner verification = LocalVerificationRunner.CreateDefault(catalog, Report);
         if (desktopMode)
         {
-            await DesktopStdioSession.RunAsync(catalog, monitor, processing, verification, inbox, cancellationToken);
+            await DesktopStdioSession.RunAsync(catalog, monitors, processing, verification, roots[0], cancellationToken);
         }
         else
         {
-            await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: false, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
+            await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: false,
+                monitors.RunAsync, processing.RunAsync, verification.RunAsync);
         }
 
         return 0;

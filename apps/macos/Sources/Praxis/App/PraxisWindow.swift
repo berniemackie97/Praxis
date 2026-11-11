@@ -5,6 +5,8 @@ struct PraxisWindow: View {
     @EnvironmentObject private var model: WorkbenchModel
     @AppStorage("dataRoot") private var dataRoot = ""
     @AppStorage("inbox") private var inbox = ""
+    @AppStorage("additionalInboxes") private var additionalInboxes = "[]"
+    @AppStorage("rootApprovals") private var rootApprovals = "{}"
     @AppStorage("configured") private var configured = false
     @AppStorage("dotnetExecutable") private var dotnetExecutable = ""
     @State private var section = Section.library
@@ -32,8 +34,9 @@ struct PraxisWindow: View {
                 }.pickerStyle(.segmented)
                 workspace
             } else {
-                SetupView(dataRoot: $dataRoot, inbox: $inbox, configured: $configured,
-                          dotnetExecutable: $dotnetExecutable)
+                SetupView(dataRoot: $dataRoot, inbox: $inbox,
+                          additionalInboxes: $additionalInboxes, rootApprovals: $rootApprovals,
+                          configured: $configured, dotnetExecutable: $dotnetExecutable)
             }
             Divider()
             Text(model.message).font(.footnote).foregroundStyle(.secondary)
@@ -46,8 +49,9 @@ struct PraxisWindow: View {
                 return
             }
             if configured && !dataRoot.isEmpty && !inbox.isEmpty {
-                model.start(dataRoot: dataRoot, inbox: inbox, initialize: false,
-                            dotnetExecutable: dotnetExecutable)
+                model.start(dataRoot: dataRoot, inbox: inbox,
+                            additionalInboxes: additionalInboxes, rootApprovals: rootApprovals,
+                            initialize: false, dotnetExecutable: dotnetExecutable)
             }
         }
         .onDisappear { model.stop() }
@@ -68,7 +72,7 @@ struct PraxisWindow: View {
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .collections: CollectionsView()
         case .models: IntelligenceSettingsView(model: model.intelligence)
-        case .configuration: ConfigurationView(dataRoot: dataRoot, inbox: inbox)
+        case .configuration: ConfigurationView(dataRoot: dataRoot, rootApprovals: $rootApprovals)
         }
     }
 

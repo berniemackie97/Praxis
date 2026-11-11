@@ -20,12 +20,15 @@ public sealed class LocalWatchedIntake
     private readonly ObservedRenameCorrelator renames;
     private readonly WatchedFileReconciler reconciler;
     private readonly SemaphoreSlim scanLock = new(1, 1);
+    private readonly SemaphoreSlim? sharedScanLock;
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
     private int wakePending;
     private int watcherFaulted;
     private bool rootWasOffline;
+    private int requiresApproval;
+    private long approvedCreationTicks;
 
-    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null)
+    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);
@@ -48,6 +51,8 @@ public sealed class LocalWatchedIntake
 
         // Watcher events, scans and stored locators must agree on one spelling of the folder.
         root = CatalogPaths.Canonicalize(intakeDirectory);
+        approvedCreationTicks = Directory.Exists(root) ? Directory.GetCreationTimeUtc(root).Ticks : 0;
+        this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
         LocalSourceIntake intake = new(catalog);
@@ -55,7 +60,33 @@ public sealed class LocalWatchedIntake
         reconciler = new WatchedFileReconciler(catalog, intake, root, quiet, renames, this.status, report);
     }
 
+    public string RootPath => root;
+
     public LocalIntakeStatus Snapshot() => status.Snapshot();
+
+    public bool IsApprovedAndAvailable =>
+        Volatile.Read(ref requiresApproval) == 0 && Directory.Exists(root) &&
+        (File.GetAttributes(root) & FileAttributes.ReparsePoint) == 0 &&
+        Interlocked.Read(ref approvedCreationTicks) == Directory.GetCreationTimeUtc(root).Ticks;
+
+    public LocalIntakeStatus ApproveRoot(string selectedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
+        if (!Path.IsPathFullyQualified(selectedPath) || !Directory.Exists(selectedPath) ||
+            (File.GetAttributes(selectedPath) & FileAttributes.ReparsePoint) != 0 ||
+            CatalogPaths.Canonicalize(selectedPath) != root)
+        {
+            throw new ArgumentException("Reapproval requires selecting the same existing, non-linked folder.", nameof(selectedPath));
+        }
+
+        Interlocked.Exchange(ref approvedCreationTicks, Directory.GetCreationTimeUtc(root).Ticks);
+        Interlocked.Exchange(ref requiresApproval, 0);
+        renames.Clear();
+        reconciler.InvalidateAll();
+        status.SetState("resuming");
+        Signal();
+        return status.Snapshot();
+    }
 
     public LocalIntakeStatus SetPaused(bool pause)
     {
@@ -83,11 +114,27 @@ public sealed class LocalWatchedIntake
     private async Task<WatchedScanResult> ReconcileCoreAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await scanLock.WaitAsync(cancellationToken);
+        bool sharedHeld = false;
         try
         {
-            if (status.IsPaused)
+            if (status.IsPaused || Volatile.Read(ref requiresApproval) != 0)
             {
                 return new WatchedScanResult(0, 0, null);
+            }
+
+            if (!IsApprovedAndAvailable)
+            {
+                bool offline = !Directory.Exists(root);
+                Interlocked.Exchange(ref requiresApproval, 1);
+                status.SetState(offline ? "offline" : "reapproval_required",
+                    offline ? OfflineProblem : "The watched folder identity changed; reapproval is required.");
+                return new WatchedScanResult(0, 0, null);
+            }
+
+            if (sharedScanLock is not null)
+            {
+                await sharedScanLock.WaitAsync(cancellationToken);
+                sharedHeld = true;
             }
 
             WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
@@ -101,6 +148,11 @@ public sealed class LocalWatchedIntake
         }
         finally
         {
+            if (sharedHeld)
+            {
+                sharedScanLock!.Release();
+            }
+
             scanLock.Release();
         }
     }
@@ -137,7 +189,8 @@ public sealed class LocalWatchedIntake
                         delay = due < rescanInterval ? due : rescanInterval;
                     }
 
-                    if (scan is not null && watcher is null && Directory.Exists(root))
+                    if (scan is not null && watcher is null && Directory.Exists(root) &&
+                        Volatile.Read(ref requiresApproval) == 0)
                     {
                         status.SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
                     }
@@ -189,6 +242,7 @@ public sealed class LocalWatchedIntake
             if (!rootWasOffline)
             {
                 rootWasOffline = true;
+                Interlocked.Exchange(ref requiresApproval, 1);
                 renames.Clear();
                 reconciler.InvalidateAll();
                 report("Watched directory is offline; captured originals are retained.");
@@ -202,6 +256,19 @@ public sealed class LocalWatchedIntake
         {
             rootWasOffline = false;
             reconciler.InvalidateAll();
+        }
+
+        long previousBirth = Interlocked.Read(ref approvedCreationTicks);
+        if (previousBirth != 0 && Directory.GetCreationTimeUtc(root).Ticks != previousBirth)
+        {
+            Interlocked.Exchange(ref requiresApproval, 1);
+        }
+
+        if (Volatile.Read(ref requiresApproval) != 0)
+        {
+            watcher?.Dispose();
+            status.SetState("reapproval_required", "The watched folder was unavailable or replaced; confirm its identity before resuming intake.");
+            return null;
         }
 
         if (watcher is not null && Interlocked.Exchange(ref watcherFaulted, 0) == 0)
@@ -257,6 +324,13 @@ public sealed class LocalWatchedIntake
         catch (IOException)
         {
             bool offline = !Directory.Exists(root);
+            if (offline)
+            {
+                Interlocked.Exchange(ref requiresApproval, 1);
+                renames.Clear();
+                reconciler.InvalidateAll();
+            }
+
             status.SetState(offline ? "offline" : "degraded", offline ? OfflineProblem : "Intake scan will retry.");
             report("Intake scan will retry.");
         }
