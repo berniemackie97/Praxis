@@ -38,4 +38,38 @@ struct CanonicalPathTests {
         let identity = try #require(WatchedFolderSettings.identity(canonical))
         #expect(identity == WatchedFolderSettings.identity(canonical))
     }
+
+    @Test func unchangedPathStillNeedsOwnerApprovalAndNestedRootsAreDenied() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("praxis-launch-\(UUID().uuidString)")
+        let source = parent.appendingPathComponent("inbox")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let sourcePath = CanonicalPath.of(source.path).path
+        let metadata = try #require(WatchedFolderSettings.identity(CanonicalPath.of(source.path)))
+        let good = WatchedFolderSettings.encode([sourcePath: metadata])
+
+        do {
+            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
+                inbox: sourcePath, additionalInboxes: "[]",
+                rootApprovals: "{}", initialize: false, dotnetExecutable: "")
+            Issue.record("A folder without an owner approval was accepted.")
+        } catch { }
+
+        do {
+            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
+                inbox: sourcePath, additionalInboxes: "[]",
+                rootApprovals: WatchedFolderSettings.encode([sourcePath: "untrusted"]),
+                initialize: false, dotnetExecutable: "")
+            Issue.record("A folder with a changed identity was accepted.")
+        } catch { }
+
+        do {
+            _ = try WorkerLaunch.prepare(dataRoot: parent.appendingPathComponent("catalog").path,
+                inbox: sourcePath, additionalInboxes: WatchedFolderSettings.encode([sourcePath]),
+                rootApprovals: good, initialize: false, dotnetExecutable: "")
+            Issue.record("Overlapping watched folders were accepted.")
+        } catch { }
+    }
 }

@@ -149,6 +149,38 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     }
 
     [Fact]
+    public async Task ActualMacNotificationsCaptureDropsInBothRootsWithoutPolling()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        LocalWatchedIntakeGroup group = new(catalog, [first, second],
+            quietPeriod: TimeSpan.FromMilliseconds(300), rescanInterval: TimeSpan.FromMinutes(5));
+        using CancellationTokenSource cancellation = new();
+        Task running = group.RunAsync(cancellation.Token);
+        try
+        {
+            await WaitForAsync(() => group.RootStatuses().All(root => root.Status.State == "watching"));
+            File.WriteAllText(Path.Combine(first, "event-a.md"), "violet event");
+            File.WriteAllText(Path.Combine(second, "event-b.txt"), "amber event");
+            await WaitForAsync(() => catalog.Library.List().Count == 2);
+            Assert.All(group.RootStatuses(), root => Assert.Equal(1, root.Status.ImportedSinceStart));
+            foreach (LocalLibraryItem item in catalog.Library.List())
+            {
+                await catalog.Originals.VerifyAsync(item.ItemId);
+            }
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
+    [Fact]
     public async Task PrivateProtocolReportsIndividualRootsAndRestrictsApprovalAndQuickCapture()
     {
         using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
