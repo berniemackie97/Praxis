@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
@@ -8,7 +9,6 @@ using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -244,7 +244,7 @@ public sealed class KnowledgeLayerTests : IDisposable
         ProcessingDriver[] drivers = new[]
         {
             ProcessingDriver.Text(catalog),
-            new ProcessingDriver(catalog, new LocalTextSegmenter(catalog)),
+            new ProcessingDriver(catalog, new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing)),
             new ProcessingDriver(catalog, new LocalSemanticExtractor(catalog, _ => new ModelConnection(model)))
         };
         foreach (ProcessingDriver driver in drivers)

@@ -5,7 +5,6 @@ using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -49,7 +48,7 @@ public sealed class LocalTextProcessorTests : IDisposable
             TextDerivative second = Assert.IsType<TextDerivative>(catalog.Text.Read(markdown.ItemId, 1));
             Assert.Equal("completed", first.Outcome);
             Assert.Equal(text.SourceId, first.SourceId);
-            Assert.Equal(LocalProcessors.SourceText, first.ProcessorKey);
+            Assert.Equal(ProcessorKeys.SourceText, first.ProcessorKey);
             Assert.Equal(text.Sha256, first.SourceSha256);
             Assert.True(first.ProducedUtc > DateTimeOffset.MinValue);
             Assert.Equal("hello\nworld", first.Content);
@@ -57,11 +56,11 @@ public sealed class LocalTextProcessorTests : IDisposable
             Assert.Equal("# Topic\nReady ✅", second.Content);
             Assert.Equal(markdown.Sha256, second.SourceSha256);
             IReadOnlyList<ProcessingJob> jobs = catalog.Processing.List();
-            Assert.All(jobs.Where(job => job.ProcessorKey == LocalProcessors.SourceText),
+            Assert.All(jobs.Where(job => job.ProcessorKey == ProcessorKeys.SourceText),
                 job => Assert.Equal("completed", job.State));
             // Completed extraction schedules exactly one downstream heading job per revision.
             Assert.Equal(2, jobs.Count(job =>
-                job.ProcessorKey == LocalProcessors.MarkdownHeadings && job.State == "queued"));
+                job.ProcessorKey == ProcessorKeys.MarkdownHeadings && job.State == "queued"));
         }
 
         using SqliteCatalog reopened = SqliteCatalog.Open(root);
@@ -122,7 +121,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         Assert.Null(catalog.Text.Read(corrupt.ItemId, 1));
         Assert.Null(catalog.Text.Read(truncated.ItemId, 1));
         Assert.True(catalog.Processing.Retry(malformed.ItemId, 1,
-            LocalProcessors.SourceText));
+            ProcessorKeys.SourceText));
         Assert.True(await processor.ProcessNextAsync());
         ProcessingJob retry = catalog.Processing.List().Single(job => job.ItemId == malformed.ItemId);
         Assert.Equal(2, retry.TotalAttempts);
@@ -183,7 +182,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal large = await Capture(catalog, "large.txt",
-            new byte[LocalTextProcessor.MaximumTextBytes + 1], "large");
+            new byte[TextLimits.MaximumTextBytes + 1], "large");
         Assert.True(catalog.Processing.Queue(large.ItemId, 1, "media-v1"));
         ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
@@ -199,18 +198,19 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task TextClaimsDoNotExpireJobsOwnedByOtherProcessors()
     {
-        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        DateTimeOffset time = new(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
+        ManualTimeProvider clock = new(time);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
         CapturedOriginal item = await Capture(catalog, "scoped.txt", Encoding.UTF8.GetBytes("scoped"), "scope");
         Assert.True(catalog.Processing.Queue(item.ItemId, 1, "media-v1"));
-        DateTimeOffset time = new(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
         ProcessingLease media = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time, processorKey: "media-v1"));
+            TimeSpan.FromSeconds(1), maxAttempts: 1, processorKey: "media-v1"));
         Assert.Equal("media-v1", media.ProcessorKey);
 
+        clock.UtcNow = time.AddSeconds(2);
         ProcessingLease text = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(1), maxAttempts: 1, nowUtc: time.AddSeconds(2),
-            processorKey: LocalProcessors.SourceText));
-        Assert.Equal(LocalProcessors.SourceText, text.ProcessorKey);
+            TimeSpan.FromSeconds(1), maxAttempts: 1, processorKey: ProcessorKeys.SourceText));
+        Assert.Equal(ProcessorKeys.SourceText, text.ProcessorKey);
         Assert.Equal("running", catalog.Processing.List()
             .Single(job => job.ProcessorKey == "media-v1").State);
     }
@@ -220,10 +220,10 @@ public sealed class LocalTextProcessorTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal item = await Capture(catalog, "canceled.txt", Encoding.UTF8.GetBytes("private"), "cancel");
-        Assert.True(catalog.Processing.Cancel(item.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Cancel(item.ItemId, 1, ProcessorKeys.SourceText));
         Assert.False(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Null(catalog.Text.Read(item.ItemId, 1));
-        Assert.True(catalog.Processing.Retry(item.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Retry(item.ItemId, 1, ProcessorKeys.SourceText));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal("private", catalog.Text.Read(item.ItemId, 1)?.Content);
     }
@@ -318,9 +318,9 @@ public sealed class LocalTextProcessorTests : IDisposable
             Assert.Equal(1, Assert.Single(reopened.Search.Query("RecoveredTechnicalSource")).Revision);
             Assert.Single(reopened.Search.Query("RecoveredTechnicalSource"));
             Assert.Equal(1, reopened.Processing.List()
-                .Single(job => job.ProcessorKey == LocalProcessors.SourceText).TotalAttempts);
+                .Single(job => job.ProcessorKey == ProcessorKeys.SourceText).TotalAttempts);
             Assert.Equal("queued", reopened.Processing.List()
-                .Single(job => job.ProcessorKey == LocalProcessors.MarkdownHeadings).State);
+                .Single(job => job.ProcessorKey == ProcessorKeys.MarkdownHeadings).State);
             await reopened.Originals.VerifyAsync(source.ItemId);
         }
 

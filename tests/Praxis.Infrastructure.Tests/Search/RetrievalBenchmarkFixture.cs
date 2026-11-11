@@ -1,11 +1,11 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Text;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -140,11 +140,11 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
 
     public static async Task ProcessSegmentsAsync(SqliteCatalog catalog)
     {
-        LocalTextSegmenter segmenter = new(catalog);
+        TextSegmentationHandler segmenter = new(catalog.Text, catalog.Segments, catalog.Processing);
         for (int index = 0; index < 128; index++)
         {
             ProcessingLease? lease = catalog.Processing.TryClaim(segmenter.LeaseDuration,
-                processorKey: LocalProcessors.TextSegments);
+                processorKey: ProcessorKeys.TextSegments);
             if (lease is null)
             {
                 return;
@@ -153,7 +153,7 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
             await segmenter.ProcessAsync(lease, CancellationToken.None);
             Assert.Equal("completed", Assert.Single(catalog.Processing.List(500),
                 job => job.ItemId == lease.ItemId && job.Revision == lease.Revision &&
-                    job.ProcessorKey == LocalProcessors.TextSegments).State);
+                    job.ProcessorKey == ProcessorKeys.TextSegments).State);
         }
 
         throw new InvalidDataException("Segmentation exceeded the corpus job limit.");

@@ -2,7 +2,6 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -48,7 +47,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
         Assert.Equal("corrected", migrated.Status);
         Assert.Equal("Architecture overview", migrated.Correction);
         Assert.Equal("queued", catalog.Processing.List().Single(job =>
-            job.ProcessorKey == LocalProcessors.SemanticExtraction).State);
+            job.ProcessorKey == ProcessorKeys.SemanticExtraction).State);
 
         Assert.True(catalog.Proposals.Review(proposal, "corrected", new string('c', 120)));
         Assert.Throws<ArgumentException>(() => catalog.Proposals.Review(proposal, "corrected", new string('c', 121)));
@@ -81,7 +80,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
         {
             Assert.Contains(catalog.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
             ProcessingJob[] jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
-            Assert.Equal("queued", jobs.Single(job => job.ProcessorKey == LocalProcessors.SemanticExtraction).State);
+            Assert.Equal("queued", jobs.Single(job => job.ProcessorKey == ProcessorKeys.SemanticExtraction).State);
             Assert.Equal("completed", jobs.Single(job => job.ProcessorKey == "semantic-extract-v1").State);
         }
 
@@ -95,7 +94,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
         using SqliteCatalog replaced = SqliteCatalog.Open(root);
         Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
-        Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == LocalProcessors.MarkdownHeadings);
+        Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == ProcessorKeys.MarkdownHeadings);
     }
 
     [Fact]

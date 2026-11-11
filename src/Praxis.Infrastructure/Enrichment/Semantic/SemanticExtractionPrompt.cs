@@ -3,12 +3,13 @@ using System.Text.Json;
 using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
-using Praxis.Infrastructure.Processing;
+
+using Praxis.Domain.Processing;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;
 
 /// <summary>
-/// The versioned instructions and output schema for <see cref="LocalProcessors.SemanticExtraction"/>.
+/// The versioned instructions and output schema for <see cref="ProcessorKeys.SemanticExtraction"/>.
 /// Changing either changes the processor version. Source text is passed as delimited data and
 /// the instructions state that nothing inside it is an instruction. Owner decisions (confirmed
 /// types, rejected names) are passed as hints so repeated mistakes are not re-proposed.

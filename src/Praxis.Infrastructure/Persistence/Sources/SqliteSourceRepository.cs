@@ -1,18 +1,24 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Sources;
+using Praxis.Domain.Processing;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 
-namespace Praxis.Infrastructure.Sources;
+namespace Praxis.Infrastructure.Persistence.Sources;
 
 /// <summary>
 /// Identity and lifecycle of captured sources: path lookup, observed relocations and revocation.
 /// </summary>
-public sealed class LocalSources
+public sealed class SqliteSourceRepository : ISourceRepository
 {
     private readonly CatalogDatabase database;
 
-    internal LocalSources(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteSourceRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     /// <summary>
     /// Canonical, source-scoped provenance for one recorded revision. Revoked and older
@@ -67,7 +73,7 @@ public sealed class LocalSources
                                                                  """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$revision", revision.HasValue ? (object)revision.Value : DBNull.Value);
-            query.Parameters.AddWithValue("$processor", LocalProcessors.SourceText);
+            query.Parameters.AddWithValue("$processor", ProcessorKeys.SourceText);
             using SqliteDataReader reader = query.ExecuteReader();
             if (!reader.Read())
             {
@@ -212,7 +218,7 @@ public sealed class LocalSources
     }
 
     /// <summary>Latest revision of an active file source, or null when unavailable.</summary>
-    internal CurrentFileVersion? CurrentFile(Guid sourceId) => database.Execute(connection =>
+    public CurrentFileVersion? CurrentFile(Guid sourceId) => database.Execute(connection =>
     {
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT i.item_id, v.revision, v.digest, o.byte_length, s.locator
@@ -246,14 +252,14 @@ public sealed class LocalSources
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
-            bool revoked = RevokeWithin(connection, transaction, sourceId.ToString("D"), CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            bool revoked = RevokeWithin(connection, transaction, sourceId.ToString("D"), CatalogValues.Timestamp(clock.GetUtcNow()));
             transaction.Commit();
             return revoked;
         });
     }
 
     /// <summary>Active file sources with their stored locator and current digest.</summary>
-    internal IReadOnlyList<(Guid SourceId, string Locator, string Digest)> ActiveFileLocators() => database.Execute(connection =>
+    public IReadOnlyList<(Guid SourceId, string Locator, string Digest)> ActiveFileLocators() => database.Execute(connection =>
     {
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT s.source_id, s.locator, v.digest
@@ -280,9 +286,9 @@ public sealed class LocalSources
     /// over to matching proposals, then the alias is revoked. When the canonical source was
     /// revoked by the owner, the alias is revoked too. Returns false when nothing changed.
     /// </summary>
-    internal bool FoldAlias(Guid aliasSourceId, string canonicalLocator) => database.Execute(connection =>
+    public bool FoldAlias(Guid aliasSourceId, string canonicalLocator) => database.Execute(connection =>
     {
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         string alias = aliasSourceId.ToString("D");
         using SqliteTransaction transaction = connection.BeginTransaction();
         using SqliteCommand target = connection.CreateCommand("SELECT source_id, status FROM sources WHERE source_kind = 'file' AND locator = $locator");
@@ -371,7 +377,7 @@ public sealed class LocalSources
         });
     }
 
-    internal long CountMovesFrom(string previousPath)
+    public long CountMovesFrom(string previousPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
         return database.Execute(connection =>
@@ -382,7 +388,7 @@ public sealed class LocalSources
         });
     }
 
-    internal bool RelocateObservedFile(string previousPath, string currentPath, string verifiedDigest)
+    public bool RelocateObservedFile(string previousPath, string currentPath, string verifiedDigest)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(previousPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(currentPath);
@@ -446,7 +452,7 @@ public sealed class LocalSources
             history.Parameters.AddWithValue("$old", old);
             history.Parameters.AddWithValue("$new", current);
             history.Parameters.AddWithValue("$digest", verifiedDigest);
-            history.Parameters.AddWithValue("$at", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            history.Parameters.AddWithValue("$at", CatalogValues.Timestamp(clock.GetUtcNow()));
             history.ExecuteNonQuery();
             transaction.Commit();
             return true;

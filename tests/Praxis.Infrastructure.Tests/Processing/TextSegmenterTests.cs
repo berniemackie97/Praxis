@@ -1,6 +1,6 @@
 using System.Text;
+using Praxis.Application.Text;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Processing;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Processing;

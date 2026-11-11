@@ -1,12 +1,13 @@
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Sources;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Originals;
-using Praxis.Infrastructure.Processing;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence.Sources;
+using Praxis.Infrastructure.Persistence.Text;
 using Praxis.Infrastructure.Search;
-using Praxis.Infrastructure.Sources;
 
 namespace Praxis.Infrastructure.Media;
 
@@ -16,12 +17,12 @@ namespace Praxis.Infrastructure.Media;
 /// </summary>
 public sealed class LocalMediaEvidence
 {
-    private readonly LocalSources sources;
+    private readonly SqliteSourceRepository sources;
     private readonly LocalTextSearch search;
-    private readonly LocalTextDerivatives text;
+    private readonly SqliteTextDerivativeRepository text;
     private readonly OriginalFileStore objects;
 
-    internal LocalMediaEvidence(LocalSources sources, LocalTextSearch search, LocalTextDerivatives text, OriginalFileStore objects)
+    internal LocalMediaEvidence(SqliteSourceRepository sources, LocalTextSearch search, SqliteTextDerivativeRepository text, OriginalFileStore objects)
     {
         this.sources = sources;
         this.search = search;
@@ -71,7 +72,7 @@ public sealed class LocalMediaEvidence
         (string? container, long? duration) = LocalMediaHeaderParser.Read(header, fileExtension);
         return new MediaInspection(sourceId, source.ItemId, source.Revision, source.Digest, source.Length, fileExtension,
             container is null ? "unsupported" : "header_recognized", container, duration, container is null ? "unsupported_signature" : null,
-            LocalProcessors.MediaHeader);
+            ProcessorKeys.MediaHeader);
     }
 
     public IReadOnlyList<VideoCueHit> SearchCues(string query, int limit = 20)
@@ -137,7 +138,7 @@ public sealed class LocalMediaEvidence
                 }
 
                 results.Add(new VideoCueHit(hit.SourceId, hit.ItemId, hit.Revision, hit.OriginalSha256, cue.Offset, cue.Length, cue.Number,
-                    cue.StartMilliseconds, cue.EndMilliseconds, cue.Text, LocalProcessors.TimedCaption, currentVideo.SourceId, currentVideo.ItemId,
+                    cue.StartMilliseconds, cue.EndMilliseconds, cue.Text, ProcessorKeys.TimedCaption, currentVideo.SourceId, currentVideo.ItemId,
                     currentVideo.Revision, currentVideo.Sha256, video.Value.Locator));
                 if (results.Count == limit)
                 {

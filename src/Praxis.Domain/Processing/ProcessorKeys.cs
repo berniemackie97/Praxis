@@ -1,10 +1,10 @@
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Domain.Processing;
 
 /// <summary>
 /// Versioned identities of the processors that produce catalog evidence, and the stage graph
 /// that schedules a processor once the evidence it consumes has been committed.
 /// </summary>
-public static class LocalProcessors
+public static class ProcessorKeys
 {
     public const string SourceText = "source-text-v1";
     public const string MarkdownHeadings = "markdown-heading-v1";

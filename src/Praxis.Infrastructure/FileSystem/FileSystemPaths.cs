@@ -1,15 +1,9 @@
 namespace Praxis.Infrastructure.FileSystem;
 
-internal static class CatalogPaths
+/// <summary>Resolution of symbolic links in existing paths so that one location has one spelling.</summary>
+internal static class FileSystemPaths
 {
     private const int MaximumLinkDepth = 40;
-
-    internal static bool Contains(string directory, string path)
-    {
-        string relative = Path.GetRelativePath(directory, path);
-        return !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-               && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
-    }
 
     internal static string ResolveExisting(string path) => ResolveExisting(Path.GetFullPath(path), 0);
 

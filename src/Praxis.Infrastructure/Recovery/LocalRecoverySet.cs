@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Praxis.Domain.Common;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Security;
@@ -28,9 +29,9 @@ public static class LocalRecoverySet
 
         string identity = SecurityRegistrySnapshots.ValidateExistingCurrentRegistry(identityDirectory);
         using SqliteCatalog catalog = SqliteCatalog.OpenReadOnly(catalogDirectory);
-        string source = CatalogPaths.ResolveExisting(catalog.DataDirectory);
-        identity = CatalogPaths.ResolveExisting(identity);
-        if (CatalogPaths.Contains(source, identity) || CatalogPaths.Contains(identity, source))
+        string source = FileSystemPaths.ResolveExisting(catalog.DataDirectory);
+        identity = FileSystemPaths.ResolveExisting(identity);
+        if (PathScope.Contains(source, identity) || PathScope.Contains(identity, source))
         {
             throw new InvalidOperationException("Catalog and identity roots must be separate directories.");
         }

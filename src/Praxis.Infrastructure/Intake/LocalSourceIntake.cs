@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Common;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
@@ -46,10 +46,10 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
     }
 
     public Task<CapturedOriginal> ImportFileAsync(string sourcePath, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
-        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.SelectedFile(sourcePath), cancellationToken);
+        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureContexts.SelectedFile(sourcePath), cancellationToken);
 
     internal Task<CapturedOriginal> ImportWatchedFileAsync(string sourcePath, string approvedRoot, long maxBytes, string requestKey, string expectedDigest, long expectedLength, CancellationToken cancellationToken = default) =>
-        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureRequestContext.WatchedFolder(approvedRoot), cancellationToken, expectedDigest, expectedLength);
+        ImportFileCoreAsync(sourcePath, maxBytes, requestKey, CaptureContexts.WatchedFolder(approvedRoot), cancellationToken, expectedDigest, expectedLength);
 
     private async Task<CapturedOriginal> ImportFileCoreAsync(string sourcePath, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken, string? expectedDigest = null, long? expectedLength = null)
     {
@@ -107,7 +107,7 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
         }
 
         List<ImportedFile> imported = new(paths.Count);
-        CaptureRequestContext capture = CaptureRequestContext.SelectedFolder(root);
+        CaptureRequestContext capture = CaptureContexts.SelectedFolder(root);
         remaining = maxTotalBytes;
         foreach (string path in paths)
         {
@@ -130,8 +130,8 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
         }
 
         string full = Path.GetFullPath(sourcePath);
-        string dataRoot = CatalogPaths.ResolveExisting(catalog.DataDirectory);
-        if (CatalogPaths.Contains(dataRoot, CatalogPaths.ResolveExisting(full)))
+        string dataRoot = FileSystemPaths.ResolveExisting(catalog.DataDirectory);
+        if (PathScope.Contains(dataRoot, FileSystemPaths.ResolveExisting(full)))
         {
             throw new InvalidOperationException("The data store cannot be imported as a source.");
         }
@@ -146,7 +146,7 @@ public sealed class LocalSourceIntake(SqliteCatalog catalog)
         // The leaf is not a link, so canonicalizing only normalizes linked ancestors.
         return isDirectory != expectDirectory
             ? throw new InvalidDataException("The selected source has an unexpected file type.")
-            : CatalogPaths.Canonicalize(full);
+            : FileSystemPaths.Canonicalize(full);
     }
 
     private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth, CancellationToken cancellationToken)

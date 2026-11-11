@@ -1,13 +1,14 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Application.Processing;
+using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -51,13 +52,13 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         Assert.Equal(["Praxis", "Storage", "Search", "SQLite"], proposals.Select(proposal => proposal.Value));
         Assert.All(proposals, proposal =>
         {
-            Assert.Equal(LocalProcessors.SemanticExtraction, proposal.Producer);
+            Assert.Equal(ProcessorKeys.SemanticExtraction, proposal.Producer);
             Assert.Equal("pending", proposal.Status);
             Assert.Equal(Document.Substring(proposal.EvidenceOffset, proposal.Evidence.Length), proposal.Evidence);
         });
         Assert.Equal("technology", proposals.Single(proposal => proposal.Value == "SQLite").EntityType);
         Assert.Null(proposals.Single(proposal => proposal.Value == "Search").EntityType);
-        Assert.Equal("generated", catalog.Proposals.Outcome(source.SourceId, LocalProcessors.SemanticExtraction));
+        Assert.Equal("generated", catalog.Proposals.Outcome(source.SourceId, ProcessorKeys.SemanticExtraction));
         Assert.Equal(2, model.Requests.Count);
         Assert.All(model.Requests, request => Assert.Equal(4_096, request.ContextTokens));
 
@@ -84,8 +85,8 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         await CaptureAndPrepare(catalog, "notes.md", Document);
         List<string> reports = new List<string>();
         ScriptedChatModel model = new ScriptedChatModel(_ => "{}") { DescribeFailure = InferenceFailure.Unavailable };
-        LocalProcessingPipeline pipeline = new LocalProcessingPipeline(catalog,
-            [new LocalSemanticExtractor(catalog, _ => new ModelConnection(model))],
+        ProcessingPipeline pipeline = new ProcessingPipeline(catalog.Processing,
+            [new LocalSemanticExtractor(catalog, _ => new ModelConnection(model))], TimeProvider.System,
             status: reports.Add);
 
         Assert.True(await pipeline.ProcessNextAsync());
@@ -121,7 +122,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
             await CaptureAndPrepare(catalog, "other.md", Document + "changed");
             Assert.True(await Extractor(catalog, broken).ProcessNextAsync());
             ProcessingJob failed = catalog.Processing.List().Single(job =>
-                job.ProcessorKey == LocalProcessors.SemanticExtraction && job.State == "failed");
+                job.ProcessorKey == ProcessorKeys.SemanticExtraction && job.State == "failed");
             Assert.Equal("model_invalid_response", failed.FailureCode);
         }
     }
@@ -144,7 +145,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         Assert.Single(model.Requests);
         Assert.Empty(catalog.Proposals.List(source.SourceId));
         Assert.Equal("canceled", catalog.Processing.List().Single(job =>
-            job.ProcessorKey == LocalProcessors.SemanticExtraction && job.Revision == 1).State);
+            job.ProcessorKey == ProcessorKeys.SemanticExtraction && job.Revision == 1).State);
     }
 
     [Fact]
@@ -162,7 +163,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         Assert.True(await Extractor(catalog, obedient).ProcessNextAsync());
 
         Assert.Empty(catalog.Proposals.List(source.SourceId));
-        Assert.Equal("abstained", catalog.Proposals.Outcome(source.SourceId, LocalProcessors.SemanticExtraction));
+        Assert.Equal("abstained", catalog.Proposals.Outcome(source.SourceId, ProcessorKeys.SemanticExtraction));
         string system = obedient.Requests.Single().Messages[0].Content;
         Assert.Contains("untrusted data", system, StringComparison.Ordinal);
     }
@@ -210,13 +211,13 @@ public sealed class LocalSemanticExtractorTests : IDisposable
             "ollama", "http://127.0.0.1:11434", "qwen:9b", 16_384, Enabled: true));
 
     private static ProcessingJob SemanticJob(SqliteCatalog catalog) =>
-        catalog.Processing.List().Single(job => job.ProcessorKey == LocalProcessors.SemanticExtraction);
+        catalog.Processing.List().Single(job => job.ProcessorKey == ProcessorKeys.SemanticExtraction);
 
     private async Task<CapturedOriginal> CaptureAndPrepare(SqliteCatalog catalog, string name, string text)
     {
         CapturedOriginal captured = await Capture(catalog, name, text);
         ProcessingDriver text1 = ProcessingDriver.Text(catalog);
-        ProcessingDriver segments = new ProcessingDriver(catalog, new LocalTextSegmenter(catalog));
+        ProcessingDriver segments = new ProcessingDriver(catalog, new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing));
         while (await text1.ProcessNextAsync() | await segments.ProcessNextAsync())
         {
         }

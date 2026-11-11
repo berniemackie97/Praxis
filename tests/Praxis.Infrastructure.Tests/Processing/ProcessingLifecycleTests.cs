@@ -4,7 +4,6 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -45,7 +44,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(2, catalog.Processing.List().Count);
 
         Assert.False(catalog.Processing.Queue(next.ItemId, next.Revision,
-            LocalProcessors.SourceText));
+            ProcessorKeys.SourceText));
         Assert.True(catalog.Processing.Queue(next.ItemId, next.Revision, "another-v2"));
         Assert.Equal(3, catalog.Processing.List().Count);
         Assert.False(catalog.Processing.Queue(Guid.NewGuid(), 1, "another-v2"));
@@ -55,60 +54,65 @@ public sealed class ProcessingLifecycleTests : IDisposable
     public async Task ClaimedJobSurvivesRestartAndExpiredLeaseIsFenced()
     {
         DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);
+        ManualTimeProvider clock = new(time);
         ProcessingLease first;
-        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root, clock))
         {
             using MemoryStream data = new([1, 2]);
             await catalog.Originals.CaptureFileAsync(Source("a"), data, 100, "submit");
             first = Assert.IsType<ProcessingLease>(
-                catalog.Processing.TryClaim(TimeSpan.FromSeconds(10), nowUtc: time));
+                catalog.Processing.TryClaim(TimeSpan.FromSeconds(10)));
             Assert.Equal(1, Assert.Single(catalog.Processing.List()).Attempt);
-            Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(10),
-                nowUtc: time.AddSeconds(5)));
+            clock.UtcNow = time.AddSeconds(5);
+            Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(10)));
         }
 
-        using SqliteCatalog reopened = SqliteCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root, clock);
+        clock.UtcNow = time.AddSeconds(11);
         ProcessingLease second = Assert.IsType<ProcessingLease>(reopened.Processing.TryClaim(
-            TimeSpan.FromSeconds(10), nowUtc: time.AddSeconds(11)));
+            TimeSpan.FromSeconds(10)));
         Assert.NotEqual(first.LeaseKey, second.LeaseKey);
-        Assert.False(reopened.Processing.Finish(first, ProcessingCompletion.Completed,
-            nowUtc: time.AddSeconds(12)));
-        Assert.False(reopened.Processing.Finish(second, ProcessingCompletion.Completed,
-            nowUtc: time.AddSeconds(21)));
-        Assert.True(reopened.Processing.Finish(second, ProcessingCompletion.Unsupported,
-            nowUtc: time.AddSeconds(12)));
+        clock.UtcNow = time.AddSeconds(12);
+        Assert.False(reopened.Processing.Finish(first, ProcessingCompletion.Completed));
+        clock.UtcNow = time.AddSeconds(21);
+        Assert.False(reopened.Processing.Finish(second, ProcessingCompletion.Completed));
+        clock.UtcNow = time.AddSeconds(12);
+        Assert.True(reopened.Processing.Finish(second, ProcessingCompletion.Unsupported));
         ProcessingJob job = Assert.Single(reopened.Processing.List());
         Assert.Equal("unsupported", job.State);
         Assert.Equal(2, job.TotalAttempts);
         Assert.Null(job.LeaseUntil);
-        Assert.Null(reopened.Processing.TryClaim(TimeSpan.FromSeconds(1),
-            nowUtc: time.AddMinutes(1)));
+        clock.UtcNow = time.AddMinutes(1);
+        Assert.Null(reopened.Processing.TryClaim(TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
     public async Task AttemptExhaustionRequiresExplicitRetryAndPreservesTotalAttempts()
     {
-        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);
+        ManualTimeProvider clock = new(time);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
         using MemoryStream content = new([2]);
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("b"), content, 10, "submit");
-        DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);
         ProcessingLease first = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(1), maxAttempts: 2, nowUtc: time));
+            TimeSpan.FromSeconds(1), maxAttempts: 2));
+        clock.UtcNow = time.AddSeconds(2);
         ProcessingLease second = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(1), maxAttempts: 2, nowUtc: time.AddSeconds(2)));
+            TimeSpan.FromSeconds(1), maxAttempts: 2));
         Assert.NotEqual(first.LeaseKey, second.LeaseKey);
-        Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(1),
-            maxAttempts: 2, nowUtc: time.AddSeconds(4)));
+        clock.UtcNow = time.AddSeconds(4);
+        Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(1), maxAttempts: 2));
         ProcessingJob failed = Assert.Single(catalog.Processing.List());
         Assert.Equal("failed", failed.State);
         Assert.Equal("attempt_limit", failed.FailureCode);
         Assert.Equal(2, failed.TotalAttempts);
-        Assert.True(catalog.Processing.Retry(saved.ItemId, 1, LocalProcessors.SourceText));
-        Assert.False(catalog.Processing.Retry(saved.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Retry(saved.ItemId, 1, ProcessorKeys.SourceText));
+        Assert.False(catalog.Processing.Retry(saved.ItemId, 1, ProcessorKeys.SourceText));
+        clock.UtcNow = time.AddSeconds(5);
         ProcessingLease next = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(2), maxAttempts: 2, nowUtc: time.AddSeconds(5)));
-        Assert.True(catalog.Processing.Finish(next, ProcessingCompletion.Failed,
-            "invalid_content", nowUtc: time.AddSeconds(6)));
+            TimeSpan.FromSeconds(2), maxAttempts: 2));
+        clock.UtcNow = time.AddSeconds(6);
+        Assert.True(catalog.Processing.Finish(next, ProcessingCompletion.Failed, "invalid_content"));
         ProcessingJob job = Assert.Single(catalog.Processing.List());
         Assert.Equal(3, job.TotalAttempts);
         Assert.Equal("invalid_content", job.FailureCode);
@@ -124,12 +128,12 @@ public sealed class ProcessingLifecycleTests : IDisposable
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("c"), content, 10, "submit");
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
             TimeSpan.FromHours(1)));
-        Assert.True(catalog.Processing.Cancel(saved.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Cancel(saved.ItemId, 1, ProcessorKeys.SourceText));
         Assert.False(catalog.Processing.Finish(lease, ProcessingCompletion.Completed));
-        Assert.True(catalog.Processing.Retry(saved.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Retry(saved.ItemId, 1, ProcessorKeys.SourceText));
         Assert.True(catalog.Sources.Revoke(saved.SourceId));
         Assert.False(catalog.Sources.Revoke(saved.SourceId));
-        Assert.False(catalog.Processing.Retry(saved.ItemId, 1, LocalProcessors.SourceText));
+        Assert.False(catalog.Processing.Retry(saved.ItemId, 1, ProcessorKeys.SourceText));
         Assert.False(catalog.Processing.Queue(saved.ItemId, 1, "some-other-v1"));
         Assert.Equal("canceled", Assert.Single(catalog.Processing.List()).State);
         await catalog.Originals.VerifyAsync(saved.ItemId);
@@ -148,7 +152,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
             using MemoryStream content = new([7]);
             CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("a"), content, 10, "one");
             Assert.True(catalog.Processing.Cancel(saved.ItemId, 1,
-                LocalProcessors.SourceText));
+                ProcessorKeys.SourceText));
             await catalog.Recovery.BackupAsync(backup, 10_000_000);
         }
 

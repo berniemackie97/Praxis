@@ -20,7 +20,7 @@ internal sealed class SourceLocatorCanonicalizer(SqliteCatalog catalog, Action<s
             string canonical;
             try
             {
-                canonical = CatalogPaths.Canonicalize(locator);
+                canonical = FileSystemPaths.Canonicalize(locator);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
             {

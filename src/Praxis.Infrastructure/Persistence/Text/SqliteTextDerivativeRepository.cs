@@ -1,26 +1,28 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Text;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Persistence.Processing;
 
-namespace Praxis.Infrastructure.Processing;
-
-internal sealed record LeasedTextSource(string SourceKind, string Locator, OriginalObject Original);
-
-/// <summary>Verified extracted text handed to a downstream processor holding a lease.</summary>
-internal sealed record LeasedText(string Digest, string Content, string SourceKind, string Locator);
+namespace Praxis.Infrastructure.Persistence.Text;
 
 /// <summary>
 /// Revision- and digest-bound text extracted from immutable originals. A result is committed
 /// atomically with its job's terminal state and is readable only while its source is active.
 /// </summary>
-public sealed class LocalTextDerivatives
+public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
 {
     private readonly CatalogDatabase database;
 
-    internal LocalTextDerivatives(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteTextDerivativeRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     public TextDerivative? Read(Guid itemId, int revision)
     {
@@ -44,11 +46,11 @@ public sealed class LocalTextDerivatives
                                                                      AND d.processor_key = $processor AND s.status = 'active'
                                                                      AND j.state = d.outcome
                                                                    """);
-            ProcessingJobKey.Bind(command, itemId, revision, LocalProcessors.SourceText);
+            ProcessingJobParameters.Bind(command, itemId, revision, ProcessorKeys.SourceText);
             using SqliteDataReader reader = command.ExecuteReader();
             return reader.Read()
                 ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,
-                    LocalProcessors.SourceText, reader.GetString(1), reader.GetString(2),
+                    ProcessorKeys.SourceText, reader.GetString(1), reader.GetString(2),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
                     CatalogValues.ParseTimestamp(reader.GetString(5)))
@@ -56,7 +58,7 @@ public sealed class LocalTextDerivatives
         });
     }
 
-    internal LeasedTextSource? ReadLeasedSource(ProcessingLease lease)
+    public LeasedTextSource? ReadLeasedSource(ProcessingLease lease)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         return database.Execute(connection =>
@@ -73,8 +75,8 @@ public sealed class LocalTextDerivatives
                                                                      AND j.lease_key = $lease AND j.lease_until_utc > $now
                                                                      AND s.status = 'active'
                                                                    """);
-            ProcessingJobKey.BindLease(command, lease);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            ProcessingJobParameters.BindLease(command, lease);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             using SqliteDataReader reader = command.ExecuteReader();
             return reader.Read()
                 ? new LeasedTextSource(reader.GetString(0), reader.GetString(1),
@@ -87,7 +89,7 @@ public sealed class LocalTextDerivatives
     /// Completed, digest-matched text of the leased job's revision for a downstream processor,
     /// or null when the lease is no longer held or the source was revoked.
     /// </summary>
-    internal LeasedText? ReadLeasedInput(ProcessingLease lease)
+    public LeasedText? ReadLeasedInput(ProcessingLease lease)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         return database.Execute(connection =>
@@ -108,8 +110,8 @@ public sealed class LocalTextDerivatives
                                                                    AND j.lease_key = $lease AND j.lease_until_utc > $now
                                                                    AND s.status = 'active'
                                                                  """);
-            ProcessingJobKey.BindLease(query, lease);
-            query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            ProcessingJobParameters.BindLease(query, lease);
+            query.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             using SqliteDataReader reader = query.ExecuteReader();
             return reader.Read()
                 ? new LeasedText(reader.GetString(0), reader.GetString(1),
@@ -118,7 +120,7 @@ public sealed class LocalTextDerivatives
         });
     }
 
-    internal bool CommitResult(ProcessingLease lease, string? content, string? reasonCode)
+    public bool CommitResult(ProcessingLease lease, string? content, string? reasonCode)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         if ((content is null) == (reasonCode is null))
@@ -127,18 +129,17 @@ public sealed class LocalTextDerivatives
         }
 
         if (content is not null &&
-            Encoding.UTF8.GetByteCount(content) > LocalTextProcessor.MaximumTextBytes)
+            Encoding.UTF8.GetByteCount(content) > TextLimits.MaximumTextBytes)
         {
             throw new ArgumentOutOfRangeException(nameof(content));
         }
 
-        if (reasonCode is not null && (reasonCode.Length is < 1 or > 64 ||
-            reasonCode.Any(c => c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '_'))))
+        if (reasonCode is not null && !ProcessingCodes.IsValid(reasonCode))
         {
             throw new ArgumentException("Use a bounded unsupported reason code.", nameof(reasonCode));
         }
 
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -154,7 +155,7 @@ public sealed class LocalTextDerivatives
                                                                     AND s.status = 'active'
                                                                   """);
             source.Transaction = transaction;
-            ProcessingJobKey.BindLease(source, lease);
+            ProcessingJobParameters.BindLease(source, lease);
             source.Parameters.AddWithValue("$now", now);
             if (source.ExecuteScalar() is not string sourceDigest)
             {
@@ -170,7 +171,7 @@ public sealed class LocalTextDerivatives
                                                                           $outcome, $content, $reason, $now)
                                                                   """);
             insert.Transaction = transaction;
-            ProcessingJobKey.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
+            ProcessingJobParameters.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
             insert.Parameters.AddWithValue("$digest", sourceDigest);
             insert.Parameters.AddWithValue("$outcome", outcome);
             insert.Parameters.AddWithValue("$content", (object?)content ?? DBNull.Value);
@@ -187,7 +188,7 @@ public sealed class LocalTextDerivatives
                                                                     AND lease_key = $lease AND lease_until_utc > $now
                                                                   """);
             finish.Transaction = transaction;
-            ProcessingJobKey.BindLease(finish, lease);
+            ProcessingJobParameters.BindLease(finish, lease);
             finish.Parameters.AddWithValue("$outcome", outcome);
             finish.Parameters.AddWithValue("$now", now);
             if (finish.ExecuteNonQuery() != 1)
@@ -197,7 +198,7 @@ public sealed class LocalTextDerivatives
 
             if (content is not null)
             {
-                LocalProcessingQueue.QueueDependents(connection, transaction,
+                SqliteProcessingQueue.QueueDependents(connection, transaction,
                     lease.ItemId, lease.Revision, lease.ProcessorKey, now);
             }
 
@@ -210,7 +211,7 @@ public sealed class LocalTextDerivatives
     /// Reopens one active, current source previously classified unsupported only because its
     /// extension had no decoder. Every other recorded outcome remains immutable.
     /// </summary>
-    internal bool RequeueNewlySupported(IReadOnlyList<string> extensions)
+    public bool RequeueNewlySupported(IReadOnlyList<string> extensions)
     {
         if (extensions.Count == 0)
         {
@@ -283,7 +284,7 @@ public sealed class LocalTextDerivatives
             requeue.Transaction = transaction;
             requeue.Parameters.AddWithValue("$item", item);
             requeue.Parameters.AddWithValue("$revision", revision);
-            requeue.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
+            requeue.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
             if (requeue.ExecuteNonQuery() != 1)
             {
                 throw new InvalidOperationException("The unsupported processing job changed.");

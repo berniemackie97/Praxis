@@ -1,15 +1,15 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Library;
 using Praxis.Domain.Library;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Library;
+namespace Praxis.Infrastructure.Persistence.Library;
 
 /// <summary>Read model of the latest revision of each item with its text-processing state.</summary>
-public sealed class LocalLibrary
+public sealed class SqliteLibraryReader : ILibraryReader
 {
     private readonly CatalogDatabase database;
 
-    internal LocalLibrary(CatalogDatabase database) => this.database = database;
+    internal SqliteLibraryReader(CatalogDatabase database) => this.database = database;
 
     public IReadOnlyList<LibraryItem> List(int limit = 100, int offset = 0, Guid? collectionId = null)
     {

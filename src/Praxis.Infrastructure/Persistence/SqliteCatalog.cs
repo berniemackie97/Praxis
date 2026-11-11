@@ -1,16 +1,18 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.Collections;
 using Praxis.Infrastructure.Enrichment;
+using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Library;
 using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Models;
-using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence.Library;
+using Praxis.Infrastructure.Persistence.Originals;
+using Praxis.Infrastructure.Persistence.Processing;
+using Praxis.Infrastructure.Persistence.Sources;
+using Praxis.Infrastructure.Persistence.Text;
 using Praxis.Infrastructure.Persistence.Verification;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Search;
-using Praxis.Infrastructure.Sources;
 
 namespace Praxis.Infrastructure.Persistence;
 
@@ -27,12 +29,12 @@ public sealed class SqliteCatalog : IDisposable
     public string DataDirectory { get; }
     public int SchemaVersion => CatalogSchema.CurrentVersion;
 
-    public LocalSources Sources { get; }
-    public LocalOriginals Originals { get; }
-    public LocalLibrary Library { get; }
-    public LocalProcessingQueue Processing { get; }
-    public LocalTextDerivatives Text { get; }
-    public LocalTextSegments Segments { get; }
+    public SqliteSourceRepository Sources { get; }
+    public SqliteOriginalStore Originals { get; }
+    public SqliteLibraryReader Library { get; }
+    public SqliteProcessingQueue Processing { get; }
+    public SqliteTextDerivativeRepository Text { get; }
+    public SqliteTextSegmentRepository Segments { get; }
     public LocalTextSearch Search { get; }
     public LocalSemanticIndex Embeddings { get; }
     public LocalHybridSearch Hybrid { get; }
@@ -52,12 +54,12 @@ public sealed class SqliteCatalog : IDisposable
         database = new CatalogDatabase(connection);
         OriginalFileStore objects = new(dataDirectory);
 
-        Sources = new LocalSources(database);
-        Processing = new LocalProcessingQueue(database);
-        Originals = new LocalOriginals(database, objects, dataDirectory);
-        Library = new LocalLibrary(database);
-        Text = new LocalTextDerivatives(database);
-        Segments = new LocalTextSegments(database);
+        Sources = new SqliteSourceRepository(database, clock);
+        Processing = new SqliteProcessingQueue(database, clock);
+        Originals = new SqliteOriginalStore(database, objects, dataDirectory, clock);
+        Library = new SqliteLibraryReader(database);
+        Text = new SqliteTextDerivativeRepository(database, clock);
+        Segments = new SqliteTextSegmentRepository(database, clock);
         Search = new LocalTextSearch(database);
         Embeddings = new LocalSemanticIndex(database);
         Hybrid = new LocalHybridSearch(Search, Embeddings);

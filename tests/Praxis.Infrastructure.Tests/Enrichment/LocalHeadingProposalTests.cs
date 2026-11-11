@@ -1,10 +1,10 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -47,7 +47,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         {
             Assert.Equal(captured.ItemId, proposal.ItemId);
             Assert.Equal(captured.Sha256, proposal.SourceSha256);
-            Assert.Equal(LocalProcessors.MarkdownHeadings, proposal.Producer);
+            Assert.Equal(ProcessorKeys.MarkdownHeadings, proposal.Producer);
             Assert.Equal(proposal.Evidence, content.Substring(proposal.EvidenceOffset,
                 proposal.Evidence.Length));
             Assert.Equal("pending", proposal.Status);
@@ -105,7 +105,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         CapturedOriginal source = await Capture(catalog, "fenced.md", "# Fenced topic\n", "fenced");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.MarkdownHeadings));
+            TimeSpan.FromMinutes(1), processorKey: ProcessorKeys.MarkdownHeadings));
         LeasedText candidate = Assert.IsType<LeasedText>(catalog.Text.ReadLeasedInput(lease));
 
         Assert.True(catalog.Sources.Revoke(source.SourceId));

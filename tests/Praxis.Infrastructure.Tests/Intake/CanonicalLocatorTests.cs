@@ -41,10 +41,10 @@ public sealed class CanonicalLocatorTests : IDisposable
     [Fact]
     public void CanonicalFormResolvesLinkedAncestorsAndKeepsMissingRemainder()
     {
-        Assert.Equal(Path.Combine(realInbox, "note.md"), CatalogPaths.Canonicalize(Path.Combine(aliasInbox, "note.md")));
-        Assert.Equal(Path.Combine(realInbox, "later", "x.md"), CatalogPaths.Canonicalize(Path.Combine(aliasInbox, "later", "x.md")));
-        Assert.Equal(realInbox, CatalogPaths.Canonicalize(realInbox));
-        Assert.Equal(realInbox, CatalogPaths.Canonicalize(aliasInbox + Path.DirectorySeparatorChar));
+        Assert.Equal(Path.Combine(realInbox, "note.md"), FileSystemPaths.Canonicalize(Path.Combine(aliasInbox, "note.md")));
+        Assert.Equal(Path.Combine(realInbox, "later", "x.md"), FileSystemPaths.Canonicalize(Path.Combine(aliasInbox, "later", "x.md")));
+        Assert.Equal(realInbox, FileSystemPaths.Canonicalize(realInbox));
+        Assert.Equal(realInbox, FileSystemPaths.Canonicalize(aliasInbox + Path.DirectorySeparatorChar));
     }
 
     [Fact]

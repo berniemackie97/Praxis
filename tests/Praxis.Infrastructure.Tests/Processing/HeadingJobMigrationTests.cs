@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -45,7 +45,7 @@ public sealed class HeadingJobMigrationTests : IDisposable
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Dictionary<(Guid ItemId, int Revision), string> headings = catalog.Processing.List()
-            .Where(job => job.ProcessorKey == LocalProcessors.MarkdownHeadings)
+            .Where(job => job.ProcessorKey == ProcessorKeys.MarkdownHeadings)
             .ToDictionary(job => (job.ItemId, job.Revision), job => job.State);
 
         Assert.Equal(4, headings.Count);

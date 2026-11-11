@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Common;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Recovery;
@@ -103,7 +103,7 @@ internal static class SnapshotFiles
         }
 
         string root = CheckPrivateDirectory(Path.GetFullPath(backupDirectory));
-        root = CheckPrivateDirectory(CatalogPaths.ResolveExisting(root));
+        root = CheckPrivateDirectory(FileSystemPaths.ResolveExisting(root));
         HashSet<string> allowed = new(StringComparer.Ordinal)
         {
             "catalog.sqlite", "manifest.json", "objects"
@@ -129,9 +129,9 @@ internal static class SnapshotFiles
         string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         string parent = Path.GetDirectoryName(full) ?? throw new ArgumentException("A destination parent is required.", nameof(path));
         CheckPrivateDirectory(parent);
-        string resolvedParent = CheckPrivateDirectory(CatalogPaths.ResolveExisting(parent));
+        string resolvedParent = CheckPrivateDirectory(FileSystemPaths.ResolveExisting(parent));
         string destination = Path.Combine(resolvedParent, Path.GetFileName(full));
-        if (CatalogPaths.Contains(CatalogPaths.ResolveExisting(disallowedRoot), destination))
+        if (PathScope.Contains(FileSystemPaths.ResolveExisting(disallowedRoot), destination))
         {
             throw new InvalidOperationException("The destination cannot be inside the source.");
         }

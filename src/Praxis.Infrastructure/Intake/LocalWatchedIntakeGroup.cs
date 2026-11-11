@@ -1,3 +1,4 @@
+using Praxis.Domain.Common;
 using Praxis.Domain.Intake;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence;
@@ -25,7 +26,7 @@ public sealed class LocalWatchedIntakeGroup
             throw new ArgumentOutOfRangeException(nameof(approvedRoots), "Select between one and four watched folders.");
         }
 
-        string dataRoot = CatalogPaths.Canonicalize(catalog.DataDirectory);
+        string dataRoot = FileSystemPaths.Canonicalize(catalog.DataDirectory);
         List<string> roots = new(approvedRoots.Count);
         foreach (string candidate in approvedRoots)
         {
@@ -35,9 +36,9 @@ public sealed class LocalWatchedIntakeGroup
                 throw new ArgumentException("Every approved intake directory must be absolute.", nameof(approvedRoots));
             }
 
-            string path = CatalogPaths.Canonicalize(candidate);
-            if (CatalogPaths.Contains(dataRoot, path) || CatalogPaths.Contains(path, dataRoot) ||
-                roots.Any(existing => CatalogPaths.Contains(existing, path) || CatalogPaths.Contains(path, existing)))
+            string path = FileSystemPaths.Canonicalize(candidate);
+            if (PathScope.Contains(dataRoot, path) || PathScope.Contains(path, dataRoot) ||
+                roots.Any(existing => PathScope.Contains(existing, path) || PathScope.Contains(path, existing)))
             {
                 throw new ArgumentException("Watched folders cannot overlap each other or the private catalog.", nameof(approvedRoots));
             }
@@ -83,7 +84,7 @@ public sealed class LocalWatchedIntakeGroup
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
         LocalWatchedIntake? monitor = monitors.FirstOrDefault(candidate =>
             Path.IsPathFullyQualified(selectedPath) &&
-            CatalogPaths.Canonicalize(selectedPath) == candidate.RootPath);
+            FileSystemPaths.Canonicalize(selectedPath) == candidate.RootPath);
         if (monitor is null)
         {
             throw new ArgumentException("The selected folder is not approved for intake.", nameof(selectedPath));

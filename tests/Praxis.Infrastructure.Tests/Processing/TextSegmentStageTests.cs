@@ -1,10 +1,11 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Processing;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
+using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -64,32 +65,35 @@ public sealed class TextSegmentStageTests : IDisposable
         await DrainAsync(catalog);
 
         Assert.DoesNotContain(catalog.Processing.List(), job =>
-            job.ItemId == binary.ItemId && job.ProcessorKey == LocalProcessors.TextSegments);
+            job.ItemId == binary.ItemId && job.ProcessorKey == ProcessorKeys.TextSegments);
     }
 
     [Fact]
     public async Task RenewExtendsHeldLeasesAndStopsRevokedOrSupersededWork()
     {
-        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        ManualTimeProvider clock = new(now);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
         CapturedOriginal kept = await Capture(catalog, "kept.txt", "kept", "kept");
         CapturedOriginal revoked = await Capture(catalog, "revoked.txt", "revoked", "revoked");
         CapturedOriginal superseded = await Capture(catalog, "superseded.txt", "old", "superseded");
-        DateTimeOffset now = DateTimeOffset.UtcNow;
         Dictionary<Guid, ProcessingLease> leases = Enumerable.Range(0, 3).Select(_ => Assert.IsType<ProcessingLease>(
-            catalog.Processing.TryClaim(TimeSpan.FromMinutes(1), nowUtc: now,
-                processorKey: LocalProcessors.SourceText))).ToDictionary(lease => lease.ItemId);
+            catalog.Processing.TryClaim(TimeSpan.FromMinutes(1),
+                processorKey: ProcessorKeys.SourceText))).ToDictionary(lease => lease.ItemId);
 
+        clock.UtcNow = now.AddSeconds(30);
         ProcessingLease renewed = Assert.IsType<ProcessingLease>(catalog.Processing.Renew(
-            leases[kept.ItemId], TimeSpan.FromMinutes(10), now.AddSeconds(30)));
+            leases[kept.ItemId], TimeSpan.FromMinutes(10)));
         Assert.Equal(now.AddSeconds(30).AddMinutes(10).UtcDateTime, renewed.LeaseUntil.UtcDateTime);
-        Assert.Null(catalog.Processing.Renew(
-            leases[kept.ItemId], TimeSpan.FromMinutes(1), now.AddMinutes(11)));
+        clock.UtcNow = now.AddMinutes(11);
+        Assert.Null(catalog.Processing.Renew(leases[kept.ItemId], TimeSpan.FromMinutes(1)));
 
+        clock.UtcNow = now;
         Assert.True(catalog.Sources.Revoke(revoked.SourceId));
-        Assert.Null(catalog.Processing.Renew(leases[revoked.ItemId], TimeSpan.FromMinutes(1), now));
+        Assert.Null(catalog.Processing.Renew(leases[revoked.ItemId], TimeSpan.FromMinutes(1)));
 
         await Capture(catalog, "superseded.txt", "new", "superseded-2");
-        Assert.Null(catalog.Processing.Renew(leases[superseded.ItemId], TimeSpan.FromMinutes(1), now));
+        Assert.Null(catalog.Processing.Renew(leases[superseded.ItemId], TimeSpan.FromMinutes(1)));
         Assert.Equal("canceled", catalog.Processing.List().Single(job =>
             job.ItemId == superseded.ItemId && job.Revision == 1).State);
     }
@@ -107,7 +111,7 @@ public sealed class TextSegmentStageTests : IDisposable
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Guid[] backfilled = catalog.Processing.List()
-            .Where(job => job.ProcessorKey == LocalProcessors.TextSegments)
+            .Where(job => job.ProcessorKey == ProcessorKeys.TextSegments)
             .Select(job => job.ItemId).ToArray();
         Assert.Equal(new[] { older, newer }.Order(), backfilled.Order());
 
@@ -116,7 +120,7 @@ public sealed class TextSegmentStageTests : IDisposable
 
         List<Guid> order = new List<Guid>();
         while (catalog.Processing.TryClaim(TimeSpan.FromMinutes(1),
-            processorKey: LocalProcessors.TextSegments) is { } lease)
+            processorKey: ProcessorKeys.TextSegments) is { } lease)
         {
             order.Add(lease.ItemId);
         }
@@ -168,7 +172,7 @@ public sealed class TextSegmentStageTests : IDisposable
 
     private static async Task DrainAsync(SqliteCatalog catalog)
     {
-        LocalProcessingPipeline pipeline = LocalProcessingPipeline.CreateDefault(catalog);
+        ProcessingPipeline pipeline = CatalogProcessing.CreatePipeline(catalog);
         while (await pipeline.ProcessNextAsync())
         {
         }

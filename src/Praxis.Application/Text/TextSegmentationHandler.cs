@@ -1,17 +1,18 @@
+using Praxis.Application.Processing;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Application.Text;
 
 /// <summary>
 /// Segments each revision's completed text so later processors can work on bounded,
 /// citable spans. Markdown structure (headings, fenced code) is respected; other text splits
 /// at blank lines and line boundaries.
 /// </summary>
-public sealed class LocalTextSegmenter(SqliteCatalog catalog) : ILocalProcessingHandler
+public sealed class TextSegmentationHandler(
+    ITextDerivativeRepository derivatives, ITextSegmentRepository segmentStore, IProcessingQueue processing) : IProcessingHandler
 {
-    public string ProcessorKey => LocalProcessors.TextSegments;
+    public string ProcessorKey => ProcessorKeys.TextSegments;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
     public int MaxConcurrency => 1;
 
@@ -20,7 +21,7 @@ public sealed class LocalTextSegmenter(SqliteCatalog catalog) : ILocalProcessing
     public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        LeasedText? input = catalog.Text.ReadLeasedInput(lease);
+        LeasedText? input = derivatives.ReadLeasedInput(lease);
         if (input is null)
         {
             return Task.CompletedTask;
@@ -34,11 +35,11 @@ public sealed class LocalTextSegmenter(SqliteCatalog catalog) : ILocalProcessing
         }
         catch (InvalidDataException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "segment_limit");
+            processing.Finish(lease, ProcessingCompletion.Failed, "segment_limit");
             return Task.CompletedTask;
         }
 
-        catalog.Segments.Commit(lease, input, segments);
+        segmentStore.Commit(lease, input, segments);
         return Task.CompletedTask;
     }
 }

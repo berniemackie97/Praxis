@@ -1,6 +1,6 @@
 using Praxis.Domain.Text;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Application.Text;
 
 /// <summary>
 /// Deterministic, structure-aware segmentation of extracted text. Blocks start at Markdown
@@ -10,17 +10,17 @@ namespace Praxis.Infrastructure.Processing;
 /// Segments are contiguous and cover the whole text exactly. Text without any
 /// non-whitespace character produces no segments.
 /// </summary>
-internal static class TextSegmenter
+public static class TextSegmenter
 {
-    internal const int MinimumCharacters = 200;
-    internal const int TargetCharacters = 1_200;
-    internal const int MaximumCharacters = 2_000;
-    internal const int MaximumSegments = 4_096;
+    public const int MinimumCharacters = 200;
+    public const int TargetCharacters = 1_200;
+    public const int MaximumCharacters = 2_000;
+    public const int MaximumSegments = 4_096;
     private const int MaximumHeadingPath = 512;
 
     private readonly record struct Block(int Start, int End, string? HeadingPath, bool StartsHeading);
 
-    internal static IReadOnlyList<TextSegmentSpan> Segment(string text, bool markdown)
+    public static IReadOnlyList<TextSegmentSpan> Segment(string text, bool markdown)
     {
         if (string.IsNullOrWhiteSpace(text))
         {

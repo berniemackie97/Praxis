@@ -4,9 +4,7 @@ using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Intake;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -133,7 +131,7 @@ public sealed class CaptureRequestContractTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.Originals.CaptureFileAsync(path, bytes, 100, "out-of-scope",
-                CaptureRequestContext.WatchedFolder(otherRoot)));
+                CaptureContexts.WatchedFolder(otherRoot)));
         Assert.Equal(0, bytes.Position);
         Assert.Empty(catalog.Library.List());
 
@@ -156,17 +154,17 @@ public sealed class CaptureRequestContractTests : IDisposable
         CapturedOriginal second = await intake.ImportFileAsync(path, 100, "edition-two");
         Assert.Equal(2, second.Revision);
 
-        Assert.True(catalog.Processing.Cancel(first.ItemId, 1, LocalProcessors.SourceText));
-        Assert.False(catalog.Processing.Retry(first.ItemId, 1, LocalProcessors.SourceText));
+        Assert.True(catalog.Processing.Cancel(first.ItemId, 1, ProcessorKeys.SourceText));
+        Assert.False(catalog.Processing.Retry(first.ItemId, 1, ProcessorKeys.SourceText));
         Assert.False(catalog.Sources.ReadProvenance(first.SourceId, 1)!.RetryEligible);
 
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromSeconds(10), processorKey: LocalProcessors.SourceText));
+            TimeSpan.FromSeconds(10), processorKey: ProcessorKeys.SourceText));
         Assert.Equal(second.ItemId, lease.ItemId);
         Assert.Equal(2, lease.Revision);
         Assert.Equal("running", catalog.Sources.ReadProvenance(second.SourceId)!.ProcessingState);
         Assert.Null(catalog.Processing.TryClaim(TimeSpan.FromSeconds(10),
-            processorKey: LocalProcessors.SourceText));
+            processorKey: ProcessorKeys.SourceText));
     }
 
     [Fact]
@@ -178,7 +176,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal first = await intake.ImportFileAsync(path, 100, "lease-first");
         ProcessingLease older = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.SourceText));
+            TimeSpan.FromMinutes(1), processorKey: ProcessorKeys.SourceText));
         Assert.Equal(first.ItemId, older.ItemId);
 
         File.WriteAllText(path, "second revision");
@@ -189,7 +187,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         Assert.Null(catalog.Processing.Renew(older, TimeSpan.FromSeconds(10)));
         Assert.Equal("canceled", catalog.Sources.ReadProvenance(first.SourceId, 1)!.ProcessingState);
         ProcessingLease current = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.SourceText));
+            TimeSpan.FromMinutes(1), processorKey: ProcessorKeys.SourceText));
         Assert.Equal(newer.Revision, current.Revision);
     }
 
@@ -210,7 +208,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         CapturedOriginal fixedVersion = await intake.ImportFileAsync(path, 100, "malformed-two");
         Assert.Equal(2, fixedVersion.Revision);
         Assert.False(catalog.Sources.ReadProvenance(first.SourceId, 1)!.RetryEligible);
-        Assert.False(catalog.Processing.Retry(first.ItemId, 1, LocalProcessors.SourceText));
+        Assert.False(catalog.Processing.Retry(first.ItemId, 1, ProcessorKeys.SourceText));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal("completed", catalog.Sources.ReadProvenance(first.SourceId)!.ProcessingState);
         Assert.False(catalog.Sources.ReadProvenance(first.SourceId)!.RetryEligible);
@@ -236,7 +234,7 @@ public sealed class CaptureRequestContractTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.Originals.CaptureFileAsync(path, stream, 100, "watch-observation",
-                CaptureRequestContext.WatchedFolder(selectedRoot), default,
+                CaptureContexts.WatchedFolder(selectedRoot), default,
                 earlierDigest, currentBytes.Length));
         Assert.Equal(1, catalog.Sources.ReadProvenance(initial.SourceId)!.Revision);
         Assert.Single(catalog.Sources.ListCaptureReceipts(initial.SourceId));

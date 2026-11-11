@@ -52,7 +52,7 @@ public sealed class LocalWatchedIntake
         }
 
         // Watcher events, scans and stored locators must agree on one spelling of the folder.
-        root = CatalogPaths.Canonicalize(intakeDirectory);
+        root = FileSystemPaths.Canonicalize(intakeDirectory);
         approvedCreationTicks = Directory.Exists(root) ? Directory.GetCreationTimeUtc(root).Ticks : 0;
         this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });
@@ -76,7 +76,7 @@ public sealed class LocalWatchedIntake
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
         if (!Path.IsPathFullyQualified(selectedPath) || !Directory.Exists(selectedPath) ||
             (File.GetAttributes(selectedPath) & FileAttributes.ReparsePoint) != 0 ||
-            CatalogPaths.Canonicalize(selectedPath) != root)
+            FileSystemPaths.Canonicalize(selectedPath) != root)
         {
             throw new ArgumentException("Reapproval requires selecting the same existing, non-linked folder.", nameof(selectedPath));
         }

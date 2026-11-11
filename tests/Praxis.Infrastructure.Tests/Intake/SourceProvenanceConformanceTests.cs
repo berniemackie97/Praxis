@@ -2,10 +2,10 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Domain.Sources;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -159,12 +159,12 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.True(invalid.RetryEligible);
         Assert.False(unknown.RetryEligible);
         SourceProcessingState failed = Assert.Single(catalog.Sources.ListProcessing(
-            invalid.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+            invalid.SourceId), job => job.ProcessorKey == ProcessorKeys.SourceText);
         Assert.Equal("failed", failed.State);
         Assert.True(failed.RetryEligible);
         Assert.Equal("invalid_utf8", failed.FailureCode);
         SourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
-            unsupported.SourceId), job => job.ProcessorKey == LocalProcessors.SourceText);
+            unsupported.SourceId), job => job.ProcessorKey == ProcessorKeys.SourceText);
         Assert.Equal("unsupported", unsupportedJob.State);
         Assert.False(unsupportedJob.RetryEligible);
         Assert.Empty(catalog.Search.Query("asset"));
@@ -229,7 +229,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Equal(1, source.Revision);
         Assert.Matches("^[0-9a-f]{64}$", source.OriginalSha256);
         Assert.True(source.OriginalBytes > 0);
-        Assert.Equal(LocalProcessors.SourceText, source.ProcessorKey);
+        Assert.Equal(ProcessorKeys.SourceText, source.ProcessorKey);
         Assert.Equal("completed", source.ProcessingState);
         Assert.Equal("completed", source.ExtractionOutcome);
         Assert.Null(source.FailureCode);

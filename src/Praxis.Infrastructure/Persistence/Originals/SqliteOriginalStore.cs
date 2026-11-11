@@ -1,23 +1,27 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Originals;
+using Praxis.Domain.Common;
 using Praxis.Domain.Originals;
+using Praxis.Domain.Processing;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
+using Praxis.Infrastructure.Persistence.Processing;
 
-namespace Praxis.Infrastructure.Originals;
+namespace Praxis.Infrastructure.Persistence.Originals;
 
 /// <summary>
 /// Captures, verifies and exports immutable content-addressed originals. A capture commits the
 /// source/item revision, its idempotent request receipt and its initial processing job atomically.
 /// </summary>
-public sealed class LocalOriginals
+public sealed class SqliteOriginalStore : IOriginalStore
 {
     private readonly CatalogDatabase database;
     private readonly OriginalFileStore objects;
     private readonly string dataDirectory;
+    private readonly TimeProvider clock;
 
-    internal LocalOriginals(CatalogDatabase database, OriginalFileStore objects, string dataDirectory)
+    internal SqliteOriginalStore(CatalogDatabase database, OriginalFileStore objects, string dataDirectory, TimeProvider clock)
     {
+        this.clock = clock;
         this.database = database;
         this.objects = objects;
         this.dataDirectory = dataDirectory;
@@ -26,7 +30,7 @@ public sealed class LocalOriginals
     public Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CancellationToken cancellationToken = default) =>
         CaptureFileAsync(sourcePath, content, maxBytes, requestKey, CaptureRequestContext.Unattributed, cancellationToken);
 
-    internal async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken = default, string? expectedDigest = null, long? expectedLength = null)
+    public async Task<CapturedOriginal> CaptureFileAsync(string sourcePath, Stream content, long maxBytes, string requestKey, CaptureRequestContext capture, CancellationToken cancellationToken = default, string? expectedDigest = null, long? expectedLength = null)
     {
         ArgumentNullException.ThrowIfNull(capture);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -77,7 +81,8 @@ public sealed class LocalOriginals
                 return concurrent;
             }
 
-            CapturedOriginal recorded = CommitOriginal(connection, transaction, locator, requestKey, original, capture);
+            CapturedOriginal recorded = CommitOriginal(connection, transaction, locator, requestKey, original, capture,
+                CatalogValues.Timestamp(clock.GetUtcNow()));
             transaction.Commit();
             return recorded;
         });
@@ -92,9 +97,8 @@ public sealed class LocalOriginals
         }
     }
 
-    private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original, CaptureRequestContext capture)
+    private static CapturedOriginal CommitOriginal(SqliteConnection connection, SqliteTransaction transaction, string locator, string requestKey, OriginalObject original, CaptureRequestContext capture, string recordedUtc)
     {
-        string recordedUtc = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
         using (SqliteCommand check = connection.CreateCommand("SELECT byte_length FROM original_objects WHERE digest=$digest"))
         {
             check.Transaction = transaction;
@@ -182,7 +186,7 @@ public sealed class LocalOriginals
             version.Parameters.AddWithValue("$digest", original.Digest);
             version.Parameters.AddWithValue("$recorded", recordedUtc);
             version.ExecuteNonQuery();
-            LocalProcessingQueue.QueueVersion(connection, transaction, itemId, revision, LocalProcessors.SourceText, recordedUtc);
+            SqliteProcessingQueue.QueueVersion(connection, transaction, itemId, revision, ProcessorKeys.SourceText, recordedUtc);
         }
 
         using SqliteCommand receipt = connection.CreateCommand("""
@@ -255,7 +259,7 @@ public sealed class LocalOriginals
     }
 
     /// <summary>Reads a whole original after verifying its recorded length and SHA-256.</summary>
-    internal Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken)
+    public Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken)
         => objects.ReadVerifiedBytesAsync(original, maxBytes, cancellationToken);
 
     public async Task VerifyAsync(Guid itemId, CancellationToken cancellationToken = default)
@@ -305,10 +309,10 @@ public sealed class LocalOriginals
             throw new DirectoryNotFoundException(requestedFolder);
         }
 
-        string resolvedCatalog = CatalogPaths.ResolveExisting(dataDirectory);
-        string folder = CatalogPaths.ResolveExisting(requestedFolder);
+        string resolvedCatalog = FileSystemPaths.ResolveExisting(dataDirectory);
+        string folder = FileSystemPaths.ResolveExisting(requestedFolder);
         string destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
-        if (CatalogPaths.Contains(resolvedCatalog, destination))
+        if (PathScope.Contains(resolvedCatalog, destination))
         {
             throw new InvalidOperationException("An export cannot be written inside the private catalog.");
         }

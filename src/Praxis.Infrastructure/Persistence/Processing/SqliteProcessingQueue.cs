@@ -1,18 +1,24 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Processing;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Infrastructure.Persistence.Processing;
 
 /// <summary>
 /// Durable, leased processing jobs keyed by immutable item revision and processor.
 /// Leases fence stale workers; attempt budgets bound retries; only active sources are claimable.
 /// </summary>
-public sealed class LocalProcessingQueue
+public sealed class SqliteProcessingQueue : IProcessingQueue
 {
     private readonly CatalogDatabase database;
 
-    internal LocalProcessingQueue(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteProcessingQueue(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     public IReadOnlyList<ProcessingJob> List(int limit = 100)
     {
@@ -48,7 +54,7 @@ public sealed class LocalProcessingQueue
     public bool Queue(Guid itemId, int revision, string processorKey)
     {
         ProcessingJobKey.Validate(itemId, revision, processorKey);
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
@@ -65,13 +71,13 @@ public sealed class LocalProcessingQueue
                                                                          WHERE latest.item_id = v.item_id)
                                                                    ON CONFLICT(item_id, revision, processor_key) DO NOTHING
                                                                    """);
-            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
+            ProcessingJobParameters.Bind(command, itemId, revision, processorKey);
             command.Parameters.AddWithValue("$now", now);
             return command.ExecuteNonQuery() != 0;
         });
     }
 
-    public ProcessingLease? TryClaim(TimeSpan leaseDuration, int maxAttempts = 3, DateTimeOffset? nowUtc = null, string? processorKey = null)
+    public ProcessingLease? TryClaim(TimeSpan leaseDuration, int maxAttempts = 3, string? processorKey = null)
     {
         if (leaseDuration < TimeSpan.FromSeconds(1) || leaseDuration > TimeSpan.FromHours(1))
         {
@@ -88,7 +94,7 @@ public sealed class LocalProcessingQueue
             ProcessingJobKey.ValidateProcessor(processorKey);
         }
 
-        DateTimeOffset time = nowUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset time = clock.GetUtcNow();
         string now = CatalogValues.Timestamp(time);
         DateTimeOffset leaseUntil = time.ToUniversalTime().Add(leaseDuration);
         return database.Execute(connection =>
@@ -140,7 +146,7 @@ public sealed class LocalProcessingQueue
                                                                  WHERE item_id = $item AND revision = $revision AND processor_key = $processor
                                                                  """);
             claim.Transaction = transaction;
-            ProcessingJobKey.BindLease(claim, lease);
+            ProcessingJobParameters.BindLease(claim, lease);
             claim.Parameters.AddWithValue("$until", CatalogValues.Timestamp(leaseUntil));
             claim.Parameters.AddWithValue("$now", now);
             if (claim.ExecuteNonQuery() != 1)
@@ -153,7 +159,7 @@ public sealed class LocalProcessingQueue
         });
     }
 
-    public bool Finish(ProcessingLease lease, ProcessingCompletion completion, string? failureCode = null, DateTimeOffset? nowUtc = null)
+    public bool Finish(ProcessingLease lease, ProcessingCompletion completion, string? failureCode = null)
     {
         ArgumentNullException.ThrowIfNull(lease);
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
@@ -171,8 +177,7 @@ public sealed class LocalProcessingQueue
         };
         if (completion == ProcessingCompletion.Failed)
         {
-            if (string.IsNullOrEmpty(failureCode) || failureCode.Length > 64 ||
-                failureCode.Any(c => c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '_')))
+            if (!ProcessingCodes.IsValid(failureCode))
             {
                 throw new ArgumentException("Use a bounded non-sensitive failure code.", nameof(failureCode));
             }
@@ -182,7 +187,7 @@ public sealed class LocalProcessingQueue
             throw new ArgumentException("Only failed processing accepts a failure code.", nameof(failureCode));
         }
 
-        string now = CatalogValues.Timestamp(nowUtc ?? DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -204,7 +209,7 @@ public sealed class LocalProcessingQueue
             command.Parameters.AddWithValue("$state", state);
             command.Parameters.AddWithValue("$failure", (object?)failureCode ?? DBNull.Value);
             command.Parameters.AddWithValue("$now", now);
-            ProcessingJobKey.BindLease(command, lease);
+            ProcessingJobParameters.BindLease(command, lease);
             if (command.ExecuteNonQuery() != 1)
             {
                 return false;
@@ -226,8 +231,7 @@ public sealed class LocalProcessingQueue
     /// source revoked. When a newer revision has been captured the job is canceled instead, so
     /// expensive work on superseded content stops at the next renewal.
     /// </summary>
-    public ProcessingLease? Renew(
-        ProcessingLease lease, TimeSpan extension, DateTimeOffset? nowUtc = null)
+    public ProcessingLease? Renew(ProcessingLease lease, TimeSpan extension)
     {
         ArgumentNullException.ThrowIfNull(lease);
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
@@ -236,7 +240,7 @@ public sealed class LocalProcessingQueue
             throw new ArgumentOutOfRangeException(nameof(extension));
         }
 
-        DateTimeOffset time = nowUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset time = clock.GetUtcNow();
         string now = CatalogValues.Timestamp(time);
         DateTimeOffset until = time.ToUniversalTime().Add(extension);
         return database.Execute(connection =>
@@ -253,7 +257,7 @@ public sealed class LocalProcessingQueue
                                                                                       AND newer.revision > processing_jobs.revision)
                                                                       """);
             superseded.Transaction = transaction;
-            ProcessingJobKey.BindLease(superseded, lease);
+            ProcessingJobParameters.BindLease(superseded, lease);
             superseded.Parameters.AddWithValue("$now", now);
             if (superseded.ExecuteNonQuery() == 1)
             {
@@ -271,7 +275,7 @@ public sealed class LocalProcessingQueue
                                                                         WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
                                                                   """);
             extend.Transaction = transaction;
-            ProcessingJobKey.BindLease(extend, lease);
+            ProcessingJobParameters.BindLease(extend, lease);
             extend.Parameters.AddWithValue("$until", CatalogValues.Timestamp(until));
             extend.Parameters.AddWithValue("$now", now);
             bool renewed = extend.ExecuteNonQuery() == 1;
@@ -288,7 +292,7 @@ public sealed class LocalProcessingQueue
     {
         ArgumentNullException.ThrowIfNull(lease);
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
@@ -304,7 +308,7 @@ public sealed class LocalProcessingQueue
                                                                                SELECT MAX(latest.revision) FROM item_versions latest
                                                                                WHERE latest.item_id = processing_jobs.item_id))
                                                                    """);
-            ProcessingJobKey.BindLease(command, lease);
+            ProcessingJobParameters.BindLease(command, lease);
             command.Parameters.AddWithValue("$now", now);
             return command.ExecuteNonQuery() == 1;
         });
@@ -328,8 +332,8 @@ public sealed class LocalProcessingQueue
                                                                                SELECT MAX(latest.revision) FROM item_versions latest
                                                                                WHERE latest.item_id = processing_jobs.item_id))
                                                                    """);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
+            ProcessingJobParameters.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
         });
     }
@@ -346,8 +350,8 @@ public sealed class LocalProcessingQueue
                                                                    WHERE item_id = $item AND revision = $revision AND processor_key = $processor
                                                                      AND state IN ('queued', 'running', 'failed')
                                                                    """);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(DateTimeOffset.UtcNow));
-            ProcessingJobKey.Bind(command, itemId, revision, processorKey);
+            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
+            ProcessingJobParameters.Bind(command, itemId, revision, processorKey);
             return command.ExecuteNonQuery() == 1;
         });
     }
@@ -362,7 +366,7 @@ public sealed class LocalProcessingQueue
                                                                VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
                                                                """);
         command.Transaction = transaction;
-        ProcessingJobKey.Bind(command, itemId, revision, processor);
+        ProcessingJobParameters.Bind(command, itemId, revision, processor);
         command.Parameters.AddWithValue("$now", utc);
         command.ExecuteNonQuery();
     }
@@ -393,7 +397,7 @@ public sealed class LocalProcessingQueue
                                                                           WHERE latest.item_id = v.item_id))
                                                               """);
         finish.Transaction = transaction;
-        ProcessingJobKey.BindLease(finish, lease);
+        ProcessingJobParameters.BindLease(finish, lease);
         finish.Parameters.AddWithValue("$digest", digest);
         finish.Parameters.AddWithValue("$now", utc);
         if (finish.ExecuteNonQuery() != 1)
@@ -411,7 +415,7 @@ public sealed class LocalProcessingQueue
     /// </summary>
     internal static void QueueDependents(SqliteConnection connection, SqliteTransaction transaction, Guid itemId, int revision, string completedProcessor, string utc)
     {
-        foreach (string dependent in LocalProcessors.DependentsOf(completedProcessor))
+        foreach (string dependent in ProcessorKeys.DependentsOf(completedProcessor))
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    INSERT INTO processing_jobs
@@ -421,7 +425,7 @@ public sealed class LocalProcessingQueue
                                                                    ON CONFLICT(item_id, revision, processor_key) DO NOTHING
                                                                    """);
             command.Transaction = transaction;
-            ProcessingJobKey.Bind(command, itemId, revision, dependent);
+            ProcessingJobParameters.Bind(command, itemId, revision, dependent);
             command.Parameters.AddWithValue("$now", utc);
             command.ExecuteNonQuery();
         }

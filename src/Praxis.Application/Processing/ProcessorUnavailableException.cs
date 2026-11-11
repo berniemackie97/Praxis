@@ -1,4 +1,4 @@
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Application.Processing;
 
 /// <summary>
 /// Raised by a handler whose required runtime is not available (for example, the local model

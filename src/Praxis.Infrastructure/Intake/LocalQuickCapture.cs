@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Originals;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
@@ -27,7 +26,7 @@ public sealed class LocalQuickCapture(SqliteCatalog catalog, string intakeDirect
         byte[] bytes = EncodeNote(heading, text);
         string root = intake.ValidateSourcePath(intakeDirectory, expectDirectory: true);
         string destination = ResolveDestination(root, heading, captureId);
-        CaptureRequestContext capture = CaptureRequestContext.QuickNote(root);
+        CaptureRequestContext capture = CaptureContexts.QuickNote(root);
         capture.Validate(destination);
 
         if (!File.Exists(destination))

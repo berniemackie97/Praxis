@@ -1,12 +1,12 @@
 using Praxis.Domain.Processing;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Application.Processing;
 
 /// <summary>
 /// Executes one processor's leased jobs. A handler commits its result and terminal job state
 /// through the catalog before returning, re-checking the lease so a stale run cannot publish.
 /// </summary>
-public interface ILocalProcessingHandler
+public interface IProcessingHandler
 {
     string ProcessorKey { get; }
 

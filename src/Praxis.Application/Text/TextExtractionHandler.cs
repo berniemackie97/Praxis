@@ -1,19 +1,20 @@
 using System.Text;
+using Praxis.Application.Originals;
+using Praxis.Application.Processing;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Domain.Text;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Application.Text;
 
 /// <summary>
 /// Extracts strictly decoded UTF-8 text from verified originals with a supported text
 /// extension. Other inputs receive an explicit unsupported or failed outcome, never guessed text.
 /// </summary>
-public sealed class LocalTextProcessor(SqliteCatalog catalog) : ILocalProcessingHandler
+public sealed class TextExtractionHandler(
+    ITextDerivativeRepository derivatives, IOriginalStore originals, IProcessingQueue processing) : IProcessingHandler
 {
-    public const int MaximumTextBytes = 1024 * 1024;
-
     // An extension establishes a supported text decoding policy, not the file's semantics.
-    internal static readonly string[] SupportedExtensions =
+    public static readonly IReadOnlyList<string> SupportedExtensions =
     [
         ".txt", ".md", ".markdown", ".vtt", ".srt",
         ".cs", ".csx", ".fs", ".fsx",
@@ -23,16 +24,16 @@ public sealed class LocalTextProcessor(SqliteCatalog catalog) : ILocalProcessing
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-    public string ProcessorKey => LocalProcessors.SourceText;
+    public string ProcessorKey => ProcessorKeys.SourceText;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(5);
     public int MaxConcurrency => 2;
 
-    public bool TryReopenWork() => catalog.Text.RequeueNewlySupported(SupportedExtensions);
+    public bool TryReopenWork() => derivatives.RequeueNewlySupported(SupportedExtensions);
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        LeasedTextSource? source = catalog.Text.ReadLeasedSource(lease);
+        LeasedTextSource? source = derivatives.ReadLeasedSource(lease);
         if (source is null)
         {
             return;
@@ -41,30 +42,30 @@ public sealed class LocalTextProcessor(SqliteCatalog catalog) : ILocalProcessing
         cancellationToken.ThrowIfCancellationRequested();
         if (source.SourceKind != "file")
         {
-            catalog.Text.CommitResult(lease, null, "unsupported_source");
+            derivatives.CommitResult(lease, null, "unsupported_source");
             return;
         }
 
         string extension = Path.GetExtension(source.Locator).ToLowerInvariant();
         if (!SupportedExtensions.Contains(extension, StringComparer.Ordinal))
         {
-            catalog.Text.CommitResult(lease, null, extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
+            derivatives.CommitResult(lease, null, extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
             return;
         }
 
-        if (source.Original.Length > MaximumTextBytes)
+        if (source.Original.Length > TextLimits.MaximumTextBytes)
         {
-            catalog.Text.CommitResult(lease, null, "text_too_large");
+            derivatives.CommitResult(lease, null, "text_too_large");
             return;
         }
 
         try
         {
-            byte[] original = await catalog.Originals.ReadVerifiedBytesAsync(source.Original, MaximumTextBytes, cancellationToken);
+            byte[] original = await originals.ReadVerifiedBytesAsync(source.Original, TextLimits.MaximumTextBytes, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (HasNonTextSignature(original))
             {
-                catalog.Text.CommitResult(lease, null, "signature_mismatch");
+                derivatives.CommitResult(lease, null, "signature_mismatch");
                 return;
             }
 
@@ -75,31 +76,31 @@ public sealed class LocalTextProcessor(SqliteCatalog catalog) : ILocalProcessing
             if (text.Any(c => (c < 0x20 && c is not ('\n' or '\r' or '\t')) ||
                 c == 0x7f))
             {
-                catalog.Text.CommitResult(lease, null, "binary_content");
+                derivatives.CommitResult(lease, null, "binary_content");
                 return;
             }
 
-            catalog.Text.CommitResult(lease, text, null);
+            derivatives.CommitResult(lease, text, null);
         }
         catch (DecoderFallbackException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "invalid_utf8");
+            processing.Finish(lease, ProcessingCompletion.Failed, "invalid_utf8");
         }
         catch (InvalidDataException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
+            processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
         }
         catch (EndOfStreamException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
+            processing.Finish(lease, ProcessingCompletion.Failed, "corrupt_original");
         }
         catch (IOException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "source_io");
+            processing.Finish(lease, ProcessingCompletion.Failed, "source_io");
         }
         catch (UnauthorizedAccessException)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "source_access");
+            processing.Finish(lease, ProcessingCompletion.Failed, "source_access");
         }
     }
 

@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Application.Processing;
 using Praxis.Application.Verification;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Models;
+using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
 using Praxis.Domain.Verification;
@@ -10,11 +12,10 @@ using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Desktop;
 
-public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, VerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
+public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, ProcessingPipeline? processing = null, VerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
@@ -104,7 +105,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
                         fields.RequireGuid("sourceId"), fields.IntegerOrDefault("limit", 40, 1, 100)),
                     outcome = catalog.Proposals.Outcome(fields.RequireGuid("sourceId")),
                     semanticOutcome = catalog.Proposals.Outcome(
-                        fields.RequireGuid("sourceId"), LocalProcessors.SemanticExtraction)
+                        fields.RequireGuid("sourceId"), ProcessorKeys.SemanticExtraction)
                 },
                 "topicReview" => new
                 {
@@ -347,7 +348,7 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
 
     private object Retry(DesktopRequestFields fields)
     {
-        bool queued = catalog.Processing.Retry(fields.RequireGuid("itemId"), fields.IntegerOrDefault("revision", 1, 1, int.MaxValue), LocalProcessors.SourceText);
+        bool queued = catalog.Processing.Retry(fields.RequireGuid("itemId"), fields.IntegerOrDefault("revision", 1, 1, int.MaxValue), ProcessorKeys.SourceText);
         if (queued)
         {
             processing?.Wake();

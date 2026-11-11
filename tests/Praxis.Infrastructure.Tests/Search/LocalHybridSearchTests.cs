@@ -1,12 +1,12 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
+using Praxis.Application.Text;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -183,11 +183,11 @@ public sealed class LocalHybridSearchTests : IDisposable
     {
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
-            TimeSpan.FromMinutes(1), processorKey: LocalProcessors.TextSegments));
-        await new LocalTextSegmenter(catalog).ProcessAsync(lease, CancellationToken.None);
+            TimeSpan.FromMinutes(1), processorKey: ProcessorKeys.TextSegments));
+        await new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing).ProcessAsync(lease, CancellationToken.None);
         Assert.Equal("completed", Assert.Single(catalog.Processing.List(),
             job => job.ItemId == lease.ItemId && job.Revision == lease.Revision &&
-                job.ProcessorKey == LocalProcessors.TextSegments).State);
+                job.ProcessorKey == ProcessorKeys.TextSegments).State);
     }
 
     public void Dispose()

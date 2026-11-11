@@ -1,19 +1,26 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Text;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Persistence.Processing;
 
-namespace Praxis.Infrastructure.Processing;
+namespace Praxis.Infrastructure.Persistence.Text;
 
 /// <summary>
 /// Structure-aware segments of a revision's extracted text, stored as offsets into the text
 /// derivative. Readable only for the current revision of an active source.
 /// </summary>
-public sealed class LocalTextSegments
+public sealed class SqliteTextSegmentRepository : ITextSegmentRepository
 {
     private readonly CatalogDatabase database;
 
-    internal LocalTextSegments(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteTextSegmentRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     public IReadOnlyList<TextSegment> List(Guid itemId, int revision)
     {
@@ -59,9 +66,9 @@ public sealed class LocalTextSegments
 
     /// <summary>
     /// Completed segment spans of one revision for a downstream processor that already holds a
-    /// verified copy of the text (see <see cref="LocalTextDerivatives.ReadLeasedInput"/>).
+    /// verified copy of the text (see <see cref="ITextDerivativeRepository.ReadLeasedInput"/>).
     /// </summary>
-    internal IReadOnlyList<TextSegmentSpan> ReadCompleted(Guid itemId, int revision)
+    public IReadOnlyList<TextSegmentSpan> ReadCompleted(Guid itemId, int revision)
     {
         return database.Execute(connection =>
         {
@@ -88,7 +95,7 @@ public sealed class LocalTextSegments
     }
 
     /// <summary>Stores the segments and completes the leased job in one transaction.</summary>
-    internal bool Commit(ProcessingLease lease, LeasedText input, IReadOnlyList<TextSegmentSpan> segments)
+    public bool Commit(ProcessingLease lease, LeasedText input, IReadOnlyList<TextSegmentSpan> segments)
     {
         int expected = 0;
         foreach (TextSegmentSpan segment in segments)
@@ -106,11 +113,11 @@ public sealed class LocalTextSegments
             throw new ArgumentException("Segments must cover the extracted text exactly.", nameof(segments));
         }
 
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
-            if (!LocalProcessingQueue.TryCompleteLeased(connection, transaction, lease, input.Digest, now))
+            if (!SqliteProcessingQueue.TryCompleteLeased(connection, transaction, lease, input.Digest, now))
             {
                 return false;
             }
@@ -123,7 +130,7 @@ public sealed class LocalTextSegments
                                                                       VALUES ($item, $revision, $processor, $ordinal, $start, $length, $path)
                                                                       """);
                 insert.Transaction = transaction;
-                ProcessingJobKey.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
+                ProcessingJobParameters.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
                 insert.Parameters.AddWithValue("$ordinal", ordinal);
                 insert.Parameters.AddWithValue("$start", segments[ordinal].Start);
                 insert.Parameters.AddWithValue("$length", segments[ordinal].Length);

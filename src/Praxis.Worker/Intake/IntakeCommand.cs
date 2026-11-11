@@ -1,8 +1,9 @@
+using Praxis.Application.Processing;
 using Praxis.Application.Verification;
+using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Worker.Desktop;
 
 namespace Praxis.Worker.Intake;
@@ -57,7 +58,7 @@ internal static class IntakeCommand
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog, status: Report);
+        ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog, status: Report);
         LocalWatchedIntakeGroup monitors = new(catalog, roots, status: Report, onCaptured: processing.Wake);
         VerificationRunner verification = new(catalog.Verification, new SubscriptionVerifierModelFactory(), TimeProvider.System, status: Report);
         if (desktopMode)

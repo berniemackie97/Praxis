@@ -1,9 +1,10 @@
 using System.Text;
+using Praxis.Application.Processing;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
+using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -35,7 +36,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     public async Task BackgroundPipelineExtractsAndProposesWithoutAnIntakeScan()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        LocalProcessingPipeline pipeline = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(50));
+        ProcessingPipeline pipeline = CatalogProcessing.CreatePipeline(catalog, TimeSpan.FromMilliseconds(50));
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
 
@@ -53,8 +54,8 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     public async Task SlowProcessingDoesNotBlockWatchedIntakeCapture()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
-        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        BlockingHandler blocking = new(ProcessorKeys.SourceText, maxConcurrency: 1);
+        ProcessingPipeline pipeline = new(catalog.Processing, [blocking], TimeProvider.System, TimeSpan.FromMilliseconds(50));
         LocalWatchedIntake intake = new(catalog, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
@@ -84,8 +85,8 @@ public sealed class LocalProcessingPipelineTests : IDisposable
             await Capture(catalog, $"item{index}.txt", $"text {index}", $"key{index}");
         }
 
-        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 2);
-        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        BlockingHandler blocking = new(ProcessorKeys.SourceText, maxConcurrency: 2);
+        ProcessingPipeline pipeline = new(catalog.Processing, [blocking], TimeProvider.System, TimeSpan.FromMilliseconds(50));
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
 
@@ -108,7 +109,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         CapturedOriginal healthy = await Capture(catalog, "healthy.txt", "fine", "healthy");
         List<string> reports = new();
         FaultingHandler faulting = new(catalog, broken.ItemId);
-        LocalProcessingPipeline pipeline = new(catalog, [faulting],
+        ProcessingPipeline pipeline = new(catalog.Processing, [faulting], TimeProvider.System,
             TimeSpan.FromMilliseconds(50), status: message => { lock (reports) { reports.Add(message); } });
 
         Assert.True(await pipeline.ProcessNextAsync());
@@ -116,10 +117,10 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         Assert.False(await pipeline.ProcessNextAsync());
 
         ProcessingJob[] jobs = catalog.Processing.List()
-            .Where(job => job.ProcessorKey == LocalProcessors.SourceText).ToArray();
+            .Where(job => job.ProcessorKey == ProcessorKeys.SourceText).ToArray();
         ProcessingJob failed = Assert.Single(jobs, job => job.ItemId == broken.ItemId);
         Assert.Equal("failed", failed.State);
-        Assert.Equal(LocalProcessingPipeline.FaultCode, failed.FailureCode);
+        Assert.Equal(ProcessingPipeline.FaultCode, failed.FailureCode);
         Assert.Equal("completed", Assert.Single(jobs, job => job.ItemId == healthy.ItemId).State);
         string report = Assert.Single(reports);
         Assert.Contains(nameof(InvalidOperationException), report, StringComparison.Ordinal);
@@ -132,7 +133,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         await Capture(catalog, "secret.txt", "sensitive content", "private");
         List<string> reports = new();
-        LocalProcessingPipeline pipeline = new(catalog, [new UntrustedRuntimeCodeHandler()], status: reports.Add);
+        ProcessingPipeline pipeline = new(catalog.Processing, [new UntrustedRuntimeCodeHandler()], TimeProvider.System, status: reports.Add);
 
         Assert.True(await pipeline.ProcessNextAsync());
 
@@ -147,10 +148,11 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task ShutdownLeavesInterruptedLeaseRecoverableInsteadOfFailed()
     {
-        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        ManualTimeProvider clock = new(DateTimeOffset.UtcNow);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
         await Capture(catalog, "slow.txt", "slow", "slow");
-        BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
-        LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
+        BlockingHandler blocking = new(ProcessorKeys.SourceText, maxConcurrency: 1);
+        ProcessingPipeline pipeline = new(catalog.Processing, [blocking], clock, TimeSpan.FromMilliseconds(50));
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
         await blocking.Started.Task.WaitAsync(Deadline);
@@ -161,19 +163,19 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         ProcessingJob job = Assert.Single(catalog.Processing.List());
         Assert.Equal("running", job.State);
         Assert.Null(job.FailureCode);
-        Assert.NotNull(catalog.Processing.TryClaim(TimeSpan.FromSeconds(1),
-            nowUtc: job.LeaseUntil!.Value.AddSeconds(1), processorKey: LocalProcessors.SourceText));
+        clock.UtcNow = job.LeaseUntil!.Value.AddSeconds(1);
+        Assert.NotNull(catalog.Processing.TryClaim(TimeSpan.FromSeconds(1), processorKey: ProcessorKeys.SourceText));
     }
 
     [Fact]
     public void HandlersMustHaveDistinctProcessorsAndBoundedConcurrency()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog, []));
-        Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog,
-            [new BlockingHandler("same", 1), new BlockingHandler("same", 1)]));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new LocalProcessingPipeline(catalog,
-            [new BlockingHandler("bounded", 17)]));
+        Assert.Throws<ArgumentException>(() => new ProcessingPipeline(catalog.Processing, [], TimeProvider.System));
+        Assert.Throws<ArgumentException>(() => new ProcessingPipeline(catalog.Processing,
+            [new BlockingHandler("same", 1), new BlockingHandler("same", 1)], TimeProvider.System));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ProcessingPipeline(catalog.Processing,
+            [new BlockingHandler("bounded", 17)], TimeProvider.System));
     }
 
     private async Task<CapturedOriginal> Capture(
@@ -202,9 +204,9 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         }
     }
 
-    private sealed class UntrustedRuntimeCodeHandler : ILocalProcessingHandler
+    private sealed class UntrustedRuntimeCodeHandler : IProcessingHandler
     {
-        public string ProcessorKey => LocalProcessors.SourceText;
+        public string ProcessorKey => ProcessorKeys.SourceText;
         public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
         public int MaxConcurrency => 1;
 
@@ -214,7 +216,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
             throw new ProcessorUnavailableException("secret-bearing-code");
     }
 
-    private sealed class BlockingHandler(string processorKey, int maxConcurrency) : ILocalProcessingHandler
+    private sealed class BlockingHandler(string processorKey, int maxConcurrency) : IProcessingHandler
     {
         private int active;
         private int maximumActive;
@@ -249,9 +251,9 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         }
     }
 
-    private sealed class FaultingHandler(SqliteCatalog catalog, Guid faultingItem) : ILocalProcessingHandler
+    private sealed class FaultingHandler(SqliteCatalog catalog, Guid faultingItem) : IProcessingHandler
     {
-        public string ProcessorKey => LocalProcessors.SourceText;
+        public string ProcessorKey => ProcessorKeys.SourceText;
         public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
         public int MaxConcurrency => 1;
 

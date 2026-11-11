@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Security.Cryptography;
 using Praxis.Domain.Originals;
 
-namespace Praxis.Infrastructure.Originals;
+namespace Praxis.Infrastructure.FileSystem;
 
 internal sealed class OriginalFileStore
 {

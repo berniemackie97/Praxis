@@ -8,5 +8,5 @@ namespace Praxis.Infrastructure.Tests.Support;
 /// </summary>
 internal static class TestPaths
 {
-    internal static readonly string Temp = CatalogPaths.Canonicalize(Path.GetTempPath());
+    internal static readonly string Temp = FileSystemPaths.Canonicalize(Path.GetTempPath());
 }

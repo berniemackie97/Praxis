@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
 using Praxis.Domain.Processing;
@@ -6,7 +7,7 @@ using Praxis.Domain.Text;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
+using Praxis.Infrastructure.Persistence.Processing;
 
 namespace Praxis.Infrastructure.Enrichment;
 
@@ -38,7 +39,7 @@ public sealed class LocalProposals
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
-            if (!LocalProcessingQueue.TryCompleteLeased(connection, transaction, lease, input.Digest, now))
+            if (!SqliteProcessingQueue.TryCompleteLeased(connection, transaction, lease, input.Digest, now))
             {
                 return false;
             }
@@ -53,7 +54,7 @@ public sealed class LocalProposals
                                                                        $duration, $examined, $total, $rejected, $reused)
                                                                """);
             run.Transaction = transaction;
-            ProcessingJobKey.Bind(run, lease.ItemId, lease.Revision, lease.ProcessorKey);
+            ProcessingJobParameters.Bind(run, lease.ItemId, lease.Revision, lease.ProcessorKey);
             run.Parameters.AddWithValue("$digest", input.Digest);
             run.Parameters.AddWithValue("$outcome", candidates.Count == 0 ? "abstained" : "generated");
             run.Parameters.AddWithValue("$now", now);
@@ -85,7 +86,7 @@ public sealed class LocalProposals
                                                                         """);
                 proposal.Transaction = transaction;
                 proposal.Parameters.AddWithValue("$id", proposalId);
-                ProcessingJobKey.Bind(proposal, lease.ItemId, lease.Revision, lease.ProcessorKey);
+                ProcessingJobParameters.Bind(proposal, lease.ItemId, lease.Revision, lease.ProcessorKey);
                 proposal.Parameters.AddWithValue("$digest", input.Digest);
                 proposal.Parameters.AddWithValue("$kind", candidate.Kind);
                 proposal.Parameters.AddWithValue("$entityType", (object?)candidate.EntityType ?? DBNull.Value);
@@ -378,7 +379,7 @@ public sealed class LocalProposals
     /// A producer's state for the source's current revision: unavailable, pending,
     /// unsupported, failed, or the recorded run outcome (generated / abstained).
     /// </summary>
-    public string Outcome(Guid sourceId, string producer = LocalProcessors.MarkdownHeadings)
+    public string Outcome(Guid sourceId, string producer = ProcessorKeys.MarkdownHeadings)
     {
         ProcessingJobKey.ValidateProcessor(producer);
         if (sourceId == Guid.Empty)

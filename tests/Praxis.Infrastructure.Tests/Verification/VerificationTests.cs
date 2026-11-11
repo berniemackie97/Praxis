@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Praxis.Application.Inference;
+using Praxis.Application.Text;
 using Praxis.Application.Verification;
 using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
@@ -11,7 +12,6 @@ using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -337,7 +337,7 @@ public sealed class VerificationTests : IDisposable
         ProcessingDriver[] drivers =
         [
             ProcessingDriver.Text(catalog),
-            new(catalog, new LocalTextSegmenter(catalog)),
+            new(catalog, new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing)),
             new(catalog, new LocalSemanticExtractor(catalog, _ => new ModelConnection(model)))
         ];
         foreach (ProcessingDriver driver in drivers)

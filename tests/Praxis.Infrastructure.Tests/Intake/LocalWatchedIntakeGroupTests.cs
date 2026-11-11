@@ -1,9 +1,10 @@
 using System.Text.Json;
+using Praxis.Application.Processing;
 using Praxis.Domain.Library;
+using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -39,7 +40,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         File.WriteAllText(a, "violet primary content");
         File.WriteAllText(b, "amber secondary content");
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog);
+        ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog);
         LocalWatchedIntakeGroup group = new(catalog, [first, second], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero);
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -118,7 +119,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     {
         string disconnected = Path.Combine(workspace, "not-present");
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog);
+        ProcessingPipeline processing = CatalogProcessing.CreatePipeline(catalog);
         LocalWatchedIntakeGroup group = new(catalog, [first, disconnected], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero, rescanInterval: TimeSpan.FromMilliseconds(100));
         using CancellationTokenSource cancellation = new();

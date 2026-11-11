@@ -1,8 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Sources;
+namespace Praxis.Infrastructure.Persistence.Sources;
 
 /// <summary>
 /// Copies owner review decisions from one source's current proposals to the matching pending

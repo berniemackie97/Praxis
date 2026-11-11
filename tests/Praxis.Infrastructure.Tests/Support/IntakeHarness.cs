@@ -1,7 +1,8 @@
+using Praxis.Application.Processing;
 using Praxis.Domain.Intake;
+using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Tests.Support;
 
@@ -15,13 +16,13 @@ internal sealed class IntakeHarness
         SqliteCatalog catalog, string inbox, TimeSpan? quietPeriod = null,
         TimeSpan? rescanInterval = null, Action<string>? status = null)
     {
-        Processing = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(100));
+        Processing = CatalogProcessing.CreatePipeline(catalog, TimeSpan.FromMilliseconds(100));
         Monitor = new LocalWatchedIntake(catalog, inbox, quietPeriod, rescanInterval, status,
             onCaptured: Processing.Wake);
     }
 
     internal LocalWatchedIntake Monitor { get; }
-    internal LocalProcessingPipeline Processing { get; }
+    internal ProcessingPipeline Processing { get; }
 
     /// <summary>One intake scan followed by processing everything it made available.</summary>
     internal async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
