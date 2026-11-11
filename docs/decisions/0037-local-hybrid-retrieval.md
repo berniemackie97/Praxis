@@ -38,9 +38,13 @@ A trusted owner-local client can omit the collection ID to search the full activ
 catalog. Separate authenticated principal grants, per-operation user approval and
 audit belong to #32 and the future MCP/API caller boundary. Collection filtering
 does not automatically revoke snippets already rendered in an open UI, erase a
-model's previous inputs or invalidate historical session memories. The UI does not
-mix unscoped video-caption results into collection-filtered text search; a properly
-scoped video query remains an independent integration requirement.
+model's previous inputs or invalidate historical session memories. Timecoded caption searches use the same selected collection and require both
+the caption sidecar and the paired video source to be active collection members
+before returning linked video identities and cue text. Search results and previews
+are cleared when the Search view is dismissed. An out-of-process revocation while
+the Search view remains visible can still leave previously rendered snippets on
+screen until a new query or preview; the future multi-principal authorization
+system must address prompt context and external cache lifetimes separately.
 
 The existing #29 judged query sets and real EmbeddingGemma resource measurements
 are a bounded retrieval baseline, **not** universal answerability classification.
