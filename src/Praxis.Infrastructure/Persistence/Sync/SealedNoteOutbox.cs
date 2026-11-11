@@ -168,21 +168,21 @@ internal sealed class SealedNoteOutbox
             .Select(edit => edit.OperationId.ToString("N") + ".json")
             .ToHashSet(StringComparer.Ordinal);
         retained.Add(ContextFileName);
-        foreach (string path in Directory.EnumerateFiles(root, "*.json", SearchOption.TopDirectoryOnly))
+        string[] entries = Directory.EnumerateFiles(root, "*.json", SearchOption.TopDirectoryOnly).ToArray();
+        foreach (string path in entries)
         {
             VerifyRegularPrivateFile(path);
             string name = Path.GetFileName(path);
-            if (name == ContextFileName)
-            {
-                continue;
-            }
-
-            if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(name), "N", out _))
+            if (name != ContextFileName &&
+                !Guid.TryParseExact(Path.GetFileNameWithoutExtension(name), "N", out _))
             {
                 throw new InvalidDataException("The encrypted outbox contains an unrelated JSON file.");
             }
+        }
 
-            if (!retained.Contains(name))
+        foreach (string path in entries)
+        {
+            if (!retained.Contains(Path.GetFileName(path)))
             {
                 File.Delete(path);
             }
