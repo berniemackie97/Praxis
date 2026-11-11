@@ -1,3 +1,4 @@
+using Praxis.Application.Collections;
 using Praxis.Application.Originals;
 using Praxis.Application.Search;
 using Praxis.Application.Sources;
@@ -21,13 +22,16 @@ public sealed class MediaEvidence
     private readonly ITextSearchIndex search;
     private readonly ITextDerivativeRepository text;
     private readonly IOriginalStore originals;
+    private readonly ICollectionRepository? collections;
 
-    public MediaEvidence(ISourceRepository sources, ITextSearchIndex search, ITextDerivativeRepository text, IOriginalStore originals)
+    public MediaEvidence(ISourceRepository sources, ITextSearchIndex search, ITextDerivativeRepository text,
+        IOriginalStore originals, ICollectionRepository? collections = null)
     {
         this.sources = sources;
         this.search = search;
         this.text = text;
         this.originals = originals;
+        this.collections = collections;
     }
 
     public Task<MediaInspection> InspectAsync(Guid sourceId, CancellationToken cancellationToken = default) => InspectAsync(sourceId, expectedRevision: null, cancellationToken);
@@ -75,11 +79,16 @@ public sealed class MediaEvidence
             ProcessorKeys.MediaHeader);
     }
 
-    public IReadOnlyList<VideoCueHit> SearchCues(string query, int limit = 20)
+    public IReadOnlyList<VideoCueHit> SearchCues(string query, int limit = 20, Guid? collectionId = null)
     {
         if (limit is < 1 or > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        if (collectionId == Guid.Empty || (collectionId.HasValue && collections is null))
+        {
+            throw new ArgumentException("A valid collection-scoped media reader is required.", nameof(collectionId));
         }
 
         // Existing FTS is a bounded candidate selector. The matching cue itself must
@@ -91,7 +100,7 @@ public sealed class MediaEvidence
         }
 
         List<VideoCueHit> results = new();
-        foreach (SearchHit hit in search.Query(query, 40))
+        foreach (SearchHit hit in search.Query(query, 40, collectionId))
         {
             string extension = Path.GetExtension(hit.SourceLocator).ToLowerInvariant();
             if (extension is not (".vtt" or ".srt"))
@@ -99,14 +108,17 @@ public sealed class MediaEvidence
                 continue;
             }
 
-            TextDerivative? derivative = text.Read(hit.ItemId, hit.Revision);
+            TextDerivative? derivative = text.ReadCurrent(hit.ItemId, hit.Revision, collectionId,
+                hit.SourceId, hit.OriginalSha256);
             if (derivative?.Content is not { } content || derivative.SourceSha256 != hit.OriginalSha256 || derivative.SourceId != hit.SourceId)
             {
                 continue;
             }
 
             (SourceFileVersion Source, string Locator)? video = FindPairedVideo(hit.SourceLocator);
-            if (video is null)
+            if (video is null ||
+                (collectionId is { } selected &&
+                 !collections!.ContainsActiveSource(selected, video.Value.Source.SourceId)))
             {
                 continue;
             }
@@ -133,6 +145,15 @@ public sealed class MediaEvidence
                 SourceFileVersion? currentVideo = sources.FindLatestFile(video.Value.Locator);
                 if (current is null || current.SourceId != hit.SourceId || current.Revision != hit.Revision || current.Sha256 != hit.OriginalSha256
                     || current.Status != "active" || currentVideo != video.Value.Source || currentVideo.Status != "active")
+                {
+                    break;
+                }
+
+                // Both the caption and its paired video must remain within the
+                // selected collection when the cue is disclosed.
+                if (search.RetainCurrent([hit], collectionId).Count == 0 ||
+                    (collectionId is { } selected &&
+                     !collections!.ContainsActiveSource(selected, currentVideo.SourceId)))
                 {
                     break;
                 }
