@@ -69,7 +69,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton(provider => new WatchedFolderIntakeGroup(
             provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>(), options.DataRoot,
             options.IntakeRoots, status: Report(provider, "Praxis.Intake"),
-            onCaptured: provider.GetRequiredService<ProcessingPipeline>().Wake));
+            onCaptured: provider.GetRequiredService<ProcessingPipeline>().Wake,
+            clock: provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IIntakeSupervisor>(provider => provider.GetRequiredService<WatchedFolderIntakeGroup>());
         services.AddSingleton<IQuickNoteCapture>(provider => new QuickNoteCapture(
             provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));

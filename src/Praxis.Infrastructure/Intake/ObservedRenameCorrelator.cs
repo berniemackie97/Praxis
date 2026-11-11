@@ -9,7 +9,7 @@ namespace Praxis.Infrastructure.Intake;
 /// re-hashed and match the source's current revision. The event queue is bounded; overflow
 /// falls back to ordinary capture of the scanned paths.
 /// </summary>
-internal sealed class ObservedRenameCorrelator(ISourceRepository sources, FileSourceIntake intake, string root, Action<string> report, Action signal)
+internal sealed class ObservedRenameCorrelator(ISourceRepository sources, FileSourceIntake intake, string root, Action<string> report, Action signal, TimeProvider clock)
 {
     private const int MaximumPending = 128;
     private static readonly TimeSpan MaximumEventAge = TimeSpan.FromMinutes(1);
@@ -34,7 +34,7 @@ internal sealed class ObservedRenameCorrelator(ISourceRepository sources, FileSo
             }
             else
             {
-                pending.Enqueue(new PendingRename(previousPath, currentPath, DateTimeOffset.UtcNow));
+                pending.Enqueue(new PendingRename(previousPath, currentPath, clock.GetUtcNow()));
             }
         }
 
@@ -75,7 +75,7 @@ internal sealed class ObservedRenameCorrelator(ISourceRepository sources, FileSo
         while (TryPeek() is { } entry)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (entry.OccurredUtc < DateTimeOffset.UtcNow - MaximumEventAge)
+            if (entry.OccurredUtc < clock.GetUtcNow() - MaximumEventAge)
             {
                 Dequeue(entry);
                 continue;

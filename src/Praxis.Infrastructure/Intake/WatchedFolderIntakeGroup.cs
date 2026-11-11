@@ -19,7 +19,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
 
     public WatchedFolderIntakeGroup(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, IReadOnlyList<string> approvedRoots,
         Action<string>? status = null, Action? onCaptured = null,
-        TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null)
+        TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, TimeProvider? clock = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -57,7 +57,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
 
         SemaphoreSlim sharedScanLock = new(1, 1);
         monitors = roots.Select(path => new WatchedFolderIntake(sources, originals, catalogDirectory, path, quietPeriod, rescanInterval,
-            status, onCaptured, sharedScanLock)).ToArray();
+            status, onCaptured, sharedScanLock, clock)).ToArray();
     }
 
     public IReadOnlyList<WatchedRootStatus> RootStatuses() =>

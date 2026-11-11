@@ -25,13 +25,14 @@ public sealed class WatchedFolderIntake
     private readonly SemaphoreSlim scanLock = new(1, 1);
     private readonly SemaphoreSlim? sharedScanLock;
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
+    private readonly TimeProvider clock;
     private int wakePending;
     private int watcherFaulted;
     private bool rootWasOffline;
     private int requiresApproval;
     private long approvedCreationTicks;
 
-    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
+    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -61,7 +62,8 @@ public sealed class WatchedFolderIntake
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });
         FileSourceIntake intake = new(originals, catalogDirectory);
-        renames = new ObservedRenameCorrelator(sources, intake, root, report, Signal);
+        this.clock = clock ?? TimeProvider.System;
+        renames = new ObservedRenameCorrelator(sources, intake, root, report, Signal, this.clock);
         reconciler = new WatchedFileReconciler(sources, intake, root, quiet, renames, this.status, report);
     }
 
@@ -180,13 +182,13 @@ public sealed class WatchedFolderIntake
                 }
                 else
                 {
-                    TimeSpan sincePrevious = DateTimeOffset.UtcNow - lastScanStarted;
+                    TimeSpan sincePrevious = clock.GetUtcNow() - lastScanStarted;
                     if (sincePrevious < MinimumScanSpacing)
                     {
                         await Task.Delay(MinimumScanSpacing - sincePrevious, cancellationToken);
                     }
 
-                    lastScanStarted = DateTimeOffset.UtcNow;
+                    lastScanStarted = clock.GetUtcNow();
                     watcher = MaintainWatcher(watcher);
                     WatchedScanResult? scan = await TryScanAsync(cancellationToken);
                     if (scan is { NextScanDelay: { } due })
@@ -324,7 +326,7 @@ public sealed class WatchedFolderIntake
     {
         try
         {
-            return await ReconcileCoreAsync(DateTimeOffset.UtcNow, cancellationToken);
+            return await ReconcileCoreAsync(clock.GetUtcNow(), cancellationToken);
         }
         catch (IOException)
         {

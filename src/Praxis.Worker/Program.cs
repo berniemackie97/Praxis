@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using System.Data.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -80,7 +80,7 @@ static string FailureCategory(Exception exception) => exception switch
 {
     UnauthorizedAccessException => "access_denied",
     DirectoryNotFoundException => "directory_unavailable",
-    SqliteException => "storage_error",
+    DbException => "storage_error",
     IOException => "io_error",
     InvalidDataException => "invalid_input",
     ArgumentException => "invalid_argument",

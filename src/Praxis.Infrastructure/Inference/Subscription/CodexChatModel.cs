@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Praxis.Domain.Models;
 
@@ -62,7 +63,7 @@ public sealed class CodexChatModel : IChatModel
         arguments.Add("-");
         var prompt = "Instructions:\n" + SubscriptionCli.System(request) +
             "\n\nRequest:\n" + SubscriptionCli.User(request);
-        var started = DateTime.UtcNow;
+        var started = Stopwatch.StartNew();
         var result = await CliProcess.RunAsync(executable, arguments, prompt, workspace.Path, timeout, cancellationToken);
         var (inputTokens, outputTokens, failure) = ReadEvents(result.Stdout);
         if (result.ExitCode != 0 || failure is not null || !File.Exists(answerPath))
@@ -71,7 +72,7 @@ public sealed class CodexChatModel : IChatModel
         }
 
         var answer = await File.ReadAllTextAsync(answerPath, cancellationToken);
-        return new ChatResult(answer.Trim(), inputTokens, outputTokens, DateTime.UtcNow - started);
+        return new ChatResult(answer.Trim(), inputTokens, outputTokens, started.Elapsed);
     }
 
     /// <summary>Token usage from <c>turn.completed</c> and the text of any failure event.</summary>

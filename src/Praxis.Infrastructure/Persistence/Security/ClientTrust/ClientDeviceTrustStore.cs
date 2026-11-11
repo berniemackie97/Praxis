@@ -17,10 +17,12 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
     private readonly Guid installationId;
     private Guid ownerDeviceId;
     private byte[] ownerPublicKey;
+    private readonly TimeProvider clock;
 
     private ClientDeviceTrustStore(FileStream lease, SqliteConnection connection,
-        Guid installation, Guid ownerDevice, byte[] key)
+        Guid installation, Guid ownerDevice, byte[] key, TimeProvider clock)
     {
+        this.clock = clock;
         this.lease = lease;
         this.connection = connection;
         installationId = installation;
@@ -29,7 +31,7 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
     }
 
     public static ClientDeviceTrustStore Open(string directory, Guid installation,
-        Guid ownerDevice, ReadOnlySpan<byte> independentlyVerifiedOwnerPublicKey)
+        Guid ownerDevice, ReadOnlySpan<byte> independentlyVerifiedOwnerPublicKey, TimeProvider? timeProvider = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         if (installation == Guid.Empty || ownerDevice == Guid.Empty ||
@@ -113,7 +115,7 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
             }
 
             return new ClientDeviceTrustStore(lease, connection, installation,
-                ownerDevice, independentlyVerifiedOwnerPublicKey.ToArray());
+                ownerDevice, independentlyVerifiedOwnerPublicKey.ToArray(), timeProvider ?? TimeProvider.System);
         }
         catch
         {
@@ -135,7 +137,7 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
             approval.DeviceId == ownerDeviceId ||
             approval.SpaceId == Guid.Empty ||
             approval.PrincipalId == Guid.Empty ||
-            !ApprovedDeviceEnrollment.VerifyApproval(approval, ownerPublicKey, DateTimeOffset.UtcNow))
+            !ApprovedDeviceEnrollment.VerifyApproval(approval, ownerPublicKey, clock.GetUtcNow()))
         {
             throw new UnauthorizedAccessException("A current, independently verified owner approval is required.");
         }
@@ -188,7 +190,7 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
             throw new UnauthorizedAccessException("Only the local pinned owner can revoke trusted recipients.");
         }
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = clock.GetUtcNow();
         byte[] message = System.Text.Encoding.UTF8.GetBytes("Praxis.ClientPinRevocation.v1\n" +
             $"{installationId:N}\n{ownerDeviceId:N}\n{spaceId:N}\n{deviceId:N}\n" +
             $"{now.ToUnixTimeSeconds()}\n");
