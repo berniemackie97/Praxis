@@ -303,6 +303,37 @@ public sealed class OriginalExportTests : IDisposable
     }
 
     [Fact]
+    public void MacStagingUsesPinnedDescriptorAndPrivateExclusiveFile()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        string output = Path.Combine(exportRoot, "native-stage.bin");
+        using (OriginalExportDestination export = OriginalExportDestination.Open(output, catalogRoot))
+        {
+            using (FileStream staged = export.CreateStaging())
+            {
+                string path = Assert.Single(Directory.EnumerateFiles(exportRoot,
+                    ".praxis-export-*.part"));
+                Assert.Matches(@"^\.praxis-export-[0-9a-f]{32}-[A-Za-z0-9]{6}\.part$",
+                    Path.GetFileName(path));
+                UnixFileMode mode = File.GetUnixFileMode(path);
+                Assert.Equal(UnixFileMode.None,
+                    mode & ~(UnixFileMode.UserRead | UnixFileMode.UserWrite));
+                staged.Write([14, 15, 16]);
+                staged.Flush(flushToDisk: true);
+            }
+
+            export.Publish();
+        }
+
+        Assert.Equal(new byte[] { 14, 15, 16 }, File.ReadAllBytes(output));
+        Assert.Single(Directory.EnumerateFileSystemEntries(exportRoot));
+    }
+
+    [Fact]
     public async Task IndependentSourcesWithIdenticalContentExportWithoutSharingSourceIdentity()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
