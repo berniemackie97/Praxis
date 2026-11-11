@@ -29,7 +29,7 @@ internal static class TestDesktop
             new MediaActions(new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals)),
             new CaptureActions(quickCapture, intake, processing),
             new EnrichmentActions(catalog.Proposals),
-            new IntakeActions(intake, catalog.Processing),
+            new IntakeActions(intake, catalog.Processing, catalog.IntakeIncidents),
             new KnowledgeActions(catalog.Knowledge),
             new VerificationActions(catalog.Verification, new VerificationApproval(catalog.Verification),
                 new VerificationProviderConfiguration(catalog.Verification, verifierModels), verifierModels, verification),

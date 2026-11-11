@@ -58,6 +58,17 @@ struct ConfigurationView: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            if !model.intakeIncidents.isEmpty {
+                Text("Recent intake incidents").font(.headline)
+                ForEach(model.intakeIncidents.prefix(8)) { incident in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(incident.state) · \(incident.rootPath)")
+                            .font(.caption).textSelection(.enabled)
+                        Text("Started \(incident.startedUtc) · \(incident.resolvedUtc == nil ? "awaiting recovery" : "resolved")")
+                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                }
+            }
             Text("Previously captured originals remain preserved when a folder disappears. Reconnected or replaced folders are not scanned until their identity is confirmed. An unchanged folder can be reapproved automatically using its saved local filesystem identity. Editing the watched set requires stopping the worker.")
                 .font(.caption).foregroundStyle(.secondary)
             Text("No browser service, remote model, connector or agent credential is enabled.")

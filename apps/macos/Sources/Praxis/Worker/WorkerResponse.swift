@@ -5,6 +5,7 @@ struct WorkerResponseData: Decodable {
     let status: IntakeStatus?
     let roots: [WatchedRootStatus]?
     let backlog: ProcessingBacklog?
+    let incidents: [IntakeIncident]?
     let proposals: [TopicProposal]?
     let reviewed: Bool?
     let collections: [SourceCollection]?

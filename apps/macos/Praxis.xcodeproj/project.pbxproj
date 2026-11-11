@@ -32,6 +32,7 @@
 		00000000000000000000A04C /* CanonicalPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04B /* CanonicalPath.swift */; };
 		00000000000000000000A04E /* IntakeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04D /* IntakeModels.swift */; };
 		00000000000000000000B072 /* ProcessingBacklog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000B071 /* ProcessingBacklog.swift */; };
+		00000000000000000000B074 /* IntakeIncident.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000B073 /* IntakeIncident.swift */; };
 		00000000000000000000A050 /* IntelligenceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A04F /* IntelligenceModels.swift */; };
 		00000000000000000000A052 /* KnowledgeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A051 /* KnowledgeModels.swift */; };
 		00000000000000000000A054 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000A053 /* LibraryModels.swift */; };
@@ -85,6 +86,7 @@
 		00000000000000000000A04B /* CanonicalPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonicalPath.swift; sourceTree = "<group>"; };
 		00000000000000000000A04D /* IntakeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakeModels.swift; sourceTree = "<group>"; };
 		00000000000000000000B071 /* ProcessingBacklog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingBacklog.swift; sourceTree = "<group>"; };
+		00000000000000000000B073 /* IntakeIncident.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakeIncident.swift; sourceTree = "<group>"; };
 		00000000000000000000A04F /* IntelligenceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelligenceModels.swift; sourceTree = "<group>"; };
 		00000000000000000000A051 /* KnowledgeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeModels.swift; sourceTree = "<group>"; };
 		00000000000000000000A053 /* LibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModels.swift; sourceTree = "<group>"; };
@@ -207,6 +209,7 @@
 				00000000000000000000A04B /* CanonicalPath.swift */,
 				00000000000000000000A04D /* IntakeModels.swift */,
 				00000000000000000000B071 /* ProcessingBacklog.swift */,
+				00000000000000000000B073 /* IntakeIncident.swift */,
 				00000000000000000000A04F /* IntelligenceModels.swift */,
 				00000000000000000000A051 /* KnowledgeModels.swift */,
 				00000000000000000000A053 /* LibraryModels.swift */,
@@ -368,6 +371,7 @@
 				00000000000000000000A04C /* CanonicalPath.swift in Sources */,
 				00000000000000000000A04E /* IntakeModels.swift in Sources */,
 				00000000000000000000B072 /* ProcessingBacklog.swift in Sources */,
+				00000000000000000000B074 /* IntakeIncident.swift in Sources */,
 				00000000000000000000A050 /* IntelligenceModels.swift in Sources */,
 				00000000000000000000A052 /* KnowledgeModels.swift in Sources */,
 				00000000000000000000A054 /* LibraryModels.swift in Sources */,
