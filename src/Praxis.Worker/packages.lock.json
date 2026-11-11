@@ -335,8 +335,12 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.14, )",
-          "Praxis.Application": "[1.0.0, )"
+          "Praxis.Application": "[1.0.0, )",
+          "Praxis.Notes": "[1.0.0, )"
         }
+      },
+      "praxis.notes": {
+        "type": "Project"
       },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",
