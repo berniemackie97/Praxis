@@ -218,6 +218,23 @@ public sealed class HybridSearchTests : IDisposable
         Assert.Empty(result.Hits);
     }
 
+    [Fact]
+    public async Task LexicalOnlyResultIsRevalidatedAfterItsInitialRead()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
+        CapturedOriginal source = await Capture(catalog, "local.md",
+            "violet private notes", "one");
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+
+        ITextSearchIndex index = new RevokingTextIndex(catalog.Search,
+            () => Assert.True(catalog.Sources.Revoke(source.SourceId)));
+        HybridSearchResults result = await new HybridSearch(
+            index, new SemanticRetriever(catalog.Embeddings)).QueryAsync("violet");
+
+        Assert.False(result.UsedEmbeddings);
+        Assert.Empty(result.Hits);
+    }
+
     private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));
