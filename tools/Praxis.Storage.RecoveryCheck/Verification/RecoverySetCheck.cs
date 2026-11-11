@@ -102,8 +102,9 @@ internal static class RecoverySetCheck
         using (SecurityRegistry registry = SecurityRegistry.Open(Path.Combine(restored, "identity")))
         {
             VerifiedDeviceProof proof = Prove(registry, signer, device, space, SecurityPermission.Read);
-            AvailableSpaceKey? epoch = registry.SpaceKeys.Download(proof);
-            Require(epoch is not null && epoch.OwnerRecovery is not null,
+            AvailableSpaceKey epoch = registry.SpaceKeys.Download(proof) ??
+                throw new InvalidDataException("The restored key epoch is missing.");
+            Require(epoch.OwnerRecovery is not null,
                 "The recovery envelope is missing from the restored registry.");
             Require(ClientSpaceKeys.UnlockWithRecovery(installation, epoch, recoverySecret, signer, 1)
                     .SequenceEqual(contentKey),
