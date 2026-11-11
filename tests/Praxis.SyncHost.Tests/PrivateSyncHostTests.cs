@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Security.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Praxis.Domain.Security;
 using Praxis.Infrastructure.Persistence.Security.Registry;
