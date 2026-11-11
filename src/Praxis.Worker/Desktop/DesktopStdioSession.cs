@@ -9,7 +9,7 @@ namespace Praxis.Worker.Desktop;
 
 internal static class DesktopStdioSession
 {
-    internal static async Task RunAsync(LocalCatalog catalog, LocalWatchedIntake monitor, LocalProcessingPipeline processing, LocalVerificationRunner verification, string inbox, CancellationToken cancellationToken)
+    internal static async Task RunAsync(LocalCatalog catalog, LocalWatchedIntakeGroup monitors, LocalProcessingPipeline processing, LocalVerificationRunner verification, string inbox, CancellationToken cancellationToken)
     {
         using StreamReader reader = new(Console.OpenStandardInput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true, throwOnInvalidBytes: true), detectEncodingFromByteOrderMarks: false);
         using StreamWriter writer = new(Console.OpenStandardOutput(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
@@ -17,7 +17,7 @@ internal static class DesktopStdioSession
             AutoFlush = true
         };
         DesktopRequestReader frames = new(reader);
-        LocalDesktopProtocol protocol = new(catalog, new LocalQuickCapture(catalog, inbox), monitor, processing, verification);
+        LocalDesktopProtocol protocol = new(catalog, new LocalQuickCapture(catalog, inbox), processing: processing, verification: verification, group: monitors);
 
         async Task ServeAsync(CancellationToken token)
         {
@@ -34,6 +34,6 @@ internal static class DesktopStdioSession
             }
         }
 
-        await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: true, ServeAsync, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
+        await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: true, ServeAsync, monitors.RunAsync, processing.RunAsync, verification.RunAsync);
     }
 }

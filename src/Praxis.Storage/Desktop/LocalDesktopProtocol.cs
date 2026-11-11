@@ -10,7 +10,7 @@ using Praxis.Storage.Verification;
 
 namespace Praxis.Storage.Desktop;
 
-public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null)
+public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 
@@ -115,15 +115,18 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                 },
                 "intakeStatus" => new
                 {
-                    status = RequireMonitor().Snapshot()
+                    status = IntakeStatus(),
+                    roots = group?.RootStatuses()
                 },
                 "intakePause" => new
                 {
-                    status = RequireMonitor().SetPaused(fields.RequireBoolean("paused"))
+                    status = PauseIntake(fields.RequireBoolean("paused")),
+                    roots = group?.RootStatuses()
                 },
                 "intakeRescan" => new
                 {
-                    status = RequireMonitor().RequestRescan()
+                    status = RescanIntake(),
+                    roots = group?.RootStatuses()
                 },
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
@@ -195,6 +198,12 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
     }
 
     private LocalWatchedIntake RequireMonitor() => monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+
+    private LocalIntakeStatus IntakeStatus() => group?.Snapshot() ?? RequireMonitor().Snapshot();
+
+    private LocalIntakeStatus PauseIntake(bool paused) => group?.SetPaused(paused) ?? RequireMonitor().SetPaused(paused);
+
+    private LocalIntakeStatus RescanIntake() => group?.RequestRescan() ?? RequireMonitor().RequestRescan();
 
     private object Preview(DesktopRequestFields fields)
     {
