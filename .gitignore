@@ -16,3 +16,7 @@ secrets.json
 *.key
 
 .artifacts/
+
+# Generated Python test/roadmap bytecode
+__pycache__/
+*.py[cod]
