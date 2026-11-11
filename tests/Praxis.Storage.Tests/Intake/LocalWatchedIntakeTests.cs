@@ -436,6 +436,36 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         Assert.Single(catalog.Search.Query("orange"));
     }
 
+
+    [Fact]
+    public async Task NotificationBacklogOverflowForcesBoundedFullRecheck()
+    {
+        string path = Path.Combine(inbox, "coalesced.md");
+        DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(path, "violet contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
+
+        File.WriteAllText(path, "orange contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        for (int index = 0; index < 513; index++)
+        {
+            watcher.Monitor.QueueChanged(Path.Combine(inbox, $"changed-{index}.md"));
+        }
+
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(5)));
+        LocalLibraryItem latest = Assert.Single(catalog.Library.List());
+        Assert.Equal(2, latest.Revision);
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("orange"));
+        await catalog.Originals.VerifyAsync(latest.ItemId);
+    }
+
     [Fact]
     public async Task OversizedSparseFileReportsAnErrorAndRecoversAfterReplacement()
     {

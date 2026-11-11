@@ -113,6 +113,9 @@ public sealed class LocalWatchedIntake
             {
                 if (status.IsPaused)
                 {
+                    watcher?.Dispose();
+                    watcher = null;
+                    renames.Clear();
                     status.SetState("paused", "New file capture is paused by the owner.");
                 }
                 else
