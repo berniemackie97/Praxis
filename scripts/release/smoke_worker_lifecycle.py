@@ -113,7 +113,7 @@ def main():
         if assert_lifecycle_logs(restarted.stderr) == first_run_id:
             raise AssertionError("Worker restart reused the previous run's correlation ID.")
 
-        unexpected = root / (SENTINEL + "-unexpected")
+        unexpected = catalog / (SENTINEL + "-unexpected")
         unexpected.write_text("unapproved", encoding="utf-8")
         try:
             assert_private_failure(run(catalog, inbox), "invalid_input")
