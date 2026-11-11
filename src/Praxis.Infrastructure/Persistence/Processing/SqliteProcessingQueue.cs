@@ -20,6 +20,27 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
         this.clock = clock;
     }
 
+    public ProcessingBacklog Backlog() => database.ExecuteRead(connection =>
+    {
+        using SqliteCommand command = connection.CreateCommand("""
+                                                                SELECT
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'queued' THEN 1 ELSE 0 END), 0),
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'running' THEN 1 ELSE 0 END), 0),
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'failed' THEN 1 ELSE 0 END), 0)
+                                                                FROM processing_jobs j
+                                                                JOIN items i ON i.item_id = j.item_id
+                                                                JOIN sources s ON s.source_id = i.source_id
+                                                                WHERE s.status = 'active'
+                                                                  AND j.state IN ('queued', 'running', 'failed')
+                                                                  AND j.revision = (
+                                                                      SELECT MAX(v.revision)
+                                                                      FROM item_versions v WHERE v.item_id = j.item_id)
+                                                                """);
+        using SqliteDataReader reader = command.ExecuteReader();
+        reader.Read();
+        return new ProcessingBacklog(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
+    });
+
     public IReadOnlyList<ProcessingJob> List(int limit = 100)
     {
         if (limit is < 1 or > 500)

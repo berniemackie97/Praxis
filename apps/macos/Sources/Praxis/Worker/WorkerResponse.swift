@@ -4,6 +4,7 @@ struct WorkerResponseData: Decodable {
     let items: [LibraryItem]?
     let status: IntakeStatus?
     let roots: [WatchedRootStatus]?
+    let backlog: ProcessingBacklog?
     let proposals: [TopicProposal]?
     let reviewed: Bool?
     let collections: [SourceCollection]?

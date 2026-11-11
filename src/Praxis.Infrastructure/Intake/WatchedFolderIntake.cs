@@ -144,6 +144,7 @@ public sealed class WatchedFolderIntake
                 sharedHeld = true;
             }
 
+            status.SetState("scanning");
             WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
             if (result.Imported != 0)
             {

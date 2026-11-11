@@ -146,6 +146,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
         string state = paused ? "paused" :
             states.All(status => status.State == "offline") ? "offline" :
             states.Any(status => status.State is "offline" or "degraded" or "reapproval_required" or "stopped") ? "degraded" :
+            states.Any(status => status.State == "scanning") ? "scanning" :
             states.Any(status => status.State is "starting" or "resuming") ? "starting" : "watching";
         int affected = states.Count(status => status.State is "offline" or "degraded" or "reapproval_required" or "stopped");
         DateTimeOffset? lastScan = states.All(status => status.LastSuccessfulScanUtc is not null)

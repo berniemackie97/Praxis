@@ -23,6 +23,10 @@ struct ConfigurationView: View {
                 Text("Overall: \(status.state) · \(status.observedFiles) observed · \(status.importedSinceStart) captured this session")
                     .textSelection(.enabled)
             }
+            if let backlog = model.intakeBacklog {
+                Text("Processing: \(backlog.queued) queued · \(backlog.running) running · \(backlog.failed) failed")
+                    .textSelection(.enabled)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(model.intakeRoots) { root in
