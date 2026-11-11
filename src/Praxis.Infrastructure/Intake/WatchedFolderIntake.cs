@@ -19,7 +19,7 @@ public sealed class WatchedFolderIntake
     private readonly TimeSpan rescanInterval;
     private readonly Action<string> report;
     private readonly Action notifyCaptured;
-    private readonly IntakeStatusTracker status = new();
+    private readonly IntakeStatusTracker status;
     private readonly ObservedRenameCorrelator renames;
     private readonly WatchedFileReconciler reconciler;
     private readonly SemaphoreSlim scanLock = new(1, 1);
@@ -32,7 +32,7 @@ public sealed class WatchedFolderIntake
     private int requiresApproval;
     private long approvedCreationTicks;
 
-    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null)
+    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null, Action<string>? onStateTransition = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -57,6 +57,7 @@ public sealed class WatchedFolderIntake
 
         // Watcher events, scans and stored locators must agree on one spelling of the folder.
         root = FileSystemPaths.Canonicalize(intakeDirectory);
+        this.status = new IntakeStatusTracker(onStateTransition);
         approvedCreationTicks = Directory.Exists(root) ? Directory.GetCreationTimeUtc(root).Ticks : 0;
         this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });

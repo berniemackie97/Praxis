@@ -40,6 +40,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IOriginalStore>(provider => provider.GetRequiredService<SqliteCatalog>().Originals);
         services.AddSingleton<ILibraryReader>(provider => provider.GetRequiredService<SqliteCatalog>().Library);
         services.AddSingleton<IProcessingQueue>(provider => provider.GetRequiredService<SqliteCatalog>().Processing);
+        services.AddSingleton<IIntakeIncidentJournal>(provider => provider.GetRequiredService<SqliteCatalog>().IntakeIncidents);
         services.AddSingleton<ITextDerivativeRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Text);
         services.AddSingleton<ITextSegmentRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Segments);
         services.AddSingleton<ITextSearchIndex>(provider => provider.GetRequiredService<SqliteCatalog>().Search);
@@ -70,7 +71,8 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>(), options.DataRoot,
             options.IntakeRoots, status: Report(provider, "Praxis.Intake"),
             onCaptured: provider.GetRequiredService<ProcessingPipeline>().Wake,
-            clock: provider.GetRequiredService<TimeProvider>()));
+            clock: provider.GetRequiredService<TimeProvider>(),
+            incidents: provider.GetRequiredService<IIntakeIncidentJournal>()));
         services.AddSingleton<IIntakeSupervisor>(provider => provider.GetRequiredService<WatchedFolderIntakeGroup>());
         services.AddSingleton<IQuickNoteCapture>(provider => new QuickNoteCapture(
             provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));

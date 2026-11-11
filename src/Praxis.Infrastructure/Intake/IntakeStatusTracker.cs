@@ -12,7 +12,12 @@ internal sealed class IntakeStatusTracker
     private readonly Lock gate = new();
     private readonly Dictionary<string, string> fileErrors = new(StringComparer.Ordinal);
     private IntakeStatus current = new("starting", false, null, 0, 0, 0, [], null);
+    private readonly Action<string>? onStateTransition;
+    private string? reportedState;
     private int pauseRequested;
+
+    internal IntakeStatusTracker(Action<string>? onStateTransition = null) =>
+        this.onStateTransition = onStateTransition;
 
     internal bool IsPaused => Volatile.Read(ref pauseRequested) != 0;
 
@@ -32,6 +37,7 @@ internal sealed class IntakeStatusTracker
 
     internal void SetState(string state, string? problem = null)
     {
+        string? transition;
         lock (gate)
         {
             current = current with
@@ -40,6 +46,12 @@ internal sealed class IntakeStatusTracker
                 Paused = IsPaused,
                 Problem = problem
             };
+            transition = SignificantTransition(current.State);
+        }
+
+        if (transition is not null)
+        {
+            onStateTransition?.Invoke(transition);
         }
     }
 
@@ -68,6 +80,7 @@ internal sealed class IntakeStatusTracker
 
     internal void RecordSuccessfulScan(DateTimeOffset now, int observedFiles, int imported)
     {
+        string? transition;
         lock (gate)
         {
             IntakeFileError[] reported = fileErrors
@@ -78,6 +91,24 @@ internal sealed class IntakeStatusTracker
             current = new IntakeStatus(IsPaused ? "paused" : fileErrors.Count == 0 ? "watching" : "degraded", IsPaused,
                 now, observedFiles, checked(current.ImportedSinceStart + imported), fileErrors.Count,
                 Array.AsReadOnly(reported), fileErrors.Count == 0 ? null : $"{fileErrors.Count} source error(s) need attention.");
+            transition = SignificantTransition(current.State);
         }
+
+        if (transition is not null)
+        {
+            onStateTransition?.Invoke(transition);
+        }
+    }
+
+    private string? SignificantTransition(string state)
+    {
+        if (state is not ("watching" or "offline" or "degraded" or "reapproval_required") ||
+            state == reportedState)
+        {
+            return null;
+        }
+
+        reportedState = state;
+        return state;
     }
 }
