@@ -28,6 +28,34 @@ Files under `catalog/objects` are digest-sharded. Exact object inventory is deri
 
 Because both leases are held throughout capture, this constitutes a **consistent quiescent-host recovery boundary**. It does **not** mean two independent backups collected at arbitrary times are safe to pair, nor does it prove filesystem durability after power loss. Restore must be verified on the target filesystem before relying on the checkpoint.
 
+## Disposable operator rehearsal (recommended for #40)
+
+The existing `Praxis.Storage.RecoveryCheck` tool can now create an entirely **synthetic** catalog and client-held security registry on an owner-approved scratch filesystem, exercise the actual `LocalRecoverySet` backup/verification/fresh-root restore APIs, and persist a **non-secret evidence file** for verification by another invocation. It never opens the configured Praxis catalog or existing security registry. It generates temporary device signing, wrapping and recovery factors in memory, checks that the recovered encrypted key epoch unlocks with the right factor and rejects a different factor, then discards those secrets. It also checks restored source IDs, original bytes, version history, member permission, epoch metadata, and identity continuity.
+
+Create a **new, disposable** scratch directory on the actual filesystem you want to validate. On a Mac with an approved, mounted `EnderChest` volume, for example:
+
+```sh
+umask 077
+mkdir -p /Volumes/EnderChest/Praxis-Recovery-Lab
+chmod 700 /Volumes/EnderChest/Praxis-Recovery-Lab
+
+dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release -- \
+  --set-create /Volumes/EnderChest/Praxis-Recovery-Lab
+```
+
+The command prints a newly created `praxis-set-rehearsal-<random>` workspace. **Keep the printed path** and run an independent verification (a separate process) against it:
+
+```sh
+dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release -- \
+  --set-verify /Volumes/EnderChest/Praxis-Recovery-Lab/praxis-set-rehearsal-<printed-id>
+```
+
+Both commands must exit **0**. Keep the entire workspace and `evidence.json` for inspection; the tool does **not** delete or overwrite the workspace. The evidence records only generated test IDs, original content hashes, component snapshot reports and creation time; it does **not** store private keys, recovery secrets, real user documents or original production credentials. The test data and its on-disk manifests are nevertheless plaintext, so keep the scratch root private.
+
+The creation command exercises these actual storage boundaries on **disposable test data**: locked source rejection, cancelled backup, logical byte-budget limit, existing restore destination protection, owner-private manifest enforcement on Unix, missing identity component, truncated SQLite recovery bytes and denial of publishing a damaged set. It deliberately changes the live synthetic catalog/registry after backup to establish that the restored version and grants came from the earlier checkpoint. It does **not** forcibly fill the real volume, eject the SSD or kill a process during writes. Those are separate physical fault/reconnection exercises and should be performed only on an independently approved disposable volume. The existing `--create`/`--verify` commands in this tool remain the real **>2 GiB** catalog/original-file test for [#128](https://github.com/berniemackie97/Praxis/issues/128), with their own free-space requirement.
+
+**Acceptance evidence to retain:** printed workspace path (you may redact your username/home directory when sharing), the two complete command exit codes, reported backup catalog/object and registry digests, host OS/filesystem/mount state, and results of independent `--set-verify`. Do **not** upload `identity.sqlite`, real private keys, the scratch set itself or a production backup. This limited #40 rehearsal demonstrates the coordinated recovery pipeline and safe error boundaries; it is **not** evidence of whole-system disaster recovery, backup encryption, lost-device key recovery, a power-loss guarantee, or a retention/SLA policy.
+
 ## Local owner rehearsal
 
 Use the actual absolute existing catalog and registry directories, only after shutting down their owning processes. Never experiment on the only valid backup or a live data directory. Choose an existing owner-private parent on disposable storage or a noncritical test folder. Set a budget large enough for the recorded catalog and originals plus the identity database.
