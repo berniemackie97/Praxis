@@ -169,7 +169,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 20_000_000);
         }
 
-        await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
+        await CatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(target);
         Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("accepted",

@@ -4,15 +4,13 @@ using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Recovery;
 
-public sealed record LocalSnapshotReport(int ObjectCount, long TotalBytes, string CatalogSha256);
-
 /// <summary>
 /// Coherent catalog-plus-originals snapshots that do not require an open catalog session:
 /// verification, staged restore into a new directory, and backup of a closed catalog.
 /// </summary>
-public static class LocalCatalogSnapshots
+public static class CatalogSnapshots
 {
-    public static async Task<LocalSnapshotReport> BackupExistingAsync(string dataDirectory, string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default)
+    public static async Task<CatalogSnapshotReport> BackupExistingAsync(string dataDirectory, string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default)
     {
         SnapshotFiles.ValidateBudget(maxBytes);
         cancellationToken.ThrowIfCancellationRequested();
@@ -26,13 +24,13 @@ public static class LocalCatalogSnapshots
         return await catalog.Recovery.BackupAsync(destinationDirectory, maxBytes, version, cancellationToken);
     }
 
-    public static async Task<LocalSnapshotReport> RestoreAsync(string backupDirectory, string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default)
+    public static async Task<CatalogSnapshotReport> RestoreAsync(string backupDirectory, string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default)
     {
         string backup = SnapshotFiles.ValidateExistingBackup(backupDirectory);
         string destination = SnapshotFiles.ValidateNewDestination(destinationDirectory, backup);
         SnapshotFiles.ValidateBudget(maxBytes);
-        LocalSnapshotManifest expected = SnapshotFiles.ReadSnapshotManifest(backup);
-        LocalSnapshotReport verified = await SnapshotFiles.VerifyContentsAsync(backup, expected, maxBytes, cancellationToken);
+        SnapshotManifest expected = SnapshotFiles.ReadSnapshotManifest(backup);
+        CatalogSnapshotReport verified = await SnapshotFiles.VerifyContentsAsync(backup, expected, maxBytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         string staging = SnapshotFiles.CreateStagingDirectory(destination);
@@ -40,7 +38,7 @@ public static class LocalCatalogSnapshots
 
         OriginalFileStore source = new(backup);
         OriginalFileStore target = new(staging);
-        foreach (LocalSnapshotObject original in expected.Objects)
+        foreach (SnapshotObject original in expected.Objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await source.CopyVerifiedToStoreAsync(new OriginalObject(original.Digest, original.Length), target, cancellationToken);
@@ -61,11 +59,11 @@ public static class LocalCatalogSnapshots
         return verified;
     }
 
-    public static async Task<LocalSnapshotReport> VerifyAsync(string backupDirectory, long maxBytes, CancellationToken cancellationToken = default)
+    public static async Task<CatalogSnapshotReport> VerifyAsync(string backupDirectory, long maxBytes, CancellationToken cancellationToken = default)
     {
         string backup = SnapshotFiles.ValidateExistingBackup(backupDirectory);
         SnapshotFiles.ValidateBudget(maxBytes);
-        LocalSnapshotManifest manifest = SnapshotFiles.ReadSnapshotManifest(backup);
+        SnapshotManifest manifest = SnapshotFiles.ReadSnapshotManifest(backup);
         return await SnapshotFiles.VerifyContentsAsync(backup, manifest, maxBytes, cancellationToken);
     }
 }

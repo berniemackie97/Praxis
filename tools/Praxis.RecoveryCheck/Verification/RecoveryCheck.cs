@@ -28,7 +28,7 @@ internal static class RecoveryCheck
 
         CapturedOriginal large;
         CapturedOriginal small;
-        LocalSnapshotReport snapshot;
+        CatalogSnapshotReport snapshot;
         using (SqliteCatalog live = SqliteCatalog.Open(livePath))
         {
             await using GeneratedContentStream source = new(LargeBytes);
@@ -44,7 +44,7 @@ internal static class RecoveryCheck
 
         RecoveryEvidence evidence = new(large.Length, large.SourceId, large.ItemId, large.Revision, large.Sha256, small.ItemId, snapshot.CatalogSha256, snapshot.ObjectCount, snapshot.TotalBytes, DateTimeOffset.UtcNow);
 
-        await LocalCatalogSnapshots.RestoreAsync(Path.Combine(workspace, "backup"), Path.Combine(workspace, "restored"), Budget, cancellationToken);
+        await CatalogSnapshots.RestoreAsync(Path.Combine(workspace, "backup"), Path.Combine(workspace, "restored"), Budget, cancellationToken);
         await VerifyWorkspaceAsync(workspace, evidence, cancellationToken);
         await SaveEvidenceAsync(workspace, evidence, cancellationToken);
         return workspace;
@@ -68,7 +68,7 @@ internal static class RecoveryCheck
     {
         Require(evidence is { OriginalBytes: LargeBytes, Revision: 1 } && evidence.SourceId != Guid.Empty && evidence.ItemId != Guid.Empty
                 && evidence.SmallItemId != Guid.Empty && evidence.BackupObjectCount == 2, "The physical check evidence does not describe the expected test.");
-        LocalSnapshotReport backup = await LocalCatalogSnapshots.VerifyAsync(Path.Combine(workspace, "backup"), Budget, cancellationToken);
+        CatalogSnapshotReport backup = await CatalogSnapshots.VerifyAsync(Path.Combine(workspace, "backup"), Budget, cancellationToken);
         Require(backup.ObjectCount == evidence.BackupObjectCount && backup.TotalBytes == evidence.BackupTotalBytes && backup.CatalogSha256 == evidence.BackupCatalogSha256, "The backup differs from its recorded verification.");
 
         using SqliteCatalog restored = SqliteCatalog.Open(Path.Combine(workspace, "restored"));

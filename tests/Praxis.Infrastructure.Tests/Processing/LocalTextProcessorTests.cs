@@ -168,8 +168,8 @@ public sealed class LocalTextProcessorTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 20_000_000);
         }
 
-        Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
-        await LocalCatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
+        Assert.Equal(1, (await CatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
+        await CatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(destination);
         Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);

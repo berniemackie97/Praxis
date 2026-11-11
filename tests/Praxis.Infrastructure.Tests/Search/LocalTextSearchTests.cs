@@ -192,7 +192,7 @@ public sealed class LocalTextSearchTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 30_000_000);
         }
 
-        await LocalCatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
+        await CatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
         using SqliteCatalog recovered = SqliteCatalog.Open(destination);
         Assert.Equal(16, recovered.SchemaVersion);
         Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);

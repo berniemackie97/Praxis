@@ -114,7 +114,7 @@ public sealed class LocalCollectionsTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 8_000_000);
         }
 
-        await LocalCatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
+        await CatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(destination);
         Assert.Equal(16, reopened.SchemaVersion);
         Assert.Equal(collectionId, Assert.Single(reopened.Collections.List()).CollectionId);

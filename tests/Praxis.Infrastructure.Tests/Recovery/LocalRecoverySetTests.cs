@@ -62,11 +62,11 @@ public sealed class LocalRecoverySetTests : IDisposable
             identity.SpaceKeys.Publish(write, epoch);
         }
 
-        RecoverySetReport checkpoint = await LocalRecoverySet.BackupExistingAsync(
+        RecoverySetReport checkpoint = await RecoverySet.BackupExistingAsync(
             Catalog, Identity, Backup, Budget);
         Assert.Equal(installation, checkpoint.Identity.InstallationId);
         Assert.Equal(1, checkpoint.Catalog.ObjectCount);
-        Assert.Equal(checkpoint, await LocalRecoverySet.VerifyAsync(Backup, Budget));
+        Assert.Equal(checkpoint, await RecoverySet.VerifyAsync(Backup, Budget));
 
         using (SqliteCatalog later = SqliteCatalog.Open(Catalog))
         {
@@ -80,7 +80,7 @@ public sealed class LocalRecoverySetTests : IDisposable
             Assert.True(later.Operator.RevokeGrant(owner, space, member));
         }
 
-        Assert.Equal(checkpoint, await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+        Assert.Equal(checkpoint, await RecoverySet.RestoreAsync(Backup, Restored, Budget));
         Assert.Equal(new[] { "catalog", "identity" },
             Directory.GetDirectories(Restored).Select(Path.GetFileName).Order().ToArray());
         Assert.Empty(Directory.GetFiles(Restored));
@@ -146,12 +146,12 @@ public sealed class LocalRecoverySetTests : IDisposable
             identity.Operator.CreatePrincipal();
         }
 
-        await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
+        await RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
         Assert.Equal(2L, ReadSchemaVersion(databasePath));
         Assert.Equal(2L, ReadSchemaVersion(Path.Combine(Backup, "catalog", "catalog.sqlite")));
-        RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(Backup, Budget);
+        RecoverySetReport verified = await RecoverySet.VerifyAsync(Backup, Budget);
         Assert.Equal(0, verified.Catalog.ObjectCount);
-        await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget);
+        await RecoverySet.RestoreAsync(Backup, Restored, Budget);
         using SqliteCatalog restored = SqliteCatalog.Open(Path.Combine(Restored, "catalog"));
         Assert.True(restored.SchemaVersion > 2);
         Assert.Equal(2L, ReadSchemaVersion(databasePath));
@@ -161,14 +161,14 @@ public sealed class LocalRecoverySetTests : IDisposable
     public async Task DamagedIncompleteOrUnexpectedComponentCannotProduceRestoredSet()
     {
         await CreateBasicSetAsync();
-        RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(Backup, Budget);
+        RecoverySetReport verified = await RecoverySet.VerifyAsync(Backup, Budget);
         Assert.True(verified.Catalog.TotalBytes > 0);
 
         string identityPath = Path.Combine(Backup, "identity", "identity.sqlite");
         byte[] saved = await File.ReadAllBytesAsync(identityPath);
         await File.WriteAllBytesAsync(identityPath, [1, 2, 3]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+            RecoverySet.RestoreAsync(Backup, Restored, Budget));
         Assert.False(Directory.Exists(Restored));
         await File.WriteAllBytesAsync(identityPath, saved);
 
@@ -177,7 +177,7 @@ public sealed class LocalRecoverySetTests : IDisposable
         byte[] original = await File.ReadAllBytesAsync(catalogObject);
         await File.WriteAllBytesAsync(catalogObject, [0, 0, 0]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            LocalRecoverySet.VerifyAsync(Backup, Budget));
+            RecoverySet.VerifyAsync(Backup, Budget));
         await File.WriteAllBytesAsync(catalogObject, original);
 
         string manifest = Path.Combine(Backup, "manifest.json");
@@ -186,23 +186,23 @@ public sealed class LocalRecoverySetTests : IDisposable
         invalid["FormatVersion"] = 999;
         await File.WriteAllTextAsync(manifest, invalid.ToJsonString());
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+            RecoverySet.RestoreAsync(Backup, Restored, Budget));
         invalid["FormatVersion"] = 1;
         invalid["Identity"]!.AsObject()["DatabaseSha256"] = new string('0', 64);
         await File.WriteAllTextAsync(manifest, invalid.ToJsonString());
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            LocalRecoverySet.VerifyAsync(Backup, Budget));
+            RecoverySet.VerifyAsync(Backup, Budget));
         await File.WriteAllBytesAsync(manifest, originalManifest);
 
         File.WriteAllText(Path.Combine(Backup, "extra"), "unexpected");
-        await Assert.ThrowsAsync<InvalidDataException>(() => LocalRecoverySet.VerifyAsync(Backup, Budget));
+        await Assert.ThrowsAsync<InvalidDataException>(() => RecoverySet.VerifyAsync(Backup, Budget));
         File.Delete(Path.Combine(Backup, "extra"));
 
         string incomplete = Path.Combine(root, ".unfinished.incomplete-123");
         Directory.Move(Backup, incomplete);
-        await Assert.ThrowsAsync<InvalidDataException>(() => LocalRecoverySet.VerifyAsync(incomplete, Budget));
+        await Assert.ThrowsAsync<InvalidDataException>(() => RecoverySet.VerifyAsync(incomplete, Budget));
         Directory.Move(incomplete, Backup);
-        Assert.Equal(verified, await LocalRecoverySet.VerifyAsync(Backup, Budget));
+        Assert.Equal(verified, await RecoverySet.VerifyAsync(Backup, Budget));
         Assert.False(Directory.Exists(Restored));
     }
 
@@ -214,31 +214,31 @@ public sealed class LocalRecoverySetTests : IDisposable
         {
             using SecurityRegistry identity = SecurityRegistry.Open(Identity);
             await Assert.ThrowsAnyAsync<IOException>(() =>
-                LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget));
+                RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget));
         }
 
         using (SecurityRegistry active = SecurityRegistry.Open(Identity))
         {
             await Assert.ThrowsAnyAsync<IOException>(() =>
-                LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget));
+                RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget));
         }
 
         using CancellationTokenSource cancelled = new();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget, cancelled.Token));
+            RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget, cancelled.Token));
         Assert.False(Directory.Exists(Backup));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => LocalRecoverySet.BackupExistingAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RecoverySet.BackupExistingAsync(
             Catalog, Identity, Path.Combine(Catalog, "nested"), Budget));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => LocalRecoverySet.BackupExistingAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RecoverySet.BackupExistingAsync(
             Catalog, Identity, Path.Combine(Identity, "nested"), Budget));
 
-        await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
+        await RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
         Directory.CreateDirectory(Restored);
         Private(Restored);
         File.WriteAllText(Path.Combine(Restored, "preserve.txt"), "unchanged");
-        await Assert.ThrowsAsync<IOException>(() => LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+        await Assert.ThrowsAsync<IOException>(() => RecoverySet.RestoreAsync(Backup, Restored, Budget));
         Assert.Equal("unchanged", File.ReadAllText(Path.Combine(Restored, "preserve.txt")));
         Assert.Empty(Directory.GetDirectories(root, ".restored-set.incomplete-*"));
     }
@@ -247,20 +247,20 @@ public sealed class LocalRecoverySetTests : IDisposable
     public async Task CorruptPermissionsBudgetOrMissingComponentCannotBeAccepted()
     {
         await CreateBasicSetAsync();
-        await Assert.ThrowsAsync<InvalidDataException>(() => LocalRecoverySet.VerifyAsync(Backup, 1));
+        await Assert.ThrowsAsync<InvalidDataException>(() => RecoverySet.VerifyAsync(Backup, 1));
         if (!OperatingSystem.IsWindows())
         {
             string manifest = Path.Combine(Backup, "manifest.json");
             File.SetUnixFileMode(manifest, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-                LocalRecoverySet.VerifyAsync(Backup, Budget));
+                RecoverySet.VerifyAsync(Backup, Budget));
             File.SetUnixFileMode(manifest, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
 
         string missing = Path.Combine(Backup, "identity");
         Directory.Move(missing, Path.Combine(root, "held-identity"));
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            LocalRecoverySet.RestoreAsync(Backup, Restored, Budget));
+            RecoverySet.RestoreAsync(Backup, Restored, Budget));
         Assert.False(Directory.Exists(Restored));
     }
 
@@ -281,7 +281,7 @@ public sealed class LocalRecoverySetTests : IDisposable
             registry.Operator.AssignSource(owner, space, original.SourceId);
         }
 
-        await LocalRecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
+        await RecoverySet.BackupExistingAsync(Catalog, Identity, Backup, Budget);
     }
 
     private static long ReadSchemaVersion(string databasePath)

@@ -6,16 +6,11 @@ using Praxis.Infrastructure.Security;
 
 namespace Praxis.Infrastructure.Recovery;
 
-public sealed record RecoverySetReport(LocalSnapshotReport Catalog, SecuritySnapshotReport Identity);
-
-internal sealed record RecoverySetManifest(int FormatVersion, LocalSnapshotReport Catalog,
-    SecuritySnapshotReport Identity);
-
 /// <summary>
 /// A quiescent-host recovery point for the owner-local catalog, immutable originals
 /// and host identity registry. Client-held credentials and application settings are external.
 /// </summary>
-public static class LocalRecoverySet
+public static class RecoverySet
 {
     private const int FormatVersion = 1;
     private const long MaximumManifestBytes = 4096;
@@ -47,7 +42,7 @@ public static class LocalRecoverySet
         }
 
         string staging = SnapshotFiles.CreateStagingDirectory(destination);
-        LocalSnapshotReport catalogReport = await catalog.Recovery.BackupAsync(
+        CatalogSnapshotReport catalogReport = await catalog.Recovery.BackupAsync(
             Path.Combine(staging, "catalog"), maxBytes, version, cancellationToken);
         if (catalogReport.TotalBytes >= maxBytes)
         {
@@ -86,7 +81,7 @@ public static class LocalRecoverySet
         cancellationToken.ThrowIfCancellationRequested();
 
         string staging = SnapshotFiles.CreateStagingDirectory(destination);
-        LocalSnapshotReport catalog = await LocalCatalogSnapshots.RestoreAsync(
+        CatalogSnapshotReport catalog = await CatalogSnapshots.RestoreAsync(
             Path.Combine(backup, "catalog"), Path.Combine(staging, "catalog"), maxBytes, cancellationToken);
         SecuritySnapshotReport identity = await SecurityRegistrySnapshots.RestoreAsync(
             Path.Combine(backup, "identity"), Path.Combine(staging, "identity"),
@@ -144,7 +139,7 @@ public static class LocalRecoverySet
             throw new InvalidDataException("The recovery set manifest is incompatible.");
         }
 
-        LocalSnapshotReport catalog = await LocalCatalogSnapshots.VerifyAsync(
+        CatalogSnapshotReport catalog = await CatalogSnapshots.VerifyAsync(
             Path.Combine(root, "catalog"), maxBytes, cancellationToken);
         SecuritySnapshotReport identity = await SecurityRegistrySnapshots.VerifyAsync(
             Path.Combine(root, "identity"), maxBytes - catalog.TotalBytes, cancellationToken);

@@ -40,7 +40,7 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteKnowledgeRepository Knowledge { get; }
     public SqliteVerificationRepository Verification { get; }
     public SqliteCollectionRepository Collections { get; }
-    public LocalCatalogRecovery Recovery { get; }
+    public CatalogRecovery Recovery { get; }
     public SqliteModelProfileRepository Models { get; }
 
     private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, TimeProvider clock)
@@ -63,7 +63,7 @@ public sealed class SqliteCatalog : IDisposable
         Knowledge = new SqliteKnowledgeRepository(database, clock);
         Verification = new SqliteVerificationRepository(database, clock);
         Collections = new SqliteCollectionRepository(database, clock);
-        Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
+        Recovery = new CatalogRecovery(database, objects, dataDirectory);
         Models = new SqliteModelProfileRepository(database, clock);
     }
 

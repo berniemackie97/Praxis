@@ -462,7 +462,7 @@ public sealed class LocalObservedRenameTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 8_000_000);
         }
 
-        await LocalCatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
+        await CatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(restoredRoot);
         Assert.Equal(16, restored.SchemaVersion);
         LibraryItem recovered = Assert.Single(restored.Library.List());

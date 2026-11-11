@@ -78,7 +78,7 @@ internal static class RecoverySetCheck
             registry.SpaceKeys.Publish(proof, publication);
         }
 
-        RecoverySetReport snapshot = await LocalRecoverySet.BackupExistingAsync(
+        RecoverySetReport snapshot = await RecoverySet.BackupExistingAsync(
             liveCatalog, liveIdentity, backup, Budget, cancellationToken);
 
         using (SqliteCatalog changed = SqliteCatalog.Open(liveCatalog))
@@ -96,7 +96,7 @@ internal static class RecoverySetCheck
                 "The post-snapshot permission revocation failed.");
         }
 
-        RecoverySetReport recovered = await LocalRecoverySet.RestoreAsync(
+        RecoverySetReport recovered = await RecoverySet.RestoreAsync(
             backup, restored, Budget, cancellationToken);
         Require(recovered == snapshot, "The restored set differs from its backup report.");
         using (SecurityRegistry registry = SecurityRegistry.Open(Path.Combine(restored, "identity")))
@@ -150,7 +150,7 @@ internal static class RecoverySetCheck
     private static async Task VerifyWorkspaceAsync(string workspace, RecoverySetEvidence evidence,
         CancellationToken cancellationToken)
     {
-        RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(
+        RecoverySetReport verified = await RecoverySet.VerifyAsync(
             Path.Combine(workspace, "backup"), Budget, cancellationToken);
         Require(verified == evidence.Snapshot &&
             verified.Identity.InstallationId != Guid.Empty &&
@@ -211,30 +211,30 @@ internal static class RecoverySetCheck
     {
         string backup = Path.Combine(workspace, "backup");
         await ExpectFailureAsync<InvalidDataException>(() =>
-            LocalRecoverySet.VerifyAsync(backup, 1, cancellationToken), "Insufficient budget");
+            RecoverySet.VerifyAsync(backup, 1, cancellationToken), "Insufficient budget");
 
         using (SqliteCatalog active = SqliteCatalog.Open(liveCatalog))
         {
             await ExpectFailureAsync<IOException>(() =>
-                LocalRecoverySet.BackupExistingAsync(liveCatalog, liveIdentity,
+                RecoverySet.BackupExistingAsync(liveCatalog, liveIdentity,
                     Path.Combine(workspace, "locked-attempt"), Budget, cancellationToken),
                 "Active catalog lease");
         }
 
         await ExpectFailureAsync<IOException>(() =>
-            LocalRecoverySet.RestoreAsync(backup, Path.Combine(workspace, "restored"),
+            RecoverySet.RestoreAsync(backup, Path.Combine(workspace, "restored"),
                 Budget, cancellationToken), "Existing restore destination");
 
         using CancellationTokenSource cancelled = new();
         cancelled.Cancel();
         await ExpectFailureAsync<OperationCanceledException>(() =>
-            LocalRecoverySet.BackupExistingAsync(liveCatalog, liveIdentity,
+            RecoverySet.BackupExistingAsync(liveCatalog, liveIdentity,
                 Path.Combine(workspace, "cancelled"), Budget, cancelled.Token), "Cancellation");
         Require(!Directory.Exists(Path.Combine(workspace, "cancelled")),
             "Cancellation published an incomplete backup.");
 
         string damaged = Path.Combine(workspace, "damaged-copy");
-        await LocalRecoverySet.BackupExistingAsync(liveCatalog, liveIdentity, damaged,
+        await RecoverySet.BackupExistingAsync(liveCatalog, liveIdentity, damaged,
             Budget, cancellationToken);
 
         if (!OperatingSystem.IsWindows())
@@ -245,7 +245,7 @@ internal static class RecoverySetCheck
             try
             {
                 await ExpectFailureAsync<UnauthorizedAccessException>(() =>
-                    LocalRecoverySet.VerifyAsync(damaged, Budget, cancellationToken),
+                    RecoverySet.VerifyAsync(damaged, Budget, cancellationToken),
                     "Exposed backup permissions");
             }
             finally
@@ -260,7 +260,7 @@ internal static class RecoverySetCheck
         try
         {
             await ExpectFailureAsync<InvalidDataException>(() =>
-                LocalRecoverySet.VerifyAsync(damaged, Budget, cancellationToken),
+                RecoverySet.VerifyAsync(damaged, Budget, cancellationToken),
                 "Missing security registry");
         }
         finally
@@ -271,7 +271,7 @@ internal static class RecoverySetCheck
         await File.WriteAllBytesAsync(Path.Combine(identity, "identity.sqlite"), new byte[] { 0, 1, 2 },
             cancellationToken);
         await ExpectFailureAsync<InvalidDataException>(() =>
-            LocalRecoverySet.RestoreAsync(damaged, Path.Combine(workspace, "rejected"),
+            RecoverySet.RestoreAsync(damaged, Path.Combine(workspace, "rejected"),
                 Budget, cancellationToken), "Truncated registry");
         Require(!Directory.Exists(Path.Combine(workspace, "rejected")),
             "A corrupt recovery set was published.");

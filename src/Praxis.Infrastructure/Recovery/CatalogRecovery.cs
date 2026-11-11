@@ -6,29 +6,27 @@ using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Recovery;
 
-public sealed record OriginalRecoveryInspection(int StagedFiles, int PublishedObjects, int ReferencedObjects, int UnreferencedObjects, int MissingObjects, int CorruptObjects);
-
 /// <summary>
 /// Recovery operations on an open catalog: original-store inspection and coherent live backup.
 /// </summary>
-public sealed class LocalCatalogRecovery
+public sealed class CatalogRecovery
 {
     private readonly CatalogDatabase database;
     private readonly OriginalFileStore objects;
     private readonly string dataDirectory;
 
-    internal LocalCatalogRecovery(CatalogDatabase database, OriginalFileStore objects, string dataDirectory)
+    internal CatalogRecovery(CatalogDatabase database, OriginalFileStore objects, string dataDirectory)
     {
         this.database = database;
         this.objects = objects;
         this.dataDirectory = dataDirectory;
     }
 
-    public Task<LocalSnapshotReport> BackupAsync(string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default) => BackupAsync(destinationDirectory, maxBytes, CatalogSchema.CurrentVersion, cancellationToken);
+    public Task<CatalogSnapshotReport> BackupAsync(string destinationDirectory, long maxBytes, CancellationToken cancellationToken = default) => BackupAsync(destinationDirectory, maxBytes, CatalogSchema.CurrentVersion, cancellationToken);
 
     internal int ReadStoredSchemaVersion() => database.Execute(CatalogSchema.ReadVersion);
 
-    internal async Task<LocalSnapshotReport> BackupAsync(string destinationDirectory, long maxBytes, int catalogVersion, CancellationToken cancellationToken)
+    internal async Task<CatalogSnapshotReport> BackupAsync(string destinationDirectory, long maxBytes, int catalogVersion, CancellationToken cancellationToken)
     {
         CatalogDirectory.Validate(dataDirectory);
         string destination = SnapshotFiles.ValidateNewDestination(destinationDirectory, dataDirectory);
@@ -60,17 +58,17 @@ public sealed class LocalCatalogRecovery
         }
 
         SnapshotFiles.RestrictFile(catalogPath);
-        List<LocalSnapshotObject> snapshotObjects = SnapshotFiles.ReadSnapshotObjects(catalogPath, catalogVersion);
+        List<SnapshotObject> snapshotObjects = SnapshotFiles.ReadSnapshotObjects(catalogPath, catalogVersion);
         (long catalogLength, string catalogDigest) = await SnapshotFiles.HashFileAsync(catalogPath, cancellationToken);
         SnapshotFiles.EnforceBudget(catalogLength, snapshotObjects, maxBytes);
         OriginalFileStore target = new(staging);
-        foreach (LocalSnapshotObject original in snapshotObjects)
+        foreach (SnapshotObject original in snapshotObjects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await objects.CopyVerifiedToStoreAsync(new OriginalObject(original.Digest, original.Length), target, cancellationToken);
         }
 
-        LocalSnapshotManifest manifest = new(SnapshotFiles.FormatVersion, catalogVersion, catalogDigest, catalogLength, snapshotObjects);
+        SnapshotManifest manifest = new(SnapshotFiles.FormatVersion, catalogVersion, catalogDigest, catalogLength, snapshotObjects);
         string manifestPath = Path.Combine(staging, "manifest.json");
         await using (FileStream output = SnapshotFiles.OpenNewPrivateFile(manifestPath))
         {
@@ -79,7 +77,7 @@ public sealed class LocalCatalogRecovery
             output.Flush(flushToDisk: true);
         }
 
-        LocalSnapshotReport verified = await LocalCatalogSnapshots.VerifyAsync(staging, maxBytes, cancellationToken);
+        CatalogSnapshotReport verified = await CatalogSnapshots.VerifyAsync(staging, maxBytes, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         Directory.Move(staging, destination);
         return verified;

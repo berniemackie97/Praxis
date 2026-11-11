@@ -156,7 +156,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
             await catalog.Recovery.BackupAsync(backup, 10_000_000);
         }
 
-        await LocalCatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
+        await CatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(restored);
         Assert.Equal(16, reopened.SchemaVersion);
         ProcessingJob job = Assert.Single(reopened.Processing.List());
@@ -231,8 +231,8 @@ public sealed class ProcessingLifecycleTests : IDisposable
             Objects = new[] { new { Digest = digest, Length = original.LongLength } }
         });
         await File.WriteAllTextAsync(Path.Combine(backup, "manifest.json"), json);
-        Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 10_000_000)).ObjectCount);
-        await LocalCatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
+        Assert.Equal(1, (await CatalogSnapshots.VerifyAsync(backup, 10_000_000)).ObjectCount);
+        await CatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
         using SqliteCatalog catalog = SqliteCatalog.Open(restored);
         Assert.Equal(16, catalog.SchemaVersion);
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);

@@ -14,15 +14,15 @@ internal static class RecoveryCommand
         {
             case ["recovery", "backup", var catalog, var destination, "--max-bytes", var limit]
                 when IsAbsolutePath(catalog) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalCatalogSnapshots.BackupExistingAsync(catalog, destination, maxBytes, cancellationToken);
+                report = await CatalogSnapshots.BackupExistingAsync(catalog, destination, maxBytes, cancellationToken);
                 break;
             case ["recovery", "verify", var backup, "--max-bytes", var limit]
                 when IsAbsolutePath(backup) && TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalCatalogSnapshots.VerifyAsync(backup, maxBytes, cancellationToken);
+                report = await CatalogSnapshots.VerifyAsync(backup, maxBytes, cancellationToken);
                 break;
             case ["recovery", "restore", var backup, var destination, "--max-bytes", var limit]
                 when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalCatalogSnapshots.RestoreAsync(backup, destination, maxBytes, cancellationToken);
+                report = await CatalogSnapshots.RestoreAsync(backup, destination, maxBytes, cancellationToken);
                 break;
             case ["recovery", "identity-backup", var registry, var destination, "--max-bytes", var limit]
                 when IsAbsolutePath(registry) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
@@ -39,15 +39,15 @@ internal static class RecoveryCommand
             case ["recovery", "set-backup", var catalog, var identity, var destination, "--max-bytes", var limit]
                 when IsAbsolutePath(catalog) && IsAbsolutePath(identity) && IsAbsolutePath(destination) &&
                      TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalRecoverySet.BackupExistingAsync(catalog, identity, destination, maxBytes, cancellationToken);
+                report = await RecoverySet.BackupExistingAsync(catalog, identity, destination, maxBytes, cancellationToken);
                 break;
             case ["recovery", "set-verify", var backup, "--max-bytes", var limit]
                 when IsAbsolutePath(backup) && TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalRecoverySet.VerifyAsync(backup, maxBytes, cancellationToken);
+                report = await RecoverySet.VerifyAsync(backup, maxBytes, cancellationToken);
                 break;
             case ["recovery", "set-restore", var backup, var destination, "--max-bytes", var limit]
                 when IsAbsolutePath(backup) && IsAbsolutePath(destination) && TryParseByteLimit(limit, out long maxBytes):
-                report = await LocalRecoverySet.RestoreAsync(backup, destination, maxBytes, cancellationToken);
+                report = await RecoverySet.RestoreAsync(backup, destination, maxBytes, cancellationToken);
                 break;
             default:
                 Console.Error.WriteLine("""

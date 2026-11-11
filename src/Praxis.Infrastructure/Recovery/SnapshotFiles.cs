@@ -8,10 +8,6 @@ using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Recovery;
 
-internal sealed record LocalSnapshotObject(string Digest, long Length);
-
-internal sealed record LocalSnapshotManifest(int FormatVersion, int CatalogVersion, string CatalogSha256, long CatalogLength, List<LocalSnapshotObject> Objects);
-
 /// <summary>Snapshot layout, manifest and private-file primitives shared by backup and restore.</summary>
 internal static class SnapshotFiles
 {
@@ -22,7 +18,7 @@ internal static class SnapshotFiles
     internal static readonly UnixFileMode PrivateFile = UnixFileMode.UserRead | UnixFileMode.UserWrite;
     internal static readonly string[] sourceArray = new[] { "catalog.sqlite", "manifest.json" };
 
-    internal static List<LocalSnapshotObject> ReadSnapshotObjects(string catalogPath, int catalogVersion)
+    internal static List<SnapshotObject> ReadSnapshotObjects(string catalogPath, int catalogVersion)
     {
         using SqliteConnection snapshot = new(new SqliteConnectionStringBuilder
         {
@@ -51,7 +47,7 @@ internal static class SnapshotFiles
             }
         }
 
-        List<LocalSnapshotObject> originals = new();
+        List<SnapshotObject> originals = new();
         using SqliteCommand command = snapshot.CreateCommand("SELECT digest, byte_length FROM original_objects ORDER BY digest");
         using SqliteDataReader reader = command.ExecuteReader();
         while (reader.Read())
@@ -68,13 +64,13 @@ internal static class SnapshotFiles
                 throw new InvalidDataException("The snapshot contains invalid original metadata.");
             }
 
-            originals.Add(new LocalSnapshotObject(digest, length));
+            originals.Add(new SnapshotObject(digest, length));
         }
 
         return originals;
     }
 
-    internal static LocalSnapshotManifest ReadSnapshotManifest(string backup)
+    internal static SnapshotManifest ReadSnapshotManifest(string backup)
     {
         string path = Path.Combine(backup, "manifest.json");
         long length = new FileInfo(path).Length;
@@ -86,7 +82,7 @@ internal static class SnapshotFiles
         using FileStream input = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {
-            return JsonSerializer.Deserialize<LocalSnapshotManifest>(input) ?? throw new InvalidDataException("The snapshot manifest is empty.");
+            return JsonSerializer.Deserialize<SnapshotManifest>(input) ?? throw new InvalidDataException("The snapshot manifest is empty.");
         }
         catch (JsonException exception)
         {
@@ -274,7 +270,7 @@ internal static class SnapshotFiles
         }
     }
 
-    internal static long EnforceBudget(long catalogLength, IReadOnlyList<LocalSnapshotObject> objects, long maxBytes)
+    internal static long EnforceBudget(long catalogLength, IReadOnlyList<SnapshotObject> objects, long maxBytes)
     {
         if (catalogLength > maxBytes)
         {
@@ -282,7 +278,7 @@ internal static class SnapshotFiles
         }
 
         long remaining = maxBytes - catalogLength;
-        foreach (LocalSnapshotObject? item in objects)
+        foreach (SnapshotObject? item in objects)
         {
             if (item is null || item.Length < 0 || item.Length > remaining)
             {
@@ -300,7 +296,7 @@ internal static class SnapshotFiles
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
     }
 
-    internal static async Task<LocalSnapshotReport> VerifyContentsAsync(string directory, LocalSnapshotManifest manifest, long maxBytes, CancellationToken cancellationToken)
+    internal static async Task<CatalogSnapshotReport> VerifyContentsAsync(string directory, SnapshotManifest manifest, long maxBytes, CancellationToken cancellationToken)
     {
         if (manifest.FormatVersion != FormatVersion || !IsSnapshotSchemaVersion(manifest.CatalogVersion) || manifest.Objects.Count > MaximumObjects
             || !OriginalFileStore.IsValidDigest(manifest.CatalogSha256) || manifest.CatalogLength < 0)
@@ -316,7 +312,7 @@ internal static class SnapshotFiles
             throw new InvalidDataException("The snapshot catalog failed integrity verification.");
         }
 
-        List<LocalSnapshotObject> objects = ReadSnapshotObjects(catalogPath, manifest.CatalogVersion);
+        List<SnapshotObject> objects = ReadSnapshotObjects(catalogPath, manifest.CatalogVersion);
         if (!objects.SequenceEqual(manifest.Objects))
         {
             throw new InvalidDataException("The manifest does not match the catalog objects.");
@@ -329,12 +325,12 @@ internal static class SnapshotFiles
             throw new InvalidDataException("The snapshot object inventory is incomplete or unexpected.");
         }
 
-        foreach (LocalSnapshotObject item in objects)
+        foreach (SnapshotObject item in objects)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await store.VerifyAsync(new OriginalObject(item.Digest, item.Length), cancellationToken);
         }
 
-        return new LocalSnapshotReport(objects.Count, total, hash);
+        return new CatalogSnapshotReport(objects.Count, total, hash);
     }
 }
