@@ -18,4 +18,7 @@ public interface ICollectionRepository
     bool AddSource(Guid collectionId, Guid sourceId);
 
     bool RemoveSource(Guid collectionId, Guid sourceId);
+
+    /// <summary>Whether an active source currently belongs to an active collection.</summary>
+    bool ContainsActiveSource(Guid collectionId, Guid sourceId);
 }
