@@ -2,7 +2,9 @@
 name: Bug
 about: Report reproducible incorrect behavior
 title: "[Bug] "
-labels: ["bug"]
+labels: bug
+assignees: ''
+
 ---
 
 ## Observed behavior

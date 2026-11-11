@@ -2,7 +2,9 @@
 name: Epic
 about: Track a major capability and its dependent slices
 title: "[Epic] "
-labels: ["enhancement"]
+labels: enhancement
+assignees: ''
+
 ---
 
 ## Outcome

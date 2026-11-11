@@ -2,7 +2,9 @@
 name: Feature
 about: A cohesive capability that delivers a testable user outcome
 title: "[Feature] "
-labels: ["enhancement"]
+labels: enhancement
+assignees: ''
+
 ---
 
 ## Outcome

@@ -2,7 +2,9 @@
 name: Research spike
 about: Resolve a technical uncertainty before implementation
 title: "[Spike] "
-labels: ["documentation"]
+labels: documentation
+assignees: ''
+
 ---
 
 ## Decision needed

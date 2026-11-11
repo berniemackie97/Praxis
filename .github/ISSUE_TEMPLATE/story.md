@@ -2,7 +2,9 @@
 name: User story
 about: Describe a user-visible capability
 title: "[Story] "
-labels: ["enhancement"]
+labels: enhancement
+assignees: ''
+
 ---
 
 ## User need
