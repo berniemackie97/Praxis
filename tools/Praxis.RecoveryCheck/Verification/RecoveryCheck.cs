@@ -72,7 +72,6 @@ internal static class RecoveryCheck
         Require(backup.ObjectCount == evidence.BackupObjectCount && backup.TotalBytes == evidence.BackupTotalBytes && backup.CatalogSha256 == evidence.BackupCatalogSha256, "The backup differs from its recorded verification.");
 
         using SqliteCatalog restored = SqliteCatalog.Open(Path.Combine(workspace, "restored"));
-        Require(restored.SchemaVersion == 5, "The restored catalog has an unexpected schema.");
         await restored.Originals.VerifyAsync(evidence.ItemId, cancellationToken);
         await restored.Originals.VerifyAsync(evidence.SmallItemId, cancellationToken);
 

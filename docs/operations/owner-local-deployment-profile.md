@@ -54,6 +54,8 @@ The run identifier is generated for the process, not a user ID, device credentia
 | `unsupported` | Refuse unknown schema. Use a compatible binary or explicitly plan a verified migration after a complete backup; never edit `user_version` to bypass a gate |
 | Processing runtime unavailable | Keep originals and queued jobs; check the optional local model separately. Never treat model unavailability as a reason to reset the catalog |
 
+The owner-local coordinated recovery smoke uses the actual `Praxis.RecoveryCheck` Release executable on disposable, owner-private temporary storage. It independently verifies a catalog, immutable originals and a synthetic identity registry, checks the recovery-factor refusal and expected failure boundaries, and rejects malformed saved evidence without printing filesystem paths or exception traces on stderr. Run `python3 scripts/release/smoke_recovery_set.py` after the Release build. It consumes temporary scratch space and cleans it only after testing; **never point it at an existing catalog or any live registry**. It does not encrypt snapshots or recover actual owner-held signing/recovery secrets.
+
 The automated scenarios verify fixed response categories, not a real full disk, hardware unmount, other-user access, power-loss durability or all OS/filesystem permission combinations. Permission-based negatives run only on Unix. The manual [coordinated recovery procedure](coordinated-recovery-set.md) and [security-registry recovery](security-registry-recovery.md) must be performed on the selected filesystem with operator-preserved evidence.
 
 ## Logs, retention, secrets and access
