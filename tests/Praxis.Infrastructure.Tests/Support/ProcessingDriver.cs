@@ -1,7 +1,6 @@
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Tests.Support;
@@ -18,7 +17,7 @@ internal sealed class ProcessingDriver(SqliteCatalog catalog, IProcessingHandler
         new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing));
 
     internal static ProcessingDriver Topics(SqliteCatalog catalog) =>
-        new(catalog, new LocalHeadingProposer(catalog));
+        new(catalog, TestHandlers.HeadingProposals(catalog));
 
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {

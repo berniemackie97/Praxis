@@ -6,7 +6,7 @@ using Praxis.Domain.Knowledge;
 
 using Praxis.Domain.Processing;
 
-namespace Praxis.Infrastructure.Enrichment.Semantic;
+namespace Praxis.Application.Enrichment;
 
 /// <summary>
 /// The versioned instructions and output schema for <see cref="ProcessorKeys.SemanticExtraction"/>.
@@ -14,14 +14,14 @@ namespace Praxis.Infrastructure.Enrichment.Semantic;
 /// the instructions state that nothing inside it is an instruction. Owner decisions (confirmed
 /// types, rejected names) are passed as hints so repeated mistakes are not re-proposed.
 /// </summary>
-internal static class SemanticExtractionPrompt
+public static class SemanticExtractionPrompt
 {
-    internal const int MaximumTopics = 5;
-    internal const int MaximumEntities = 12;
-    internal const int MaximumRelations = 6;
-    internal const int MaximumHints = 24;
+    public const int MaximumTopics = 5;
+    public const int MaximumEntities = 12;
+    public const int MaximumRelations = 6;
+    public const int MaximumHints = 24;
 
-    internal static readonly JsonElement Schema = JsonDocument.Parse($$"""
+    public static readonly JsonElement Schema = JsonDocument.Parse($$"""
         {
           "type": "object",
           "properties": {
@@ -86,7 +86,7 @@ internal static class SemanticExtractionPrompt
         - If nothing qualifies, return empty arrays.
         """;
 
-    internal static IReadOnlyList<ChatMessage> Messages(
+    public static IReadOnlyList<ChatMessage> Messages(
         string sourceName, string? section, string excerpt, IReadOnlyList<EntityHint> hints)
     {
         StringBuilder user = new StringBuilder()

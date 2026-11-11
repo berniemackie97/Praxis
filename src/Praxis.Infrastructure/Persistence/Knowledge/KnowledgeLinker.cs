@@ -1,9 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Knowledge;
+namespace Praxis.Infrastructure.Persistence.Knowledge;
 
 /// <summary>
 /// Links proposals to canonical entities inside the transaction that records them. A name

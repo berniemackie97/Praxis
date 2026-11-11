@@ -1,7 +1,7 @@
+using Praxis.Application.Enrichment;
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
-using Praxis.Infrastructure.Enrichment;
-using Praxis.Infrastructure.Enrichment.Semantic;
+using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Composition;
@@ -16,9 +16,10 @@ public static class CatalogProcessing
     public static IReadOnlyList<IProcessingHandler> CreateHandlers(SqliteCatalog catalog) =>
     [
         new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing),
-        new LocalHeadingProposer(catalog),
+        new HeadingProposalHandler(catalog.Text, catalog.Proposals, catalog.Processing),
         new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing),
-        new LocalSemanticExtractor(catalog, ModelConnection.Open)
+        new SemanticExtractionHandler(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals,
+            catalog.Knowledge, catalog.Processing, new OllamaChatModelConnector())
     ];
 
     public static ProcessingPipeline CreatePipeline(

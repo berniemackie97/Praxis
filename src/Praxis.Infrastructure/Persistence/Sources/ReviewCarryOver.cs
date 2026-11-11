@@ -1,5 +1,5 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Knowledge;
+using Praxis.Infrastructure.Persistence.Knowledge;
 
 namespace Praxis.Infrastructure.Persistence.Sources;
 

@@ -1,4 +1,6 @@
 using Praxis.Application.Inference;
+using Praxis.Application.Knowledge;
+using Praxis.Application.Models;
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
@@ -6,9 +8,8 @@ using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Enrichment.Semantic;
+namespace Praxis.Application.Enrichment;
 
 /// <summary>
 /// Proposes topics, typed entities and relations for each segment of a revision using the
@@ -19,10 +20,13 @@ namespace Praxis.Infrastructure.Enrichment.Semantic;
 /// swap applies without restarting. A disabled or unreachable runtime defers the job instead
 /// of failing it; long runs renew their lease and stop when superseded or revoked.
 /// </summary>
-public sealed class LocalSemanticExtractor(
-    SqliteCatalog catalog, Func<ModelProfile, ModelConnection> connect) : IProcessingHandler
+public sealed class SemanticExtractionHandler(
+    IModelProfileRepository profiles, ITextDerivativeRepository derivatives, ITextSegmentRepository segmentStore,
+    IProposalRepository proposals, IKnowledgeRepository knowledge, IProcessingQueue processing,
+    IChatModelConnector connector) : IProcessingHandler
 {
-    internal const int MaximumSegments = 64;
+    public const int MaximumSegments = 64;
+    private const int MaximumHints = 2_000;
     private const int MaximumContextTokens = 4_096;
     private const int MaximumOutputTokens = 1_024;
 
@@ -34,23 +38,23 @@ public sealed class LocalSemanticExtractor(
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
-        ModelProfile? profile = catalog.Models.Get(ModelProfile.LocalEnrichment);
+        ModelProfile? profile = profiles.Get(ModelProfile.LocalEnrichment);
         if (profile is not { Enabled: true })
         {
             throw new ProcessorUnavailableException("model_disabled");
         }
 
-        using ModelConnection connection = connect(profile);
+        using ModelConnection connection = connector.Connect(profile);
         ModelIdentity identity = await DescribeAsync(connection.Model, cancellationToken);
-        LeasedText? input = catalog.Text.ReadLeasedInput(lease);
+        LeasedText? input = derivatives.ReadLeasedInput(lease);
         if (input is null)
         {
             return;
         }
 
-        IReadOnlyList<TextSegmentSpan> segments = catalog.Segments.ReadCompleted(lease.ItemId, lease.Revision);
-        Dictionary<string, List<ProposalCandidate>> reusable = ReusableResults(catalog.Proposals.ReadPrior(lease.ItemId, lease.Revision, ProcessorKey));
-        IReadOnlyList<EntityHint> hints = catalog.Knowledge.GoverningHints();
+        IReadOnlyList<TextSegmentSpan> segments = segmentStore.ReadCompleted(lease.ItemId, lease.Revision);
+        Dictionary<string, List<ProposalCandidate>> reusable = ReusableResults(proposals.ReadPrior(lease.ItemId, lease.Revision, ProcessorKey));
+        IReadOnlyList<EntityHint> hints = knowledge.GoverningHints(MaximumHints);
         RunState run = new RunState();
         string sourceName = Path.GetFileName(input.Locator);
         foreach (TextSegmentSpan segment in segments.Take(MaximumSegments))
@@ -72,7 +76,7 @@ public sealed class LocalSemanticExtractor(
                 .Take(SemanticExtractionPrompt.MaximumHints).ToArray();
             await ExtractAsync(connection.Model, profile, sourceName, segment, text, segmentHints, run,
                 cancellationToken);
-            if (catalog.Processing.Renew(lease, LeaseDuration) is null)
+            if (processing.Renew(lease, LeaseDuration) is null)
             {
                 return; // Lease lost, source revoked or revision superseded: publish nothing.
             }
@@ -80,11 +84,11 @@ public sealed class LocalSemanticExtractor(
 
         if (run.Examined > 0 && run.FailedSegments == run.Examined)
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Failed, run.LastFailure!);
+            processing.Finish(lease, ProcessingCompletion.Failed, run.LastFailure!);
             return;
         }
 
-        catalog.Proposals.Commit(lease, input, run.Accepted, new ModelRunRecord(
+        proposals.Commit(lease, input, run.Accepted, new ModelRunRecord(
             identity, run.InputTokens, run.OutputTokens, run.Duration,
             run.Examined + run.Reused, segments.Count, run.Rejected, run.Reused));
     }
@@ -183,7 +187,7 @@ public sealed class LocalSemanticExtractor(
             string identity = candidate.Kind == "relation"
                 ? $"{KnowledgeVocabulary.NameKey(candidate.RelationSubject)}|{candidate.Value}|{KnowledgeVocabulary.NameKey(candidate.RelationObject)}"
                 : KnowledgeVocabulary.NameKey(candidate.Value) ?? candidate.Value.ToUpperInvariant();
-            if (Accepted.Count < LocalProposals.MaximumPerRun && seen.Add((candidate.Kind, identity)))
+            if (Accepted.Count < ProposalLimits.MaximumPerRun && seen.Add((candidate.Kind, identity)))
             {
                 Accepted.Add(candidate);
             }

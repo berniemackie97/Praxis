@@ -2,15 +2,15 @@ using Praxis.Application.Processing;
 using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Enrichment;
+namespace Praxis.Application.Enrichment;
 
 /// <summary>
 /// Deterministic topic proposals from literal first- to third-level Markdown headings of
 /// verified extracted text. Non-Markdown sources are marked unsupported; no model is used.
 /// </summary>
-public sealed class LocalHeadingProposer(SqliteCatalog catalog) : IProcessingHandler
+public sealed class HeadingProposalHandler(
+    ITextDerivativeRepository derivatives, IProposalRepository proposals, IProcessingQueue processing) : IProcessingHandler
 {
     public string ProcessorKey => ProcessorKeys.MarkdownHeadings;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
@@ -21,7 +21,7 @@ public sealed class LocalHeadingProposer(SqliteCatalog catalog) : IProcessingHan
     public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        LeasedText? candidate = catalog.Text.ReadLeasedInput(lease);
+        LeasedText? candidate = derivatives.ReadLeasedInput(lease);
         if (candidate is null)
         {
             return Task.CompletedTask;
@@ -30,11 +30,11 @@ public sealed class LocalHeadingProposer(SqliteCatalog catalog) : IProcessingHan
         string extension = Path.GetExtension(candidate.Locator).ToLowerInvariant();
         if (candidate.SourceKind != "file" || extension is not (".md" or ".markdown"))
         {
-            catalog.Processing.Finish(lease, ProcessingCompletion.Unsupported);
+            processing.Finish(lease, ProcessingCompletion.Unsupported);
             return Task.CompletedTask;
         }
 
-        catalog.Proposals.Commit(lease, candidate, ExtractHeadings(candidate.Content));
+        proposals.Commit(lease, candidate, ExtractHeadings(candidate.Content));
         return Task.CompletedTask;
     }
 

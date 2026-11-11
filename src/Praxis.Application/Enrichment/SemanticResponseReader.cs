@@ -3,7 +3,7 @@ using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
 
-namespace Praxis.Infrastructure.Enrichment.Semantic;
+namespace Praxis.Application.Enrichment;
 
 /// <summary>
 /// Converts a model's structured answer for one segment into proposal candidates. An item is
@@ -12,9 +12,9 @@ namespace Praxis.Infrastructure.Enrichment.Semantic;
 /// predicate and quote both names. Evidence that reads like an instruction is flagged.
 /// Everything else is counted as rejected; model output is never trusted as fact.
 /// </summary>
-internal static class SemanticResponseReader
+public static class SemanticResponseReader
 {
-    internal static (IReadOnlyList<ProposalCandidate> Accepted, int Rejected) Read(
+    public static (IReadOnlyList<ProposalCandidate> Accepted, int Rejected) Read(
         string json, string segmentText, int segmentStart)
     {
         JsonDocument document;
@@ -154,7 +154,7 @@ internal static class SemanticResponseReader
 
         private (int Offset, int Length)? Locate(string? quote) =>
             quote is not null && EvidenceLocator.Find(segmentText, quote) is { } found &&
-            found.Length <= LocalProposals.MaximumEvidenceLength ? found : null;
+            found.Length <= ProposalLimits.MaximumEvidenceLength ? found : null;
 
         private string? Flag((int Offset, int Length) span) =>
             InstructionLikeText.Matches(segmentText, span.Offset, span.Length) ? InstructionLikeText.Flag : null;

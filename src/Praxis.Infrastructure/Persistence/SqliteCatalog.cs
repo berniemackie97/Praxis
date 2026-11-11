@@ -1,9 +1,9 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Knowledge;
 using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Persistence.Collections;
+using Praxis.Infrastructure.Persistence.Enrichment;
+using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Library;
 using Praxis.Infrastructure.Persistence.Models;
 using Praxis.Infrastructure.Persistence.Originals;
@@ -37,8 +37,8 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteTextSegmentRepository Segments { get; }
     public SqliteTextSearchIndex Search { get; }
     public SqliteSemanticVectorStore Embeddings { get; }
-    public LocalProposals Proposals { get; }
-    public LocalKnowledge Knowledge { get; }
+    public SqliteProposalRepository Proposals { get; }
+    public SqliteKnowledgeRepository Knowledge { get; }
     public SqliteVerificationRepository Verification { get; }
     public SqliteCollectionRepository Collections { get; }
     public LocalMediaEvidence Media { get; }
@@ -61,8 +61,8 @@ public sealed class SqliteCatalog : IDisposable
         Segments = new SqliteTextSegmentRepository(database, clock);
         Search = new SqliteTextSearchIndex(database);
         Embeddings = new SqliteSemanticVectorStore(database, clock);
-        Proposals = new LocalProposals(database);
-        Knowledge = new LocalKnowledge(database);
+        Proposals = new SqliteProposalRepository(database, clock);
+        Knowledge = new SqliteKnowledgeRepository(database, clock);
         Verification = new SqliteVerificationRepository(database, clock);
         Collections = new SqliteCollectionRepository(database, clock);
         Media = new LocalMediaEvidence(Sources, Search, Text, objects);

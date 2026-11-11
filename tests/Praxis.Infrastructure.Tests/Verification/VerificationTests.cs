@@ -9,7 +9,6 @@ using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Desktop;
-using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -338,7 +337,7 @@ public sealed class VerificationTests : IDisposable
         [
             ProcessingDriver.Text(catalog),
             new(catalog, new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing)),
-            new(catalog, new LocalSemanticExtractor(catalog, _ => new ModelConnection(model)))
+            new(catalog, TestHandlers.SemanticExtraction(catalog, _ => new ModelConnection(model)))
         ];
         foreach (ProcessingDriver driver in drivers)
         {

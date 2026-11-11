@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Praxis.Infrastructure.Enrichment.Semantic;
+namespace Praxis.Domain.Enrichment;
 
 /// <summary>
 /// Flags evidence whose sentence reads like an instruction to an AI model ("ignore previous
@@ -9,9 +9,9 @@ namespace Praxis.Infrastructure.Enrichment.Semantic;
 /// proposal from the knowledge graph until the owner accepts it or a verifier confirms it; it
 /// never deletes or rejects anything by itself.
 /// </summary>
-internal static partial class InstructionLikeText
+public static partial class InstructionLikeText
 {
-    internal const string Flag = "instruction_like";
+    public const string Flag = "instruction_like";
 
     [GeneratedRegex("""
         \b(ignore|disregard|forget|override)\b.{0,40}\b(instructions?|prompts?|rules?|above|previous|prior)\b
@@ -24,7 +24,7 @@ internal static partial class InstructionLikeText
     private static partial Regex Instruction();
 
     /// <summary>Checks the sentence(s) of <paramref name="text"/> that contain the evidence span.</summary>
-    internal static bool Matches(string text, int offset, int length)
+    public static bool Matches(string text, int offset, int length)
     {
         int start = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, offset - 1)) + 1;
         int endIndex = text.IndexOfAny(['.', '!', '?', '\n'], Math.Min(text.Length - 1, offset + length));

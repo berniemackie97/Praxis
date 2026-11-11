@@ -7,7 +7,6 @@ using Praxis.Domain.Enrichment;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -86,7 +85,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         List<string> reports = new List<string>();
         ScriptedChatModel model = new ScriptedChatModel(_ => "{}") { DescribeFailure = InferenceFailure.Unavailable };
         ProcessingPipeline pipeline = new ProcessingPipeline(catalog.Processing,
-            [new LocalSemanticExtractor(catalog, _ => new ModelConnection(model))], TimeProvider.System,
+            [TestHandlers.SemanticExtraction(catalog, _ => new ModelConnection(model))], TimeProvider.System,
             status: reports.Add);
 
         Assert.True(await pipeline.ProcessNextAsync());
@@ -174,7 +173,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         EnableModel(catalog);
         List<string> opened = new List<string>();
-        ProcessingDriver extractor = new ProcessingDriver(catalog, new LocalSemanticExtractor(catalog, profile =>
+        ProcessingDriver extractor = new ProcessingDriver(catalog, TestHandlers.SemanticExtraction(catalog, profile =>
         {
             opened.Add(profile.Model);
             return new ModelConnection(new ScriptedChatModel(_ => """{"topics":[],"entities":[]}""")
@@ -204,7 +203,7 @@ public sealed class LocalSemanticExtractorTests : IDisposable
     }
 
     private static ProcessingDriver Extractor(SqliteCatalog catalog, ScriptedChatModel model) =>
-        new(catalog, new LocalSemanticExtractor(catalog, _ => new ModelConnection(model)));
+        new(catalog, TestHandlers.SemanticExtraction(catalog, _ => new ModelConnection(model)));
 
     private static void EnableModel(SqliteCatalog catalog) =>
         catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment,

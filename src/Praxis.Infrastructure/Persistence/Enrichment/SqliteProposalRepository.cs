@@ -1,41 +1,40 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Enrichment;
 using Praxis.Application.Text;
 using Praxis.Domain.Enrichment;
-using Praxis.Domain.Knowledge;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Enrichment.Semantic;
-using Praxis.Infrastructure.Knowledge;
-using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Processing;
 
-namespace Praxis.Infrastructure.Enrichment;
+namespace Praxis.Infrastructure.Persistence.Enrichment;
 
 /// <summary>
 /// Source-grounded proposals (topics and typed entities) with exact evidence spans and
 /// append-only owner review. Proposals are visible only for the current, verified revision
 /// of an active source; no proposal changes canonical content.
 /// </summary>
-public sealed class LocalProposals
+public sealed class SqliteProposalRepository : IProposalRepository
 {
-    public const int MaximumPerRun = 64;
-    public const int MaximumValueLength = 120;
-    public const int MaximumEvidenceLength = 240;
-
     private readonly CatalogDatabase database;
+    private readonly TimeProvider clock;
 
-    internal LocalProposals(CatalogDatabase database) => this.database = database;
+    internal SqliteProposalRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     /// <summary>
     /// Records the producer run, its proposals and the job's completion in one transaction,
     /// only while the lease is held, the source is active and the revision digest is unchanged.
     /// </summary>
-    internal bool Commit(
+    public bool Commit(
         ProcessingLease lease, LeasedText input, IReadOnlyList<ProposalCandidate> candidates,
         ModelRunRecord? model = null)
     {
-        Validate(input, candidates);
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        ProposalRules.ValidateCandidates(input.Content, candidates);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -113,7 +112,7 @@ public sealed class LocalProposals
     /// The latest earlier revision's result from <paramref name="producer"/> for this item, with
     /// that revision's text and segments, or null when there is none.
     /// </summary>
-    internal PriorExtraction? ReadPrior(Guid itemId, int revision, string producer) => database.Execute(connection =>
+    public PriorExtraction? ReadPrior(Guid itemId, int revision, string producer) => database.Execute(connection =>
     {
         using SqliteCommand run = connection.CreateCommand("""
                                                            SELECT r.revision, d.content FROM enrichment_runs r
@@ -182,43 +181,6 @@ public sealed class LocalProposals
         return new PriorExtraction(content, spans, candidates);
     });
 
-    private static bool ValidName(string? name) =>
-        name is { Length: >= 1 and <= MaximumValueLength } && !name.Any(char.IsControl);
-
-    private static void Validate(LeasedText input, IReadOnlyList<ProposalCandidate> candidates)
-    {
-        if (candidates.Count > MaximumPerRun)
-        {
-            throw new ArgumentException("A run may record at most 64 proposals.", nameof(candidates));
-        }
-
-        foreach (ProposalCandidate candidate in candidates)
-        {
-            bool kindValid = candidate.Kind switch
-            {
-                "topic" => candidate.EntityType is null && candidate.RelationSubject is null,
-                "entity" => candidate.EntityType is not null &&
-                    KnowledgeVocabulary.EntityTypes.Contains(candidate.EntityType) &&
-                    candidate.RelationSubject is null,
-                "relation" => candidate.EntityType is null &&
-                    KnowledgeVocabulary.Predicates.Contains(candidate.Value) &&
-                    ValidName(candidate.RelationSubject) && ValidName(candidate.RelationObject),
-                _ => false
-            };
-            kindValid = kindValid && (candidate.Flags is null or InstructionLikeText.Flag) &&
-                (candidate.Kind == "relation") == (candidate.RelationObject is not null);
-            if (!kindValid || candidate.Value.Length is < 1 or > MaximumValueLength ||
-                candidate.Value.Any(char.IsControl) ||
-                candidate.EvidenceLength is < 1 or > MaximumEvidenceLength ||
-                candidate.EvidenceOffset < 0 ||
-                candidate.EvidenceOffset > input.Content.Length - candidate.EvidenceLength)
-            {
-                throw new ArgumentException("Each proposal needs a valid kind, value and evidence span.",
-                    nameof(candidates));
-            }
-        }
-    }
-
     public IReadOnlyList<EnrichmentProposal> List(Guid sourceId, int limit = 40)
     {
         if (sourceId == Guid.Empty)
@@ -270,25 +232,7 @@ public sealed class LocalProposals
             throw new ArgumentException("A proposal identifier is required.", nameof(proposalId));
         }
 
-        if (decision is not ("accepted" or "rejected" or "corrected"))
-        {
-            throw new ArgumentException("The review decision is invalid.", nameof(decision));
-        }
-
-        if (decision == "corrected")
-        {
-            correction = correction?.Trim();
-            if (string.IsNullOrWhiteSpace(correction) || correction.Length > MaximumValueLength ||
-                correction.Any(char.IsControl))
-            {
-                throw new ArgumentException(
-                    "Corrections must be printable and at most 120 characters.", nameof(correction));
-            }
-        }
-        else if (correction is not null)
-        {
-            throw new ArgumentException("Only corrected proposals accept replacement text.", nameof(correction));
-        }
+        correction = ProposalRules.NormalizeReview(decision, correction);
 
         return database.Execute(connection =>
         {
@@ -324,7 +268,7 @@ public sealed class LocalProposals
                 return false;
             }
 
-            string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+            string now = CatalogValues.Timestamp(clock.GetUtcNow());
             using SqliteCommand update = connection.CreateCommand("""
                                                                   UPDATE enrichment_proposals SET status = $decision,
                                                                       correction = $correction, reviewed_utc = $now WHERE proposal_id = $id

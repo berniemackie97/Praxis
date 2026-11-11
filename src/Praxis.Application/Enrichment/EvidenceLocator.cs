@@ -1,17 +1,17 @@
 using System.Text;
 
-namespace Praxis.Infrastructure.Enrichment.Semantic;
+namespace Praxis.Application.Enrichment;
 
 /// <summary>
 /// Finds a model-quoted passage in the text it was given. An exact ordinal match wins;
 /// otherwise runs of whitespace are treated as equivalent, which tolerates reflowed line
 /// breaks but never changed words. Returns the span in the original text, or null.
 /// </summary>
-internal static class EvidenceLocator
+public static class EvidenceLocator
 {
-    internal const int MinimumQuote = 3;
+    public const int MinimumQuote = 3;
 
-    internal static (int Offset, int Length)? Find(string text, string quote)
+    public static (int Offset, int Length)? Find(string text, string quote)
     {
         string trimmed = quote.Trim();
         if (trimmed.Length < MinimumQuote)

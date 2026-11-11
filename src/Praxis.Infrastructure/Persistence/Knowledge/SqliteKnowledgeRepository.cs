@@ -1,9 +1,9 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Knowledge;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
-using Praxis.Infrastructure.Persistence;
 
-namespace Praxis.Infrastructure.Knowledge;
+namespace Praxis.Infrastructure.Persistence.Knowledge;
 
 /// <summary>
 /// Canonical entities across all sources: what is known about a name, where it is mentioned,
@@ -11,7 +11,7 @@ namespace Praxis.Infrastructure.Knowledge;
 /// reject, restore, relate). Everything shown is derived from currently visible evidence, so a
 /// revoked source or superseded revision drops out without deleting owner decisions.
 /// </summary>
-public sealed class LocalKnowledge
+public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
 {
     private const string Summary = """
         SELECT e.entity_id, e.display_name, e.entity_type, e.type_origin, e.status,
@@ -23,7 +23,13 @@ public sealed class LocalKnowledge
 
     private readonly CatalogDatabase database;
 
-    internal LocalKnowledge(CatalogDatabase database) => this.database = database;
+    private readonly TimeProvider clock;
+
+    internal SqliteKnowledgeRepository(CatalogDatabase database, TimeProvider clock)
+    {
+        this.database = database;
+        this.clock = clock;
+    }
 
     /// <summary>Active entities with visible evidence or an owner decision, most mentioned first.</summary>
     public IReadOnlyList<EntitySummary> ListEntities(string? entityType = null, string? search = null, int limit = 100)
@@ -193,7 +199,7 @@ public sealed class LocalKnowledge
     }
 
     /// <summary>Owner and verifier decisions the local model should respect, for prompt hints.</summary>
-    internal IReadOnlyList<EntityHint> GoverningHints(int limit = 2_000) => database.Execute(connection =>
+    public IReadOnlyList<EntityHint> GoverningHints(int limit = 2_000) => database.Execute(connection =>
     {
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT a.display, e.entity_type, e.status = 'rejected'
@@ -225,7 +231,7 @@ public sealed class LocalKnowledge
         Guid entityId, string action, string detail, Action<SqliteConnection, SqliteTransaction, string> apply)
     {
         RequireId(entityId);
-        string now = CatalogValues.Timestamp(DateTimeOffset.UtcNow);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();

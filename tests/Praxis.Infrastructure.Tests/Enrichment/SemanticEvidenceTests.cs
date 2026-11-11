@@ -1,6 +1,6 @@
+using Praxis.Application.Enrichment;
 using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
-using Praxis.Infrastructure.Enrichment.Semantic;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Enrichment;

@@ -4,7 +4,7 @@ using Praxis.Application.Inference;
 using Praxis.Application.Verification;
 using Praxis.Domain.Models;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Knowledge;
+using Praxis.Infrastructure.Persistence.Knowledge;
 
 namespace Praxis.Infrastructure.Persistence.Verification;
 
