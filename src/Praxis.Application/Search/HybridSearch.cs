@@ -37,6 +37,14 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
             return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray()), false);
         }
 
+        // Only currently eligible vectors may influence the fused ranking.
+        IReadOnlyList<SearchHit> currentVectors = lexical.RetainCurrent(
+            vectors.Select(vector => vector.Hit).ToArray());
+        if (currentVectors.Count == 0)
+        {
+            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray()), false);
+        }
+
         Dictionary<Guid, (SearchHit Hit, double Score)> combined = new();
         for (int index = 0; index < keyword.Count; index++)
         {
@@ -44,9 +52,9 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
             combined[hit.ItemId] = (hit, 1d / (RankOffset + index + 1));
         }
 
-        for (int index = 0; index < vectors.Count; index++)
+        for (int index = 0; index < currentVectors.Count; index++)
         {
-            SearchHit hit = vectors[index].Hit;
+            SearchHit hit = currentVectors[index];
             double score = 1d / (RankOffset + index + 1);
             if (combined.TryGetValue(hit.ItemId, out var existing))
             {
