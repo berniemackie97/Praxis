@@ -108,6 +108,47 @@ public sealed class VideoCueSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task CollectionScopeRequiresBothCaptionAndVideoSourceAndRechecksRemoval()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal video = await Capture(catalog, "scoped.mp4", "video bytes", "video");
+        CapturedOriginal captions = await Capture(catalog,
+            "scoped.mp4." + video.Sha256 + ".vtt",
+            "WEBVTT\n\n00:00:03.000 --> 00:00:07.000\nViolet scoped tutorial.\n", "caption");
+        ProcessingDriver worker = ProcessingDriver.Text(catalog);
+        Assert.True(await worker.ProcessNextAsync());
+        Assert.True(await worker.ProcessNextAsync());
+
+        Guid group = catalog.Collections.Create("Paired tutorial").CollectionId;
+        Assert.True(catalog.Collections.AddSource(group, captions.SourceId));
+        MediaEvidence media = new(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals,
+            catalog.Collections);
+        Assert.Single(media.SearchCues("violet"));
+        Assert.Empty(media.SearchCues("violet", 20, group));
+
+        Assert.True(catalog.Collections.AddSource(group, video.SourceId));
+        Assert.True(catalog.Collections.ContainsActiveSource(group, captions.SourceId));
+        Assert.True(catalog.Collections.ContainsActiveSource(group, video.SourceId));
+        Assert.Equal(video.SourceId, Assert.Single(media.SearchCues("violet", 20, group)).VideoSourceId);
+
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
+        using JsonDocument scoped = JsonDocument.Parse(await protocol.HandleAsync(
+            $"""{"requestId":"scoped","action":"mediaCues","query":"violet","collectionId":"{{group:D}}"}"""));
+        Assert.True(scoped.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Single(scoped.RootElement.GetProperty("data").GetProperty("clips").EnumerateArray());
+
+        Assert.True(catalog.Collections.RemoveSource(group, video.SourceId));
+        Assert.Empty(media.SearchCues("violet", 20, group));
+        Assert.False(catalog.Collections.ContainsActiveSource(group, video.SourceId));
+
+        Assert.True(catalog.Collections.AddSource(group, video.SourceId));
+        Assert.True(catalog.Collections.Archive(group));
+        Assert.Empty(media.SearchCues("violet", 20, group));
+        Assert.False(catalog.Collections.ContainsActiveSource(group, captions.SourceId));
+        Assert.Single(media.SearchCues("violet"));
+    }
+
+    [Fact]
     public async Task PrivateDesktopProtocolReturnsGroundedVideoCues()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
