@@ -117,7 +117,7 @@ internal static class RecoverySetCheck
             }
             catch (CryptographicException)
             {
-                // Expected: an unrelated recovery secret cannot unlock the archive.
+                Console.WriteLine("PASS failure boundary: Incorrect recovery secret");
             }
         }
 
