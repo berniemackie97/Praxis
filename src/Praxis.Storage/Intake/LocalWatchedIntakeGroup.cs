@@ -70,6 +70,14 @@ public sealed class LocalWatchedIntakeGroup
         return Snapshot();
     }
 
+    public void EnsurePrimaryRootApproved()
+    {
+        if (!monitors[0].IsApprovedAndAvailable)
+        {
+            throw new InvalidOperationException("The primary Inbox is offline or requires folder reapproval.");
+        }
+    }
+
     public LocalIntakeStatus ApproveRoot(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);

@@ -235,6 +235,7 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
 
     private async Task<object> CaptureNoteAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
     {
+        group?.EnsurePrimaryRootApproved();
         LocalQuickCaptureReceipt capture = await (quickCapture ?? throw new InvalidOperationException("Quick capture is not configured."))
             .CaptureAsync(fields.RequireGuid("captureId"), fields.OptionalText("title", 80, "The note title is invalid."),
                 fields.RequireString("text", 8_000), cancellationToken);

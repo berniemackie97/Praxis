@@ -64,6 +64,10 @@ public sealed class LocalWatchedIntake
 
     public LocalIntakeStatus Snapshot() => status.Snapshot();
 
+    public bool IsApprovedAndAvailable =>
+        Volatile.Read(ref requiresApproval) == 0 && Directory.Exists(root) &&
+        Interlocked.Read(ref approvedCreationTicks) == Directory.GetCreationTimeUtc(root).Ticks;
+
     public LocalIntakeStatus ApproveRoot(string selectedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
