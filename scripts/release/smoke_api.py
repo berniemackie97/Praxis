@@ -33,6 +33,7 @@ def main():
     environment["PRAXIS_HEALTH_PORT"] = str(port)
     # Deliberately try to override the explicit Kestrel endpoint with a wildcard.
     environment["ASPNETCORE_URLS"] = f"http://0.0.0.0:{port}"
+    environment["Kestrel__Endpoints__Injected__Url"] = f"http://0.0.0.0:{port}"
     environment["ASPNETCORE_ENVIRONMENT"] = "Production"
     process = subprocess.Popen(
         ["dotnet", str(assembly)],
