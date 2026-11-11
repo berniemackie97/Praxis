@@ -53,6 +53,7 @@ public sealed class SqliteIntakeIncidentJournal : IIntakeIncidentJournal
 
             if (existing == state)
             {
+                transaction.Commit();
                 return;
             }
 

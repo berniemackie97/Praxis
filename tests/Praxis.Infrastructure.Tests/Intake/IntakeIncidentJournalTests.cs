@@ -85,12 +85,12 @@ public sealed class IntakeIncidentJournalTests : IDisposable
         tracker.RecordSuccessfulScan(now, 0, 0, notificationsUnavailable: true);
         tracker.RecordSuccessfulScan(now.AddSeconds(10), 0, 0, notificationsUnavailable: true);
         Assert.Equal("degraded", tracker.Snapshot().State);
-        Assert.Equal(["degraded"], transitions);
+        Assert.Equal(new[] { "degraded" }, transitions);
 
         tracker.SetState("resuming");
         tracker.RecordSuccessfulScan(now.AddSeconds(20), 0, 0);
         Assert.Equal("watching", tracker.Snapshot().State);
-        Assert.Equal(["degraded", "watching"], transitions);
+        Assert.Equal(new[] { "degraded", "watching" }, transitions);
     }
 
     [Fact]
