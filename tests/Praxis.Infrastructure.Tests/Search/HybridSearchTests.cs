@@ -284,6 +284,30 @@ public sealed class HybridSearchTests : IDisposable
         Assert.Equal(2, (await search.QueryAsync("citrus", model)).Hits.Count);
     }
 
+    [Fact]
+    public async Task CollectionRemovalAfterCandidateReadsRetractsHybridSnippets()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
+        CapturedOriginal saved = await Capture(catalog, "scope.md",
+            "tangerine orchard harvest", "one");
+        await SegmentNext(catalog);
+        Guid collectionId = catalog.Collections.Create("Restricted").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collectionId, saved.SourceId));
+        FixtureEmbeddingModel model = new();
+        Assert.Equal(1, (await new SemanticIndexer(catalog.Embeddings)
+            .RefreshAsync(model, rebuild: true)).Indexed);
+
+        ITextSearchIndex index = new RevokingTextIndex(catalog.Search,
+            () => Assert.True(catalog.Collections.RemoveSource(collectionId, saved.SourceId)));
+        HybridSearchResults result = await new HybridSearch(
+            index, new SemanticRetriever(catalog.Embeddings)).QueryAsync(
+            "citrus", model, 20, default, collectionId);
+
+        Assert.False(result.UsedEmbeddings);
+        Assert.Empty(result.Hits);
+        Assert.Empty(catalog.Search.Query("tangerine", 20, collectionId));
+    }
+
     private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));
