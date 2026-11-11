@@ -198,6 +198,26 @@ public sealed class HybridSearchTests : IDisposable
         Assert.Empty(catalog.Search.Query("tangerine"));
     }
 
+    [Fact]
+    public async Task InvalidatedSemanticCandidatesDoNotReportEmbeddingsOrLeakSnippets()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
+        CapturedOriginal source = await Capture(catalog, "private.md",
+            "tangerine orchard secret", "one");
+        await SegmentNext(catalog);
+        FixtureEmbeddingModel model = new();
+        Assert.Equal(1, (await new SemanticIndexer(catalog.Embeddings)
+            .RefreshAsync(model, rebuild: true)).Indexed);
+
+        ITextSearchIndex index = new RevokingTextIndex(catalog.Search,
+            () => Assert.True(catalog.Sources.Revoke(source.SourceId)));
+        HybridSearchResults result = await new HybridSearch(
+            index, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus", model);
+
+        Assert.False(result.UsedEmbeddings);
+        Assert.Empty(result.Hits);
+    }
+
     private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));
