@@ -3,8 +3,6 @@ using System.Text;
 
 namespace Praxis.Application.Inference;
 
-internal sealed record CliResult(int ExitCode, string Stdout, string Stderr);
-
 /// <summary>
 /// Runs a provider CLI as a child process without a shell: arguments are passed as a list,
 /// input is written to stdin, output is bounded, and the whole process tree is killed on

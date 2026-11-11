@@ -4,7 +4,7 @@
     <Project Path="src/Praxis.Application/Praxis.Application.csproj" />
     <Project Path="src/Praxis.Domain/Praxis.Domain.csproj" />
     <Project Path="src/Praxis.Infrastructure/Praxis.Infrastructure.csproj" />
-    <Project Path="src/Praxis.Knowledge/Praxis.Knowledge.csproj" />
+    <Project Path="src/Praxis.Notes/Praxis.Notes.csproj" />
     <Project Path="src/Praxis.Worker/Praxis.Worker.csproj" />
   </Folder>
   <Folder Name="/tools/">
@@ -14,6 +14,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
     <Project Path="tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj" />
-    <Project Path="tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj" />
+    <Project Path="tests/Praxis.Notes.Tests/Praxis.Notes.Tests.csproj" />
   </Folder>
 </Solution>

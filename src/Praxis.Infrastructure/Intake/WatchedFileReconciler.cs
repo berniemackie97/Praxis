@@ -7,8 +7,6 @@ using Praxis.Domain.Sources;
 
 namespace Praxis.Infrastructure.Intake;
 
-internal sealed record WatchedScanResult(int ObservedFiles, int Imported, TimeSpan? NextScanDelay);
-
 /// <summary>
 /// One reconciliation pass over the approved folder: applies observed renames, waits for each
 /// file to stay unchanged for the quiet period, then captures new content as a revision with a
