@@ -14,7 +14,9 @@ internal sealed class OriginalExportDestination : IDisposable
     private const int OwnerFileMode = 0x180; // 0600
     private const int MacDirectoryOpenFlags = 0x00100000 | 0x00000100 | 0x01000000;
     private const int LinuxDirectoryOpenFlags = 0x00010000 | 0x00020000 | 0x00080000;
-    private const int MacStageOpenFlags = 0x00000002 | 0x00000200 | 0x00000800 | 0x00000100 | 0x01000000;
+    private const int MacCloseOnExec = 0x01000000;
+    private const int MacVnodePathInfo = 2;
+    private const int MacPathLength = 1024;
     private const int LinuxStageOpenFlags = 0x00000002 | 0x00000040 | 0x00000080 | 0x00020000 | 0x00080000;
     private const uint MacExclusiveRename = 0x4;
     private const uint LinuxExclusiveRename = 0x1;
@@ -105,8 +107,23 @@ internal sealed class OriginalExportDestination : IDisposable
             return stream;
         }
 
-        int flags = OperatingSystem.IsMacOS() ? MacStageOpenFlags : LinuxStageOpenFlags;
-        int fd = OpenRelative(DirectoryFd, pending, flags, OwnerFileMode);
+        int fd;
+        if (OperatingSystem.IsMacOS())
+        {
+            // mkostempsat_np is non-variadic and creates mode 0600 relative to the pinned directory.
+            byte[] template = Encoding.UTF8.GetBytes(
+                ".praxis-export-" + Guid.NewGuid().ToString("N") + "-XXXXXX.part\0");
+            fd = CreateMacStage(DirectoryFd, template, ".part".Length, MacCloseOnExec);
+            if (fd >= 0)
+            {
+                pending = Encoding.UTF8.GetString(template, 0, template.Length - 1);
+            }
+        }
+        else
+        {
+            fd = OpenRelative(DirectoryFd, pending, LinuxStageOpenFlags, OwnerFileMode);
+        }
+
         if (fd < 0)
         {
             throw Failure("The private export staging file could not be created.");
@@ -191,19 +208,25 @@ internal sealed class OriginalExportDestination : IDisposable
         }
         else if (OperatingSystem.IsMacOS())
         {
-            byte[] path = new byte[1024];
-            if (GetDescriptorPath(DirectoryFd, 50, path) != 0)
+            // proc_pidfdinfo has a fixed ABI. Its vnode_fdinfowithpath result ends
+            // with vip_path[MAXPATHLEN], unlike variadic fcntl(F_GETPATH).
+            byte[] descriptor = new byte[4096];
+            int size = GetMacDescriptorInfo(Environment.ProcessId, DirectoryFd,
+                MacVnodePathInfo, descriptor, descriptor.Length);
+            if (size <= MacPathLength || size > descriptor.Length)
             {
                 throw Failure("The export directory could not be verified.");
             }
 
-            int length = Array.IndexOf(path, (byte)0);
-            if (length < 1)
+            int start = size - MacPathLength;
+            int end = Array.IndexOf(descriptor, (byte)0, start, MacPathLength);
+            if (end <= start || descriptor[start] != (byte)'/')
             {
                 throw new InvalidDataException("The export directory returned an invalid path.");
             }
 
-            actual = FileSystemPaths.ResolveExisting(Encoding.UTF8.GetString(path, 0, length));
+            actual = FileSystemPaths.ResolveExisting(
+                Encoding.UTF8.GetString(descriptor, start, end - start));
         }
         else
         {
@@ -248,6 +271,11 @@ internal sealed class OriginalExportDestination : IDisposable
     [DllImport("libc", EntryPoint = "unlinkat", SetLastError = true, CharSet = CharSet.Ansi)]
     private static extern int UnlinkRelative(int directory, string name, int flags);
 
-    [DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    private static extern int GetDescriptorPath(int fd, int command, [Out] byte[] path);
+    [DllImport("libproc", EntryPoint = "proc_pidfdinfo", SetLastError = true)]
+    private static extern int GetMacDescriptorInfo(int pid, int fd, int flavor,
+        [Out] byte[] buffer, int bufferSize);
+
+    [DllImport("libc", EntryPoint = "mkostempsat_np", SetLastError = true)]
+    private static extern int CreateMacStage(int directory, [In, Out] byte[] template,
+        int suffixLength, int flags);
 }
