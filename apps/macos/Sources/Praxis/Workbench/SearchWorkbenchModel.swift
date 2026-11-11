@@ -32,7 +32,8 @@ final class SearchWorkbenchModel: ObservableObject {
             model.collections = response.data?.collections ?? []
             if let selected = model.selectedCollectionId,
                !model.collections.contains(where: { $0.collectionId == selected }) {
-                model.selectedCollectionId = nil
+                model.clearResults()
+                model.notice = "The selected collection is unavailable. Choose another source scope."
             }
         }
     }
