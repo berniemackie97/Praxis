@@ -10,4 +10,11 @@ public interface ITextSearchIndex
 
     /// <summary>Rebuilds the index from canonical text within the given bounds; returns the documents indexed.</summary>
     int Rebuild(int maxDocuments, long maxTextBytes);
+
+    /// <summary>
+    /// Discards any retrieved hits whose source, item revision, original digest or locator
+    /// is no longer current. The canonical eligibility check executes as one bounded read.
+    /// Candidates are not a permission grant or evidence that an answer is supported.
+    /// </summary>
+    IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates);
 }

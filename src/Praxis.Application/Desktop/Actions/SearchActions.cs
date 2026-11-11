@@ -31,7 +31,7 @@ public sealed class SearchActions(
         ModelProfile? profile = profiles.Get(ModelProfile.LocalEmbedding);
         if (profile is not { Enabled: true })
         {
-            return new SearchResponse(lexical.Query(query, ResultLimit), "lexical", null);
+            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit)), "lexical", null);
         }
 
         try
@@ -44,7 +44,7 @@ public sealed class SearchActions(
         }
         catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new SearchResponse(lexical.Query(query, ResultLimit), "lexical",
+            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit)), "lexical",
                 "The local embedding runtime is unavailable; showing keyword results.");
         }
     }
