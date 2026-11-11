@@ -24,7 +24,7 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
         cancellationToken.ThrowIfCancellationRequested();
         if (model is null)
         {
-            return new HybridSearchResults(lexical.Query(query, limit), false);
+            return new HybridSearchResults(lexical.RetainCurrent(lexical.Query(query, limit)), false);
         }
 
         IReadOnlyList<SemanticSearchHit> vectors =
@@ -34,7 +34,7 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
         IReadOnlyList<SearchHit> keyword = lexical.Query(query, PoolSize);
         if (vectors.Count == 0)
         {
-            return new HybridSearchResults(keyword.Take(limit).ToArray(), false);
+            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray()), false);
         }
 
         Dictionary<Guid, (SearchHit Hit, double Score)> combined = new();
@@ -58,10 +58,14 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
             }
         }
 
-        return new HybridSearchResults(combined.Values
+        SearchHit[] ranked = combined.Values
             .OrderByDescending(entry => entry.Score)
             .ThenBy(entry => entry.Hit.SourceLocator, StringComparer.Ordinal)
             .ThenBy(entry => entry.Hit.ItemId)
-            .Take(limit).Select(entry => entry.Hit).ToArray(), true);
+            .Take(limit).Select(entry => entry.Hit).ToArray();
+
+        // The two source lists were read at different times. A revocation or revision
+        // may occur after the first read; only canonical evidence may cross this boundary.
+        return new HybridSearchResults(lexical.RetainCurrent(ranked), true);
     }
 }

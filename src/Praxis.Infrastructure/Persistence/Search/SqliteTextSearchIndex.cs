@@ -75,6 +75,55 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         });
     }
 
+    public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (candidates.Count > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(candidates));
+        }
+
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        return database.ExecuteRead(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            string[] parameters = new string[candidates.Count];
+            for (int index = 0; index < candidates.Count; index++)
+            {
+                string name = "$item" + index.ToString(CultureInfo.InvariantCulture);
+                parameters[index] = name;
+                command.Parameters.AddWithValue(name, candidates[index].ItemId.ToString("D"));
+            }
+
+            command.CommandText = """
+                SELECT e.item_id, e.source_id, e.revision, e.source_digest, e.locator
+                FROM eligible_text_search e
+                WHERE e.item_id IN (
+                """ + string.Join(", ", parameters) + ")";
+            command.CommandTimeout = 5;
+            using SqliteDataReader reader = command.ExecuteReader();
+            Dictionary<Guid, (Guid Source, int Revision, string Digest, string Locator)> current = new();
+            while (reader.Read())
+            {
+                current.Add(Guid.Parse(reader.GetString(0)),
+                    (Guid.Parse(reader.GetString(1)), reader.GetInt32(2),
+                        reader.GetString(3), reader.GetString(4)));
+            }
+
+            return candidates.Where(hit =>
+                current.TryGetValue(hit.ItemId, out var eligible) &&
+                eligible.Source == hit.SourceId &&
+                eligible.Revision == hit.Revision &&
+                string.Equals(eligible.Digest, hit.OriginalSha256, StringComparison.Ordinal) &&
+                string.Equals(eligible.Locator, hit.SourceLocator, StringComparison.Ordinal))
+                .ToArray();
+        });
+    }
+
     public int Rebuild(int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
     {
         if (maxDocuments is < 1 or > 100_000)

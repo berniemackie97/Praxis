@@ -60,6 +60,39 @@ public sealed class TextSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task CanonicalEvidenceFenceRejectsForgedMetadataAndEarlierSourceRevisions()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal original = await Capture(catalog, "evidence.md",
+            "violet primary evidence", "initial");
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        SearchHit current = Assert.Single(catalog.Search.Query("violet"));
+        Assert.Equal(current, Assert.Single(catalog.Search.RetainCurrent([current])));
+
+        Assert.Empty(catalog.Search.RetainCurrent([current with { SourceId = Guid.NewGuid() }]));
+        Assert.Empty(catalog.Search.RetainCurrent([current with { Revision = 42 }]));
+        Assert.Empty(catalog.Search.RetainCurrent(
+            [current with { OriginalSha256 = new string('0', 64) }]));
+        Assert.Empty(catalog.Search.RetainCurrent(
+            [current with { SourceLocator = current.SourceLocator + ".stale" }]));
+        Assert.Empty(catalog.Search.RetainCurrent([]));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            catalog.Search.RetainCurrent(Enumerable.Repeat(current, 101).ToArray()));
+
+        CapturedOriginal revised = await Capture(catalog, "evidence.md",
+            "amber second revision", "revised");
+        Assert.Equal(original.ItemId, revised.ItemId);
+        Assert.Empty(catalog.Search.RetainCurrent([current]));
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        SearchHit latest = Assert.Single(catalog.Search.Query("amber"));
+        Assert.Equal(2, latest.Revision);
+        Assert.Equal(latest, Assert.Single(catalog.Search.RetainCurrent([latest])));
+
+        Assert.True(catalog.Sources.Revoke(original.SourceId));
+        Assert.Empty(catalog.Search.RetainCurrent([latest]));
+    }
+
+    [Fact]
     public async Task UnsupportedOriginalsNeverBecomeSearchableText()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);

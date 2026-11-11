@@ -173,6 +173,31 @@ public sealed class HybridSearchTests : IDisposable
         await catalog.Originals.VerifyAsync(original.ItemId);
     }
 
+    [Fact]
+    public async Task RevokingAfterBothRetrievalListsAreReadCannotExposePreviouslyRankedEvidence()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
+        CapturedOriginal revoked = await Capture(catalog, "revoked.md",
+            "tangerine orchard harvest", "revoked");
+        CapturedOriginal retained = await Capture(catalog, "retained.md",
+            "invoice ledger balances", "retained");
+        await SegmentNext(catalog);
+        await SegmentNext(catalog);
+        FixtureEmbeddingModel model = new();
+        Assert.Equal(2, (await new SemanticIndexer(catalog.Embeddings)
+            .RefreshAsync(model, rebuild: true)).Indexed);
+
+        ITextSearchIndex index = new RevokingTextIndex(catalog.Search,
+            () => Assert.True(catalog.Sources.Revoke(revoked.SourceId)));
+        HybridSearchResults result = await new HybridSearch(
+            index, new SemanticRetriever(catalog.Embeddings)).QueryAsync("citrus", model);
+
+        Assert.True(result.UsedEmbeddings);
+        Assert.DoesNotContain(result.Hits, hit => hit.SourceId == revoked.SourceId);
+        Assert.Equal(retained.ItemId, Assert.Single(result.Hits).ItemId);
+        Assert.Empty(catalog.Search.Query("tangerine"));
+    }
+
     private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));
@@ -197,6 +222,22 @@ public sealed class HybridSearchTests : IDisposable
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    private sealed class RevokingTextIndex(ITextSearchIndex inner, Action afterQuery) : ITextSearchIndex
+    {
+        public IReadOnlyList<SearchHit> Query(string query, int limit)
+        {
+            IReadOnlyList<SearchHit> results = inner.Query(query, limit);
+            afterQuery();
+            return results;
+        }
+
+        public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates) =>
+            inner.RetainCurrent(candidates);
+
+        public int Rebuild(int maxDocuments, long maxTextBytes) =>
+            inner.Rebuild(maxDocuments, maxTextBytes);
     }
 
     private sealed class FixtureEmbeddingModel(
