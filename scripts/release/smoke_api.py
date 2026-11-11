@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test the published Praxis API as a separate loopback process."""
+"""Smoke-test the published health-only API and its actual listener boundary."""
 
 import os
 from pathlib import Path
@@ -7,8 +7,57 @@ import socket
 import subprocess
 import sys
 import time
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
+
+
+def wait_until_ready(port, process):
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            break
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/health/live", timeout=1) as response:
+                live = response.status == 200 and response.read() == b"Healthy"
+            with urlopen(f"http://127.0.0.1:{port}/health/ready", timeout=1) as response:
+                ready = response.status == 200 and response.read() == b"Ready"
+            if live and ready:
+                return True
+        except (OSError, URLError):
+            pass
+        time.sleep(0.25)
+    return False
+
+
+def assert_listener_boundary(port):
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/v1/library", timeout=1):
+            raise AssertionError("A private API route unexpectedly responded.")
+    except HTTPError as error:
+        if error.code != 404 or error.headers.get("Access-Control-Allow-Origin"):
+            raise AssertionError("An unregistered private route is exposed.") from error
+
+    try:
+        with socket.create_connection(("127.0.0.2", port), timeout=1):
+            raise AssertionError("Wildcard binding reached another loopback IPv4 address.")
+    except OSError:
+        pass
+
+
+def assert_invalid_port_rejected(assembly, environment):
+    invalid_environment = environment.copy()
+    invalid_environment["PRAXIS_HEALTH_PORT"] = "0"
+    invalid = subprocess.run(
+        ["dotnet", str(assembly)],
+        capture_output=True,
+        timeout=10,
+        env=invalid_environment,
+        check=False,
+    )
+    if invalid.returncode == 0 or b"PRAXIS_HEALTH_PORT must be" not in (
+        invalid.stdout + invalid.stderr
+    ):
+        raise AssertionError("Invalid health listener port was not explicitly rejected.")
 
 
 def main():
@@ -21,28 +70,22 @@ def main():
         port = listener.getsockname()[1]
 
     environment = os.environ.copy()
-    environment["ASPNETCORE_URLS"] = f"http://127.0.0.1:{port}"
+    environment["PRAXIS_HEALTH_PORT"] = str(port)
+    environment["ASPNETCORE_URLS"] = f"http://0.0.0.0:{port}"
+    environment["Kestrel__Endpoints__Injected__Url"] = f"http://0.0.0.0:{port}"
     environment["ASPNETCORE_ENVIRONMENT"] = "Production"
     process = subprocess.Popen(
         ["dotnet", str(assembly)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=environment
+        env=environment,
     )
+
     passed = False
     try:
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            if process.poll() is not None:
-                break
-            try:
-                with urlopen(f"http://127.0.0.1:{port}/health/live", timeout=1) as response:
-                    if response.status == 200 and response.read() == b"Healthy":
-                        passed = True
-                        break
-            except (OSError, URLError):
-                pass
-            time.sleep(0.25)
+        passed = wait_until_ready(port, process)
+        if passed:
+            assert_listener_boundary(port)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -54,8 +97,11 @@ def main():
 
     if not passed:
         print(output.decode("utf-8", errors="replace")[-4000:], file=sys.stderr)
-        raise SystemExit("Published API did not pass its loopback liveness smoke test.")
-    print("Published Praxis API started and returned HTTP 200 Healthy on loopback.")
+        raise SystemExit("Published API did not pass its loopback diagnostics smoke test.")
+
+    assert_invalid_port_rejected(assembly, environment)
+    print("Published API: liveness and readiness passed, private routes absent, "
+          "wildcard override rejected, invalid port rejected.")
 
 
 if __name__ == "__main__":

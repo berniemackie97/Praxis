@@ -6,6 +6,8 @@
 
 The first-party window launches one .NET worker as a private child process. Structured messages travel over its inherited stdin/stdout pipes. Only that worker opens the catalog and owns the existing watched intake, processing leases, verified originals and FTS5 index. No TCP listener, browser route, external inference, MCP grant or agent permission is enabled.
 
+The separately built `Praxis.Api` executable is an optional **health-only loopback diagnostic host**, not an application transport or a network-accessible private-data service. Its [owner-local deployment and explicit exclusions](../operations/health-only-deployment.md) are tracked under #41. Running the native app does not start or depend on that HTTP host.
+
 The private pipe supports bounded library pages, local lexical search, versioned extracted-text previews, integrity verification, processing retry and explicit source revocation. The UI asks for confirmation before revocation. Revocation removes a source from active retrieval; it does **not** automatically destroy an original. Original export is implemented (#167/#192); current-app Save dialog, TOCTOU/security and real-volume acceptance remain open under #166.
 
 The first macOS delivery surface does not settle #36's future Windows/Linux/mobile stack decision. The app requires the .NET 10 runtime and, during development, full Xcode (Swift 6.2 or later) as the active developer directory; the standalone Command Line Tools lack Swift Testing and are rejected by the build scripts. macOS GUI processes may not inherit a shell's dotnet path; first-run setup can explicitly select a trusted dotnet executable when it is installed outside standard locations.
