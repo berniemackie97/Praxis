@@ -26,7 +26,9 @@ source is revalidated against current canonical source/revision/digest/locator i
 at the fusion boundary. A collection removed or archived mid-query is denied at the
 final canonical recheck, including lexical-only and model-fallback paths.
 
-The Search view clears results when the selected collection changes, and the preview
+The Search view clears results when the selected collection changes. An archived or
+deleted selected collection remains a denied scope rather than silently falling back
+to All Sources; broadening the search requires an explicit owner choice. The preview
 request passes the source ID, original SHA-256 and selection. Preview reads the latest
 active source revision and applies collection membership and evidence identity in one
 SQL read. A stale selected hit is removed when preview reports unavailable. The
