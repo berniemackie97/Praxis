@@ -26,8 +26,13 @@ struct WorkerLaunch {
             }
 
             guard approvals[root.path] != nil else { throw LaunchError.approvalRequired }
-            if let identity = WatchedFolderSettings.identity(root) {
-                guard approvals[root.path] == identity else { throw LaunchError.approvalRequired }
+            var directory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: root.path, isDirectory: &directory) {
+                guard directory.boolValue,
+                      let identity = WatchedFolderSettings.identity(root),
+                      approvals[root.path] == identity else {
+                    throw LaunchError.approvalRequired
+                }
             }
         }
 

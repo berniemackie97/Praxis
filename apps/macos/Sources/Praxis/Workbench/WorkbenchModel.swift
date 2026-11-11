@@ -217,7 +217,7 @@ final class WorkbenchModel: ObservableObject {
 
     func exportOriginal(_ item: LibraryItem, destination: URL) {
         guard !exportingOriginal, running, item.sourceStatus == "active" else { return }
-        let output = destination.standardizedFileURL.resolvingSymlinksInPath()
+        let output = CanonicalPath.of(destination.path)
         if watchedInboxes.contains(where: { output.pathComponents.starts(with: $0.pathComponents) }) {
             message = "Choose a destination outside the watched folders to avoid capturing an exported duplicate."
             return
