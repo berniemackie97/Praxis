@@ -49,7 +49,7 @@ cd ../Praxis-note-sync-247
 git rev-parse HEAD
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet test tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~OfflineNoteSynchronizerTests|FullyQualifiedName~LocalNoteJournal'
+dotnet test tests/Praxis.Notes.Tests/Praxis.Notes.Tests.csproj -c Release --no-build --no-restore --filter 'FullyQualifiedName~OfflineNoteSynchronizerTests|FullyQualifiedName~LocalNoteJournal'
 dotnet test Praxis.slnx -c Release --no-build --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 python3 -m unittest discover -s scripts/github -p 'test_*.py'

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Praxis.Knowledge.Archives;
-using Praxis.Knowledge.Model;
-using Praxis.Knowledge.Vaults;
+using Praxis.Notes.Archives;
+using Praxis.Notes.Model;
+using Praxis.Notes.Vaults;
 
 switch (args.Length)
 {
@@ -21,7 +21,7 @@ switch (args.Length)
         return Run(() =>
         {
             using FileStream stream = File.OpenRead(args[1]);
-            VaultLinkReport report = LocalVaultAttachmentLinks.Inspect(NoteArchive.ReadCollection(stream));
+            VaultLinkReport report = VaultAttachmentLinks.Inspect(NoteArchive.ReadCollection(stream));
             Console.WriteLine($"Resolved {report.References.Count} note-to-attachment links; {report.Problems.Count} unresolved or ambiguous.");
             foreach (VaultLinkProblem problem in report.Problems)
             {
@@ -37,13 +37,13 @@ switch (args.Length)
         return Run(() =>
         {
             (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 3, allowRenames: false, allowUnlinks: false);
-            LocalVaultExchange.CaptureArchive(args[1], args[2], options.TrackLinks);
+            VaultExchange.CaptureArchive(args[1], args[2], options.TrackLinks);
             Console.WriteLine("Vault archive created.");
         });
     case 3 when args[0] == "compare":
         return Run(() =>
         {
-            VaultComparison report = LocalVaultComparison.CompareArchive(args[1], args[2]);
+            VaultComparison report = VaultComparer.CompareArchive(args[1], args[2]);
             Console.WriteLine($"Matched {report.MatchedFiles} files; {report.Differences.Count} differences.");
             foreach (VaultFileDifference difference in report.Differences.Take(20))
             {
@@ -58,14 +58,14 @@ switch (args.Length)
     case 3 when args[0] == "restore":
         return Run(() =>
         {
-            LocalVaultExchange.RestoreArchive(args[1], args[2]);
+            VaultExchange.RestoreArchive(args[1], args[2]);
             Console.WriteLine("Vault restored to a new directory.");
         });
     case >= 3 when args[0] == "plan":
         return Run(() =>
         {
             (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 3, allowUnlinks: false);
-            VaultUpdate update = LocalVaultExchange.PlanUpdate(args[1], args[2], options.Renames,
+            VaultUpdate update = VaultExchange.PlanUpdate(args[1], args[2], options.Renames,
                 options.TrackLinks);
             PrintChanges(update);
         });
@@ -73,7 +73,7 @@ switch (args.Length)
         return Run(() =>
         {
             (IReadOnlyList<VaultRename> Renames, bool TrackLinks, IReadOnlyList<AttachmentReference>? ApprovedUnlinks) options = ReadOptions(args, 4);
-            VaultUpdate update = LocalVaultExchange.UpdateArchive(args[1], args[2], args[3],
+            VaultUpdate update = VaultExchange.UpdateArchive(args[1], args[2], args[3],
                 options.Renames, options.TrackLinks, options.ApprovedUnlinks);
             PrintChanges(update);
             Console.WriteLine("Updated archive created.");

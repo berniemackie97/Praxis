@@ -1,6 +1,6 @@
 # ADR 0031: Local inference boundary and model profiles
 
-**Status:** Accepted. Schema v11. Implements the first part of #31 for local models only.
+**Status:** Accepted. Schema v11. Implements the first part of #31 for local models only. Project layout superseded by [ADR 0039](0039-layered-architecture.md): the model ports live in Praxis.Application.Inference and the adapters in Praxis.Infrastructure.Inference.
 
 ## Context
 

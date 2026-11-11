@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Praxis.Domain.Tests" />
+  </ItemGroup>
+</Project>

@@ -48,7 +48,7 @@ Before #40 can close, Praxis needs a coordinated catalog/originals/registry/clie
 ```sh
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-build --no-restore \
   --filter 'FullyQualifiedName~SecuritySnapshotTests|FullyQualifiedName~SecurityRegistryTests|FullyQualifiedName~SpaceKeyDistributionTests'
 dotnet test Praxis.slnx -c Release --no-build --no-restore

@@ -12,5 +12,9 @@
     <NuGetAuditLevel>low</NuGetAuditLevel>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Required for IDE0005 (unnecessary using directives) to run during build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
   </PropertyGroup>
 </Project>

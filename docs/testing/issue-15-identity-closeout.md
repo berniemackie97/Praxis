@@ -43,7 +43,7 @@ git rev-parse HEAD
 dotnet --info
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-restore \
   --filter 'FullyQualifiedName~Security'
 dotnet test Praxis.slnx -c Release --no-restore

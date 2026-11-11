@@ -129,13 +129,13 @@ mkdir -p "$HOME/Desktop/Praxis-29-evidence"
 for version in v2 v3; do
   if [[ "$version" == v2 ]]; then corpus=retrieval-corpus-v1.json; else corpus=retrieval-corpus-v3.json; fi
   jq -r '.documents[] | "=== \(.id) ===\nPath: \(.path)\nSearchable: \(.searchable)\n\(.content)\n"' \
-    "tests/Praxis.Storage.Tests/Fixtures/$corpus" \
+    "tests/Praxis.Infrastructure.Tests/Fixtures/$corpus" \
     > "$HOME/Desktop/Praxis-29-evidence/$version-corpus-review.txt"
   jq -r '(
     ["case","domain","query","relevant_sources","lexical_expected","approved","corrected_relevant_sources","reason"],
     (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),(.lexicalExpected|join(",")),"","",""])
   ) | @tsv' \
-    "tests/Praxis.Storage.Tests/Fixtures/retrieval-judgments-$version.json" \
+    "tests/Praxis.Infrastructure.Tests/Fixtures/retrieval-judgments-$version.json" \
     > "$HOME/Desktop/Praxis-29-evidence/$version-judgment-review.tsv"
 done
 ```

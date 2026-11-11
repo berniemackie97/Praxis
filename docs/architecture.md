@@ -25,6 +25,15 @@ Praxis is a client-independent knowledge and automation platform. Obsidian is an
 
 These are responsibilities, not separate projects or deployable services. A modular monolith is the default until tests and measurements justify additional components.
 
+## Code layout
+
+The modular monolith is layered by [ADR 0039](decisions/0039-layered-architecture.md), and `tests/Praxis.Architecture.Tests` enforces it:
+
+- `Praxis.Domain` holds records, statuses, limits and pure policies, with no dependencies.
+- `Praxis.Application` holds the ports, the use cases (processing, enrichment, verification, retrieval, media evidence) and the desktop protocol, and depends only on the domain.
+- `Praxis.Infrastructure` implements the ports: SQLite persistence (the only place SQL lives), the original file store, filesystem intake, and the Ollama and subscription CLI model adapters.
+- `Praxis.Worker` and `Praxis.Api` are composition roots. `Praxis.Notes` is the independent portable notes library.
+
 ## Security baseline
 
 The [threat model](security/threat-model.md) identifies data assets, attacker capabilities, trust boundaries, prioritized threats and verification ownership. [ADR 0003](decisions/0003-processing-trust-boundaries.md) requires opt-in remote processing and forbids assuming that server-readable data is end-to-end encrypted.
@@ -33,7 +42,7 @@ The concrete deployment and encryption model remains open in [#50](https://githu
 
 ## Local knowledge baseline
 
-`Praxis.Knowledge` implements immutable local Markdown note identities, revisions and a versioned ZIP interchange format. [ADR 0004](decisions/0004-portable-note-archive.md) specifies paths, integrity checks, compatibility rules and resource limits. The version-one archive contains note history; the version-two collection archive also preserves original binary attachments and stable note/attachment links. [ADR 0005](decisions/0005-attachment-collection-archive.md) defines binary integrity, deduplication and recovery limits. Neither format implements deletion state, canonical durable storage, sync, encryption, a vault watcher or remote endpoints. A separate [local attachment staging primitive](decisions/0007-local-attachment-staging.md) can resume byte transfers and publish verified content-addressed files, but is not integrated with canonical storage or authentication.
+`Praxis.Notes` implements immutable local Markdown note identities, revisions and a versioned ZIP interchange format. [ADR 0004](decisions/0004-portable-note-archive.md) specifies paths, integrity checks, compatibility rules and resource limits. The version-one archive contains note history; the version-two collection archive also preserves original binary attachments and stable note/attachment links. [ADR 0005](decisions/0005-attachment-collection-archive.md) defines binary integrity, deduplication and recovery limits. Neither format implements deletion state, canonical durable storage, sync, encryption, a vault watcher or remote endpoints. A separate [local attachment staging primitive](decisions/0007-local-attachment-staging.md) can resume byte transfers and publish verified content-addressed files, but is not integrated with canonical storage or authentication.
 
 The [versioned sync contract](decisions/0006-versioned-sync-protocol.md) specifies expected revisions, tombstones, operation receipts and ordered cursors. Test-only reference and adversarial multi-device fixtures exercise these semantics, including lost acknowledgments and interrupted pulls; they do not implement persistence, authentication or remote synchronization. See the [adversarial test guide](testing/sync-adversarial.md) for evidence and limitations.
 

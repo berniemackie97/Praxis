@@ -1,0 +1,198 @@
+using Microsoft.Data.Sqlite;
+using Praxis.Domain.Enrichment;
+using Praxis.Domain.Processing;
+using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Support;
+using Xunit;
+
+namespace Praxis.Infrastructure.Tests.Enrichment;
+
+public sealed class ProposalSchemaMigrationTests : IDisposable
+{
+    private const string At = "2026-11-09T00:00:00.0000000Z";
+    private readonly string root = Path.Combine(TestPaths.Temp,
+        "praxis-v12-" + Guid.NewGuid().ToString("N"));
+
+    public ProposalSchemaMigrationTests()
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public void VersionElevenProposalsAndReviewsSurviveTheRebuildAndSegmentsAreQueued()
+    {
+        Guid item = Guid.NewGuid();
+        Guid proposal = Guid.NewGuid();
+        Guid source = Guid.NewGuid();
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 11))
+        {
+            Seed(connection, item, source, proposal);
+            Execute(connection, $"""
+                INSERT INTO enrichment_reviews (review_id, proposal_id, decision, correction, reviewed_utc)
+                VALUES ('{Guid.NewGuid()}', '{proposal}', 'corrected', 'Architecture overview', '{At}');
+                """);
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+
+        EnrichmentProposal migrated = Assert.Single(catalog.Proposals.List(source));
+        Assert.Equal(proposal, migrated.ProposalId);
+        Assert.Equal("topic", migrated.Kind);
+        Assert.Null(migrated.EntityType);
+        Assert.Equal("corrected", migrated.Status);
+        Assert.Equal("Architecture overview", migrated.Correction);
+        Assert.Equal("queued", catalog.Processing.List().Single(job =>
+            job.ProcessorKey == ProcessorKeys.SemanticExtraction).State);
+
+        Assert.True(catalog.Proposals.Review(proposal, "corrected", new string('c', 120)));
+        Assert.Throws<ArgumentException>(() => catalog.Proposals.Review(proposal, "corrected", new string('c', 121)));
+    }
+
+    [Fact]
+    public void VersionTwelveSemanticResultsStayVisibleUntilVersionTwoReplacesThem()
+    {
+        Guid item = Guid.NewGuid();
+        Guid source = Guid.NewGuid();
+        string digest = new string('a', 64);
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 12))
+        {
+            Seed(connection, item, source, Guid.NewGuid(), version: 12);
+            Execute(connection, $"""
+                INSERT INTO processing_jobs
+                    (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v1', 'completed', 1, 1, '{At}', '{At}');
+                INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v1', '{digest}', 'generated', '{At}');
+                INSERT INTO enrichment_proposals
+                    (proposal_id, item_id, revision, processor_key, source_digest, kind, entity_type, value,
+                     evidence, evidence_offset, evidence_length, status, created_utc)
+                VALUES ('{Guid.NewGuid()}', '{item}', 1, 'semantic-extract-v1', '{digest}', 'entity',
+                        'concept', 'Architecture', 'Architecture', 2, 12, 'pending', '{At}');
+                """);
+        }
+
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            Assert.Contains(catalog.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
+            ProcessingJob[] jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
+            Assert.Equal("queued", jobs.Single(job => job.ProcessorKey == ProcessorKeys.SemanticExtraction).State);
+            Assert.Equal("completed", jobs.Single(job => job.ProcessorKey == "semantic-extract-v1").State);
+        }
+
+        using (SqliteConnection connection = Connect())
+        {
+            Execute(connection, $"""
+                INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
+                VALUES ('{item}', 1, 'semantic-extract-v2', '{digest}', 'abstained', '{At}');
+                """);
+        }
+
+        using SqliteCatalog replaced = SqliteCatalog.Open(root);
+        Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
+        Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == ProcessorKeys.MarkdownHeadings);
+    }
+
+    [Fact]
+    public void OrphanedReferencesAreRejectedBeforeAnyUpgrade()
+    {
+        using (SqliteConnection connection = CreateCatalog(throughVersion: 11))
+        {
+            Execute(connection, $"""
+                PRAGMA foreign_keys = OFF;
+                INSERT INTO enrichment_reviews (review_id, proposal_id, decision, correction, reviewed_utc)
+                VALUES ('{Guid.NewGuid()}', '{Guid.NewGuid()}', 'accepted', NULL, '{At}');
+                """);
+        }
+
+        Assert.Throws<InvalidDataException>(() => SqliteCatalog.Open(root));
+
+        using SqliteConnection check = Connect();
+        Assert.Equal(11L, Scalar(check, "PRAGMA user_version"));
+        Assert.Equal(0L, Scalar(check,
+            "SELECT COUNT(*) FROM pragma_table_info('enrichment_proposals') WHERE name = 'entity_type'"));
+    }
+
+    private static void Seed(SqliteConnection connection, Guid item, Guid source, Guid proposal, int version = 11)
+    {
+        string lengthColumn = version >= 12 ? ", evidence_length" : "";
+        string lengthValue = version >= 12 ? ", 12" : "";
+        string digest = new string('a', 64);
+        Execute(connection, $"""
+            INSERT INTO sources (source_id, source_kind, locator, created_utc)
+            VALUES ('{source}', 'file', '/notes/plan.md', '{At}');
+            INSERT INTO items (item_id, source_id) VALUES ('{item}', '{source}');
+            INSERT INTO original_objects (digest, byte_length, recorded_utc) VALUES ('{digest}', 20, '{At}');
+            INSERT INTO item_versions (item_id, revision, digest, observed_utc)
+            VALUES ('{item}', 1, '{digest}', '{At}');
+            INSERT INTO processing_jobs
+                (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
+            VALUES ('{item}', 1, 'source-text-v1', 'completed', 1, 1, '{At}', '{At}'),
+                   ('{item}', 1, 'markdown-heading-v1', 'completed', 1, 1, '{At}', '{At}'),
+                   ('{item}', 1, 'text-segments-v1', 'completed', 1, 1, '{At}', '{At}');
+            INSERT INTO text_derivatives
+                (item_id, revision, processor_key, source_digest, outcome, content, reason_code, created_utc)
+            VALUES ('{item}', 1, 'source-text-v1', '{digest}', 'completed', '# Architecture\nBody', NULL, '{At}');
+            INSERT INTO enrichment_runs (item_id, revision, processor_key, source_digest, outcome, created_utc)
+            VALUES ('{item}', 1, 'markdown-heading-v1', '{digest}', 'generated', '{At}');
+            INSERT INTO enrichment_proposals
+                (proposal_id, item_id, revision, processor_key, source_digest, kind, value, evidence,
+                 evidence_offset, status, correction, created_utc, reviewed_utc{lengthColumn})
+            VALUES ('{proposal}', '{item}', 1, 'markdown-heading-v1', '{digest}', 'topic', 'Architecture',
+                    'Architecture', 2, 'corrected', 'Architecture overview', '{At}', '{At}'{lengthValue});
+            """);
+    }
+
+    private SqliteConnection CreateCatalog(int throughVersion)
+    {
+        SqliteConnection connection = Connect();
+        foreach (string resource in new[] { "Catalog.V1.sql" }
+            .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"Catalog.V{version}.sql")))
+        {
+            using Stream stream = typeof(SqliteCatalog).Assembly
+                .GetManifestResourceStream("Praxis.Infrastructure." + resource)!;
+            using StreamReader reader = new StreamReader(stream);
+            Execute(connection, reader.ReadToEnd());
+        }
+
+        return connection;
+    }
+
+    private SqliteConnection Connect()
+    {
+        SqliteConnection connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(root, "catalog.sqlite"),
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false
+        }.ToString());
+        connection.Open();
+        return connection;
+    }
+
+    private static object? Scalar(SqliteConnection connection, string sql)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar();
+    }
+
+    private static void Execute(SqliteConnection connection, string sql)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}

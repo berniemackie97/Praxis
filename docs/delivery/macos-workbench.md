@@ -32,17 +32,18 @@ The Xcode application target produces a real `.app` with a generated `Info.plist
 
 ### Diagnosing Xcode worker build failures
 
-Xcode's Run Script phase inherits Xcode build settings as process environment variables. MSBuild also reads environment variables as project properties. The root `Directory.Build.props` therefore explicitly pins each .NET project's `AssemblyName` and `TargetName` to its own `MSBuildProjectName` so `Praxis.Inference`, `Praxis.Storage` and `Praxis.Worker` cannot all emit `Praxis.dll`. The Xcode worker publisher validates each evaluated `TargetFileName` before building and verifies that all three distinct assemblies appear in the published bundle.
+Xcode's Run Script phase inherits Xcode build settings as process environment variables. MSBuild also reads environment variables as project properties. The root `Directory.Build.props` therefore explicitly pins each .NET project's `AssemblyName` and `TargetName` to its own `MSBuildProjectName` so `Praxis.Domain`, `Praxis.Application`, `Praxis.Infrastructure` and `Praxis.Worker` cannot all emit `Praxis.dll`. The Xcode worker publisher validates each evaluated `TargetFileName` before building and verifies that all four distinct assemblies appear in the published bundle.
 
 If Xcode reports `Command PhaseScriptExecution failed`, expand **Publish .NET Worker** in the Xcode Report Navigator. Fix the first underlying error rather than removing the phase or editing the Swift application. Confirm the distinct names independently with:
 
 ```sh
-dotnet msbuild src/Praxis.Inference/Praxis.Inference.csproj -getProperty:TargetFileName
-dotnet msbuild src/Praxis.Storage/Praxis.Storage.csproj -getProperty:TargetFileName
+dotnet msbuild src/Praxis.Domain/Praxis.Domain.csproj -getProperty:TargetFileName
+dotnet msbuild src/Praxis.Application/Praxis.Application.csproj -getProperty:TargetFileName
+dotnet msbuild src/Praxis.Infrastructure/Praxis.Infrastructure.csproj -getProperty:TargetFileName
 dotnet msbuild src/Praxis.Worker/Praxis.Worker.csproj -getProperty:TargetFileName
 ```
 
-These should report `Praxis.Inference.dll`, `Praxis.Storage.dll` and `Praxis.Worker.dll` respectively. The Xcode build still requires the local .NET SDK and performs a locked restore and worker publish; no backend code is translated into Swift.
+These should report `Praxis.Domain.dll`, `Praxis.Application.dll`, `Praxis.Infrastructure.dll` and `Praxis.Worker.dll` respectively. The Xcode build still requires the local .NET SDK and performs a locked restore and worker publish; no backend code is translated into Swift.
 
 The worker is **framework-dependent in this development slice**: a local .NET 10 SDK is needed at build time, and a .NET 10 runtime is needed on the Mac at run time. Finder-launched Xcode may not inherit your terminal's `PATH`. If its build cannot find the SDK, set a user-defined Xcode Build Setting `PRAXIS_DOTNET_EXECUTABLE` to the absolute executable path (or install .NET in a standard location). Separately, the app's first-run setup can select the .NET executable used to launch the worker. A locally configured path is not committed to the project. Select Xcode once using `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer` or set `DEVELOPER_DIR` for that terminal.
 

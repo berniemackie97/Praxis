@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Praxis.Application.Tests" />
+    <ProjectReference Include="../Praxis.Domain/Praxis.Domain.csproj" />
+  </ItemGroup>
+</Project>

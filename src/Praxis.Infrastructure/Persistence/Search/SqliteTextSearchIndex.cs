@@ -1,0 +1,183 @@
+using System.Globalization;
+using System.Text;
+using Microsoft.Data.Sqlite;
+using Praxis.Application.Search;
+using Praxis.Domain.Search;
+
+namespace Praxis.Infrastructure.Persistence.Search;
+
+/// <summary>
+/// Rebuildable FTS5 index over the latest verified text of active sources. Query-time joins
+/// re-check canonical visibility, so a stale index row cannot bypass revocation or supersession.
+/// </summary>
+public sealed class SqliteTextSearchIndex : ITextSearchIndex
+{
+    private readonly CatalogDatabase database;
+
+    internal SqliteTextSearchIndex(CatalogDatabase database) => this.database = database;
+
+    public IReadOnlyList<SearchHit> Query(string query, int limit = 20)
+    {
+        if (limit is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        string expression = BuildTextQuery(query);
+        return database.ExecuteRead(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand("""
+                                                                   SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
+                                                                          snippet(text_search, -1, '⟦', '⟧', '…', 24)
+                                                                   FROM text_search
+                                                                   JOIN search_index_keys k ON k.rowid = text_search.rowid
+                                                                   JOIN item_versions v
+                                                                       ON v.item_id = k.item_id AND v.revision = k.revision
+                                                                   JOIN items i ON i.item_id = v.item_id
+                                                                   JOIN sources s
+                                                                       ON s.source_id = i.source_id AND s.source_id = k.source_id
+                                                                   JOIN text_derivatives d
+                                                                       ON d.item_id = v.item_id AND d.revision = v.revision
+                                                                       AND d.source_digest = v.digest AND d.outcome = 'completed'
+                                                                       AND d.processor_key = 'source-text-v1'
+                                                                   JOIN processing_jobs j
+                                                                       ON j.item_id = d.item_id AND j.revision = d.revision
+                                                                       AND j.processor_key = d.processor_key AND j.state = 'completed'
+                                                                   WHERE text_search MATCH $query
+                                                                     AND s.status = 'active'
+                                                                     AND v.revision = (
+                                                                         SELECT MAX(latest.revision) FROM item_versions latest
+                                                                         WHERE latest.item_id = v.item_id)
+                                                                   ORDER BY bm25(text_search), s.locator COLLATE BINARY,
+                                                                            v.item_id, v.revision
+                                                                   LIMIT $limit
+                                                                   """);
+            command.CommandTimeout = 5;
+            command.Parameters.AddWithValue("$query", expression);
+            command.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = command.ExecuteReader();
+            List<SearchHit> hits = new();
+            while (reader.Read())
+            {
+                string locator = reader.GetString(3);
+                string snippet = reader.IsDBNull(5) ? "" : reader.GetString(5);
+                if (snippet.Length > 480)
+                {
+                    snippet = snippet[..480];
+                }
+
+                hits.Add(new SearchHit(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+                    Convert.ToInt32(reader.GetValue(2), CultureInfo.InvariantCulture),
+                    Path.GetFileName(locator), locator, reader.GetString(4), snippet));
+            }
+
+            return hits;
+        });
+    }
+
+    public int Rebuild(int maxDocuments = 100_000, long maxTextBytes = 512L * 1024 * 1024)
+    {
+        if (maxDocuments is < 1 or > 100_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDocuments));
+        }
+
+        if (maxTextBytes is < 1 or > 512L * 1024 * 1024)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxTextBytes));
+        }
+
+        return database.Execute(connection =>
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand count = connection.CreateCommand("""
+                                                                 SELECT COUNT(*), COALESCE(SUM(length(CAST(content AS BLOB))), 0)
+                                                                 FROM eligible_text_search
+                                                                 """);
+            count.Transaction = transaction;
+            count.CommandTimeout = 30;
+            int eligible;
+            using (SqliteDataReader reader = count.ExecuteReader())
+            {
+                reader.Read();
+                long documentCount = reader.GetInt64(0);
+                if (documentCount > maxDocuments || reader.GetInt64(1) > maxTextBytes)
+                {
+                    throw new InvalidOperationException("The rebuild exceeds its data budget.");
+                }
+
+                eligible = (int)documentCount;
+            }
+
+            using SqliteCommand clear = connection.CreateCommand("DELETE FROM text_search");
+            clear.Transaction = transaction;
+            clear.CommandTimeout = 30;
+            clear.ExecuteNonQuery();
+
+            using SqliteCommand removeKeys = connection.CreateCommand("DELETE FROM search_index_keys");
+            removeKeys.Transaction = transaction;
+            removeKeys.CommandTimeout = 30;
+            removeKeys.ExecuteNonQuery();
+
+            using SqliteCommand insertKeys = connection.CreateCommand("""
+                                                                      INSERT INTO search_index_keys (item_id, revision, source_id)
+                                                                      SELECT item_id, revision, source_id
+                                                                      FROM eligible_text_search ORDER BY item_id, revision
+                                                                      """);
+            insertKeys.Transaction = transaction;
+            insertKeys.CommandTimeout = 30;
+            insertKeys.ExecuteNonQuery();
+
+            using SqliteCommand populate = connection.CreateCommand("""
+                                                                    INSERT INTO text_search (rowid, locator, content)
+                                                                    SELECT k.rowid, e.locator, e.content
+                                                                    FROM eligible_text_search e
+                                                                    JOIN search_index_keys k
+                                                                        ON k.item_id = e.item_id AND k.revision = e.revision
+                                                                    ORDER BY e.item_id, e.revision
+                                                                    """);
+            populate.Transaction = transaction;
+            populate.CommandTimeout = 30;
+            populate.ExecuteNonQuery();
+            transaction.Commit();
+            return eligible;
+        });
+    }
+
+    private static string BuildTextQuery(string query)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        if (query.Length > 256 || query.Any(char.IsControl))
+        {
+            throw new ArgumentException("Search queries must be bounded printable text.", nameof(query));
+        }
+
+        List<string> terms = new();
+        StringBuilder token = new();
+        foreach (char character in query)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                token.Append(character);
+                if (token.Length > 64)
+                {
+                    throw new ArgumentException("Search terms cannot exceed 64 characters.", nameof(query));
+                }
+            }
+            else if (token.Length > 0)
+            {
+                terms.Add(token.ToString());
+                token.Clear();
+            }
+        }
+
+        if (token.Length > 0)
+        {
+            terms.Add(token.ToString());
+        }
+
+        return terms.Count is < 1 or > 16
+            ? throw new ArgumentException("Search queries must contain one to sixteen terms.", nameof(query))
+            : string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
+    }
+}

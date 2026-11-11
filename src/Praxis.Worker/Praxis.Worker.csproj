@@ -3,6 +3,8 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../Praxis.Storage/Praxis.Storage.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <InternalsVisibleTo Include="Praxis.Worker.Tests" />
+    <ProjectReference Include="../Praxis.Infrastructure/Praxis.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

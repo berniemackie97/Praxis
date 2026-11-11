@@ -4,7 +4,7 @@
 
 ## Scope and expected behavior
 
-The entirely synthetic, versioned corpus is `tests/Praxis.Storage.Tests/Fixtures/retrieval-corpus-v1.json`: ten separate sources and twelve exact source-level query cases. Two sources deliberately contain identical bytes. The expected identifiers are logical source keys, resolved at test execution into actual item/source IDs; no unstable SQLite IDs are committed.
+The entirely synthetic, versioned corpus is `tests/Praxis.Infrastructure.Tests/Fixtures/retrieval-corpus-v1.json`: ten separate sources and twelve exact source-level query cases. Two sources deliberately contain identical bytes. The expected identifiers are logical source keys, resolved at test execution into actual item/source IDs; no unstable SQLite IDs are committed.
 
 | Domain | Gold cases | Current boundary |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ Run these as one **fail-fast chain**, so a failed compile cannot be followed by 
 ```bash
 dotnet restore Praxis.slnx --locked-mode &&
 dotnet build Praxis.slnx -c Release --no-restore &&
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-build --no-restore \
   --filter FullyQualifiedName~RetrievalEvaluationTests \
   --logger 'console;verbosity=detailed' &&
@@ -48,7 +48,7 @@ The test writes per-domain recall and precision, elapsed query time, synchronous
 
 ## Hybrid retrieval follow-through — issue #28
 
-The optional owner-local semantic index introduced in [ADR 0037](../decisions/0037-local-hybrid-retrieval.md) is **not** a replacement for lexical corpus v1. `LocalHybridSearchTests` uses a deterministic stub embedding model to assert concept-only recall, fused source attribution, distinct owners of identical bytes, revocation/revision fencing, index-loss recovery and failed rebuild safety. `OllamaEmbeddingTests` checks the actual local embedding transport. Neither suite reports measured embedding quality of a physical local model.
+The optional owner-local semantic index introduced in [ADR 0037](../decisions/0037-local-hybrid-retrieval.md) is **not** a replacement for lexical corpus v1. `HybridSearchTests` uses a deterministic stub embedding model to assert concept-only recall, fused source attribution, distinct owners of identical bytes, revocation/revision fencing, index-loss recovery and failed rebuild safety. `OllamaEmbeddingTests` checks the actual local embedding transport. Neither suite reports measured embedding quality of a physical local model.
 
 The next evaluation under #29 must record a pinned installed embedding model and digest; compare lexical, semantic-only and fused result identities against independently judged relevant sources; report per-domain recall/precision and no-answer false-positive behavior, query/index throughput, index bytes, local model memory and machine details; and exercise broader cross-file, contradiction, PDF/CSV when implemented, video cue and financial cases. Do not extrapolate quality or performance from synthetic fixture vectors or from a queued CI job.
 
@@ -78,7 +78,7 @@ dotnet format Praxis.slnx --verify-no-changes --no-restore
 To isolate the deterministic evaluation and retain full reported metrics:
 
 ```sh
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release \
   --no-build --no-restore \
   --filter 'FullyQualifiedName~RetrievalEvaluationTests|FullyQualifiedName~HybridRetrievalEvaluationTests' \
   --logger 'console;verbosity=detailed'
@@ -88,7 +88,7 @@ For a deliberately authorized **real local Ollama run**, first confirm that the 
 
 ```sh
 PRAXIS_RETRIEVAL_OLLAMA_MODEL=<installed-embedding-model> \
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release \
   --no-build --no-restore \
   --filter 'FullyQualifiedName~MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments' \
   --logger 'console;verbosity=detailed'
@@ -121,7 +121,7 @@ The synthetic v3 corpus (`retrieval-corpus-v3.json`) contains **32 separate orig
 After checking out the PR and performing fresh Release restore/build, the deterministic verification is:
 
 ```bash
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-build --no-restore \
   --filter 'FullyQualifiedName~RetrievalRankingEvaluationTests|FullyQualifiedName~HybridRetrievalEvaluationTests' \
   --logger 'console;verbosity=detailed'
@@ -131,7 +131,7 @@ To execute the real-model comparison, use **only an embedding model already inst
 
 ```bash
 PRAXIS_RETRIEVAL_OLLAMA_MODEL='embeddinggemma:latest' \
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-build --no-restore \
   --filter 'FullyQualifiedName~MeasureInstalledLocalOllamaModelAgainstVersionedSourceJudgments' \
   --logger 'console;verbosity=detailed'
@@ -162,13 +162,13 @@ Use only the synthetic repository fixture. Export the 36 cases to a worksheet; i
 ```bash
 mkdir -p "$HOME/Desktop/Praxis-29-evidence"
 jq -r '.documents[] | "=== \(.id) ===\n\(.path)\n\(.content)\n"' \
-  tests/Praxis.Storage.Tests/Fixtures/retrieval-corpus-v3.json \
+  tests/Praxis.Infrastructure.Tests/Fixtures/retrieval-corpus-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/corpus-v3-review.txt"
 jq -r '(
   ["case","domain","query","relevant_sources","lexical_expected","approved","correction","reason"],
   (.judgments[] | [.name,.domain,.query,(.relevant|join(",")),(.lexicalExpected|join(",")),"","",""])
 ) | @tsv' \
-  tests/Praxis.Storage.Tests/Fixtures/retrieval-judgments-v3.json \
+  tests/Praxis.Infrastructure.Tests/Fixtures/retrieval-judgments-v3.json \
   > "$HOME/Desktop/Praxis-29-evidence/judgment-v3-review.tsv"
 ```
 
