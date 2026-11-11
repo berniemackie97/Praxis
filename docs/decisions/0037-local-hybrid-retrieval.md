@@ -16,6 +16,39 @@ The owner must save a separate `local-embedding` model profile. This role is not
 
 The first-party Search screen exposes explicit **Update semantic index** and **Rebuild** controls; these use the already approved local model only. Nothing is sent to Claude, Codex or a remote API. The index does not automatically process new source content: the owner controls when expensive embedding work runs. Until indexed, newly captured material is searchable lexically as soon as canonical text extraction completes. Search reports whether it used hybrid or lexical mode; an unavailable local embedding runtime gracefully falls back to lexical hits with an explanation.
 
+## Owner-selected source scope and freshness (feature #60)
+
+The desktop Search view can restrict queries to an existing, active owner-authored source
+collection. An optional collection ID is passed through FTS5 and semantic vector queries;
+both query plans enforce membership in the active, non-archived collection **before**
+ranking or snippet extraction. A moved, revoked, revised, removed or reclassified
+source is revalidated against current canonical source/revision/digest/locator identity
+at the fusion boundary. A collection removed or archived mid-query is denied at the
+final canonical recheck, including lexical-only and model-fallback paths.
+
+The Search view clears results when the selected collection changes, and the preview
+request passes the source ID, original SHA-256 and selection. Preview reads the latest
+active source revision and applies collection membership and evidence identity in one
+SQL read. A stale selected hit is removed when preview reports unavailable. The
+unscoped owner Library also previews only the current active revision, rather than
+silently disclosing a previous extraction through a stale item/revision pair.
+
+This scope is **owner-directed query filtering**, not a caller/device authorization grant.
+A trusted owner-local client can omit the collection ID to search the full active
+catalog. Separate authenticated principal grants, per-operation user approval and
+audit belong to #32 and the future MCP/API caller boundary. Collection filtering
+does not automatically revoke snippets already rendered in an open UI, erase a
+model's previous inputs or invalidate historical session memories. The UI does not
+mix unscoped video-caption results into collection-filtered text search; a properly
+scoped video query remains an independent integration requirement.
+
+The existing #29 judged query sets and real EmbeddingGemma resource measurements
+are a bounded retrieval baseline, **not** universal answerability classification.
+Scored nearest-neighbor candidates can remain nonempty for no-evidence questions,
+and rank fusion can favor a lexical distractor. No unsupported similarity
+cutoff, hallucination claim or automatically synthesized answer is added here.
+Grounded answer sufficiency and actual claim-level citations belong to #33.
+
 ## Limits and evidence
 
 - No vector database or speculative generic provider framework. Exact cosine search scans at most 5,000 eligible segment vectors per query; a larger index reports a budget failure instead of silently omitting results. Index refresh defaults to 512 segments, with a hard per-invocation cap of 2,048. A full rebuild exceeding the declared cap fails without deleting the previous index.
