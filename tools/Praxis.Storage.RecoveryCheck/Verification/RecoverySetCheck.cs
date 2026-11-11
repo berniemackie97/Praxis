@@ -124,6 +124,7 @@ internal static class RecoverySetCheck
             sourcePath, DateTimeOffset.UtcNow);
         await VerifyWorkspaceAsync(workspace, evidence, cancellationToken);
         await ExerciseFailureBoundariesAsync(workspace, liveCatalog, liveIdentity, cancellationToken);
+        await VerifyWorkspaceAsync(workspace, evidence, cancellationToken);
         await SaveEvidenceAsync(workspace, evidence, cancellationToken);
         return workspace;
     }
@@ -299,6 +300,7 @@ internal static class RecoverySetCheck
         }
 
         Require(rejected, scenario + " was unexpectedly accepted.");
+        Console.WriteLine("PASS failure boundary: " + scenario);
     }
 
     private static async Task SaveEvidenceAsync(string workspace, RecoverySetEvidence evidence,
