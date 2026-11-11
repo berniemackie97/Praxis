@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Praxis.Api/Praxis.Api.csproj" />
+    <Project Path="src/Praxis.SyncHost/Praxis.SyncHost.csproj" />
     <Project Path="src/Praxis.Application/Praxis.Application.csproj" />
     <Project Path="src/Praxis.Domain/Praxis.Domain.csproj" />
     <Project Path="src/Praxis.Infrastructure/Praxis.Infrastructure.csproj" />
@@ -13,6 +14,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
+    <Project Path="tests/Praxis.SyncHost.Tests/Praxis.SyncHost.Tests.csproj" />
     <Project Path="tests/Praxis.Architecture.Tests/Praxis.Architecture.Tests.csproj" />
     <Project Path="tests/Praxis.Domain.Tests/Praxis.Domain.Tests.csproj" />
     <Project Path="tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj" />

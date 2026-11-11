@@ -17,6 +17,12 @@ public sealed class DeviceCertificateIdentity(SecurityRegistry registry)
         X509Certificate2 clientCertificate, X509Certificate2 trustedRoot, Guid deviceId) =>
         Inspect(clientCertificate, trustedRoot, deviceId, X509RevocationMode.Online);
 
+    // The private host uses the enrolled-device registry for immediate revocation.
+    // This is not CA CRL/OCSP checking; that remains a separate host-operations gate.
+    public VerifiedCertificateIdentity? AuthenticateWithRegistryRevocation(
+        X509Certificate2 clientCertificate, X509Certificate2 trustedRoot, Guid deviceId) =>
+        Inspect(clientCertificate, trustedRoot, deviceId, X509RevocationMode.NoCheck);
+
     internal VerifiedCertificateIdentity? AuthenticateForTest(
         X509Certificate2 clientCertificate, X509Certificate2 trustedRoot, Guid deviceId) =>
         Inspect(clientCertificate, trustedRoot, deviceId, X509RevocationMode.NoCheck);
