@@ -11,6 +11,7 @@ namespace Praxis.Storage.Intake;
 public sealed class LocalWatchedIntake
 {
     private const string OfflineProblem = "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
+    private static readonly TimeSpan MinimumScanSpacing = TimeSpan.FromMilliseconds(250);
 
     private readonly string root;
     private readonly TimeSpan rescanInterval;
@@ -23,6 +24,7 @@ public sealed class LocalWatchedIntake
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
     private int wakePending;
     private int watcherFaulted;
+    private bool rootWasOffline;
 
     public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null)
     {
@@ -58,7 +60,13 @@ public sealed class LocalWatchedIntake
 
     public LocalIntakeStatus SetPaused(bool pause)
     {
+        bool resuming = status.IsPaused && !pause;
         status.SetPaused(pause);
+        if (resuming)
+        {
+            reconciler.InvalidateAll();
+        }
+
         Signal();
         return status.Snapshot();
     }
@@ -75,6 +83,11 @@ public sealed class LocalWatchedIntake
         await scanLock.WaitAsync(cancellationToken);
         try
         {
+            if (status.IsPaused)
+            {
+                return 0;
+            }
+
             WatchedScanResult result = await reconciler.ReconcileAsync(now, cancellationToken);
             if (result.Imported != 0)
             {
@@ -93,16 +106,27 @@ public sealed class LocalWatchedIntake
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         FileSystemWatcher? watcher = null;
+        DateTimeOffset lastScanStarted = DateTimeOffset.MinValue;
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
                 if (status.IsPaused)
                 {
+                    watcher?.Dispose();
+                    watcher = null;
+                    renames.Clear();
                     status.SetState("paused", "New file capture is paused by the owner.");
                 }
                 else
                 {
+                    TimeSpan sincePrevious = DateTimeOffset.UtcNow - lastScanStarted;
+                    if (sincePrevious < MinimumScanSpacing)
+                    {
+                        await Task.Delay(MinimumScanSpacing - sincePrevious, cancellationToken);
+                    }
+
+                    lastScanStarted = DateTimeOffset.UtcNow;
                     watcher = MaintainWatcher(watcher);
                     if (await TryScanAsync(cancellationToken) && watcher is null && Directory.Exists(root))
                     {
@@ -124,7 +148,25 @@ public sealed class LocalWatchedIntake
         }
     }
 
-    internal void QueueRename(string previousPath, string currentPath) => renames.Queue(previousPath, currentPath);
+    internal void QueueRename(string previousPath, string currentPath)
+    {
+        reconciler.Invalidate(previousPath);
+        reconciler.Invalidate(currentPath);
+        renames.Queue(previousPath, currentPath);
+    }
+
+    internal void QueueChanged(string path)
+    {
+        reconciler.Invalidate(path);
+        Signal();
+    }
+
+    internal void NotifyWatcherError()
+    {
+        Interlocked.Exchange(ref watcherFaulted, 1);
+        reconciler.InvalidateAll();
+        Signal();
+    }
 
     /// <summary>
     /// Keeps a notification watcher matched to the folder's availability: dropped while the
@@ -135,16 +177,22 @@ public sealed class LocalWatchedIntake
         if (!Directory.Exists(root))
         {
             status.SetState("offline", OfflineProblem);
-            if (watcher is null)
+            if (!rootWasOffline)
             {
-                return null;
+                rootWasOffline = true;
+                renames.Clear();
+                reconciler.InvalidateAll();
+                report("Watched directory is offline; captured originals are retained.");
             }
 
-            watcher.Dispose();
-            renames.Clear();
-            report("Watched directory is offline; captured originals are retained.");
-
+            watcher?.Dispose();
             return null;
+        }
+
+        if (rootWasOffline)
+        {
+            rootWasOffline = false;
+            reconciler.InvalidateAll();
         }
 
         if (watcher is not null && Interlocked.Exchange(ref watcherFaulted, 0) == 0)
@@ -152,8 +200,13 @@ public sealed class LocalWatchedIntake
             return watcher;
         }
 
-        watcher?.Dispose();
-        renames.Clear();
+        if (watcher is not null)
+        {
+            watcher.Dispose();
+            renames.Clear();
+            reconciler.InvalidateAll();
+        }
+
         try
         {
             if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
@@ -220,15 +273,11 @@ public sealed class LocalWatchedIntake
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.CreationTime
         };
-        watcher.Created += (_, _) => Signal();
-        watcher.Changed += (_, _) => Signal();
-        watcher.Deleted += (_, _) => Signal();
-        watcher.Renamed += (_, change) => renames.Queue(change.OldFullPath, change.FullPath);
-        watcher.Error += (_, _) =>
-        {
-            Interlocked.Exchange(ref watcherFaulted, 1);
-            Signal();
-        };
+        watcher.Created += (_, change) => QueueChanged(change.FullPath);
+        watcher.Changed += (_, change) => QueueChanged(change.FullPath);
+        watcher.Deleted += (_, change) => QueueChanged(change.FullPath);
+        watcher.Renamed += (_, change) => QueueRename(change.OldFullPath, change.FullPath);
+        watcher.Error += (_, _) => NotifyWatcherError();
         watcher.EnableRaisingEvents = true;
         return watcher;
     }
