@@ -9,5 +9,7 @@ public enum NoteSubmitStatus
     WrongCollectionEpoch,
     InvalidRequest,
     UnsupportedProtocolVersion,
-    OperationKeyReused
+    OperationKeyReused,
+    ResetRequired,
+    QuotaExceeded
 }

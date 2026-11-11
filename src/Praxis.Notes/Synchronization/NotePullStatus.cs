@@ -7,5 +7,6 @@ public enum NotePullStatus
     WrongCollectionEpoch,
     InvalidCursor,
     Unauthorized,
-    UnsupportedProtocolVersion
+    UnsupportedProtocolVersion,
+    ResetRequired
 }

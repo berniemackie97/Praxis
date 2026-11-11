@@ -380,9 +380,18 @@ public sealed class OfflineNoteJournal : IDisposable
         foreach (PendingNoteEdit edit in candidate.Pending.GroupBy(item => item.RecordId).Select(group => group.First()))
         {
             LocalNoteState? current = candidate.Records.FirstOrDefault(record => record.Id == edit.RecordId);
-            if (edit.ExpectedRevision != (current?.Revision ?? 0) && candidate.Conflicts.All(conflict => conflict.Edit.OperationId != edit.OperationId))
+            if (edit.ExpectedRevision != (current?.Revision ?? 0))
             {
-                candidate.Conflicts.Add(new RejectedNoteEdit(edit, LocalNoteConflictReason.StaleRevision, current));
+                int index = candidate.Conflicts.FindIndex(conflict => conflict.Edit.OperationId == edit.OperationId);
+                if (index < 0)
+                {
+                    candidate.Conflicts.Add(new RejectedNoteEdit(edit, LocalNoteConflictReason.StaleRevision, current));
+                }
+                else if (candidate.Conflicts[index] is { Reason: LocalNoteConflictReason.StaleRevision } conflict &&
+                         conflict.Current != current)
+                {
+                    candidate.Conflicts[index] = conflict with { Current = current };
+                }
             }
         }
     }

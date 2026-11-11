@@ -60,7 +60,7 @@ public sealed class ClientOpaqueNoteCipherTests
         Assert.Throws<CryptographicException>(() => ClientOpaqueNoteCipher.Decrypt(
             key, space, collectionEpoch, record, 1, OpaqueSyncAction.Upsert, 1, encrypted[..15]));
         Assert.Throws<ArgumentException>(() => ClientOpaqueNoteCipher.Encrypt(
-            key, space, collectionEpoch, record, 1, OpaqueSyncAction.Delete, 1,
+            key, space, collectionEpoch, record, 1, (OpaqueSyncAction)1000, 1,
             new("a.md", "A")));
         Assert.Throws<ArgumentOutOfRangeException>(() => ClientOpaqueNoteCipher.Encrypt(
             key, space, collectionEpoch, record, 1, OpaqueSyncAction.Upsert, 1,
