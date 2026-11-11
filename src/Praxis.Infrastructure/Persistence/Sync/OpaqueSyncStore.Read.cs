@@ -52,6 +52,17 @@ public sealed partial class OpaqueSyncStore
             return Reject(OpaqueSyncStatus.CursorExpired);
         }
 
+        using (SqliteCommand epochCheck = Command(transaction, """
+            SELECT 1 FROM sync_records
+            WHERE space_id=$space AND key_epoch<>$epoch LIMIT 1
+            """, ("$space", space), ("$epoch", request.ContentEpoch)))
+        {
+            if (epochCheck.ExecuteScalar() is not null)
+            {
+                return Reject(OpaqueSyncStatus.ResetRequired);
+            }
+        }
+
         List<OpaqueSyncEvent> changes = [];
         using (SqliteCommand command = Command(transaction, """
             SELECT sequence, record_id, revision, deleted, key_epoch, ciphertext
