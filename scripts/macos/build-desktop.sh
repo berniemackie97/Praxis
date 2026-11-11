@@ -19,6 +19,10 @@ if [[ -e "$destination" || -L "$destination" ]]; then
     echo "Use --archive-existing to preserve the previous bundle before building." >&2
     exit 1
   fi
+  if pgrep -x Praxis >/dev/null 2>&1; then
+    echo "Quit Praxis before archiving an existing development app." >&2
+    exit 1
+  fi
   mkdir -p "$artifacts/previous-builds"
   archive="$(mktemp -d "$artifacts/previous-builds/Praxis.XXXXXX")"
   mv "$destination" "$archive/Praxis.app"

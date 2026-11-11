@@ -31,8 +31,7 @@ enum WorkerFixture {
 }
 
 @MainActor
-@Suite(.enabled(if: WorkerFixture.workerPath != nil && WorkerFixture.dotnetPath != nil,
-                "A bundled worker and local .NET runtime are required"))
+@Suite("Bundled worker transport")
 struct WorkerSessionTests {
     @Test("Capture, search, typed replies, denied requests, restart and malformed responses")
     func workerTransport() async throws {
