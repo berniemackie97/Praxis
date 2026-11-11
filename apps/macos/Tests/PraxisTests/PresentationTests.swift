@@ -54,6 +54,20 @@ struct PresentationTests {
         #expect(incidents[1].resolvedUtc != nil)
     }
 
+    @Test func verifiedOriginalExportReceiptDecodesFromDesktopReply() throws {
+        let response = """
+            {"requestId":"export","ok":true,
+             "data":{"exported":{"itemId":"source-item","revision":2,
+                                  "sha256":"dd80536ce4e3c903e7d292afaeb035b70ac3e08a64c9101f195a3ebff3c76456","length":5}}}
+            """
+        let decoded = try JSONDecoder().decode(WorkerResponse.self, from: Data(response.utf8))
+        let receipt = try #require(decoded.data?.exported)
+        #expect(receipt.itemId == "source-item")
+        #expect(receipt.revision == 2)
+        #expect(receipt.sha256 == "dd80536ce4e3c903e7d292afaeb035b70ac3e08a64c9101f195a3ebff3c76456")
+        #expect(receipt.length == 5)
+    }
+
     @Test func countsUseSingularAndPlural() {
         #expect(Count.label(1, "source") == "1 source")
         #expect(Count.label(3, "mention") == "3 mentions")
