@@ -55,8 +55,10 @@ public sealed partial class OpaqueSyncStore
         }
 
         using (SqliteCommand epochCheck = Command(transaction, """
-            SELECT 1 FROM sync_records
-            WHERE space_id=$space AND key_epoch<>$epoch LIMIT 1
+            SELECT 1 FROM (
+                SELECT key_epoch FROM sync_records WHERE space_id=$space
+                UNION ALL SELECT key_epoch FROM sync_events WHERE space_id=$space
+            ) WHERE key_epoch<>$epoch LIMIT 1
             """, ("$space", space), ("$epoch", scope.ContentEpoch)))
         {
             if (epochCheck.ExecuteScalar() is not null)
@@ -88,9 +90,8 @@ public sealed partial class OpaqueSyncStore
         long revision = 0;
         bool exists = false;
         bool deleted = false;
-        byte[] current = [];
         using (SqliteCommand record = Command(transaction, """
-            SELECT space_id, revision, deleted, ciphertext
+            SELECT space_id, revision, deleted
             FROM sync_records WHERE record_id=$record
             """, ("$record", Id(request.RecordId))))
         using (SqliteDataReader reader = record.ExecuteReader())
@@ -105,7 +106,6 @@ public sealed partial class OpaqueSyncStore
                 exists = true;
                 revision = reader.GetInt64(1);
                 deleted = reader.GetInt64(2) != 0;
-                current = (byte[])reader.GetValue(3);
             }
         }
 
@@ -128,8 +128,7 @@ public sealed partial class OpaqueSyncStore
         {
             reader.Read();
             long stored = reader.GetInt64(1);
-            int acceptedBytes = request.Action == OpaqueSyncAction.Delete
-                ? current.Length : payload!.Length;
+            int acceptedBytes = request.Action == OpaqueSyncAction.Delete ? 0 : payload!.Length;
             if (reader.GetInt64(0) >= MaximumEvents ||
                 stored + acceptedBytes * 2L > MaximumStoredBytes)
             {
@@ -140,7 +139,7 @@ public sealed partial class OpaqueSyncStore
         long nextSequence = checked(head + 1);
         long nextRevision = checked(revision + 1);
         bool nextDeleted = request.Action == OpaqueSyncAction.Delete;
-        byte[] saved = nextDeleted ? current : payload!;
+        byte[] saved = nextDeleted ? [] : payload!;
 
         using (SqliteCommand write = Command(transaction, """
             INSERT INTO sync_records

@@ -53,8 +53,10 @@ public sealed partial class OpaqueSyncStore
         }
 
         using (SqliteCommand epochCheck = Command(transaction, """
-            SELECT 1 FROM sync_records
-            WHERE space_id=$space AND key_epoch<>$epoch LIMIT 1
+            SELECT 1 FROM (
+                SELECT key_epoch FROM sync_records WHERE space_id=$space
+                UNION ALL SELECT key_epoch FROM sync_events WHERE space_id=$space
+            ) WHERE key_epoch<>$epoch LIMIT 1
             """, ("$space", space), ("$epoch", request.ContentEpoch)))
         {
             if (epochCheck.ExecuteScalar() is not null)

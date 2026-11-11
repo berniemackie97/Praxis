@@ -46,6 +46,22 @@ public sealed class AuthenticatedDataAccess(SecurityRegistry registry)
             }
 
             reader.Close();
+            using SqliteCommand enrollment = SecurityRegistry.Command(connection, null, """
+                SELECT 1 FROM security_spaces s
+                WHERE s.space_id=$space AND
+                    (s.owner_id=$principal OR EXISTS (
+                        SELECT 1 FROM device_approvals a
+                        WHERE a.space_id=s.space_id AND a.device_id=$device
+                          AND a.approved_principal_id=$principal))
+                """,
+                ("$space", SecurityRegistry.Id(proof.SpaceId)),
+                ("$principal", SecurityRegistry.Id(session.PrincipalId)),
+                ("$device", SecurityRegistry.Id(session.DeviceId)));
+            if (enrollment.ExecuteScalar() is null)
+            {
+                throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+            }
+
             return operation(new AuthorizedSpaceScope(session.PrincipalId, session.DeviceId,
                 proof.SpaceId, permission, contentEpoch));
         });
