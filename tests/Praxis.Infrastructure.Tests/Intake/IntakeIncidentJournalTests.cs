@@ -74,6 +74,26 @@ public sealed class IntakeIncidentJournalTests : IDisposable
     }
 
     [Fact]
+    public void FallbackPollingDoesNotFalselyResolveAWatcherFailure()
+    {
+        List<string> transitions = new();
+        IntakeStatusTracker tracker = new(transitions.Add);
+        DateTimeOffset now = new(2026, 11, 10, 22, 0, 0, TimeSpan.Zero);
+
+        tracker.SetState("degraded", "Filesystem watcher unavailable.");
+        tracker.SetState("scanning");
+        tracker.RecordSuccessfulScan(now, 0, 0, notificationsUnavailable: true);
+        tracker.RecordSuccessfulScan(now.AddSeconds(10), 0, 0, notificationsUnavailable: true);
+        Assert.Equal("degraded", tracker.Snapshot().State);
+        Assert.Equal(["degraded"], transitions);
+
+        tracker.SetState("resuming");
+        tracker.RecordSuccessfulScan(now.AddSeconds(20), 0, 0);
+        Assert.Equal("watching", tracker.Snapshot().State);
+        Assert.Equal(["degraded", "watching"], transitions);
+    }
+
+    [Fact]
     public async Task WatchedRootPublishesOfflineAndRecoveryTransitionsWithoutLeakingSourceData()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
