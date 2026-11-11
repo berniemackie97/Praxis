@@ -56,6 +56,9 @@
       },
       "praxis.domain": {
         "type": "Project"
+      },
+      "praxis.notes": {
+        "type": "Project"
       }
     }
   }
