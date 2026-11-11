@@ -1,0 +1,212 @@
+using System.Text;
+using Praxis.Domain.Intake;
+using Praxis.Domain.Library;
+using Praxis.Domain.Search;
+using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Support;
+using Xunit;
+
+namespace Praxis.Infrastructure.Tests.Intake;
+
+public sealed class QuickNoteCaptureTests : IDisposable
+{
+    private readonly string workspace = Path.Combine(TestPaths.Temp,
+        "praxis-quick-note-" + Guid.NewGuid().ToString("N"));
+    private readonly string dataRoot;
+    private readonly string inbox;
+
+    public QuickNoteCaptureTests()
+    {
+        dataRoot = Path.Combine(workspace, "data");
+        inbox = Path.Combine(workspace, "inbox");
+        Directory.CreateDirectory(dataRoot);
+        Directory.CreateDirectory(inbox);
+        if (!OperatingSystem.IsWindows())
+        {
+            UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(workspace, mode);
+            File.SetUnixFileMode(dataRoot, mode);
+            File.SetUnixFileMode(inbox, mode);
+        }
+    }
+
+    [Fact]
+    public async Task QuickNoteIsDurableSourceWithSearchableAttributedContent()
+    {
+        Guid id = Guid.NewGuid();
+        QuickCaptureReceipt receipt;
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
+        {
+            QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
+            receipt = await capture.CaptureAsync(id, "Project Ideas", "The violet compass.");
+            Assert.Equal(Path.Combine(inbox, "Project-Ideas-" + id.ToString("N") + ".md"),
+                receipt.SourcePath);
+            Assert.Equal("# Project Ideas\n\nThe violet compass.",
+                File.ReadAllText(receipt.SourcePath));
+            Assert.Equal(receipt.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
+            Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
+            Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+            SearchHit hit = Assert.Single(catalog.Search.Query("violet compass"));
+            Assert.Equal(receipt.Original.SourceId, hit.SourceId);
+            Assert.Equal(receipt.Original.ItemId, hit.ItemId);
+            Assert.Equal(receipt.Original.Sha256, hit.OriginalSha256);
+            await catalog.Originals.VerifyAsync(receipt.Original.ItemId);
+            Assert.Empty(Directory.EnumerateFiles(inbox, "*.part", SearchOption.TopDirectoryOnly));
+        }
+
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
+        LibraryItem item = Assert.Single(reopened.Library.List());
+        Assert.Equal(receipt.Original.ItemId, item.ItemId);
+        Assert.Single(reopened.Search.Query("violet"));
+        Assert.Equal(receipt.Original, (await new QuickNoteCapture(reopened.Originals, reopened.DataDirectory, inbox)
+            .CaptureAsync(id, "Project Ideas", "The violet compass.")).Original);
+        await reopened.Originals.VerifyAsync(item.ItemId);
+        Assert.Single(Directory.EnumerateFiles(inbox, "*.md", SearchOption.TopDirectoryOnly));
+    }
+
+    [Fact]
+    public async Task IdenticalRetriesNeverMakeAnotherNoteOrRevision()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
+        Guid id = Guid.NewGuid();
+        QuickCaptureReceipt first = await capture.CaptureAsync(id, null, "Original thought");
+        QuickCaptureReceipt second = await capture.CaptureAsync(id, null, "Original thought");
+        Assert.Equal(first, second);
+        Assert.Equal("Original thought", File.ReadAllText(first.SourcePath));
+        IntakeHarness watcher = new(catalog, inbox, TimeSpan.Zero);
+        DateTimeOffset time = DateTimeOffset.UtcNow;
+        Assert.Equal(0, await watcher.ReconcileAsync(time));
+        Assert.Equal(0, await watcher.ReconcileAsync(time.AddSeconds(1)));
+        Assert.Single(catalog.Library.List());
+        Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
+        Assert.Single(catalog.Search.Query("thought"));
+        Assert.Single(Directory.EnumerateFiles(inbox, "*.md"));
+    }
+
+    [Fact]
+    public async Task ChangedRetryCannotOverwriteOrDuplicateAnAcceptedNote()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
+        Guid id = Guid.NewGuid();
+        QuickCaptureReceipt original = await capture.CaptureAsync(id, "Research", "This text is preserved.");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            capture.CaptureAsync(id, "Research", "Different body"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            capture.CaptureAsync(id, "Different Title", "This text is preserved."));
+        Assert.Equal("# Research\n\nThis text is preserved.", File.ReadAllText(original.SourcePath));
+        Assert.Single(Directory.EnumerateFiles(inbox, "*.md"));
+        Assert.Single(catalog.Library.List());
+        await catalog.Originals.VerifyAsync(original.Original.ItemId);
+    }
+
+    [Fact]
+    public async Task PublishedButUncommittedNoteIsRecoveredByTheExistingIntake()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        Guid id = Guid.NewGuid();
+        string target = Path.Combine(inbox, "Recover-" + id.ToString("N") + ".md");
+        File.WriteAllText(target, "# Recover\n\nOffline thought");
+        QuickCaptureReceipt result = await new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
+            .CaptureAsync(id, "Recover", "Offline thought");
+        Assert.Equal(target, result.SourcePath);
+        Assert.Equal(result.Original.ItemId, Assert.Single(catalog.Library.List()).ItemId);
+        await catalog.Originals.VerifyAsync(result.Original.ItemId);
+    }
+
+    [Fact]
+    public async Task ReplacedExistingContentIsNotOverwrittenOnRetry()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        Guid id = Guid.NewGuid();
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
+        QuickCaptureReceipt saved = await capture.CaptureAsync(id, "Topic", "Keep these bytes.");
+        File.WriteAllText(saved.SourcePath, "external revision");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            capture.CaptureAsync(id, "Topic", "Keep these bytes."));
+        Assert.Equal("external revision", File.ReadAllText(saved.SourcePath));
+        Assert.Equal(1, Assert.Single(catalog.Library.List()).Revision);
+        await catalog.Originals.VerifyAsync(saved.Original.ItemId);
+    }
+
+    [Fact]
+    public async Task RejectedInputsCannotWriteAnInboxFile()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        QuickNoteCapture capture = new(catalog.Originals, catalog.DataDirectory, inbox);
+        Guid id = Guid.NewGuid();
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(Guid.Empty, "Notes", "hello"));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(id, "Notes", "  "));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(id, "Bad\nTitle", "hello"));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(id, new string('x', 81), "hello"));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(id, "Notes", new string('x', 8_001)));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            capture.CaptureAsync(id, "Notes", "hello\0world"));
+        await Assert.ThrowsAsync<EncoderFallbackException>(() =>
+            capture.CaptureAsync(id, "Notes", "invalid \uD800"));
+        Assert.Empty(Directory.EnumerateFiles(inbox));
+        Assert.Empty(catalog.Library.List());
+    }
+
+    [Fact]
+    public async Task CatalogAndLinkedRootsAreNotValidCaptureDestinations()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, dataRoot)
+                .CaptureAsync(Guid.NewGuid(), "Private", "Cannot write into the catalog."));
+        Assert.Empty(catalog.Library.List());
+
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string link = Path.Combine(workspace, "linked-inbox");
+        Directory.CreateSymbolicLink(link, inbox);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, link)
+                .CaptureAsync(Guid.NewGuid(), "Linked", "Cannot follow a linked root."));
+        Assert.Empty(Directory.EnumerateFiles(inbox));
+    }
+
+    [Fact]
+    public async Task CancellationBeforeCaptureLeavesNoOriginalOrReceipt()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
+                .CaptureAsync(Guid.NewGuid(), "Cancelled", "text", cts.Token));
+        Assert.Empty(catalog.Library.List());
+        Assert.Empty(Directory.EnumerateFiles(inbox));
+    }
+
+    [Fact]
+    public async Task OwnerPastedUrlIsOnlyPreservedAsText()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        string url = "https://example.invalid/private?token=abc";
+        QuickCaptureReceipt saved = await new QuickNoteCapture(catalog.Originals, catalog.DataDirectory, inbox)
+            .CaptureAsync(Guid.NewGuid(), "Reference", url);
+        Assert.Equal("# Reference\n\n" + url, File.ReadAllText(saved.SourcePath));
+        Assert.Equal("file", Assert.Single(catalog.Library.List()).SourceKind);
+        await catalog.Originals.VerifyAsync(saved.Original.ItemId);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(workspace))
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+}

@@ -13,6 +13,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
+    <Project Path="tests/Praxis.Architecture.Tests/Praxis.Architecture.Tests.csproj" />
+    <Project Path="tests/Praxis.Domain.Tests/Praxis.Domain.Tests.csproj" />
     <Project Path="tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj" />
     <Project Path="tests/Praxis.Notes.Tests/Praxis.Notes.Tests.csproj" />
   </Folder>

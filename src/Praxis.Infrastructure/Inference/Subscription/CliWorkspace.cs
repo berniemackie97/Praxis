@@ -1,4 +1,4 @@
-namespace Praxis.Application.Inference;
+namespace Praxis.Infrastructure.Inference.Subscription;
 
 /// <summary>
 /// An empty, owner-private working directory for one provider call, so the CLI loads no

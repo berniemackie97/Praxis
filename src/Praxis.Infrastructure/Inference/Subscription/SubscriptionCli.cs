@@ -1,6 +1,8 @@
 using System.Text;
 
-namespace Praxis.Application.Inference;
+using Praxis.Application.Inference;
+
+namespace Praxis.Infrastructure.Inference.Subscription;
 
 /// <summary>Shared rules for provider CLIs that run on the owner's subscription sign-in.</summary>
 internal static class SubscriptionCli

@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Praxis.Application.Inference;
+using Praxis.Application.Inference;
+
+namespace Praxis.Infrastructure.Inference.Subscription;
 
 /// <summary>
 /// Runs a provider CLI as a child process without a shell: arguments are passed as a list,

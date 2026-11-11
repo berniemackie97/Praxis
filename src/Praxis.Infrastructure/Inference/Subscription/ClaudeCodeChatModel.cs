@@ -1,7 +1,8 @@
 using System.Text.Json;
+using Praxis.Application.Inference;
 using Praxis.Domain.Models;
 
-namespace Praxis.Application.Inference;
+namespace Praxis.Infrastructure.Inference.Subscription;
 
 /// <summary>
 /// Structured completions through the owner's own Claude Code installation in headless print

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Infrastructure.Inference.Subscription;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Inference;
