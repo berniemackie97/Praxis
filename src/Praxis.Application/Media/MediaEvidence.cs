@@ -152,8 +152,8 @@ public sealed class MediaEvidence
                 // Both the caption and its paired video must remain within the
                 // selected collection when the cue is disclosed.
                 if (search.RetainCurrent([hit], collectionId).Count == 0 ||
-                    (collectionId is { } selected &&
-                     !collections!.ContainsActiveSource(selected, currentVideo.SourceId)))
+                    (collectionId is { } selectedAtDisclosure &&
+                     !collections!.ContainsActiveSource(selectedAtDisclosure, currentVideo.SourceId)))
                 {
                     break;
                 }
