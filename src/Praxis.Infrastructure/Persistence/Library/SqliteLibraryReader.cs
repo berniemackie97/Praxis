@@ -23,7 +23,7 @@ public sealed class SqliteLibraryReader : ILibraryReader
             throw new ArgumentException("A nonempty collection identifier is required.", nameof(collectionId));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,

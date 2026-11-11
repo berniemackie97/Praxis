@@ -27,7 +27,7 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT item_id, revision, processor_key, state, attempt, total_attempts,

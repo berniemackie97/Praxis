@@ -86,7 +86,7 @@ public sealed class SqliteCollectionRepository : ICollectionRepository
     public IReadOnlyList<SourceCollection> List(int limit = 100, int offset = 0)
     {
         ValidateCollectionPage(limit, offset);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT c.collection_id, c.name, (
@@ -120,7 +120,7 @@ public sealed class SqliteCollectionRepository : ICollectionRepository
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT c.collection_id

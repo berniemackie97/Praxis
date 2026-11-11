@@ -29,7 +29,7 @@ public sealed class SqliteTextSegmentRepository : ITextSegmentRepository
             throw new ArgumentException("A valid item and revision are required.");
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT s.source_id, d.source_digest, g.ordinal, g.start_offset, g.length,

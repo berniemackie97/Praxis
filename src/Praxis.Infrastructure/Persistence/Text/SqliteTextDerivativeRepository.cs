@@ -31,7 +31,7 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
             throw new ArgumentException("A valid item and revision are required.");
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc

@@ -193,7 +193,7 @@ public sealed class SqliteProposalRepository : IProposalRepository
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT proposal_id, source_id, item_id, revision,
@@ -331,7 +331,7 @@ public sealed class SqliteProposalRepository : IProposalRepository
             throw new ArgumentException("A valid source identifier is required.", nameof(sourceId));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT s.status, text.state, producer.state, r.outcome

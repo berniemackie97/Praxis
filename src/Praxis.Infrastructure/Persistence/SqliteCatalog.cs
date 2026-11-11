@@ -43,12 +43,12 @@ public sealed class SqliteCatalog : IDisposable
     public CatalogRecovery Recovery { get; }
     public SqliteModelProfileRepository Models { get; }
 
-    private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, TimeProvider clock)
+    private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, SqliteConnection? reader, TimeProvider clock)
     {
         DataDirectory = dataDirectory;
         DatabasePath = Path.Combine(dataDirectory, CatalogDirectory.DatabaseFile);
         this.lockFile = lockFile;
-        database = new CatalogDatabase(connection);
+        database = new CatalogDatabase(connection, reader);
         OriginalFileStore objects = new(dataDirectory);
 
         Sources = new SqliteSourceRepository(database, clock);
@@ -102,35 +102,55 @@ public sealed class SqliteCatalog : IDisposable
 
         FileStream fileLock = new(lockPath, lockOptions);
         SqliteConnection? connection = null;
+        SqliteConnection? reader = null;
         try
         {
-            connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = databasePath,
-                Mode = mode,
-                Pooling = false
-            }.ToString());
-            connection.Open();
+            connection = Connect(databasePath, mode);
             if (mode == SqliteOpenMode.ReadOnly)
             {
-                return new SqliteCatalog(root, fileLock, connection, clock);
+                return new SqliteCatalog(root, fileLock, connection, null, clock);
             }
 
             CatalogSchema.Prepare(connection);
-            if (OperatingSystem.IsWindows())
+            if (!OperatingSystem.IsWindows())
             {
-                return new SqliteCatalog(root, fileLock, connection, clock);
+                File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
 
-            File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            reader = Connect(databasePath, SqliteOpenMode.ReadOnly);
+            using (SqliteCommand readOnly = reader.CreateCommand("PRAGMA query_only = ON; PRAGMA busy_timeout = 5000"))
+            {
+                readOnly.ExecuteNonQuery();
+            }
 
-            return new SqliteCatalog(root, fileLock, connection, clock);
+            return new SqliteCatalog(root, fileLock, connection, reader, clock);
         }
         catch
         {
+            reader?.Dispose();
             connection?.Dispose();
             fileLock.Dispose();
+            throw;
+        }
+    }
+
+    private static SqliteConnection Connect(string databasePath, SqliteOpenMode mode)
+    {
+        SqliteConnection connection = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = mode,
+            Pooling = false
+        }.ToString());
+        try
+        {
+            connection.Open();
+            return connection;
+        }
+        catch
+        {
+            connection.Dispose();
             throw;
         }
     }

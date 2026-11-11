@@ -45,7 +45,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         }
 
         string? key = search is null ? null : KnowledgeVocabulary.NameKey(search);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand(Summary + """
                                                                            WHERE e.status = 'active'
@@ -67,7 +67,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
     public EntityDetail? GetEntity(Guid entityId)
     {
         RequireId(entityId);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand summary = connection.CreateCommand(Summary + """
                                                                              WHERE e.entity_id = $entity GROUP BY e.entity_id

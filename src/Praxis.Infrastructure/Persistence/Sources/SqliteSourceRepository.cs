@@ -36,7 +36,7 @@ public sealed class SqliteSourceRepository : ISourceRepository
             throw new ArgumentOutOfRangeException(nameof(revision));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT s.source_id, i.item_id, s.source_kind, s.locator, s.status,
@@ -112,7 +112,7 @@ public sealed class SqliteSourceRepository : ISourceRepository
             throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT r.request_key, r.revision, c.route,
@@ -155,7 +155,7 @@ public sealed class SqliteSourceRepository : ISourceRepository
             throw new ArgumentOutOfRangeException(revision is < 1 ? nameof(revision) : nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT j.processor_key, j.state, j.attempt, j.total_attempts,
@@ -352,7 +352,7 @@ public sealed class SqliteSourceRepository : ISourceRepository
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT m.source_id, m.old_locator, m.new_locator, m.digest, m.recorded_utc

@@ -24,7 +24,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         }
 
         string expression = BuildTextQuery(query);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,

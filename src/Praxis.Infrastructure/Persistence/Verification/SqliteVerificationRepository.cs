@@ -27,7 +27,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         this.clock = clock;
     }
 
-    public IReadOnlyList<VerificationProvider> ListProviders() => database.Execute(connection =>
+    public IReadOnlyList<VerificationProvider> ListProviders() => database.ExecuteRead(connection =>
     {
         using var query = connection.CreateCommand("""
             SELECT provider_id, executable, model, cost_weight, daily_limit, enabled
@@ -187,7 +187,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using var query = connection.CreateCommand(
                 "SELECT request_id FROM verification_requests ORDER BY created_utc DESC, request_id LIMIT $limit");
@@ -199,7 +199,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     public VerificationRequestView? Get(Guid requestId)
     {
         RequireId(requestId);
-        return database.Execute(connection => Read(connection, null, requestId.ToString("D")));
+        return database.ExecuteRead(connection => Read(connection, null, requestId.ToString("D")));
     }
 
     public string? ReadAwaitingPayload(Guid requestId)

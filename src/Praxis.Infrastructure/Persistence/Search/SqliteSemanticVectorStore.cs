@@ -115,7 +115,7 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
         });
     }
 
-    public bool HasVectors(string modelDigest) => database.Execute(connection =>
+    public bool HasVectors(string modelDigest) => database.ExecuteRead(connection =>
     {
         using SqliteCommand check = connection.CreateCommand("""
                                                              SELECT EXISTS(
@@ -131,7 +131,7 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
 
     public IReadOnlyList<SemanticSearchHit> FindNearest(
         string modelDigest, float[] unitQuery, int limit, int maximumScanned, CancellationToken cancellationToken) =>
-        database.Execute(connection =>
+        database.ExecuteRead(connection =>
         {
             using SqliteCommand read = connection.CreateCommand("""
                                                                 SELECT e.source_id, e.item_id, e.revision, e.locator,

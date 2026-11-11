@@ -19,7 +19,7 @@ public sealed class SqliteModelProfileRepository : IModelProfileRepository
     public ModelProfile? Get(string role)
     {
         ModelProfile.ValidateRole(role);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
                                                                  SELECT provider, endpoint, model, context_tokens, enabled
