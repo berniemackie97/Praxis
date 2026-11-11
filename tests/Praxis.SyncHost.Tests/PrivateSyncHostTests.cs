@@ -4,6 +4,8 @@ using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Connections.Features;
+using Microsoft.AspNetCore.Http;
 using Praxis.Domain.Security;
 using Praxis.Infrastructure.Persistence.Security.Registry;
 using Praxis.Infrastructure.Persistence.Sync;
@@ -123,17 +125,63 @@ public sealed class PrivateSyncHostTests
     }
 
     [Fact]
-    public async Task Tls12DoesNotDowngradeThePrivateSyncListener()
+    public async Task NegotiatedProtocolIsExplicitAndUnsupportedVersionIsRejected()
     {
         await using TestHost host = new();
         await host.StartAsync();
 
-        // Enable the same .NET 10 macOS TLS 1.3 client backend used by a real client.
-        using OpaqueSyncTransportClient client = host.ConnectFirst();
-        using HttpClient downgraded = host.RawFirst(SslProtocols.Tls12);
-        await Assert.ThrowsAsync<HttpRequestException>(() => downgraded.PostAsJsonAsync(
+        using HttpClient verified = host.RawFirst();
+        string[] negotiated = (await verified.GetStringAsync("__test/tls-protocol")).Split('|');
+        Assert.Equal(2, negotiated.Length);
+        Assert.Equal(host.ExpectedProtocol.ToString(), negotiated[0]);
+        Assert.True(negotiated[1].Contains("GCM", StringComparison.Ordinal) ||
+            negotiated[1].Contains("CHACHA20_POLY1305", StringComparison.Ordinal));
+        if (host.ExpectedProtocol == SslProtocols.Tls12)
+        {
+            Assert.Contains("ECDHE", negotiated[1]);
+        }
+
+        SslProtocols unsupported = host.ExpectedProtocol == SslProtocols.Tls12
+            ? SslProtocols.Tls13 : SslProtocols.Tls12;
+        using HttpClient rejected = host.RawFirst(unsupported);
+        await Assert.ThrowsAsync<HttpRequestException>(() => rejected.PostAsJsonAsync(
             "v1/sync/challenge",
             new SyncChallengeRequest(host.FirstDevice, host.Space, SecurityPermission.Read)));
+    }
+
+    [Fact]
+    public async Task MissingOrUntrustedClientCertificateCannotObtainChallenges()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        SyncChallengeRequest request = new(
+            host.FirstDevice, host.Space, SecurityPermission.Read);
+
+        using HttpClient missing = host.RawFirst(includeCertificate: false);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            missing.PostAsJsonAsync("v1/sync/challenge", request));
+
+        using X509Certificate2 outsider = host.UntrustedCertificate();
+        using HttpClient untrusted = host.RawFirst(certificate: outsider);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            untrusted.PostAsJsonAsync("v1/sync/challenge", request));
+
+        using HttpClient trusted = host.RawFirst();
+        using HttpResponseMessage accepted = await trusted.PostAsJsonAsync(
+            "v1/sync/challenge", request);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProductionListenerCannotSilentlyDowngradeOnMacOs()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        await using TestHost host = new();
+        host.VerifyProductionListenerIsUnsupported();
     }
 
     [Fact]
@@ -172,6 +220,7 @@ public sealed class PrivateSyncHostTests
         private readonly X509Certificate2 secondCertificate;
         private readonly ECDsa firstSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         private readonly ECDsa secondSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        private readonly ECDsa serverSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         private readonly byte[] contentKey = ClientSpaceKeys.GenerateContentKey();
         private OpaqueSyncStore store;
         private WebApplication? app;
@@ -215,18 +264,38 @@ public sealed class PrivateSyncHostTests
                 ClientSpaceKeys.GenerateRecoverySecret());
             Registry.SpaceKeys.Publish(write, publication);
 
-            using ECDsa serverSigner = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             serverCertificate = IssueLeaf(authority, serverSigner, isServer: true);
             firstCertificate = IssueLeaf(authority, firstSigner, isServer: false);
             secondCertificate = IssueLeaf(authority, secondSigner, isServer: false);
         }
 
+        public SslProtocols ExpectedProtocol =>
+            OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13;
+
         public async Task StartAsync()
         {
-            app = PrivateSyncHost.Build(IPAddress.Loopback, 0,
-                serverCertificate, authority, Registry, store);
+            app = OperatingSystem.IsMacOS()
+                ? PrivateSyncHost.BuildMacOsLoopback(IPAddress.Loopback, 0,
+                    serverCertificate, authority, Registry, store)
+                : PrivateSyncHost.Build(IPAddress.Loopback, 0,
+                    serverCertificate, authority, Registry, store);
+            app.MapGet("/__test/tls-protocol", (HttpContext context) =>
+            {
+                ITlsHandshakeFeature? tls = context.Features.Get<ITlsHandshakeFeature>();
+                return tls is null ? Results.Problem() :
+                    Results.Text($"{tls.Protocol}|{tls.NegotiatedCipherSuite}");
+            });
             await app.StartAsync();
             endpoint = new Uri(app.Urls.Single().TrimEnd('/') + "/");
+        }
+
+        public void VerifyProductionListenerIsUnsupported()
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => PrivateSyncHost.Build(
+                IPAddress.Loopback, 0, serverCertificate, authority, Registry, store));
+            Assert.Throws<InvalidOperationException>(() =>
+                PrivateSyncHost.BuildMacOsLoopback(IPAddress.Any, 0,
+                    serverCertificate, authority, Registry, store));
         }
 
         public async Task RestartAsync()
@@ -247,19 +316,26 @@ public sealed class PrivateSyncHostTests
         }
 
         public OpaqueSyncTransportClient ConnectFirst() =>
-            OpaqueSyncTransportClient.Connect(endpoint!, firstCertificate, authority,
-                FirstDevice, firstSigner);
+            OperatingSystem.IsMacOS()
+                ? OpaqueSyncTransportClient.ConnectMacOsLoopback(
+                    endpoint!, firstCertificate, authority, FirstDevice, firstSigner)
+                : OpaqueSyncTransportClient.Connect(
+                    endpoint!, firstCertificate, authority, FirstDevice, firstSigner);
 
         public OpaqueSyncTransportClient ConnectSecond() =>
-            OpaqueSyncTransportClient.Connect(endpoint!, secondCertificate, authority,
-                SecondDevice, secondSigner);
+            OperatingSystem.IsMacOS()
+                ? OpaqueSyncTransportClient.ConnectMacOsLoopback(
+                    endpoint!, secondCertificate, authority, SecondDevice, secondSigner)
+                : OpaqueSyncTransportClient.Connect(
+                    endpoint!, secondCertificate, authority, SecondDevice, secondSigner);
 
-        public HttpClient RawFirst(SslProtocols protocols = SslProtocols.Tls13)
+        public HttpClient RawFirst(SslProtocols? protocols = null,
+            bool includeCertificate = true, X509Certificate2? certificate = null)
         {
             HttpClientHandler handler = new()
             {
                 ClientCertificateOptions = ClientCertificateOption.Manual,
-                SslProtocols = protocols,
+                SslProtocols = protocols ?? ExpectedProtocol,
                 ServerCertificateCustomValidationCallback = (_, cert, _, errors) =>
                     cert is not null &&
                     (errors & (System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch |
@@ -267,8 +343,19 @@ public sealed class PrivateSyncHostTests
                     PinnedCertificateChain.Verify(cert, authority,
                         PinnedCertificateChain.ServerAuthentication)
             };
-            handler.ClientCertificates.Add(firstCertificate);
+            if (includeCertificate)
+            {
+                handler.ClientCertificates.Add(certificate ?? firstCertificate);
+            }
+
             return new HttpClient(handler) { BaseAddress = endpoint! };
+        }
+
+        public X509Certificate2 UntrustedCertificate()
+        {
+            using X509Certificate2 outsideAuthority = IssueRoot();
+            using ECDsa outsideKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            return IssueLeaf(outsideAuthority, outsideKey, isServer: false);
         }
 
         public byte[] Encrypt(Guid record, long revision, OpaqueSyncAction action,
@@ -380,6 +467,7 @@ public sealed class PrivateSyncHostTests
             authority.Dispose();
             firstSigner.Dispose();
             secondSigner.Dispose();
+            serverSigner.Dispose();
             store.Dispose();
             Registry.Dispose();
             if (Directory.Exists(root))

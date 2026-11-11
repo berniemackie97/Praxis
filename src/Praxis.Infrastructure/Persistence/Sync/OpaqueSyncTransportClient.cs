@@ -27,7 +27,27 @@ public sealed class OpaqueSyncTransportClient : IDisposable
 
     public static OpaqueSyncTransportClient Connect(Uri endpoint,
         X509Certificate2 clientCertificate, X509Certificate2 pinnedServerRoot,
+        Guid deviceId, ECDsa deviceSigningKey, TimeProvider? clock = null) =>
+        Connect(endpoint, clientCertificate, pinnedServerRoot, deviceId,
+            deviceSigningKey, clock, SslProtocols.Tls13);
+
+    internal static OpaqueSyncTransportClient ConnectMacOsLoopback(Uri endpoint,
+        X509Certificate2 clientCertificate, X509Certificate2 pinnedServerRoot,
         Guid deviceId, ECDsa deviceSigningKey, TimeProvider? clock = null)
+    {
+        if (!OperatingSystem.IsMacOS() || endpoint is null || !endpoint.IsLoopback)
+        {
+            throw new InvalidOperationException(
+                "The TLS 1.2 compatibility client is restricted to macOS loopback tests.");
+        }
+
+        return Connect(endpoint, clientCertificate, pinnedServerRoot, deviceId,
+            deviceSigningKey, clock, SslProtocols.Tls12);
+    }
+
+    private static OpaqueSyncTransportClient Connect(Uri endpoint,
+        X509Certificate2 clientCertificate, X509Certificate2 pinnedServerRoot,
+        Guid deviceId, ECDsa deviceSigningKey, TimeProvider? clock, SslProtocols protocols)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(clientCertificate);
@@ -42,7 +62,7 @@ public sealed class OpaqueSyncTransportClient : IDisposable
 
         // .NET 10's default macOS Secure Transport client does not support TLS 1.3.
         // The Network.framework backend is opt-in and affects only client-side TLS.
-        if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS() && protocols == SslProtocols.Tls13)
         {
             AppContext.SetSwitch("System.Net.Security.UseNetworkFramework", true);
         }
@@ -50,7 +70,7 @@ public sealed class OpaqueSyncTransportClient : IDisposable
         HttpClientHandler handler = new()
         {
             ClientCertificateOptions = ClientCertificateOption.Manual,
-            SslProtocols = SslProtocols.Tls13,
+            SslProtocols = protocols,
             ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
                 certificate is not null &&
                 (errors & (SslPolicyErrors.RemoteCertificateNameMismatch |
