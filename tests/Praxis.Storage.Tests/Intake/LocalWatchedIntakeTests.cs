@@ -406,6 +406,36 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         await catalog.Originals.VerifyAsync(after.ItemId);
     }
 
+
+    [Fact]
+    public async Task ResumeRechecksModifiedBytesWhenMetadataIsUnchanged()
+    {
+        string path = Path.Combine(inbox, "paused-revision.md");
+        DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(path, "violet contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await watcher.ReconcileAsync(now);
+        await watcher.ReconcileAsync(now.AddSeconds(2));
+        LocalLibraryItem before = Assert.Single(catalog.Library.List());
+
+        watcher.SetPaused(true);
+        File.WriteAllText(path, "orange contents");
+        File.SetLastWriteTimeUtc(path, fixedWrite);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(3)));
+        watcher.SetPaused(false);
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(4)));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(6)));
+        LocalLibraryItem after = Assert.Single(catalog.Library.List());
+        Assert.Equal(before.SourceId, after.SourceId);
+        Assert.Equal(before.ItemId, after.ItemId);
+        Assert.Equal(2, after.Revision);
+        Assert.Empty(catalog.Search.Query("violet"));
+        Assert.Single(catalog.Search.Query("orange"));
+    }
+
     [Fact]
     public async Task OversizedSparseFileReportsAnErrorAndRecoversAfterReplacement()
     {

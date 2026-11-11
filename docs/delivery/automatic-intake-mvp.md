@@ -43,7 +43,7 @@ With that **single running process**, copy Markdown, text, and arbitrary other f
 
 For current search and library inspection, `LocalCatalog.Search.Query` and `LocalCatalog.Library.List` are owner-local library APIs. The repository now contains a first-party SwiftUI workbench with source browsing, search and intake status/pause/retry controls. Actual Xcode application launch and first-run acceptance remain open under #215/#130. There is intentionally no unauthenticated private-data HTTP endpoint.
 
-## Acceptance to complete #101 / #105 / #130
+## Remaining #105 / #130 acceptance
 
 Run the existing and new xUnit suites, including:
 
@@ -54,7 +54,7 @@ Run the existing and new xUnit suites, including:
 - Symlinks and out-of-scope data roots fail closed; actual disconnected volumes and read errors do not implicitly delete sources.
 - During a real macOS session, dropping files while Praxis runs is automatically reflected without any manual trigger. Inspect logs and stable on-disk catalog records.
 
-Still required for release: supervised OS-login lifecycle and owner-configured watch roots via the first-party UI, safe rename/move source attribution, distinguishable missing/disconnected states, actual disk-full and failure injection, cross-platform tests, complete source-aware browsing, source-backed URL bookmarks, and explicit owner-controlled organization. These remain tracked in #101/#105/#104/#108/#130 rather than silently declared complete.
+Still required for release: owner-controlled multi-root management, supported OS-login lifecycle, same-volume reattachment identification, actual disk-full/unplug/overflow fault evidence, cross-platform tests and complete first-party acceptance. The implemented verified-rename path must not be confused with proof of missed-event directory move identity. Track the outstanding work in #105/#130/#215 and their related features.
 
 **Format boundary:** `.md`, `.markdown`, and `.txt` UTF-8 files up to 1 MiB currently receive extracted searchable text. PDF text extraction, image understanding, audio transcription, archives, links and full knowledge enrichment are **not yet implemented** by this worker; they remain preserved originals or future explicit source types. Any entity/tag/summary/relation generated later must retain processor/source provenance and a review status (#115/#116). No local LLM process or MCP grants are silently enabled.
 

@@ -24,6 +24,7 @@ public sealed class LocalWatchedIntake
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
     private int wakePending;
     private int watcherFaulted;
+    private bool rootWasOffline;
 
     public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null)
     {
@@ -59,7 +60,13 @@ public sealed class LocalWatchedIntake
 
     public LocalIntakeStatus SetPaused(bool pause)
     {
+        bool resuming = status.IsPaused && !pause;
         status.SetPaused(pause);
+        if (resuming)
+        {
+            reconciler.InvalidateAll();
+        }
+
         Signal();
         return status.Snapshot();
     }
@@ -167,17 +174,22 @@ public sealed class LocalWatchedIntake
         if (!Directory.Exists(root))
         {
             status.SetState("offline", OfflineProblem);
-            if (watcher is null)
+            if (!rootWasOffline)
             {
-                return null;
+                rootWasOffline = true;
+                renames.Clear();
+                reconciler.InvalidateAll();
+                report("Watched directory is offline; captured originals are retained.");
             }
 
-            watcher.Dispose();
-            renames.Clear();
-            reconciler.InvalidateAll();
-            report("Watched directory is offline; captured originals are retained.");
-
+            watcher?.Dispose();
             return null;
+        }
+
+        if (rootWasOffline)
+        {
+            rootWasOffline = false;
+            reconciler.InvalidateAll();
         }
 
         if (watcher is not null && Interlocked.Exchange(ref watcherFaulted, 0) == 0)
@@ -185,9 +197,13 @@ public sealed class LocalWatchedIntake
             return watcher;
         }
 
-        watcher?.Dispose();
-        renames.Clear();
-        reconciler.InvalidateAll();
+        if (watcher is not null)
+        {
+            watcher.Dispose();
+            renames.Clear();
+            reconciler.InvalidateAll();
+        }
+
         try
         {
             if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
