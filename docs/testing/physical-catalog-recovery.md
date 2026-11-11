@@ -26,7 +26,7 @@ mkdir -m 700 "/Volumes/YOUR_DRIVE/PraxisRecoveryQA"
 cd /path/to/Praxis
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release \
+dotnet run --project tools/Praxis.RecoveryCheck -c Release \
   --no-build --no-restore -- --create "/Volumes/YOUR_DRIVE/PraxisRecoveryQA"
 ```
 
@@ -39,7 +39,7 @@ Inspect filesystem type, permissions and physical storage with `diskutil info` a
 Once the **completed** check has exited and the external volume is idle, eject/unmount the test drive normally, disconnect and reconnect it, then run:
 
 ```sh
-dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release \
+dotnet run --project tools/Praxis.RecoveryCheck -c Release \
   --no-build --no-restore -- --verify "/Volumes/YOUR_DRIVE/PraxisRecoveryQA/praxis-recovery-YOUR_ID"
 ```
 

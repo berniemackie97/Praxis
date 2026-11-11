@@ -13,6 +13,7 @@
 
 - Eliminate duplicated parsing and data-flow logic; keep one clear owner for each responsibility.
 - Avoid god classes, speculative extension points, forwarding wrappers, broad catch-and-ignore blocks, redundant checks, dead code, and commentary that repeats the implementation.
+- Respect the layering in [ADR 0039](decisions/0039-layered-architecture.md): domain policy in `Praxis.Domain`, use cases and ports in `Praxis.Application`, SQL only in `Praxis.Infrastructure/Persistence`, time from an injected `TimeProvider`, one top-level type per file. `tests/Praxis.Architecture.Tests` fails the build otherwise.
 - Specify bounded resources, cancellation, retries, lifetime ownership, and observed failure behavior where applicable.
 - Prefer measurable behavior and small changes over premature distributed systems or framework layering.
 - No secrets, access tokens, or personal source data in commits, logs, tests, or issue reproductions.

@@ -1,6 +1,6 @@
 # ADR 0028: Responsibility-specific catalog stores over one serialized connection
 
-**Status:** Accepted. Behavior-preserving restructuring; no schema change.
+**Status:** Accepted. Behavior-preserving restructuring; no schema change. Partly superseded by [ADR 0039](0039-layered-architecture.md): stores became persistence repositories behind application ports, and pure queries may use a read-only connection.
 
 ## Context
 

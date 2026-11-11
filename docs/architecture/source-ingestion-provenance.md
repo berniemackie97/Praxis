@@ -46,14 +46,14 @@ Local capture authority comes from the trusted owner-local call and checked path
 
 `SourceProvenanceConformanceTests` validates file, quick-note and watched-folder intake against the same catalog: independent source/item identities with shared original bytes, durable captured-route attribution, replay, revision invalidation, separate search ownership, revocation, index rebuild, restart and exact-byte verification, as well as malformed and unsupported input.
 
-`CaptureRequestContractTests` covers selected-folder scope on a batch and repeat imports, conflicting route/scope reuse, out-of-scope watcher claims, current-revision retry/claim restrictions, stale-lease completion/defer fencing, failed extraction/recovery and missing watched-file preservation. `LocalCatalogTests` covers schema-v15 upgrade and the absence of invented consent evidence on legacy receipts.
+`CaptureRequestContractTests` covers selected-folder scope on a batch and repeat imports, conflicting route/scope reuse, out-of-scope watcher claims, current-revision retry/claim restrictions, stale-lease completion/defer fencing, failed extraction/recovery and missing watched-file preservation. `SqliteCatalogTests` covers schema-v15 upgrade and the absence of invented consent evidence on legacy receipts.
 
 From the repository root:
 
 ```bash
 dotnet restore Praxis.slnx --locked-mode
 dotnet build Praxis.slnx -c Release --no-restore
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~CaptureRequestContractTests|FullyQualifiedName~SourceProvenanceConformanceTests"
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~CaptureRequestContractTests|FullyQualifiedName~SourceProvenanceConformanceTests"
 dotnet test Praxis.slnx -c Release --no-build --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 ```

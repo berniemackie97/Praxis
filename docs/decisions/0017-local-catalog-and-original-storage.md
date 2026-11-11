@@ -99,7 +99,7 @@ Durations from GitHub-hosted runner disks are descriptive, **not** platform perf
 
 ## S1a schema bootstrap (PR #123)
 
-The owner-local SQLite metadata database is now introduced as a **separate assembly** (`Praxis.Storage`) rather than polluting the portable archive domain model. Its first migration reuses the single [embedded schema](../../src/Praxis.Storage/Catalog/Migrations/LocalCatalog.sql) also used by the research tests; the duplicate research fixture was removed.
+The owner-local SQLite metadata database is now introduced as a **separate assembly** (`Praxis.Storage`) rather than polluting the portable archive domain model. Its first migration reuses the single [embedded schema](../../src/Praxis.Infrastructure/Persistence/Migrations/Catalog.V1.sql) also used by the research tests; the duplicate research fixture was removed.
 
 `LocalCatalog.Open(absoluteDataRoot)` is deliberately **not an import operation**: the root must already exist, it rejects unexpected names and reparse points, and it enforces private owner-only root permissions on Unix. A per-process file lock prevents two cooperating catalog instances using the same root at once. It checks integrity, schema version and foreign keys, rejects unrecognized or corrupt catalogs, and verifies WAL and FULL synchronous settings before reporting a usable catalog.
 

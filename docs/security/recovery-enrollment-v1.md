@@ -72,11 +72,11 @@ This component deliberately does **not** write an OS keychain, expose an authent
 
 ## Reproducible tests
 
-`tests/Praxis.Storage.Tests/Security/RecoveryEnrollmentTests.cs` exercises valid two-signer enrollment across process restart, historical recovery and key rotation, wrong-key consumption/replay, household-member refusal, recovery-key rotation invalidating pending requests, disabled principal, bounded expiry and duplicate-signing-key refusal. Existing `SecurityRegistryMigrationTests` must pass migration from historical schema v1 to v3.
+`tests/Praxis.Infrastructure.Tests/Security/RecoveryEnrollmentTests.cs` exercises valid two-signer enrollment across process restart, historical recovery and key rotation, wrong-key consumption/replay, household-member refusal, recovery-key rotation invalidating pending requests, disabled principal, bounded expiry and duplicate-signing-key refusal. Existing `SecurityRegistryMigrationTests` must pass migration from historical schema v1 to v3.
 
 ```sh
 dotnet restore Praxis.slnx --locked-mode
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~Security
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~Security
 dotnet test Praxis.slnx -c Release --no-restore
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 python3 -m unittest discover -s scripts/github -p 'test_*.py'

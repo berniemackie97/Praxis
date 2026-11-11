@@ -30,7 +30,7 @@ Because both leases are held throughout capture, this constitutes a **consistent
 
 ## Disposable operator rehearsal (recommended for #40)
 
-The existing `Praxis.Storage.RecoveryCheck` tool can now create an entirely **synthetic** catalog and client-held security registry on an owner-approved scratch filesystem, exercise the actual `LocalRecoverySet` backup/verification/fresh-root restore APIs, and persist a **non-secret evidence file** for verification by another invocation. It never opens the configured Praxis catalog or existing security registry. It generates temporary device signing, wrapping and recovery factors in memory, checks that the recovered encrypted key epoch unlocks with the right factor and rejects a different factor, then discards those secrets. It also checks restored source IDs, original bytes, version history, member permission, epoch metadata, and identity continuity.
+The existing `Praxis.RecoveryCheck` tool can now create an entirely **synthetic** catalog and client-held security registry on an owner-approved scratch filesystem, exercise the actual `LocalRecoverySet` backup/verification/fresh-root restore APIs, and persist a **non-secret evidence file** for verification by another invocation. It never opens the configured Praxis catalog or existing security registry. It generates temporary device signing, wrapping and recovery factors in memory, checks that the recovered encrypted key epoch unlocks with the right factor and rejects a different factor, then discards those secrets. It also checks restored source IDs, original bytes, version history, member permission, epoch metadata, and identity continuity.
 
 Create a **new, disposable** scratch directory on the actual filesystem you want to validate. On a Mac with an approved, mounted `EnderChest` volume, for example:
 
@@ -39,14 +39,14 @@ umask 077
 mkdir -p /Volumes/EnderChest/Praxis-Recovery-Lab
 chmod 700 /Volumes/EnderChest/Praxis-Recovery-Lab
 
-dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release -- \
+dotnet run --project tools/Praxis.RecoveryCheck -c Release -- \
   --set-create /Volumes/EnderChest/Praxis-Recovery-Lab
 ```
 
 The command prints a newly created `praxis-set-rehearsal-<random>` workspace. **Keep the printed path** and run an independent verification (a separate process) against it:
 
 ```sh
-dotnet run --project tools/Praxis.Storage.RecoveryCheck -c Release -- \
+dotnet run --project tools/Praxis.RecoveryCheck -c Release -- \
   --set-verify /Volumes/EnderChest/Praxis-Recovery-Lab/praxis-set-rehearsal-<printed-id>
 ```
 
@@ -100,9 +100,9 @@ There is no automatic periodic schedule, encrypted off-device transfer, retentio
 ```sh
 dotnet restore Praxis.slnx --locked-mode &&
 dotnet build Praxis.slnx -c Release --no-restore &&
-dotnet test tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj \
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
   -c Release --no-build --no-restore \
-  --filter 'FullyQualifiedName~LocalRecoverySetTests|FullyQualifiedName~LocalSnapshotTests|FullyQualifiedName~SecuritySnapshotTests' &&
+  --filter 'FullyQualifiedName~RecoverySetTests|FullyQualifiedName~CatalogSnapshotTests|FullyQualifiedName~SecuritySnapshotTests' &&
 dotnet test Praxis.slnx -c Release --no-build --no-restore &&
 dotnet format Praxis.slnx --verify-no-changes --no-restore
 ```

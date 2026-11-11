@@ -26,7 +26,7 @@ The first-party Search screen exposes explicit **Update semantic index** and **R
 
 ## Verification
 
-`LocalHybridSearchTests` checks nonlexical conceptual recall, source attribution, duplicate ownership, revocation, revision replacement, a missing derived index, bounded failed rebuild, model digest changes, and revocation during a query-embedding call. `OllamaEmbeddingTests` verifies the actual /api/embed request contract, response order, normalization, malformed responses and input bounds. `LocalModelProfileTests` validates opt-in/denied desktop paths. Existing catalog upgrade/recovery and lexical golden-corpus tests remain part of the suite.
+`HybridSearchTests` checks nonlexical conceptual recall, source attribution, duplicate ownership, revocation, revision replacement, a missing derived index, bounded failed rebuild, model digest changes, and revocation during a query-embedding call. `OllamaEmbeddingTests` verifies the actual /api/embed request contract, response order, normalization, malformed responses and input bounds. `ModelProfileTests` validates opt-in/denied desktop paths. Existing catalog upgrade/recovery and lexical golden-corpus tests remain part of the suite.
 
 Run the commands as one chain; a passing `--no-build` test run after a failed build may have executed stale test assemblies.
 
