@@ -122,6 +122,15 @@ public sealed class LocalWatchedIntake
                 return new WatchedScanResult(0, 0, null);
             }
 
+            if (!IsApprovedAndAvailable)
+            {
+                bool offline = !Directory.Exists(root);
+                Interlocked.Exchange(ref requiresApproval, 1);
+                status.SetState(offline ? "offline" : "reapproval_required",
+                    offline ? OfflineProblem : "The watched folder identity changed; reapproval is required.");
+                return new WatchedScanResult(0, 0, null);
+            }
+
             if (sharedScanLock is not null)
             {
                 await sharedScanLock.WaitAsync(cancellationToken);

@@ -45,7 +45,9 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await group.ReconcileAsync(now));
         Assert.Equal(2, await group.ReconcileAsync(now.AddSeconds(1)));
-        while (await processing.ProcessNextAsync()) { }
+        while (await processing.ProcessNextAsync())
+        {
+        }
 
         LocalLibraryItem[] items = catalog.Library.List().ToArray();
         Assert.Equal(2, items.Length);
@@ -65,7 +67,9 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         File.SetLastWriteTimeUtc(b, DateTime.UtcNow.AddSeconds(10));
         Assert.Equal(0, await group.ReconcileAsync(now.AddSeconds(2)));
         Assert.Equal(1, await group.ReconcileAsync(now.AddSeconds(3)));
-        while (await processing.ProcessNextAsync()) { }
+        while (await processing.ProcessNextAsync())
+        {
+        }
         LocalLibraryItem revised = Assert.Single(catalog.Library.List(), item => item.SourceLocator == b);
         Assert.Equal(original, revised.ItemId);
         Assert.Equal(2, revised.Revision);
