@@ -35,6 +35,34 @@ After the TLS variables are set, start the separate network process using:
 
 A VPN does not provide device authorization. Never expose this candidate to the internet merely by setting PRAXIS_SYNC_ALLOW_PRIVATE_BIND. Review ingress, certificate issuance/revocation, storage and approved host obligations under #65.
 
+## macOS TLS 1.3 client support (.NET 10)
+
+On macOS, the default .NET 10 outbound TLS implementation uses Secure Transport,
+which does not negotiate TLS 1.3. The private sync host **requires TLS 1.3** and
+must not be made to accept TLS 1.2 merely to get the tests running.
+
+`OpaqueSyncTransportClient.Connect` enables the .NET 10 Network.framework-backed
+outbound TLS implementation on macOS before constructing its HTTP handler, and
+explicitly restricts its connections to TLS 1.3. This opts the **process** into a
+different outbound TLS backend; it does not modify Kestrel's inbound TLS stack.
+If a future first-party desktop client has already initialized outbound TLS
+before calling `Connect`, configure the switch at application startup instead:
+
+```sh
+DOTNET_SYSTEM_NET_SECURITY_USENETWORKFRAMEWORK=1 dotnet test tests/Praxis.SyncHost.Tests/Praxis.SyncHost.Tests.csproj -c Release
+```
+
+This command is only a diagnostic verification option, not a substitute for
+testing the code's normal path **without** that environment override. The
+Network.framework backend has different buffering, cancellation and
+hostname-handling behavior, so the first-party caller must test those behaviors
+before integrating it with other outbound services. Do not set a machine-wide
+switch without reviewing other outbound HTTPS clients.
+
+The focused TLS regression explicitly attempts a TLS 1.2 handshake against
+the opt-in host and must fail. A passing build, successful in-process gateway
+test or TLS 1.2 connection is **not** evidence that macOS mTLS works.
+
 ## Limits and caveats
 
 - TLS 1.3, mandatory client certificates, strict pinned CA and fresh signed proof at every data operation. **CA CRL/OCSP is not yet implemented**; local registry device revocation is immediate and distinct from CA revocation.
