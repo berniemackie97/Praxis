@@ -2,9 +2,11 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
+using Praxis.Domain.Security;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Persistence.Security.Registry;
 using Praxis.Infrastructure.Recovery;
-using Praxis.Infrastructure.Security;
+using Praxis.Infrastructure.Security.Cryptography;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

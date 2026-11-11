@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Security;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Persistence.Security.ClientTrust;
+using Praxis.Infrastructure.Persistence.Security.Registry;
+using Praxis.Infrastructure.Security.Cryptography;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 

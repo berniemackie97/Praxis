@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 internal static class SecurityRegistrySchema
 {

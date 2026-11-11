@@ -1,20 +1,9 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Security.Cryptography;
 
-namespace Praxis.Infrastructure.Security;
-
-[Flags]
-public enum SecurityPermission
-{
-    Read = 1,
-    Write = 2
-}
-
-public enum SecurityProcessingClass
-{
-    ClientHeld,
-    TrustedHost
-}
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Owner/operator-only provisioning. Do not register this class as a request-scoped

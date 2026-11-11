@@ -1,40 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
 
-namespace Praxis.Infrastructure.Security;
-
-/// <summary>A 30-second, single-use challenge for a specific device, security space and operation.</summary>
-public sealed record DeviceChallenge(Guid ChallengeId, byte[] Message, DateTimeOffset ExpiresUtc);
-
-/// <summary>
-/// An authenticated request result, not a durable session or bearer token. Before every
-/// data operation, callers must additionally check IsCurrent against the registry.
-/// </summary>
-public sealed class VerifiedDeviceProof
-{
-    internal VerifiedDeviceProof(Guid installationId, Guid principalId, Guid deviceId,
-        Guid spaceId, Guid? sourceId, SecurityPermission permission, long grantVersion, DateTimeOffset expiresUtc)
-    {
-        InstallationId = installationId;
-        PrincipalId = principalId;
-        DeviceId = deviceId;
-        SpaceId = spaceId;
-        SourceId = sourceId;
-        Permission = permission;
-        GrantVersion = grantVersion;
-        ExpiresUtc = expiresUtc;
-    }
-
-    internal Guid InstallationId { get; }
-    public Guid PrincipalId { get; }
-    public Guid DeviceId { get; }
-    public Guid SpaceId { get; }
-    public Guid? SourceId { get; }
-    public SecurityPermission Permission { get; }
-    internal long GrantVersion { get; }
-    public DateTimeOffset ExpiresUtc { get; }
-}
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// P-256 SHA-256 proof-of-possession for a single requested access. Not a general OAuth

@@ -2,7 +2,7 @@ using System.Text.Json;
 using Praxis.Domain.Common;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Security;
+using Praxis.Infrastructure.Persistence.Security.Registry;
 
 namespace Praxis.Infrastructure.Recovery;
 

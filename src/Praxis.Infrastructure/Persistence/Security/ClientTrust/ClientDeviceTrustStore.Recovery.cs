@@ -2,8 +2,9 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Infrastructure.Persistence.Security.Registry;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.ClientTrust;
 
 public sealed partial class ClientDeviceTrustStore
 {

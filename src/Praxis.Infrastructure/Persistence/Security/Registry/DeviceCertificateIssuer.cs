@@ -1,8 +1,9 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Offline/operator-only certificate issuance. The CA private key is supplied by the

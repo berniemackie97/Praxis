@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Persistence.Security.Registry;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.ClientTrust;
 
 /// <summary>
 /// Independently bootstrapped, owner-private recipient pins. Never populate it by

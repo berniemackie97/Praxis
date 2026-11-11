@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Persistence.Security.ClientTrust;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Security.Cryptography;
 
 /// <summary>
 /// Client-side envelope operations. Only public material and ciphertext may reach

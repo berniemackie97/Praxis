@@ -1,4 +1,5 @@
-using Praxis.Infrastructure.Security;
+using Praxis.Infrastructure.Persistence.Security.Registry;
+
 
 namespace Praxis.Infrastructure.Recovery;
 

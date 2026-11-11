@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Security.Cryptography;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Stores only owner-signed opaque space-key envelopes. Every operation requires a

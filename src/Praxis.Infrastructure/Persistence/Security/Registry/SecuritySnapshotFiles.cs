@@ -3,10 +3,7 @@ using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Recovery;
 
-namespace Praxis.Infrastructure.Security;
-
-internal sealed record SecuritySnapshotManifest(int FormatVersion, int SchemaVersion, Guid InstallationId,
-    long DatabaseLength, string DatabaseSha256);
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 internal static class SecuritySnapshotFiles
 {

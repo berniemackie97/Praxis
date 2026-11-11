@@ -2,18 +2,10 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Security.Cryptography;
 
-namespace Praxis.Infrastructure.Security;
-
-public sealed record DeviceApprovalChallenge(Guid ChallengeId, Guid DeviceId, byte[] Message,
-    DateTimeOffset ExpiresUtc);
-
-/// <summary>A signed approval. A client must verify this against an independently pinned owner key.</summary>
-public sealed record ApprovedDeviceIdentity(
-    Guid InstallationId, Guid ChallengeId, Guid DeviceId, Guid SpaceId, Guid PrincipalId,
-    Guid ApproverDeviceId, byte[] SigningPublicKey, byte[] WrappingPublicKey,
-    byte[] WrappingSignature, byte[] Nonce, DateTimeOffset ExpiresUtc,
-    byte[] OwnerSignature, byte[] ApplicantSignature);
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Owner-controlled device admission. This is not an unauthenticated network enrollment

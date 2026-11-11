@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Security.Cryptography;
 
 /// <summary>Proof that an enrolled signing device controls its RSA-OAEP recipient key.</summary>
 public static class DeviceWrappingKey

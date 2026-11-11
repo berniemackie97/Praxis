@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Infrastructure.Security;
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Dedicated host-side identity state. It is never the owner-local content catalog and

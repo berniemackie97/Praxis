@@ -2,9 +2,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.Recovery;
 
-namespace Praxis.Infrastructure.Security;
-
-public sealed record SecuritySnapshotReport(Guid InstallationId, long DatabaseBytes, string DatabaseSha256);
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Offline identity-registry backup, independent verification and non-overwriting restore.

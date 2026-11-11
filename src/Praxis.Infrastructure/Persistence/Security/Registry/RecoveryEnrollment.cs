@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Security;
+using Praxis.Infrastructure.Security.Cryptography;
 
-namespace Praxis.Infrastructure.Security;
-
-public sealed record ReplacementChallenge(Guid EnrollmentId, byte[] Message, DateTimeOffset ExpiresUtc);
+namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
 /// <summary>
 /// Separately held P-256 recovery credential for replacing a lost signing device.
