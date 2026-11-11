@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 
 namespace Praxis.RecoveryCheck.Verification;
@@ -29,7 +29,7 @@ internal static class RecoveryCheck
         CapturedOriginal large;
         CapturedOriginal small;
         LocalSnapshotReport snapshot;
-        using (LocalCatalog live = LocalCatalog.Open(livePath))
+        using (SqliteCatalog live = SqliteCatalog.Open(livePath))
         {
             await using GeneratedContentStream source = new(LargeBytes);
             large = await live.Originals.CaptureFileAsync(Path.Combine(workspace, "large.bin"), source, LargeBytes, LargeRequestKey, cancellationToken);
@@ -71,7 +71,7 @@ internal static class RecoveryCheck
         LocalSnapshotReport backup = await LocalCatalogSnapshots.VerifyAsync(Path.Combine(workspace, "backup"), Budget, cancellationToken);
         Require(backup.ObjectCount == evidence.BackupObjectCount && backup.TotalBytes == evidence.BackupTotalBytes && backup.CatalogSha256 == evidence.BackupCatalogSha256, "The backup differs from its recorded verification.");
 
-        using LocalCatalog restored = LocalCatalog.Open(Path.Combine(workspace, "restored"));
+        using SqliteCatalog restored = SqliteCatalog.Open(Path.Combine(workspace, "restored"));
         Require(restored.SchemaVersion == 5, "The restored catalog has an unexpected schema.");
         await restored.Originals.VerifyAsync(evidence.ItemId, cancellationToken);
         await restored.Originals.VerifyAsync(evidence.SmallItemId, cancellationToken);

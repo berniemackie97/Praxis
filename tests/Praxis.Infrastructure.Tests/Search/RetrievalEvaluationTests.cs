@@ -5,7 +5,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 using Xunit.Abstractions;
@@ -23,7 +23,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
     {
         PrepareWorkspace();
         Corpus corpus = ReadCorpus();
-        using LocalCatalog catalog = LocalCatalog.Open(Path.Combine(root, "catalog"));
+        using SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(root, "catalog"));
         Dictionary<string, CapturedOriginal> originals = await CaptureAsync(catalog, corpus);
         await ProcessAsync(catalog, corpus.Documents.Length);
 
@@ -101,7 +101,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
     {
         PrepareWorkspace();
         Corpus corpus = ReadCorpus();
-        using LocalCatalog catalog = LocalCatalog.Open(Path.Combine(root, "catalog"));
+        using SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(root, "catalog"));
         Dictionary<string, CapturedOriginal> original = await CaptureAsync(catalog, corpus);
         await ProcessAsync(catalog, corpus.Documents.Length);
         Assert.Equal(original["mesh"].ItemId, Assert.Single(catalog.Search.Query("ParseMesh")).ItemId);
@@ -156,7 +156,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
     {
         PrepareWorkspace();
         Corpus corpus = ReadCorpus();
-        using LocalCatalog catalog = LocalCatalog.Open(Path.Combine(root, "catalog"));
+        using SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(root, "catalog"));
         Dictionary<string, CapturedOriginal> originals = await CaptureAsync(catalog, corpus);
         await ProcessAsync(catalog, corpus.Documents.Length);
 
@@ -192,7 +192,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
         return corpus;
     }
 
-    private async Task<Dictionary<string, CapturedOriginal>> CaptureAsync(LocalCatalog catalog, Corpus corpus)
+    private async Task<Dictionary<string, CapturedOriginal>> CaptureAsync(SqliteCatalog catalog, Corpus corpus)
     {
         Dictionary<string, CapturedOriginal> originals = new(StringComparer.Ordinal);
         foreach (GoldDocument document in corpus.Documents)
@@ -205,7 +205,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
     }
 
     private async Task<CapturedOriginal> CaptureAsync(
-        LocalCatalog catalog, string relativePath, string content, string key)
+        SqliteCatalog catalog, string relativePath, string content, string key)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(content);
         using MemoryStream input = new(bytes, writable: false);
@@ -213,7 +213,7 @@ public sealed class RetrievalEvaluationTests(ITestOutputHelper output) : IDispos
             input, bytes.LongLength, key);
     }
 
-    private static async Task ProcessAsync(LocalCatalog catalog, int count)
+    private static async Task ProcessAsync(SqliteCatalog catalog, int count)
     {
         ProcessingDriver processor = ProcessingDriver.Text(catalog);
         for (int index = 0; index < count; index++)

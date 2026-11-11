@@ -1,4 +1,4 @@
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.FileSystem;
 
 internal static class CatalogPaths
 {

@@ -1,5 +1,5 @@
 using Praxis.Domain.Intake;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -9,7 +9,7 @@ namespace Praxis.Infrastructure.Intake;
 /// re-hashed and match the source's current revision. The event queue is bounded; overflow
 /// falls back to ordinary capture of the scanned paths.
 /// </summary>
-internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSourceIntake intake, string root, Action<string> report, Action signal)
+internal sealed class ObservedRenameCorrelator(SqliteCatalog catalog, LocalSourceIntake intake, string root, Action<string> report, Action signal)
 {
     private const int MaximumPending = 128;
     private static readonly TimeSpan MaximumEventAge = TimeSpan.FromMinutes(1);

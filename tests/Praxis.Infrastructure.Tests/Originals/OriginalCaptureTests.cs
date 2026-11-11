@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -27,7 +27,7 @@ public sealed class OriginalCaptureTests : IDisposable
     {
         byte[] bytes = Enumerable.Range(0, 150_000).Select(i => (byte)(i * 37)).ToArray();
         CapturedOriginal captured;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             using MemoryStream content = new(bytes);
             captured = await catalog.Originals.CaptureFileAsync(SourcePath("large.bin"), content, bytes.Length, Key());
@@ -38,7 +38,7 @@ public sealed class OriginalCaptureTests : IDisposable
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bytes)), captured.Sha256);
         Assert.Equal(bytes.Length, captured.Length);
         Assert.Equal(bytes, File.ReadAllBytes(ObjectPath(captured.Sha256)));
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         await reopened.Originals.VerifyAsync(captured.ItemId);
         using SqliteConnection reader = Connect(reopened.DatabasePath);
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
@@ -51,7 +51,7 @@ public sealed class OriginalCaptureTests : IDisposable
     public async Task DistinctSourcesShareOriginalBytesWithoutMergingProvenance()
     {
         byte[] bytes = [0, 1, 255, 3, 5, 8];
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream first = new(bytes);
         using MemoryStream second = new(bytes);
         CapturedOriginal a = await catalog.Originals.CaptureFileAsync(SourcePath("first.bin"), first, 100, Key());
@@ -73,7 +73,7 @@ public sealed class OriginalCaptureTests : IDisposable
     public async Task ConcurrentIdenticalCapturesPublishOneVerifiedObject()
     {
         byte[] bytes = Enumerable.Range(0, 100_000).Select(i => (byte)(i * 17)).ToArray();
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal[] results = await Task.WhenAll(Enumerable.Range(0, 8).Select(async i =>
         {
             using MemoryStream stream = new(bytes);
@@ -99,7 +99,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task EmptyOriginalIsPreserved()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream empty = new();
         CapturedOriginal result = await catalog.Originals.CaptureFileAsync(SourcePath("empty.md"), empty, 0, Key());
 
@@ -113,7 +113,7 @@ public sealed class OriginalCaptureTests : IDisposable
     public async Task NonSeekableInputUsesBoundedReadChunks()
     {
         byte[] bytes = Enumerable.Range(0, 300_000).Select(i => (byte)i).ToArray();
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using NonSeekableStream input = new(bytes);
         CapturedOriginal result = await catalog.Originals.CaptureFileAsync(SourcePath("stream.bin"), input, bytes.Length, Key());
 
@@ -126,7 +126,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task OversizedOriginalLeavesNoCatalogReferencesOrStagingFile()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream bytes = new(new byte[80_000]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.Originals.CaptureFileAsync(SourcePath("too-large.bin"), bytes, 1024, Key()));
@@ -142,7 +142,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task CancellationRemovesStagingWithoutCommittingMetadata()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream bytes = new(new byte[2000]);
         using CancellationTokenSource canceled = new();
         canceled.Cancel();
@@ -157,7 +157,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task FailedSourceReadCannotCommitIncompleteContent()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using FailingReadStream failing = new([1, 2, 3, 4]);
 
         await Assert.ThrowsAsync<IOException>(() =>
@@ -172,7 +172,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task ReimportAppendsRevisionWithoutChangingSourceIdentity()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream original = new([1, 2, 3]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(SourcePath("same.bin"), original, 100, Key());
         using MemoryStream changed = new([4, 5, 6]);
@@ -195,7 +195,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task CorruptExistingObjectIsRejectedRatherThanReplaced()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream input = new([4, 5, 6, 7]);
         CapturedOriginal result = await catalog.Originals.CaptureFileAsync(SourcePath("good.bin"), input, 100, Key());
         string path = ObjectPath(result.Sha256);
@@ -220,7 +220,7 @@ public sealed class OriginalCaptureTests : IDisposable
             return;
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         string external = Path.Combine(TestPaths.Temp, "praxis-untrusted-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(external);
         try
@@ -241,7 +241,7 @@ public sealed class OriginalCaptureTests : IDisposable
     [Fact]
     public async Task MissingOriginalOrUnknownItemFailsVerification()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream input = new([1, 2]);
         CapturedOriginal result = await catalog.Originals.CaptureFileAsync(SourcePath("missing.bin"), input, 100, Key());
         await Assert.ThrowsAsync<KeyNotFoundException>(() =>

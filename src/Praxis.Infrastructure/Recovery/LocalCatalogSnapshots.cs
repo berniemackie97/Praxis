@@ -1,6 +1,6 @@
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Recovery;
 
@@ -16,7 +16,7 @@ public static class LocalCatalogSnapshots
     {
         SnapshotFiles.ValidateBudget(maxBytes);
         cancellationToken.ThrowIfCancellationRequested();
-        using LocalCatalog catalog = LocalCatalog.OpenReadOnly(dataDirectory);
+        using SqliteCatalog catalog = SqliteCatalog.OpenReadOnly(dataDirectory);
         int version = catalog.Recovery.ReadStoredSchemaVersion();
         if (!SnapshotFiles.IsSnapshotSchemaVersion(version))
         {
@@ -47,7 +47,7 @@ public static class LocalCatalogSnapshots
         }
 
         await SnapshotFiles.VerifyContentsAsync(staging, expected, maxBytes, cancellationToken);
-        using (LocalCatalog restored = LocalCatalog.Open(staging))
+        using (SqliteCatalog restored = SqliteCatalog.Open(staging))
         {
             OriginalRecoveryInspection inspection = await restored.Recovery.InspectAsync(cancellationToken);
             if (inspection.MissingObjects != 0 || inspection.CorruptObjects != 0)

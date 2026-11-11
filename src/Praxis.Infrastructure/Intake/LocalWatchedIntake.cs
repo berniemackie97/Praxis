@@ -1,5 +1,6 @@
 using Praxis.Domain.Intake;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -29,7 +30,7 @@ public sealed class LocalWatchedIntake
     private int requiresApproval;
     private long approvedCreationTicks;
 
-    public LocalWatchedIntake(LocalCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
+    public LocalWatchedIntake(SqliteCatalog catalog, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(intakeDirectory);

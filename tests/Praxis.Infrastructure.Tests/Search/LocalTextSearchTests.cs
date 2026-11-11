@@ -3,7 +3,7 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -32,7 +32,7 @@ public sealed class LocalTextSearchTests : IDisposable
     [Fact]
     public async Task SearchReturnsRankedBoundedSnippetsAndVerifiedSourceIdentity()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal first = await Capture(catalog, "journal.md",
             "# Journal\nThe midnight violet garden is blooming.", "journal");
         await Capture(catalog, "unrelated.md",
@@ -62,7 +62,7 @@ public sealed class LocalTextSearchTests : IDisposable
     [Fact]
     public async Task UnsupportedOriginalsNeverBecomeSearchableText()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal file = await Capture(catalog, "report.pdf", "violet in an unsupported pdf", "pdf");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal("unsupported", catalog.Text.Read(file.ItemId, 1)?.Outcome);
@@ -75,7 +75,7 @@ public sealed class LocalTextSearchTests : IDisposable
     [Fact]
     public async Task NewRevisionRetractsOldHitsBeforeItsProcessingCompletes()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal initial = await Capture(catalog, "versioned.txt", "violet first", "one");
         ProcessingDriver worker = ProcessingDriver.Text(catalog);
         Assert.True(await worker.ProcessNextAsync());
@@ -100,7 +100,7 @@ public sealed class LocalTextSearchTests : IDisposable
     [Fact]
     public async Task SourceRevocationRemovesOnlyThatSourcesSearchResults()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal first = await Capture(catalog, "first.txt", "shared violet content", "one");
         CapturedOriginal second = await Capture(catalog, "second.txt", "shared violet content", "two");
         ProcessingDriver worker = ProcessingDriver.Text(catalog);
@@ -121,7 +121,7 @@ public sealed class LocalTextSearchTests : IDisposable
     public async Task DeletedDerivedIndexContentsRebuildDeterministically()
     {
         CapturedOriginal captured;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             captured = await Capture(catalog, "rebuild.txt", "violet survives", "one");
             Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
@@ -135,7 +135,7 @@ public sealed class LocalTextSearchTests : IDisposable
             erase.ExecuteNonQuery();
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         Assert.Empty(reopened.Search.Query("violet"));
         Assert.Equal(1, reopened.Search.Rebuild());
         SearchHit found = Assert.Single(reopened.Search.Query("violet"));
@@ -147,7 +147,7 @@ public sealed class LocalTextSearchTests : IDisposable
     [Fact]
     public async Task SearchAndRebuildRejectUnboundedInputWithoutChangingIndex()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         await Capture(catalog, "first.txt", "violet bloom", "one");
         await Capture(catalog, "second.txt", "violet flower", "two");
         ProcessingDriver worker = ProcessingDriver.Text(catalog);
@@ -181,7 +181,7 @@ public sealed class LocalTextSearchTests : IDisposable
         string backup = Path.Combine(workspace, "backup");
         string destination = Path.Combine(workspace, "restored");
         CapturedOriginal retained;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             retained = await Capture(catalog, "retained.md", "# violet diary", "retained");
             CapturedOriginal revoked = await Capture(catalog, "revoked.md", "# violet secret", "revoked");
@@ -193,7 +193,7 @@ public sealed class LocalTextSearchTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
-        using LocalCatalog recovered = LocalCatalog.Open(destination);
+        using SqliteCatalog recovered = SqliteCatalog.Open(destination);
         Assert.Equal(16, recovered.SchemaVersion);
         Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);
         Assert.Equal(1, recovered.Search.Rebuild());
@@ -207,9 +207,9 @@ public sealed class LocalTextSearchTests : IDisposable
         using (SqliteConnection db = OpenDatabase())
         {
             foreach (string name in new[]
-                { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql", "LocalCatalog.V4.sql" })
+                { "Catalog.V1.sql", "Catalog.V2.sql", "Catalog.V3.sql", "Catalog.V4.sql" })
             {
-                using Stream resource = typeof(LocalCatalog).Assembly
+                using Stream resource = typeof(SqliteCatalog).Assembly
                     .GetManifestResourceStream("Praxis.Infrastructure." + name)!;
                 using StreamReader reader = new(resource);
                 using SqliteCommand command = db.CreateCommand();
@@ -245,7 +245,7 @@ public sealed class LocalTextSearchTests : IDisposable
             insert.ExecuteNonQuery();
         }
 
-        using LocalCatalog upgraded = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog upgraded = SqliteCatalog.Open(dataRoot);
         Assert.Equal(16, upgraded.SchemaVersion);
         SearchHit hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
@@ -253,7 +253,7 @@ public sealed class LocalTextSearchTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string name, string body, string requestKey)
+        SqliteCatalog catalog, string name, string body, string requestKey)
     {
         using MemoryStream data = new(Encoding.UTF8.GetBytes(body));
         return await catalog.Originals.CaptureFileAsync(

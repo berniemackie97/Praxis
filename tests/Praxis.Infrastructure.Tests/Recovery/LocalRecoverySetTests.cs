@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Security;
 using Praxis.Infrastructure.Tests.Support;
@@ -68,7 +68,7 @@ public sealed class LocalRecoverySetTests : IDisposable
         Assert.Equal(1, checkpoint.Catalog.ObjectCount);
         Assert.Equal(checkpoint, await LocalRecoverySet.VerifyAsync(Backup, Budget));
 
-        using (LocalCatalog later = LocalCatalog.Open(Catalog))
+        using (SqliteCatalog later = SqliteCatalog.Open(Catalog))
         {
             using MemoryStream changed = new([9, 8, 7]);
             CapturedOriginal revision = await later.Originals.CaptureFileAsync(Source, changed, 3, "later");
@@ -85,7 +85,7 @@ public sealed class LocalRecoverySetTests : IDisposable
             Directory.GetDirectories(Restored).Select(Path.GetFileName).Order().ToArray());
         Assert.Empty(Directory.GetFiles(Restored));
 
-        using (LocalCatalog catalog = LocalCatalog.Open(Path.Combine(Restored, "catalog")))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(Restored, "catalog")))
         {
             CapturedOriginal recovered = await catalog.Originals.CaptureFileAsync(
                 Source, Stream.Null, 0, "original");
@@ -130,9 +130,9 @@ public sealed class LocalRecoverySetTests : IDisposable
         }.ToString()))
         {
             database.Open();
-            foreach (string name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql" })
+            foreach (string name in new[] { "Catalog.V1.sql", "Catalog.V2.sql" })
             {
-                using Stream schema = typeof(LocalCatalog).Assembly
+                using Stream schema = typeof(SqliteCatalog).Assembly
                     .GetManifestResourceStream("Praxis.Infrastructure." + name)!;
                 using StreamReader reader = new(schema);
                 using SqliteCommand migration = database.CreateCommand();
@@ -152,7 +152,7 @@ public sealed class LocalRecoverySetTests : IDisposable
         RecoverySetReport verified = await LocalRecoverySet.VerifyAsync(Backup, Budget);
         Assert.Equal(0, verified.Catalog.ObjectCount);
         await LocalRecoverySet.RestoreAsync(Backup, Restored, Budget);
-        using LocalCatalog restored = LocalCatalog.Open(Path.Combine(Restored, "catalog"));
+        using SqliteCatalog restored = SqliteCatalog.Open(Path.Combine(Restored, "catalog"));
         Assert.True(restored.SchemaVersion > 2);
         Assert.Equal(2L, ReadSchemaVersion(databasePath));
     }
@@ -210,7 +210,7 @@ public sealed class LocalRecoverySetTests : IDisposable
     public async Task LockedSourcesCancellationAndExistingTargetsDoNotPublishBackupOrRestore()
     {
         await CreateSourceAsync();
-        using (LocalCatalog active = LocalCatalog.Open(Catalog))
+        using (SqliteCatalog active = SqliteCatalog.Open(Catalog))
         {
             using SecurityRegistry identity = SecurityRegistry.Open(Identity);
             await Assert.ThrowsAnyAsync<IOException>(() =>
@@ -266,7 +266,7 @@ public sealed class LocalRecoverySetTests : IDisposable
 
     private async Task<CapturedOriginal> CreateSourceAsync()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(Catalog);
+        using SqliteCatalog catalog = SqliteCatalog.Open(Catalog);
         using MemoryStream bytes = new([1, 2, 3]);
         return await catalog.Originals.CaptureFileAsync(Source, bytes, 3, "original");
     }

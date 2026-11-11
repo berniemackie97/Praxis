@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Praxis.Domain.Models;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -25,7 +25,7 @@ public sealed class LocalModelProfileTests : IDisposable
     [Fact]
     public void ProfileIsNormalizedPersistedAndReplaced()
     {
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             Assert.Null(catalog.Models.Get(ModelProfile.LocalEnrichment));
             ModelProfile saved = catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment,
@@ -34,7 +34,7 @@ public sealed class LocalModelProfileTests : IDisposable
             Assert.Equal("qwen:9b", saved.Model);
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         Assert.Equal(new ModelProfile(ModelProfile.LocalEnrichment, "ollama",
             "http://localhost:11434/", "qwen:9b", 16_384, true),
             reopened.Models.Get(ModelProfile.LocalEnrichment));
@@ -54,7 +54,7 @@ public sealed class LocalModelProfileTests : IDisposable
     public void UnsafeOrUnsupportedProfilesAreRejected(
         string provider, string endpoint, string model, int context)
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Assert.ThrowsAny<ArgumentException>(() => catalog.Models.Save(new ModelProfile(
             ModelProfile.LocalEnrichment, provider, endpoint, model, context, true)));
         Assert.Null(catalog.Models.Get(ModelProfile.LocalEnrichment));
@@ -63,7 +63,7 @@ public sealed class LocalModelProfileTests : IDisposable
     [Fact]
     public async Task DesktopProtocolReadsAndSavesProfileAndReportsUnreachableRuntime()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalDesktopProtocol protocol = new LocalDesktopProtocol(catalog);
 
         using (JsonDocument empty = await Send(protocol, """{"requestId":"1","action":"modelProfile"}"""))
@@ -99,7 +99,7 @@ public sealed class LocalModelProfileTests : IDisposable
     [Fact]
     public async Task EmbeddingProfileIsOptInAndCannotAuthorizeRemoteInference()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalDesktopProtocol protocol = new(catalog);
         Assert.Null(catalog.Models.Get(ModelProfile.LocalEmbedding));
 

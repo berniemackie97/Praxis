@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
 using Praxis.Domain.Models;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Inference.Ollama;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Models;
 

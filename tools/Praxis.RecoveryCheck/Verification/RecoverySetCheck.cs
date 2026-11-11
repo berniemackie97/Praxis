@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Security;
 
@@ -43,7 +43,7 @@ internal static class RecoverySetCheck
         RecoveryCheck.CreatePrivateDirectory(liveIdentity);
 
         CapturedOriginal original;
-        using (LocalCatalog catalog = LocalCatalog.Open(liveCatalog))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(liveCatalog))
         using (MemoryStream bytes = new(OriginalBytes, writable: false))
         {
             original = await catalog.Originals.CaptureFileAsync(sourcePath, bytes,
@@ -81,7 +81,7 @@ internal static class RecoverySetCheck
         RecoverySetReport snapshot = await LocalRecoverySet.BackupExistingAsync(
             liveCatalog, liveIdentity, backup, Budget, cancellationToken);
 
-        using (LocalCatalog changed = LocalCatalog.Open(liveCatalog))
+        using (SqliteCatalog changed = SqliteCatalog.Open(liveCatalog))
         using (MemoryStream bytes = new([8, 9]))
         {
             CapturedOriginal revision = await changed.Originals.CaptureFileAsync(
@@ -164,7 +164,7 @@ internal static class RecoverySetCheck
         Require(Directory.Exists(restored) && !File.Exists(Path.Combine(restored, "manifest.json")) &&
             Directory.GetDirectories(restored).Length == 2,
             "The restored parent has an unexpected inventory.");
-        using (LocalCatalog catalog = LocalCatalog.Open(Path.Combine(restored, "catalog")))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(restored, "catalog")))
         {
             CapturedOriginal receipt = await catalog.Originals.CaptureFileAsync(evidence.SourcePath,
                 Stream.Null, 0, RequestKey, cancellationToken);
@@ -213,7 +213,7 @@ internal static class RecoverySetCheck
         await ExpectFailureAsync<InvalidDataException>(() =>
             LocalRecoverySet.VerifyAsync(backup, 1, cancellationToken), "Insufficient budget");
 
-        using (LocalCatalog active = LocalCatalog.Open(liveCatalog))
+        using (SqliteCatalog active = SqliteCatalog.Open(liveCatalog))
         {
             await ExpectFailureAsync<IOException>(() =>
                 LocalRecoverySet.BackupExistingAsync(liveCatalog, liveIdentity,

@@ -3,8 +3,8 @@ using Praxis.Domain.Enrichment;
 using Praxis.Domain.Models;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Knowledge;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment.Semantic;
@@ -19,7 +19,7 @@ namespace Praxis.Infrastructure.Enrichment.Semantic;
 /// of failing it; long runs renew their lease and stop when superseded or revoked.
 /// </summary>
 public sealed class LocalSemanticExtractor(
-    LocalCatalog catalog, Func<ModelProfile, ModelConnection> connect) : ILocalProcessingHandler
+    SqliteCatalog catalog, Func<ModelProfile, ModelConnection> connect) : ILocalProcessingHandler
 {
     internal const int MaximumSegments = 64;
     private const int MaximumContextTokens = 4_096;

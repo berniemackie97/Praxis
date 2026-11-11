@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -36,7 +36,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         File.WriteAllText(note, "idea one");
         File.WriteAllBytes(binary, [0, 1, 2, 255]);
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         IReadOnlyList<ImportedFile> first = await intake.ImportFolderAsync(selected, "batch-one", 10, 3, 100, 1000);
         Assert.Equal(2, first.Count);
@@ -71,7 +71,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         string file = Path.Combine(workspace, "note.txt");
         File.WriteAllBytes(file, [5, 6, 7]);
         CapturedOriginal first;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             first = await new LocalSourceIntake(catalog)
                 .ImportFileAsync(file, 3, "owner-file-one");
@@ -79,7 +79,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         }
 
         File.Delete(file);
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         await reopened.Originals.VerifyAsync(first.ItemId);
         Assert.Equal(new byte[] { 5, 6, 7 }, ReadObject(dataRoot, first.Sha256));
     }
@@ -91,7 +91,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         Directory.CreateDirectory(selected);
         File.WriteAllBytes(Path.Combine(selected, "a"), [1, 2, 3]);
         File.WriteAllBytes(Path.Combine(selected, "b"), [4, 5, 6]);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 1, 10, 4));
@@ -109,7 +109,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         string selected = Path.Combine(workspace, "selection");
         Directory.CreateDirectory(Path.Combine(selected, "nested"));
         File.WriteAllText(Path.Combine(selected, "nested", "a.txt"), "a");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             intake.ImportFolderAsync(dataRoot, "batch", 10, 2, 10, 100));
@@ -133,7 +133,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         string outside = Path.Combine(workspace, "outside.txt");
         File.WriteAllText(outside, "private");
         File.CreateSymbolicLink(Path.Combine(selected, "linked.txt"), outside);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFolderAsync(selected, "batch", 10, 1, 100, 1000));
@@ -146,7 +146,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
     {
         string file = Path.Combine(workspace, "replayed.bin");
         File.WriteAllBytes(file, [1, 2, 3, 4]);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal original = await intake.ImportFileAsync(file, 4, "file-request");
 
@@ -169,7 +169,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
         File.WriteAllBytes(firstPath, [1, 2, 3, 4]);
         File.WriteAllBytes(secondPath, [5, 6]);
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         IReadOnlyList<ImportedFile> original = await intake.ImportFolderAsync(
             selected, "folder-request", 2, 0, 4, 6);
@@ -196,7 +196,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
 
         string input = Path.Combine(workspace, "original.bin");
         File.WriteAllBytes(input, [1, 2, 3]);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal captured = await intake.ImportFileAsync(input, 3, "seed");
 
@@ -230,7 +230,7 @@ public sealed class LocalSourceIntakeTests : IDisposable
     {
         string file = Path.Combine(workspace, "file.bin");
         File.WriteAllBytes(file, [1, 2, 3, 4]);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             intake.ImportFileAsync(file, 2, "too-large"));

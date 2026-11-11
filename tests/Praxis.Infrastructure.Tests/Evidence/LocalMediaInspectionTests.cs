@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -36,7 +36,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     {
         byte[] contents = FastStartMovie();
         CapturedOriginal original;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             original = await Capture(catalog, "tutorial.mp4", contents, "video");
             MediaInspection inspected = await catalog.Media.InspectAsync(original.SourceId);
@@ -53,7 +53,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
             await catalog.Originals.VerifyAsync(original.ItemId);
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         MediaInspection repeated = await reopened.Media.InspectAsync(original.SourceId);
         Assert.Equal(original.Sha256, repeated.SourceSha256);
         Assert.Equal(12_000L, repeated.DurationMilliseconds);
@@ -62,7 +62,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task InspectionRefusesMalformedMediaWithoutGuessingAPlayableContainer()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal fakeVideo = await Capture(catalog, "fake.mp4",
             Encoding.UTF8.GetBytes("not an mp4 video"), "fake");
         MediaInspection unsupported = await catalog.Media.InspectAsync(fakeVideo.SourceId);
@@ -97,7 +97,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task InspectionRejectsCorruptRevokedAndSupersededOriginals()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal original = await Capture(catalog, "changed.mp4", FastStartMovie(), "original");
         MediaInspection first = await catalog.Media.InspectAsync(original.SourceId);
         CapturedOriginal changed = await Capture(catalog, "changed.mp4",
@@ -125,7 +125,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task DesktopInspectionReturnsGroundedMetadataAndDeniesInvalidRequests()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "lesson.mp4", FastStartMovie(), "video");
         LocalDesktopProtocol protocol = new(catalog);
         using (JsonDocument response = JsonDocument.Parse(await protocol.HandleAsync($$"""
@@ -156,7 +156,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task DesktopInspectionRejectsStaleAndInvalidRevisions()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal first = await Capture(catalog, "lesson.mp4", FastStartMovie(), "initial");
         byte[] updatedMovie = FastStartMovie();
         BinaryPrimitives.WriteUInt32BigEndian(updatedMovie.AsSpan(48, 4), 2_000);
@@ -188,7 +188,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task CancelledInspectionDoesNotExposeIncompleteHeaderEvidence()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "lesson.mp4", FastStartMovie(), "video");
         using CancellationTokenSource cancelled = new();
         cancelled.Cancel();
@@ -199,7 +199,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     [Fact]
     public async Task MetadataVerificationReadsBeyondTheBoundedHeaderAndHonorsByteCeilings()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         byte[] bytes = new byte[70_000];
         FastStartMovie().CopyTo(bytes, 0);
         CapturedOriginal video = await Capture(catalog, "large-fixture.mp4", bytes, "large");
@@ -266,7 +266,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string filename, byte[] content, string requestKey)
+        SqliteCatalog catalog, string filename, byte[] content, string requestKey)
     {
         using MemoryStream source = new(content);
         return await catalog.Originals.CaptureFileAsync(

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Search;
 

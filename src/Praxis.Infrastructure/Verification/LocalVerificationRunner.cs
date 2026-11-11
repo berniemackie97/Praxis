@@ -1,6 +1,6 @@
 using Praxis.Application.Inference;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Verification;
 
@@ -11,7 +11,7 @@ namespace Praxis.Infrastructure.Verification;
 /// a malformed answer fails only that request.
 /// </summary>
 public sealed class LocalVerificationRunner(
-    LocalCatalog catalog, Func<VerificationProvider, IChatModel> models,
+    SqliteCatalog catalog, Func<VerificationProvider, IChatModel> models,
     TimeSpan? idlePoll = null, Action<string>? status = null)
 {
     private const int MaximumOutputTokens = 4_096;
@@ -23,7 +23,7 @@ public sealed class LocalVerificationRunner(
     private int wakePending;
 
     /// <summary>The adapters for owner-configured subscription CLIs.</summary>
-    public static LocalVerificationRunner CreateDefault(LocalCatalog catalog, Action<string>? status = null) =>
+    public static LocalVerificationRunner CreateDefault(SqliteCatalog catalog, Action<string>? status = null) =>
         new(catalog, ProviderModels.Create, status: status);
 
     public void Wake()

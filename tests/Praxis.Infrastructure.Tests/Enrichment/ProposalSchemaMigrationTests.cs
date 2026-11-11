@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -39,7 +39,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
 
         EnrichmentProposal migrated = Assert.Single(catalog.Proposals.List(source));
         Assert.Equal(proposal, migrated.ProposalId);
@@ -77,7 +77,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             Assert.Contains(catalog.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
             ProcessingJob[] jobs = catalog.Processing.List().Where(job => job.ItemId == item).ToArray();
@@ -93,7 +93,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        using LocalCatalog replaced = LocalCatalog.Open(root);
+        using SqliteCatalog replaced = SqliteCatalog.Open(root);
         Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
         Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == LocalProcessors.MarkdownHeadings);
     }
@@ -110,7 +110,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
                 """);
         }
 
-        Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
+        Assert.Throws<InvalidDataException>(() => SqliteCatalog.Open(root));
 
         using SqliteConnection check = Connect();
         Assert.Equal(11L, Scalar(check, "PRAGMA user_version"));
@@ -151,10 +151,10 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
     private SqliteConnection CreateCatalog(int throughVersion)
     {
         SqliteConnection connection = Connect();
-        foreach (string resource in new[] { "LocalCatalog.sql" }
-            .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"LocalCatalog.V{version}.sql")))
+        foreach (string resource in new[] { "Catalog.V1.sql" }
+            .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"Catalog.V{version}.sql")))
         {
-            using Stream stream = typeof(LocalCatalog).Assembly
+            using Stream stream = typeof(SqliteCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Infrastructure." + resource)!;
             using StreamReader reader = new StreamReader(stream);
             Execute(connection, reader.ReadToEnd());

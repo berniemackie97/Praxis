@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -29,7 +29,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
 
         File.WriteAllText(Path.Combine(inbox, "memory.md"), "# project violet memory");
         File.WriteAllBytes(Path.Combine(inbox, "unknown.bin"), [0, 255, 17]);
-        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
         IntakeHarness watcher = new(catalog, inbox, TimeSpan.Zero);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
         await watcher.ReconcileAsync(DateTimeOffset.UtcNow.AddSeconds(1));
@@ -80,7 +80,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream original = new(System.Text.Encoding.UTF8.GetBytes("trusted violet"));
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "source.txt"), original, 100, "source");
@@ -137,7 +137,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
         LocalDesktopProtocol service = new(catalog, new LocalQuickCapture(catalog, inbox));
         Guid captureId = Guid.NewGuid();
         string payload =
@@ -177,7 +177,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalDesktopProtocol protocol = new(catalog);
         using JsonDocument response = await Send(protocol,
             $$"""{"requestId":"x","action":"noteCapture","captureId":"{{Guid.NewGuid():D}}","title":"Private","text":"Do not save."}""");
@@ -196,7 +196,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
         using MemoryStream stream = new(System.Text.Encoding.UTF8.GetBytes(
             "# Evidence Topic\nOriginal retained"));
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
@@ -254,7 +254,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
             File.SetUnixFileMode(exports, mode);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
         using MemoryStream input = new([0, 255, 17, 42, 99]);
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "missing", "binary.bin"), input, 100, "original");
@@ -304,7 +304,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         IntakeHarness intake = new(catalog,
             Path.Combine(root, "not-started"), TimeSpan.Zero);
         LocalDesktopProtocol service = new(catalog, monitor: intake.Monitor, processing: intake.Processing);
@@ -357,7 +357,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
         string previous = Path.Combine(inbox, "original.md");
         string current = Path.Combine(inbox, "renamed.md");
         File.WriteAllText(previous, "# Rename evidence");
-        using LocalCatalog catalog = LocalCatalog.Open(data);
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
         IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await monitor.ReconcileAsync(time);
@@ -409,7 +409,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalDesktopProtocol protocol = new(catalog);
         using JsonDocument response = await Send(protocol, payload);
         Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
@@ -427,7 +427,7 @@ public sealed class LocalDesktopProtocolTests : IDisposable
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalDesktopProtocol protocol = new(catalog);
         using JsonDocument result = await Send(protocol, $$"""
                                                            {"requestId":"retired","action":"{{action}}"}

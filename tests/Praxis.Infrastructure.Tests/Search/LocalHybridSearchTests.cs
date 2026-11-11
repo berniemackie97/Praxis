@@ -5,7 +5,7 @@ using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -33,7 +33,7 @@ public sealed class LocalHybridSearchTests : IDisposable
     [Fact]
     public async Task SemanticRecallFindsConceptWithoutExactKeywordAndPreservesSourceIdentity()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal orchard = await Capture(catalog, "orchard.md", "tangerine orchard harvest", "orchard");
         CapturedOriginal ledger = await Capture(catalog, "ledger.md", "invoice ledger balances", "ledger");
         await SegmentNext(catalog);
@@ -63,7 +63,7 @@ public sealed class LocalHybridSearchTests : IDisposable
     {
         Guid firstSourceId;
         Guid secondSourceId;
-        using (LocalCatalog catalog = LocalCatalog.Open(catalogRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot))
         {
             CapturedOriginal first = await Capture(catalog, "one.md", "shared tangerine orchard", "one");
             CapturedOriginal second = await Capture(catalog, "two.md", "shared tangerine orchard", "two");
@@ -100,7 +100,7 @@ public sealed class LocalHybridSearchTests : IDisposable
             erase.ExecuteNonQuery();
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(catalogRoot);
         Assert.False((await reopened.Hybrid.QueryAsync("citrus", new FixtureEmbeddingModel())).UsedEmbeddings);
         Assert.Equal(1, (await reopened.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true)).Indexed);
         var rebuilt = await reopened.Hybrid.QueryAsync("finances", new FixtureEmbeddingModel());
@@ -111,7 +111,7 @@ public sealed class LocalHybridSearchTests : IDisposable
     [Fact]
     public async Task FailedRebuildOrChangedModelNeverDestroysPreviousIndex()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         await Capture(catalog, "orchard.md", "tangerine orchard harvest", "one");
         await Capture(catalog, "ledger.md", "invoice ledger balances", "two");
         await SegmentNext(catalog);
@@ -137,7 +137,7 @@ public sealed class LocalHybridSearchTests : IDisposable
     [Fact]
     public async Task RevocationWhileIndexingCannotCommitAnUnauthorizedVector()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal original = await Capture(catalog, "orchard.md",
             "tangerine orchard harvest", "index-then-revoke");
         await SegmentNext(catalog);
@@ -156,7 +156,7 @@ public sealed class LocalHybridSearchTests : IDisposable
     [Fact]
     public async Task RevocationWhileEmbeddingQuestionCannotResurrectLexicalHits()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal original = await Capture(catalog, "violet.md", "violet tangerine orchard", "one");
         await SegmentNext(catalog);
         await catalog.Embeddings.RefreshAsync(new FixtureEmbeddingModel(), rebuild: true);
@@ -172,14 +172,14 @@ public sealed class LocalHybridSearchTests : IDisposable
         await catalog.Originals.VerifyAsync(original.ItemId);
     }
 
-    private async Task<CapturedOriginal> Capture(LocalCatalog catalog, string name, string content, string request)
+    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));
         return await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, name), bytes, bytes.Length, request);
     }
 
-    private static async Task SegmentNext(LocalCatalog catalog)
+    private static async Task SegmentNext(SqliteCatalog catalog)
     {
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(

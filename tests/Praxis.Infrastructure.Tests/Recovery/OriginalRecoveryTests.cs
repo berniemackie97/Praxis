@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -26,7 +26,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task CommittedHistoricalVersionsAndDeduplicatedObjectsAreReferenced()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream first = new([1]);
         CapturedOriginal a = await catalog.Originals.CaptureFileAsync(Source("one.md"), first, 10, "one-a");
         using MemoryStream changed = new([2]);
@@ -42,7 +42,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task TransactionFailureLeavesInspectableUnreferencedObjectWithoutDeletingIt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream first = new([1]);
         await catalog.Originals.CaptureFileAsync(Source("revoked.md"), first, 10, "accepted");
         using (SqliteConnection db = Connect(catalog.DatabasePath))
@@ -71,7 +71,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task StagingInventoryIsReadOnlyAndSurvivesReopen()
     {
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             using MemoryStream input = new([1]);
             await catalog.Originals.CaptureFileAsync(Source("note.md"), input, 10, "one");
@@ -80,7 +80,7 @@ public sealed class OriginalRecoveryTests : IDisposable
         string pending = Path.Combine(root, "staging", $"{Guid.NewGuid():N}.part");
         File.WriteAllBytes(pending, [9, 9, 9]);
 
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         OriginalRecoveryInspection report = await reopened.Recovery.InspectAsync();
         Assert.Equal(1, report.StagedFiles);
         Assert.Equal(1, report.PublishedObjects);
@@ -92,7 +92,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task MissingAndCorruptReferencedContentIsReportedWithoutRepairingIt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream lost = new([1, 2]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("lost.md"), lost, 10, "a");
         using MemoryStream altered = new([3, 4]);
@@ -108,7 +108,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task UnexpectedStorageFileFailsInventoryWithoutCleaningIt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream source = new([1]);
         CapturedOriginal result = await catalog.Originals.CaptureFileAsync(Source("a.md"), source, 10, "key");
         string invalid = Path.Combine(root, "objects", result.Sha256[..2], result.Sha256[2..4], "unexpected.txt");
@@ -120,7 +120,7 @@ public sealed class OriginalRecoveryTests : IDisposable
     [Fact]
     public async Task CanceledInspectionDoesNotMutateOriginals()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream input = new([1, 2, 3]);
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(Source("a.md"), input, 10, "one");
         using CancellationTokenSource cancellation = new();

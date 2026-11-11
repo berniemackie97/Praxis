@@ -1,4 +1,5 @@
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -8,7 +9,7 @@ namespace Praxis.Infrastructure.Intake;
 /// spelling already belongs to another source, the alias is folded into it. Paths that cannot
 /// be inspected right now (for example on an unavailable drive) are left for a later run.
 /// </summary>
-internal sealed class SourceLocatorCanonicalizer(LocalCatalog catalog, Action<string> report)
+internal sealed class SourceLocatorCanonicalizer(SqliteCatalog catalog, Action<string> report)
 {
     internal (int Relocated, int Folded) Run()
     {

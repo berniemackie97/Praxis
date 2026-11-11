@@ -1,6 +1,6 @@
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Enrichment;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Tests.Support;
@@ -9,14 +9,14 @@ namespace Praxis.Infrastructure.Tests.Support;
 /// Steps one handler's jobs deterministically, as the pipeline would, so a test can assert
 /// each stage's effect in isolation without running the background loop.
 /// </summary>
-internal sealed class ProcessingDriver(LocalCatalog catalog, ILocalProcessingHandler handler)
+internal sealed class ProcessingDriver(SqliteCatalog catalog, ILocalProcessingHandler handler)
 {
     private bool reopenExhausted;
 
-    internal static ProcessingDriver Text(LocalCatalog catalog) =>
+    internal static ProcessingDriver Text(SqliteCatalog catalog) =>
         new(catalog, new LocalTextProcessor(catalog));
 
-    internal static ProcessingDriver Topics(LocalCatalog catalog) =>
+    internal static ProcessingDriver Topics(SqliteCatalog catalog) =>
         new(catalog, new LocalHeadingProposer(catalog));
 
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)

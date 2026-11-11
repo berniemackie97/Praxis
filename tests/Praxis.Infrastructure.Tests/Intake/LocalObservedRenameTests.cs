@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Collections;
 using Praxis.Domain.Library;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -38,7 +38,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string oldPath = Path.Combine(inbox, "before.md");
         string newPath = Path.Combine(inbox, "after.md");
         File.WriteAllText(oldPath, "# Project\nviolet preserved note");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -91,7 +91,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string oldPath = Path.Combine(inbox, "original.md");
         string movedPath = Path.Combine(inbox, "moved.md");
         File.WriteAllText(oldPath, "same preserved bytes");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -123,7 +123,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string oldPath = Path.Combine(inbox, "revoked.md");
         string movedPath = Path.Combine(inbox, "new-source.md");
         File.WriteAllText(oldPath, "revoked original");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -151,7 +151,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string first = Path.Combine(inbox, "original.md");
         string second = Path.Combine(inbox, "copy.md");
         File.WriteAllText(first, "violet same bytes");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -175,7 +175,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string first = Path.Combine(inbox, "before.txt");
         string next = Path.Combine(inbox, "after.txt");
         File.WriteAllText(first, "identical bytes");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -200,7 +200,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string first = Path.Combine(inbox, "first.md");
         string next = Path.Combine(inbox, "next.md");
         File.WriteAllText(first, "# Same topic");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         List<string> reports = new();
         IntakeHarness monitor = new(catalog, inbox,
             TimeSpan.FromSeconds(1), status: reports.Add);
@@ -232,7 +232,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string first = Path.Combine(inbox, "before.md");
         string second = Path.Combine(inbox, "copy.md");
         File.WriteAllText(first, "# Shared");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -253,7 +253,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string first = Path.Combine(inbox, "old.md");
         string next = Path.Combine(inbox, "new.md");
         File.WriteAllText(first, "# Old\nviolet");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -281,7 +281,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string second = Path.Combine(inbox, "second.txt");
         File.WriteAllText(first, "first violet");
         File.WriteAllText(second, "second amber");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -312,7 +312,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         File.WriteAllText(first, "violet folder note");
         File.WriteAllText(second, "amber nested note");
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -362,7 +362,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string path = Path.Combine(previous, "note.md");
         File.WriteAllText(path, "violet independent copy");
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -388,7 +388,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string destination = Path.Combine(inbox, "after");
         Directory.CreateDirectory(previous);
         File.WriteAllText(Path.Combine(previous, "note.md"), "violet unobserved move");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -413,7 +413,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         Directory.CreateDirectory(previous);
         string path = Path.Combine(previous, "note.md");
         File.WriteAllText(path, "violet original file");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewWatcher(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -444,7 +444,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         string restoredRoot = Path.Combine(workspace, "restored");
         Guid sourceId;
         Guid itemId;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             File.WriteAllText(oldPath, "restorable topic");
             IntakeHarness watcher = NewWatcher(catalog);
@@ -463,7 +463,7 @@ public sealed class LocalObservedRenameTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
-        using LocalCatalog restored = LocalCatalog.Open(restoredRoot);
+        using SqliteCatalog restored = SqliteCatalog.Open(restoredRoot);
         Assert.Equal(16, restored.SchemaVersion);
         LibraryItem recovered = Assert.Single(restored.Library.List());
         Assert.Equal(sourceId, recovered.SourceId);
@@ -484,11 +484,11 @@ public sealed class LocalObservedRenameTests : IDisposable
         }.ToString()))
         {
             connection.Open();
-            foreach (string name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql",
-                "LocalCatalog.V3.sql", "LocalCatalog.V4.sql", "LocalCatalog.V5.sql",
-                "LocalCatalog.V6.sql", "LocalCatalog.V7.sql" })
+            foreach (string name in new[] { "Catalog.V1.sql", "Catalog.V2.sql",
+                "Catalog.V3.sql", "Catalog.V4.sql", "Catalog.V5.sql",
+                "Catalog.V6.sql", "Catalog.V7.sql" })
             {
-                using Stream resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                using Stream resource = typeof(SqliteCatalog).Assembly.GetManifestResourceStream(
                     "Praxis.Infrastructure." + name)!;
                 using StreamReader reader = new(resource);
                 using SqliteCommand command = connection.CreateCommand();
@@ -497,12 +497,12 @@ public sealed class LocalObservedRenameTests : IDisposable
             }
         }
 
-        using LocalCatalog upgraded = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog upgraded = SqliteCatalog.Open(dataRoot);
         Assert.Equal(16, upgraded.SchemaVersion);
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 
-    private IntakeHarness NewWatcher(LocalCatalog catalog) =>
+    private IntakeHarness NewWatcher(SqliteCatalog catalog) =>
         new(catalog, inbox, TimeSpan.FromSeconds(1));
 
     private long Count(string table, string? databasePath = null)

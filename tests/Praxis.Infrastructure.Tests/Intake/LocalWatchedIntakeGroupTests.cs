@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Praxis.Domain.Library;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -38,7 +38,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
         string b = Path.Combine(second, "secondary.txt");
         File.WriteAllText(a, "violet primary content");
         File.WriteAllText(b, "amber secondary content");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog);
         LocalWatchedIntakeGroup group = new(catalog, [first, second], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero);
@@ -80,7 +80,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     [Fact]
     public void RejectsDuplicateNestedCatalogAndExcessiveRootsBeforeStartingWatchers()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Assert.Throws<ArgumentException>(() => new LocalWatchedIntakeGroup(catalog, [first, first]));
         string child = Path.Combine(first, "nested");
         Directory.CreateDirectory(child);
@@ -97,7 +97,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     [Fact]
     public async Task PauseAndResumeApplyToEveryApprovedRootWithoutDuplicates()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalWatchedIntakeGroup group = new(catalog, [first, second], quietPeriod: TimeSpan.Zero);
         group.SetPaused(true);
         File.WriteAllText(Path.Combine(first, "a.txt"), "violet paused");
@@ -117,7 +117,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     public async Task OfflineSecondaryDoesNotBlockPrimaryAndCannotReattachWithoutApproval()
     {
         string disconnected = Path.Combine(workspace, "not-present");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalProcessingPipeline processing = LocalProcessingPipeline.CreateDefault(catalog);
         LocalWatchedIntakeGroup group = new(catalog, [first, disconnected], onCaptured: processing.Wake,
             quietPeriod: TimeSpan.Zero, rescanInterval: TimeSpan.FromMilliseconds(100));
@@ -156,7 +156,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
             return;
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalWatchedIntakeGroup group = new(catalog, [first, second],
             quietPeriod: TimeSpan.FromMilliseconds(300), rescanInterval: TimeSpan.FromMinutes(5));
         using CancellationTokenSource cancellation = new();
@@ -183,7 +183,7 @@ public sealed class LocalWatchedIntakeGroupTests : IDisposable
     [Fact]
     public async Task PrivateProtocolReportsIndividualRootsAndRestrictsApprovalAndQuickCapture()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalWatchedIntakeGroup group = new(catalog, [first, second], quietPeriod: TimeSpan.Zero);
         LocalDesktopProtocol protocol = new(catalog, group: group);
         using JsonDocument initial = await Send(protocol, """{"requestId":"status","action":"intakeStatus"}""");

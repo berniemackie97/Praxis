@@ -3,8 +3,8 @@ using Praxis.Domain.Intake;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -38,7 +38,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         File.WriteAllText(text, "# Plan\nThe violet notebook is ready.");
         File.WriteAllBytes(unknown, [0, 1, 255, 2]);
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(time));
@@ -75,7 +75,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
 
         SearchHit[] indexed;
         DateTimeOffset time = DateTimeOffset.UtcNow;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             IntakeHarness watcher = NewMonitor(catalog);
             Assert.Equal(0, await watcher.ReconcileAsync(time));
@@ -91,7 +91,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             }
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         IReadOnlyList<SearchHit> restored = reopened.Search.Query("C3ChunkReader");
         Assert.Equal(indexed.Select(hit => hit.SourceId).OrderBy(id => id),
             restored.Select(hit => hit.SourceId).OrderBy(id => id));
@@ -103,7 +103,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         string path = Path.Combine(inbox, "changing.txt");
         File.WriteAllText(path, "violet revision");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -133,7 +133,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         string temporary = Path.Combine(inbox, "download.part");
         string completed = Path.Combine(inbox, "download.md");
         File.WriteAllText(temporary, "a temporary violet note");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -152,7 +152,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         string path = Path.Combine(inbox, "history.txt");
         File.WriteAllText(path, "original violet history");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset time = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(time);
@@ -173,7 +173,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         File.WriteAllText(path, "# violet durable");
         LibraryItem before;
         DateTimeOffset time = DateTimeOffset.UtcNow;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             IntakeHarness first = NewMonitor(catalog);
             await first.ReconcileAsync(time);
@@ -181,7 +181,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             before = Assert.Single(catalog.Library.List());
         }
 
-        using (LocalCatalog reopened = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog reopened = SqliteCatalog.Open(dataRoot))
         {
             IntakeHarness resumed = NewMonitor(reopened);
             await resumed.ReconcileAsync(time.AddSeconds(10));
@@ -205,7 +205,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         string outside = Path.Combine(workspace, "outside.txt");
         File.WriteAllText(outside, "private");
         File.CreateSymbolicLink(Path.Combine(inbox, "linked.txt"), outside);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             watcher.ReconcileAsync(DateTimeOffset.UtcNow));
@@ -216,7 +216,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     [Fact]
     public async Task ActiveMonitorNoticesNewDropsWithoutAnImportCommand()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness monitor = NewMonitor(catalog, TimeSpan.Zero,
             TimeSpan.FromMilliseconds(100));
         using CancellationTokenSource cancellation = new();
@@ -247,7 +247,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     public async Task OfflineIntakeRequiresReapprovalBeforeResumingAfterDirectoryReturns()
     {
         string removable = Path.Combine(workspace, "offline");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness monitor = new(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using CancellationTokenSource cancellation = new();
@@ -277,7 +277,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         string outside = Path.Combine(workspace, "queued.txt");
         File.WriteAllText(outside, "violet from existing queue");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal original = await new LocalSourceIntake(catalog)
             .ImportFileAsync(outside, 100, "offline-queued");
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
@@ -308,7 +308,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.WriteAllText(path, "violet contents");
         File.SetLastWriteTimeUtc(path, fixedWrite);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -339,7 +339,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.WriteAllText(path, "violet contents");
         File.SetLastWriteTimeUtc(path, fixedWrite);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -364,7 +364,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     {
         string path = Path.Combine(inbox, "paused.txt");
         File.WriteAllText(path, "violet pause gate");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
@@ -387,7 +387,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         string path = Path.Combine(inbox, "atomic.md");
         string staging = Path.Combine(inbox, "atomic.part");
         File.WriteAllText(path, "violet preserved version");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -418,7 +418,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.WriteAllText(path, "violet contents");
         File.SetLastWriteTimeUtc(path, fixedWrite);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -448,7 +448,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
         DateTime fixedWrite = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         File.WriteAllText(path, "violet contents");
         File.SetLastWriteTimeUtc(path, fixedWrite);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         await watcher.ReconcileAsync(now);
@@ -479,7 +479,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             return;
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog, TimeSpan.FromMilliseconds(350),
             TimeSpan.FromMinutes(5));
         using CancellationTokenSource cancellation = new();
@@ -514,7 +514,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
             file.SetLength(2L * 1024 * 1024 * 1024 + 1);
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await watcher.ReconcileAsync(now));
@@ -546,7 +546,7 @@ public sealed class LocalWatchedIntakeTests : IDisposable
     }
 
     private IntakeHarness NewMonitor(
-        LocalCatalog catalog, TimeSpan? quietPeriod = null, TimeSpan? scanInterval = null) =>
+        SqliteCatalog catalog, TimeSpan? quietPeriod = null, TimeSpan? scanInterval = null) =>
         new(catalog, inbox, quietPeriod ?? TimeSpan.FromSeconds(1),
             scanInterval ?? TimeSpan.FromSeconds(10));
 

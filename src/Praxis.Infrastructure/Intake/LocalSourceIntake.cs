@@ -2,12 +2,13 @@ using System.Security.Cryptography;
 using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed class LocalSourceIntake(LocalCatalog catalog)
+public sealed class LocalSourceIntake(SqliteCatalog catalog)
 {
     public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
     {

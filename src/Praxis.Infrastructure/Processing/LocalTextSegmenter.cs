@@ -1,6 +1,6 @@
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Processing;
 
@@ -9,7 +9,7 @@ namespace Praxis.Infrastructure.Processing;
 /// citable spans. Markdown structure (headings, fenced code) is respected; other text splits
 /// at blank lines and line boundaries.
 /// </summary>
-public sealed class LocalTextSegmenter(LocalCatalog catalog) : ILocalProcessingHandler
+public sealed class LocalTextSegmenter(SqliteCatalog catalog) : ILocalProcessingHandler
 {
     public string ProcessorKey => LocalProcessors.TextSegments;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);

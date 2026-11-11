@@ -1,4 +1,4 @@
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
 
 namespace Praxis.Infrastructure.Tests.Support;
 

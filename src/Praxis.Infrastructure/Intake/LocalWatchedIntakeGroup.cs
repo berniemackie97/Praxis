@@ -1,5 +1,6 @@
 using Praxis.Domain.Intake;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -13,7 +14,7 @@ public sealed class LocalWatchedIntakeGroup
 
     private readonly LocalWatchedIntake[] monitors;
 
-    public LocalWatchedIntakeGroup(LocalCatalog catalog, IReadOnlyList<string> approvedRoots,
+    public LocalWatchedIntakeGroup(SqliteCatalog catalog, IReadOnlyList<string> approvedRoots,
         Action<string>? status = null, Action? onCaptured = null,
         TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null)
     {

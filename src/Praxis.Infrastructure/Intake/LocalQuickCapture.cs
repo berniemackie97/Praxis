@@ -2,12 +2,12 @@ using System.Security.Cryptography;
 using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
-public sealed class LocalQuickCapture(LocalCatalog catalog, string intakeDirectory)
+public sealed class LocalQuickCapture(SqliteCatalog catalog, string intakeDirectory)
 {
     private const int MaximumTextCharacters = 8_000;
     private const int MaximumOriginalBytes = 32 * 1024;

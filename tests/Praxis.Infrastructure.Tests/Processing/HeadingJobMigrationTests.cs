@@ -1,5 +1,5 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -43,7 +43,7 @@ public sealed class HeadingJobMigrationTests : IDisposable
             AddItem(connection, unsupported, "/notes/archive.bin", "active", ("e", "unsupported"));
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Dictionary<(Guid ItemId, int Revision), string> headings = catalog.Processing.List()
             .Where(job => job.ProcessorKey == LocalProcessors.MarkdownHeadings)
             .ToDictionary(job => (job.ItemId, job.Revision), job => job.State);
@@ -70,10 +70,10 @@ public sealed class HeadingJobMigrationTests : IDisposable
             Pooling = false
         }.ToString());
         connection.Open();
-        foreach (string resource in new[] { "LocalCatalog.sql" }
-            .Concat(Enumerable.Range(2, 7).Select(version => $"LocalCatalog.V{version}.sql")))
+        foreach (string resource in new[] { "Catalog.V1.sql" }
+            .Concat(Enumerable.Range(2, 7).Select(version => $"Catalog.V{version}.sql")))
         {
-            using Stream stream = typeof(LocalCatalog).Assembly
+            using Stream stream = typeof(SqliteCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Infrastructure." + resource)!;
             using StreamReader reader = new(stream);
             Execute(connection, reader.ReadToEnd());

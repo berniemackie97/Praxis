@@ -6,9 +6,9 @@ using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.Enrichment.Semantic;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Praxis.Infrastructure.Verification;
@@ -49,7 +49,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task PlanningQueuesFlaggedEvidenceAndTypeConflictsOnceWithMinimalEvidence()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         await Enrich(catalog, "meeting.md", Meeting);
         await Enrich(catalog, "client.md", "# Code\nOpenConquerClient renders maps.");
         types["OpenConquerClient"] = "project";
@@ -80,7 +80,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task ApprovalSendsExactlyTheNarrowedPayloadToTheCheapestProvider()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
@@ -118,7 +118,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task VerdictsActOnTheMachineLayerButOwnerDecisionsWin()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
@@ -152,7 +152,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task RoutingRespectsWeightsDailyAllowanceAndEnablement()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal first = await Enrich(catalog, "a.md", Meeting);
         CapturedOriginal second = await Enrich(catalog, "b.md", Meeting.Replace("roadmap", "budget", StringComparison.Ordinal));
         CapturedOriginal third = await Enrich(catalog, "c.md", Meeting.Replace("roadmap", "plan", StringComparison.Ordinal));
@@ -181,7 +181,7 @@ public sealed class VerificationTests : IDisposable
     public async Task ProviderFailuresWaitOrFailWithoutLosingTheRequest(
         InferenceFailure failure, string status, string code)
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
@@ -211,7 +211,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task VerdictsForItemsThatWereNotSentAreIgnored()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
@@ -232,7 +232,7 @@ public sealed class VerificationTests : IDisposable
     [Fact]
     public async Task DesktopProtocolConfiguresProvidersAndApprovesReviewedPayloads()
     {
-        using LocalCatalog catalog = Open();
+        using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         var protocol = new LocalDesktopProtocol(catalog);
 
@@ -286,20 +286,20 @@ public sealed class VerificationTests : IDisposable
         }
     }
 
-    private LocalCatalog Open()
+    private SqliteCatalog Open()
     {
-        LocalCatalog catalog = LocalCatalog.Open(root);
+        SqliteCatalog catalog = SqliteCatalog.Open(root);
         catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment, "ollama", "http://127.0.0.1:11434", "qwen:9b", 16_384, Enabled: true));
         return catalog;
     }
 
-    private void SaveProvider(LocalCatalog catalog, string provider, int weight, int dailyLimit = 20, bool enabled = true) =>
+    private void SaveProvider(SqliteCatalog catalog, string provider, int weight, int dailyLimit = 20, bool enabled = true) =>
         catalog.Verification.SaveProvider(new VerificationProvider(provider, executable, null, weight, dailyLimit, enabled));
 
-    private static LocalVerificationRunner Runner(LocalCatalog catalog, Func<VerificationProvider, IChatModel> models) =>
+    private static LocalVerificationRunner Runner(SqliteCatalog catalog, Func<VerificationProvider, IChatModel> models) =>
         new(catalog, models);
 
-    private static int Ordinal(LocalCatalog catalog, Guid request, string name) =>
+    private static int Ordinal(SqliteCatalog catalog, Guid request, string name) =>
         VerificationPayload.Ordinal(Items(catalog.Verification.Get(request)!.Payload).Single(item => (string?)item["name"] == name));
 
     private static IReadOnlyList<JsonNode> Items(string payload) =>
@@ -320,14 +320,14 @@ public sealed class VerificationTests : IDisposable
         return JsonSerializer.Serialize(new { topics = Array.Empty<object>(), entities, relations = Array.Empty<object>() });
     });
 
-    private async Task<string> NextLocalPrompt(LocalCatalog catalog, string name, string text)
+    private async Task<string> NextLocalPrompt(SqliteCatalog catalog, string name, string text)
     {
         ScriptedChatModel model = LocalModel();
         await Enrich(catalog, name, text, model);
         return model.Requests[^1].Messages[^1].Content;
     }
 
-    private async Task<CapturedOriginal> Enrich(LocalCatalog catalog, string name, string text, ScriptedChatModel? model = null)
+    private async Task<CapturedOriginal> Enrich(SqliteCatalog catalog, string name, string text, ScriptedChatModel? model = null)
     {
         model ??= LocalModel();
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));

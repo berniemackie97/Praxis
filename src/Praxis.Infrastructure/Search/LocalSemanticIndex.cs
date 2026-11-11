@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Search;
 

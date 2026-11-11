@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
 /// <summary>
 /// Owns the single catalog SQLite connection. Every statement runs while holding the

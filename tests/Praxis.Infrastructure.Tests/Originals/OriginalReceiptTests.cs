@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -26,14 +26,14 @@ public sealed class OriginalReceiptTests : IDisposable
     {
         const string key = "initial-request";
         CapturedOriginal first;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             using MemoryStream initial = new([1, 2, 3]);
             first = await catalog.Originals.CaptureFileAsync(Source("note.md"), initial, 10, key);
             Assert.Equal(1, first.Revision);
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         using ThrowOnReadStream neverRead = new();
         CapturedOriginal retry = await reopened.Originals.CaptureFileAsync(Source("note.md"), neverRead, 10, key);
         Assert.Equal(first, retry);
@@ -47,7 +47,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task NewKeyForChangedContentAddsRevisionWithoutLosingOriginal()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream initial = new([10, 20]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("versioned.md"), initial, 10, "first");
         using MemoryStream changed = new([30, 40]);
@@ -73,7 +73,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task UnchangedContentWithNewKeyRecordsReceiptWithoutNewRevision()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream firstInput = new([1, 2, 3]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("same.md"), firstInput, 10, "a");
         using MemoryStream secondInput = new([1, 2, 3]);
@@ -88,7 +88,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ReintroducingHistoricalBytesRecordsNewRevisionButReusesObject()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream a = new([1]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("history.md"), a, 10, "a");
         using MemoryStream b = new([2]);
@@ -108,7 +108,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task FailedRequestKeyCanBeRetriedWithoutAStaleReceipt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream oversized = new(new byte[8]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             catalog.Originals.CaptureFileAsync(Source("retry.md"), oversized, 4, "attempt"));
@@ -122,7 +122,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task RequestKeysCannotCrossSourceBoundaries()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream input = new([1]);
         await catalog.Originals.CaptureFileAsync(Source("one.md"), input, 10, "bound-key");
         using ThrowOnReadStream other = new();
@@ -134,7 +134,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ParallelCaptureOfSameRequestCreatesOneCommittedRevision()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal[] results = await Task.WhenAll(Enumerable.Range(0, 6).Select(async _ =>
         {
             using MemoryStream input = new(new byte[100_000]);
@@ -150,7 +150,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task ParallelKeyConflictRejectsDifferentContentWithoutCommittingAnotherVersion()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         PairGate gate = new();
         async Task<CapturedOriginal> Capture(byte value)
         {
@@ -178,7 +178,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task RevokedSourcesRejectRecaptureAndReceiptReplays()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream input = new([3]);
         await catalog.Originals.CaptureFileAsync(Source("removed.md"), input, 10, "first");
         using (SqliteConnection db = Connect(catalog.DatabasePath))
@@ -200,7 +200,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task FailedAndCanceledReadsNeverCommitReceipts()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using CancellationTokenSource canceled = new();
         canceled.Cancel();
         using MemoryStream input = new([1, 2, 3]);
@@ -217,7 +217,7 @@ public sealed class OriginalReceiptTests : IDisposable
     [Fact]
     public async Task TamperedHistoricalVersionBlocksItsReceiptReplay()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream firstInput = new([1]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("history.md"), firstInput, 10, "first");
         using MemoryStream secondInput = new([2]);

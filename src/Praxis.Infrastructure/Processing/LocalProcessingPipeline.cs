@@ -1,7 +1,7 @@
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Enrichment;
 using Praxis.Infrastructure.Enrichment.Semantic;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Processing;
 
@@ -16,7 +16,7 @@ public sealed class LocalProcessingPipeline
     internal const string FaultCode = "processor_fault";
     private const int MaximumAttempts = 3;
 
-    private readonly LocalCatalog catalog;
+    private readonly SqliteCatalog catalog;
     private readonly IReadOnlyList<ILocalProcessingHandler> handlers;
     private readonly TimeSpan idlePoll;
     private readonly Action<string> report;
@@ -30,7 +30,7 @@ public sealed class LocalProcessingPipeline
     private int wakePending;
     private int nextHandler;
 
-    public LocalProcessingPipeline(LocalCatalog catalog, IReadOnlyList<ILocalProcessingHandler> handlers, TimeSpan? idlePoll = null, Action<string>? status = null)
+    public LocalProcessingPipeline(SqliteCatalog catalog, IReadOnlyList<ILocalProcessingHandler> handlers, TimeSpan? idlePoll = null, Action<string>? status = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(handlers);
@@ -64,7 +64,7 @@ public sealed class LocalProcessingPipeline
     /// with the owner's configured local model (deferred while none is enabled).
     /// </summary>
     public static LocalProcessingPipeline CreateDefault(
-        LocalCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null) =>
+        SqliteCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null) =>
         new(catalog,
             [
                 new LocalTextProcessor(catalog), new LocalHeadingProposer(catalog),

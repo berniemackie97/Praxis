@@ -1,5 +1,6 @@
 using System.Text.Json;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Security;
 
 namespace Praxis.Infrastructure.Recovery;
@@ -26,7 +27,7 @@ public static class LocalRecoverySet
         cancellationToken.ThrowIfCancellationRequested();
 
         string identity = SecurityRegistrySnapshots.ValidateExistingCurrentRegistry(identityDirectory);
-        using LocalCatalog catalog = LocalCatalog.OpenReadOnly(catalogDirectory);
+        using SqliteCatalog catalog = SqliteCatalog.OpenReadOnly(catalogDirectory);
         string source = CatalogPaths.ResolveExisting(catalog.DataDirectory);
         identity = CatalogPaths.ResolveExisting(identity);
         if (CatalogPaths.Contains(source, identity) || CatalogPaths.Contains(identity, source))

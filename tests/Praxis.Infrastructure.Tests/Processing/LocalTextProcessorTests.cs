@@ -4,7 +4,7 @@ using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
@@ -36,7 +36,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         CapturedOriginal markdown;
         byte[] markdownBytes = Encoding.UTF8.GetPreamble()
             .Concat(Encoding.UTF8.GetBytes("# Topic\nReady ✅")).ToArray();
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             text = await Capture(catalog, "plain.txt", Encoding.UTF8.GetBytes("hello\nworld"), "text");
             markdown = await Capture(catalog, "note.md", markdownBytes, "markdown");
@@ -64,7 +64,7 @@ public sealed class LocalTextProcessorTests : IDisposable
                 job.ProcessorKey == LocalProcessors.MarkdownHeadings && job.State == "queued"));
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         Assert.Equal("hello\nworld", reopened.Text.Read(text.ItemId, 1)?.Content);
         Assert.Equal("# Topic\nReady ✅", reopened.Text.Read(markdown.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(reopened).ProcessNextAsync());
@@ -75,7 +75,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task UnsupportedFileKindsAndMismatchedSignaturesRemainVisible()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal binary = await Capture(catalog, "image.png", [137, 80, 78, 71], "image");
         CapturedOriginal pdf = await Capture(catalog, "article.pdf", Encoding.ASCII.GetBytes("%PDF-1.7"), "pdf");
         CapturedOriginal disguised = await Capture(catalog, "disguised.txt",
@@ -100,7 +100,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task InvalidUtf8AndCorruptOriginalsFailWithoutPublishingDerivatives()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal malformed = await Capture(catalog, "invalid.txt", [0xff, 0xfe, 0x41], "invalid");
         CapturedOriginal corrupt = await Capture(catalog, "corrupt.md", Encoding.UTF8.GetBytes("good"), "corrupt");
         CapturedOriginal truncated = await Capture(catalog, "truncated.txt", Encoding.UTF8.GetBytes("complete"), "truncated");
@@ -133,7 +133,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task RevisionsAndRevocationPreserveIndependentSources()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal first = await Capture(catalog, "first.txt", Encoding.UTF8.GetBytes("shared"), "a1");
         CapturedOriginal second = await Capture(catalog, "second.txt", Encoding.UTF8.GetBytes("shared"), "b1");
         ProcessingDriver processor = ProcessingDriver.Text(catalog);
@@ -162,7 +162,7 @@ public sealed class LocalTextProcessorTests : IDisposable
         string backup = Path.Combine(workspace, "backup");
         string destination = Path.Combine(workspace, "recovered");
         CapturedOriginal accepted;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             accepted = await Capture(catalog, "retained.txt", Encoding.UTF8.GetBytes("saved"), "a");
             Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
@@ -171,7 +171,7 @@ public sealed class LocalTextProcessorTests : IDisposable
 
         Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
-        using LocalCatalog restored = LocalCatalog.Open(destination);
+        using SqliteCatalog restored = SqliteCatalog.Open(destination);
         Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(restored).ProcessNextAsync());
@@ -181,7 +181,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task FileSizeLimitAndOtherProcessorsAreNotAccidentallyConsumed()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal large = await Capture(catalog, "large.txt",
             new byte[LocalTextProcessor.MaximumTextBytes + 1], "large");
         Assert.True(catalog.Processing.Queue(large.ItemId, 1, "media-v1"));
@@ -199,7 +199,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task TextClaimsDoNotExpireJobsOwnedByOtherProcessors()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal item = await Capture(catalog, "scoped.txt", Encoding.UTF8.GetBytes("scoped"), "scope");
         Assert.True(catalog.Processing.Queue(item.ItemId, 1, "media-v1"));
         DateTimeOffset time = new(2026, 11, 9, 1, 0, 0, TimeSpan.Zero);
@@ -218,7 +218,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task CanceledWorkCannotProduceTextWithoutExplicitRetry()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal item = await Capture(catalog, "canceled.txt", Encoding.UTF8.GetBytes("private"), "cancel");
         Assert.True(catalog.Processing.Cancel(item.ItemId, 1, LocalProcessors.SourceText));
         Assert.False(await ProcessingDriver.Text(catalog).ProcessNextAsync());
@@ -241,9 +241,9 @@ public sealed class LocalTextProcessorTests : IDisposable
         {
             database.Open();
             foreach (string schema in new[]
-                { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql" })
+                { "Catalog.V1.sql", "Catalog.V2.sql", "Catalog.V3.sql" })
             {
-                using Stream input = typeof(LocalCatalog).Assembly
+                using Stream input = typeof(SqliteCatalog).Assembly
                     .GetManifestResourceStream("Praxis.Infrastructure." + schema)!;
                 using StreamReader reader = new(input);
                 using SqliteCommand command = database.CreateCommand();
@@ -256,7 +256,7 @@ public sealed class LocalTextProcessorTests : IDisposable
             Assert.Equal(3L, (long)version.ExecuteScalar()!);
         }
 
-        using LocalCatalog upgraded = LocalCatalog.Open(root);
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
         Assert.Equal(16, upgraded.SchemaVersion);
         using SqliteConnection check = new(new SqliteConnectionStringBuilder
         {
@@ -279,7 +279,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task TechnicalTextIsIndexedWithVerifiedOriginalProvenance(
         string name, string content)
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal source = await Capture(catalog, name, Encoding.UTF8.GetBytes(content), "technical");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
 
@@ -299,7 +299,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task PreviouslyUnsupportedCodeIsReprocessedWithoutNewRevisionOrDuplicateIndex()
     {
         CapturedOriginal source;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             source = await Capture(catalog, "legacy.cs",
                 Encoding.UTF8.GetBytes("public class RecoveredTechnicalSource {}"), "legacy");
@@ -308,7 +308,7 @@ public sealed class LocalTextProcessorTests : IDisposable
                 catalog.Text.Read(source.ItemId, 1)?.Outcome);
         }
 
-        using (LocalCatalog reopened = LocalCatalog.Open(root))
+        using (SqliteCatalog reopened = SqliteCatalog.Open(root))
         {
             ProcessingDriver processor = ProcessingDriver.Text(reopened);
             Assert.True(await processor.ProcessNextAsync());
@@ -324,7 +324,7 @@ public sealed class LocalTextProcessorTests : IDisposable
             await reopened.Originals.VerifyAsync(source.ItemId);
         }
 
-        using LocalCatalog final = LocalCatalog.Open(root);
+        using SqliteCatalog final = SqliteCatalog.Open(root);
         Assert.Single(final.Search.Query("RecoveredTechnicalSource"));
         Assert.False(await ProcessingDriver.Text(final).ProcessNextAsync());
     }
@@ -332,7 +332,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     [Fact]
     public async Task ReprocessingDoesNotReviveRevokedOrSupersededText()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal revoked = await Capture(catalog, "revoked.cs",
             Encoding.UTF8.GetBytes("RevokedTechnicalSource"), "revoked");
         CapturedOriginal first = await Capture(catalog, "updated.cs",
@@ -365,7 +365,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     public async Task CodeFileExtensionsDoNotOverrideBinaryOrMalformedContent(
         string name, byte[] bytes)
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal source = await Capture(catalog, name, bytes, "hostile");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         TextDerivative? derivative = catalog.Text.Read(source.ItemId, 1);
@@ -421,7 +421,7 @@ public sealed class LocalTextProcessorTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string name, byte[] bytes, string key)
+        SqliteCatalog catalog, string name, byte[] bytes, string key)
     {
         string locator = Path.Combine(workspace, "incoming", name);
         using MemoryStream input = new(bytes);

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -34,7 +34,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     {
         byte[] bytes = Enumerable.Range(0, 256_000).Select(x => (byte)(x % 251)).ToArray();
         CapturedOriginal captured;
-        using (LocalCatalog catalog = LocalCatalog.Open(catalogRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot))
         {
             captured = await Capture(catalog, "offline.bin", bytes, "one");
             OriginalExport exported = await catalog.Originals.ExportAsync(
@@ -47,7 +47,7 @@ public sealed class LocalOriginalExportTests : IDisposable
             Assert.Empty(Directory.EnumerateFiles(exportRoot, "*.part"));
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(catalogRoot);
         await reopened.Originals.ExportAsync(
             captured.ItemId, captured.Revision, Path.Combine(exportRoot, "recovered.bin"));
         Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(exportRoot, "recovered.bin")));
@@ -56,7 +56,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task ExistingDestinationsAreNeverOverwrittenOrDeleted()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal captured = await Capture(catalog, "note.txt", [2, 3, 4], "one");
         string destination = Path.Combine(exportRoot, "keep.txt");
         File.WriteAllBytes(destination, [9, 8, 7]);
@@ -71,7 +71,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task StaleRevokedAndUnknownItemsCannotExport()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal initial = await Capture(catalog, "revised.md", [1], "one");
         await Capture(catalog, "revised.md", [2], "two");
         await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -97,7 +97,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task CorruptOriginalFailsVerificationWithoutPublishingAFile()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal captured = await Capture(catalog, "file.bin", [1, 2, 3, 4], "one");
         string path = Path.Combine(catalogRoot, "objects",
             captured.Sha256[..2], captured.Sha256[2..4], captured.Sha256);
@@ -113,7 +113,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task ExportRejectsCatalogPathsAndSymbolicLinkRedirection()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal captured = await Capture(catalog, "file.bin", [1, 2, 3], "one");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             catalog.Originals.ExportAsync(captured.ItemId, 1,
@@ -164,7 +164,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task CancellationLeavesOnlyOriginalBytes()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal captured = await Capture(catalog, "original.bin", new byte[300_000], "one");
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
@@ -179,7 +179,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     [Fact]
     public async Task EmptyOriginalCanBeExportedAndVerified()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal captured = await Capture(catalog, "empty.txt", [], "one");
         string destination = Path.Combine(exportRoot, "empty.txt");
 
@@ -191,7 +191,7 @@ public sealed class LocalOriginalExportTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string name, byte[] bytes, string key)
+        SqliteCatalog catalog, string name, byte[] bytes, string key)
     {
         using MemoryStream stream = new(bytes);
         return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "missing", name),

@@ -2,8 +2,8 @@ using System.Text.Json;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -37,7 +37,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     {
         string path = Path.Combine(inbox, "note.md");
         File.WriteAllText(path, "# First\nOriginal text");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
         IntakeStatus started = monitor.Snapshot();
         Assert.Equal("starting", started.State);
@@ -79,7 +79,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task OwnerPausePreventsNewCapturesAndResumeReconcilesThem()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness monitor = new(catalog, inbox,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         Assert.True(monitor.SetPaused(true).Paused);
@@ -129,7 +129,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     public async Task OfflineWatcherRequiresTrustedReapprovalWithoutRecreatingOriginals()
     {
         string removable = Path.Combine(workspace, "removable");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness monitor = new(catalog, removable,
             TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
         using CancellationTokenSource cancellation = new();
@@ -169,7 +169,7 @@ public sealed class LocalIntakeHealthTests : IDisposable
     [Fact]
     public async Task DesktopLibraryRemainsReadableWhenApprovedInboxIsOffline()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         using MemoryStream source = new(
             System.Text.Encoding.UTF8.GetBytes("Preserved offline knowledge"));
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(

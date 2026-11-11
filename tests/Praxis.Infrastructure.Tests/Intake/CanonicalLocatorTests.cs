@@ -3,7 +3,8 @@ using Praxis.Domain.Enrichment;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -50,7 +51,7 @@ public sealed class CanonicalLocatorTests : IDisposable
     public async Task WatchingTheSameFolderThroughEitherSpellingCapturesOnce()
     {
         File.WriteAllText(Path.Combine(realInbox, "plan.md"), "# Plan\nviolet");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         DateTimeOffset time = DateTimeOffset.UtcNow;
 
         IntakeHarness throughAlias = new(catalog, aliasInbox, TimeSpan.Zero);
@@ -70,7 +71,7 @@ public sealed class CanonicalLocatorTests : IDisposable
     {
         string file = Path.Combine(realInbox, "kept.md");
         File.WriteAllText(file, "# Kept\nindigo");
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal recorded = await Capture(catalog, Path.Combine(aliasInbox, "kept.md"), "# Kept\nindigo");
 
         IntakeHarness intake = new(catalog, realInbox, TimeSpan.Zero);
@@ -90,7 +91,7 @@ public sealed class CanonicalLocatorTests : IDisposable
         const string text = "# Architecture\nBody";
         string file = Path.Combine(realInbox, "arch.md");
         File.WriteAllText(file, text);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal alias = await Capture(catalog, Path.Combine(aliasInbox, "arch.md"), text);
         CapturedOriginal canonical = await Capture(catalog, file, text);
         while (await ProcessingDriver.Text(catalog).ProcessNextAsync() | await ProcessingDriver.Topics(catalog).ProcessNextAsync())
@@ -120,7 +121,7 @@ public sealed class CanonicalLocatorTests : IDisposable
         const string text = "# Private\nsecret";
         string file = Path.Combine(realInbox, "private.md");
         File.WriteAllText(file, text);
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal alias = await Capture(catalog, Path.Combine(aliasInbox, "private.md"), text);
         CapturedOriginal canonical = await Capture(catalog, file, text);
         Assert.True(catalog.Sources.Revoke(canonical.SourceId));
@@ -131,7 +132,7 @@ public sealed class CanonicalLocatorTests : IDisposable
         Assert.DoesNotContain(catalog.Library.List(), entry => entry.SourceStatus == "active");
     }
 
-    private static async Task<CapturedOriginal> Capture(LocalCatalog catalog, string locator, string text)
+    private static async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string locator, string text)
     {
         using MemoryStream stream = new(Encoding.UTF8.GetBytes(text));
         return await catalog.Originals.CaptureFileAsync(locator, stream, 10_000, Guid.NewGuid().ToString("N"));

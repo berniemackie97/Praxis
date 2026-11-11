@@ -3,8 +3,8 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -49,7 +49,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         CapturedOriginal manual;
         CapturedOriginal quick;
         Guid watchedSourceId;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             LocalSourceIntake intake = new(catalog);
             manual = await intake.ImportFileAsync(manualPath,
@@ -119,7 +119,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             await catalog.Originals.VerifyAsync(updated.ItemId);
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         Assert.Equal("revoked", reopened.Sources.ReadProvenance(quick.SourceId)!.Status);
         Assert.Equal(manual.Sha256, reopened.Sources.ReadProvenance(manual.SourceId, 1)!.OriginalSha256);
         Assert.Equal(2, reopened.Sources.ReadProvenance(manual.SourceId)!.Revision);
@@ -136,7 +136,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         File.WriteAllBytes(unsupportedPath, [0, 255, 1, 2]);
         File.WriteAllBytes(invalidPath, [0xc3, 0x28]);
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal unsupported = await intake.ImportFileAsync(unsupportedPath, 4, "unknown-file");
         CapturedOriginal malformed = await intake.ImportFileAsync(invalidPath, 2, "invalid-utf8");
@@ -179,14 +179,14 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         string path = Path.Combine(manualRoot, "author.md");
         File.WriteAllText(path, "early violet evidence");
         CapturedOriginal first;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             first = await new LocalSourceIntake(catalog).ImportFileAsync(path, 100, "author-first");
             Assert.NotNull(catalog.Sources.ReadProvenance(first.SourceId));
         }
 
         File.WriteAllText(path, "later amber evidence");
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             LocalSourceIntake intake = new(catalog);
             Assert.Equal(first, await intake.ImportFileAsync(path, 100, "author-first"));
@@ -203,7 +203,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         }
     }
 
-    private static void AssertCapture(LocalCatalog catalog, Guid sourceId,
+    private static void AssertCapture(SqliteCatalog catalog, Guid sourceId,
         string route, string basis, string scope)
     {
         SourceProvenance source = catalog.Sources.ReadProvenance(sourceId)!;

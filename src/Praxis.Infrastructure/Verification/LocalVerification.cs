@@ -3,8 +3,8 @@ using Microsoft.Data.Sqlite;
 using Praxis.Application.Inference;
 using Praxis.Domain.Models;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Knowledge;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Verification;
 

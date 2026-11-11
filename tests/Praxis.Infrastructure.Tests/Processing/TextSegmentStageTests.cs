@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -32,7 +32,7 @@ public sealed class TextSegmentStageTests : IDisposable
     [Fact]
     public async Task CompletedTextIsSegmentedWithExactSpansAndFencedBySourceState()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         string body = "# Guide\n" + new string('a', 400) + "\n\n## Install\n" + new string('b', 400) + "\n";
         CapturedOriginal first = await Capture(catalog, "guide.md", body, "first");
         await DrainAsync(catalog);
@@ -59,7 +59,7 @@ public sealed class TextSegmentStageTests : IDisposable
     [Fact]
     public async Task UnsupportedTextIsNotSegmented()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal binary = await Capture(catalog, "image.png", "\u0089PNG", "binary");
         await DrainAsync(catalog);
 
@@ -70,7 +70,7 @@ public sealed class TextSegmentStageTests : IDisposable
     [Fact]
     public async Task RenewExtendsHeldLeasesAndStopsRevokedOrSupersededWork()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal kept = await Capture(catalog, "kept.txt", "kept", "kept");
         CapturedOriginal revoked = await Capture(catalog, "revoked.txt", "revoked", "revoked");
         CapturedOriginal superseded = await Capture(catalog, "superseded.txt", "old", "superseded");
@@ -105,7 +105,7 @@ public sealed class TextSegmentStageTests : IDisposable
             AddCompletedText(connection, newer, "/notes/newer.txt", "b", "2026-06-01T00:00:00.0000000Z");
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Guid[] backfilled = catalog.Processing.List()
             .Where(job => job.ProcessorKey == LocalProcessors.TextSegments)
             .Select(job => job.ItemId).ToArray();
@@ -133,10 +133,10 @@ public sealed class TextSegmentStageTests : IDisposable
             Pooling = false
         }.ToString());
         connection.Open();
-        foreach (string resource in new[] { "LocalCatalog.sql" }
-            .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"LocalCatalog.V{version}.sql")))
+        foreach (string resource in new[] { "Catalog.V1.sql" }
+            .Concat(Enumerable.Range(2, throughVersion - 1).Select(version => $"Catalog.V{version}.sql")))
         {
-            using Stream stream = typeof(LocalCatalog).Assembly
+            using Stream stream = typeof(SqliteCatalog).Assembly
                 .GetManifestResourceStream("Praxis.Infrastructure." + resource)!;
             using StreamReader reader = new StreamReader(stream);
             Execute(connection, reader.ReadToEnd());
@@ -166,7 +166,7 @@ public sealed class TextSegmentStageTests : IDisposable
             """);
     }
 
-    private static async Task DrainAsync(LocalCatalog catalog)
+    private static async Task DrainAsync(SqliteCatalog catalog)
     {
         LocalProcessingPipeline pipeline = LocalProcessingPipeline.CreateDefault(catalog);
         while (await pipeline.ProcessNextAsync())
@@ -175,7 +175,7 @@ public sealed class TextSegmentStageTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string filename, string contents, string key)
+        SqliteCatalog catalog, string filename, string contents, string key)
     {
         using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(contents));
         return await catalog.Originals.CaptureFileAsync(

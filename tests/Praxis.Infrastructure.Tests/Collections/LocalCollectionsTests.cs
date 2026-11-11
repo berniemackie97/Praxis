@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Collections;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -31,7 +31,7 @@ public sealed class LocalCollectionsTests : IDisposable
     public async Task CollectionsRetainManualMembershipAcrossRevisionsAndRestarts()
     {
         Guid collectionId, firstSource, secondSource, firstItem;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             CapturedOriginal first = await Capture(catalog, "first.md", "violet", "one");
             CapturedOriginal second = await Capture(catalog, "second.md", "violet", "two");
@@ -57,7 +57,7 @@ public sealed class LocalCollectionsTests : IDisposable
                 item => item.ItemId == firstItem && item.Revision == 2);
         }
 
-        using (LocalCatalog reopened = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog reopened = SqliteCatalog.Open(dataRoot))
         {
             SourceCollection collection = Assert.Single(reopened.Collections.List());
             Assert.Equal(collectionId, collection.CollectionId);
@@ -69,14 +69,14 @@ public sealed class LocalCollectionsTests : IDisposable
             Assert.Single(reopened.Library.List(collectionId: collectionId));
         }
 
-        using LocalCatalog restoredSession = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog restoredSession = SqliteCatalog.Open(dataRoot);
         Assert.Single(restoredSession.Library.List(collectionId: collectionId));
     }
 
     [Fact]
     public async Task RevokedSourcesCannotLeakThroughCollectionsOrBeReassigned()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal first = await Capture(catalog, "first.md", "shared", "one");
         CapturedOriginal second = await Capture(catalog, "second.md", "shared", "two");
         SourceCollection collection = catalog.Collections.Create("Team");
@@ -103,7 +103,7 @@ public sealed class LocalCollectionsTests : IDisposable
         string backup = Path.Combine(workspace, "backup");
         string destination = Path.Combine(workspace, "restored");
         Guid collectionId, sourceId, itemId;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             CapturedOriginal item = await Capture(catalog, "book.md", "reviewable", "book");
             SourceCollection collection = catalog.Collections.Create("Research");
@@ -115,7 +115,7 @@ public sealed class LocalCollectionsTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
-        using LocalCatalog reopened = LocalCatalog.Open(destination);
+        using SqliteCatalog reopened = SqliteCatalog.Open(destination);
         Assert.Equal(16, reopened.SchemaVersion);
         Assert.Equal(collectionId, Assert.Single(reopened.Collections.List()).CollectionId);
         Assert.Equal(itemId,
@@ -140,10 +140,10 @@ public sealed class LocalCollectionsTests : IDisposable
             foreignKeys.CommandText = "PRAGMA foreign_keys = ON";
             foreignKeys.ExecuteNonQuery();
             foreach (string version in new[]
-                { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql",
-                  "LocalCatalog.V4.sql", "LocalCatalog.V5.sql" })
+                { "Catalog.V1.sql", "Catalog.V2.sql", "Catalog.V3.sql",
+                  "Catalog.V4.sql", "Catalog.V5.sql" })
             {
-                using Stream resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                using Stream resource = typeof(SqliteCatalog).Assembly.GetManifestResourceStream(
                     "Praxis.Infrastructure." + version)!;
                 using StreamReader reader = new(resource);
                 using SqliteCommand command = database.CreateCommand();
@@ -152,7 +152,7 @@ public sealed class LocalCollectionsTests : IDisposable
             }
         }
 
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Assert.Equal(16, catalog.SchemaVersion);
         Assert.Empty(catalog.Collections.List());
         Assert.Equal("Migrated", catalog.Collections.Create("Migrated").Name);
@@ -162,7 +162,7 @@ public sealed class LocalCollectionsTests : IDisposable
     [Fact]
     public async Task CollectionNamesMembershipAndPageBoundsAreEnforced()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Assert.Throws<ArgumentException>(() => catalog.Collections.Create("  "));
         Assert.Throws<ArgumentException>(() => catalog.Collections.Create("Bad\nName"));
         Assert.Throws<ArgumentException>(() => catalog.Collections.Create(new string('x', 81)));
@@ -188,7 +188,7 @@ public sealed class LocalCollectionsTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string name, string value, string requestKey)
+        SqliteCatalog catalog, string name, string value, string requestKey)
     {
         using MemoryStream stream = new(System.Text.Encoding.UTF8.GetBytes(value));
         return await catalog.Originals.CaptureFileAsync(

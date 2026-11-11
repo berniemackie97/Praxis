@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
@@ -28,7 +28,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     [Fact]
     public async Task NewRevisionQueuesOneJobAndCommittedReplayDoesNotDuplicateIt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream original = new([1]);
         CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("a"), original, 10, "first");
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
@@ -56,7 +56,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     {
         DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);
         ProcessingLease first;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             using MemoryStream data = new([1, 2]);
             await catalog.Originals.CaptureFileAsync(Source("a"), data, 100, "submit");
@@ -67,7 +67,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
                 nowUtc: time.AddSeconds(5)));
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(root);
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
         ProcessingLease second = Assert.IsType<ProcessingLease>(reopened.Processing.TryClaim(
             TimeSpan.FromSeconds(10), nowUtc: time.AddSeconds(11)));
         Assert.NotEqual(first.LeaseKey, second.LeaseKey);
@@ -88,7 +88,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     [Fact]
     public async Task AttemptExhaustionRequiresExplicitRetryAndPreservesTotalAttempts()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream content = new([2]);
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("b"), content, 10, "submit");
         DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);
@@ -119,7 +119,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     [Fact]
     public async Task CancellationAndRevocationFenceOutstandingClaimsWithoutDeletingOriginals()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         using MemoryStream content = new([3]);
         CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("c"), content, 10, "submit");
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
@@ -143,7 +143,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     {
         string backup = Path.Combine(workspace, "backup");
         string restored = Path.Combine(workspace, "restored");
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             using MemoryStream content = new([7]);
             CapturedOriginal saved = await catalog.Originals.CaptureFileAsync(Source("a"), content, 10, "one");
@@ -153,7 +153,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
-        using LocalCatalog reopened = LocalCatalog.Open(restored);
+        using SqliteCatalog reopened = SqliteCatalog.Open(restored);
         Assert.Equal(16, reopened.SchemaVersion);
         ProcessingJob job = Assert.Single(reopened.Processing.List());
         Assert.Equal("canceled", job.State);
@@ -183,9 +183,9 @@ public sealed class ProcessingLifecycleTests : IDisposable
         }.ToString()))
         {
             db.Open();
-            foreach (string name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql" })
+            foreach (string name in new[] { "Catalog.V1.sql", "Catalog.V2.sql" })
             {
-                using Stream resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                using Stream resource = typeof(SqliteCatalog).Assembly.GetManifestResourceStream(
                     "Praxis.Infrastructure." + name)!;
                 using StreamReader reader = new(resource);
                 using SqliteCommand command = db.CreateCommand();
@@ -229,7 +229,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(backup, "manifest.json"), json);
         Assert.Equal(1, (await LocalCatalogSnapshots.VerifyAsync(backup, 10_000_000)).ObjectCount);
         await LocalCatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
-        using LocalCatalog catalog = LocalCatalog.Open(restored);
+        using SqliteCatalog catalog = SqliteCatalog.Open(restored);
         Assert.Equal(16, catalog.SchemaVersion);
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
         using MemoryStream replay = new();
@@ -242,7 +242,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
     [Fact]
     public void PublicJobOperationsRejectUnboundedArguments()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Processing.List(501));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             catalog.Processing.TryClaim(TimeSpan.FromHours(2)));

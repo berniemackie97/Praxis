@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
 /// <summary>Canonical text encodings for values persisted in the catalog.</summary>
 internal static class CatalogValues

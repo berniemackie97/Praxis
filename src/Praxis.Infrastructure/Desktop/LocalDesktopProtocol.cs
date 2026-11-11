@@ -5,15 +5,15 @@ using Praxis.Domain.Models;
 using Praxis.Domain.Search;
 using Praxis.Domain.Text;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Verification;
 
 namespace Praxis.Infrastructure.Desktop;
 
-public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
+public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCapture? quickCapture = null, LocalWatchedIntake? monitor = null, LocalProcessingPipeline? processing = null, LocalVerificationRunner? verification = null, LocalWatchedIntakeGroup? group = null)
 {
     public const int MaximumRequestCharacters = 16_384;
 

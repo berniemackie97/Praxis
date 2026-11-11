@@ -2,8 +2,8 @@ using System.Text;
 using System.Text.Json;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Desktop;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -34,7 +34,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     public async Task DigestBoundVideoCaptionReturnsExactTimeAndFullMediaIdentity(
         string extension, string caption)
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal media = await Capture(catalog, "tutorial.mp4", "video fixture", "media");
         CapturedOriginal sidecar = await Capture(catalog,
             "tutorial.mp4." + media.Sha256 + extension, caption, "captions");
@@ -59,7 +59,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     [Fact]
     public async Task VideoRevisionOrRevocationNeverReusesStaleCaptionTimestamp()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "tutorial.mp4", "video-v1", "video-v1");
         const string caption = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nViolet physics demonstration.\n";
         CapturedOriginal cues = await Capture(catalog,
@@ -89,7 +89,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     [Fact]
     public async Task VideoRequiresExplicitHashBindingAndValidCaptionSyntax()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "tutorial.mp4", "video", "video");
         await Capture(catalog, "tutorial.vtt",
             "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nViolet topic.\n", "legacy");
@@ -109,7 +109,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     [Fact]
     public async Task PrivateDesktopProtocolReturnsGroundedVideoCues()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal video = await Capture(catalog, "clip.mp4", "video content", "video");
         CapturedOriginal captions = await Capture(catalog, "clip.mp4." + video.Sha256 + ".vtt",
             "WEBVTT\n\n00:00:03.000 --> 00:00:06.000\nViolet assembly instruction.\n",
@@ -130,7 +130,7 @@ public sealed class LocalVideoCueSearchTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string filename, string contents, string requestKey)
+        SqliteCatalog catalog, string filename, string contents, string requestKey)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(contents);
         using MemoryStream source = new(bytes);

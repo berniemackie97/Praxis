@@ -1,6 +1,6 @@
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment;
@@ -9,7 +9,7 @@ namespace Praxis.Infrastructure.Enrichment;
 /// Deterministic topic proposals from literal first- to third-level Markdown headings of
 /// verified extracted text. Non-Markdown sources are marked unsupported; no model is used.
 /// </summary>
-public sealed class LocalHeadingProposer(LocalCatalog catalog) : ILocalProcessingHandler
+public sealed class LocalHeadingProposer(SqliteCatalog catalog) : ILocalProcessingHandler
 {
     public string ProcessorKey => LocalProcessors.MarkdownHeadings;
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);

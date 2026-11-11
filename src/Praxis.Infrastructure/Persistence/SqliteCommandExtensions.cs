@@ -1,8 +1,8 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
-internal static class SqliteCommands
+internal static class SqliteCommandExtensions
 {
     internal static SqliteCommand CreateCommand(this SqliteConnection connection, string sql)
     {

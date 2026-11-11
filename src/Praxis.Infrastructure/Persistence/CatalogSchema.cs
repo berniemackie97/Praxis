@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
@@ -96,7 +96,7 @@ internal static class CatalogSchema
             using SqliteTransaction transaction = database.BeginTransaction();
             for (int target = version + 1; target <= CurrentVersion; target++)
             {
-                string resource = target == 1 ? "LocalCatalog.sql" : $"LocalCatalog.V{target}.sql";
+                string resource = $"Catalog.V{target}.sql";
                 using SqliteCommand migration = database.CreateCommand(ReadSchema(resource));
                 migration.Transaction = transaction;
                 migration.ExecuteNonQuery();

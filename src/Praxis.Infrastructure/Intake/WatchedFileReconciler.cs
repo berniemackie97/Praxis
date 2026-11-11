@@ -3,7 +3,7 @@ using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Intake;
 
@@ -15,7 +15,7 @@ internal sealed record WatchedScanResult(int ObservedFiles, int Imported, TimeSp
 /// deterministic request key. Unchanged verified files are re-hashed only periodically.
 /// Not thread-safe; the owning intake serializes passes.
 /// </summary>
-internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
+internal sealed class WatchedFileReconciler(SqliteCatalog catalog, LocalSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
 {
     private const int MaximumFiles = 5_000;
     private const int MaximumQueuedChanges = 512;

@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
@@ -33,7 +33,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     public async Task MarkdownHeadingsAreGroundedBoundedAndReviewedWithoutEditingTheOriginal()
     {
         const string content = "# Architecture\nSystem overview\n## Runtime\n~~~csharp\n# Not a heading\n~~~\n";
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal captured = await Capture(catalog, "topic.md", content, "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         ProcessingDriver proposer = ProcessingDriver.Topics(catalog);
@@ -69,7 +69,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task RevisedOrRevokedSourcesNeverExposeOrAcceptStaleSuggestions()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal first = await Capture(catalog, "topic.md", "# Initial\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
@@ -101,7 +101,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task RevocationBetweenReadAndCommitPublishesNoProposals()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal source = await Capture(catalog, "fenced.md", "# Fenced topic\n", "fenced");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
@@ -121,7 +121,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task UnsupportedTextAndEmptyMarkdownAbstainWithoutInventingTopics()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal empty = await Capture(catalog, "empty.md",
             "No heading.\n~~~\n# Fake heading\n~~~\n", "one");
         CapturedOriginal plain = await Capture(catalog, "plain.txt", "# Document", "two");
@@ -152,7 +152,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         string target = Path.Combine(workspace, "restore");
         CapturedOriginal first;
         CapturedOriginal second;
-        using (LocalCatalog catalog = LocalCatalog.Open(root))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
         {
             first = await Capture(catalog, "one.md", "# Shared Topic\nBody", "one");
             second = await Capture(catalog, "two.md", "# Shared Topic\nBody", "two");
@@ -170,7 +170,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
-        using LocalCatalog restored = LocalCatalog.Open(target);
+        using SqliteCatalog restored = SqliteCatalog.Open(target);
         Assert.Equal(16, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Proposals.List(first.SourceId)).Status);
@@ -194,10 +194,10 @@ public sealed class LocalHeadingProposalTests : IDisposable
         {
             connection.Open();
             foreach (string version in new[]
-                { "LocalCatalog.sql", "LocalCatalog.V2.sql", "LocalCatalog.V3.sql",
-                  "LocalCatalog.V4.sql", "LocalCatalog.V5.sql", "LocalCatalog.V6.sql" })
+                { "Catalog.V1.sql", "Catalog.V2.sql", "Catalog.V3.sql",
+                  "Catalog.V4.sql", "Catalog.V5.sql", "Catalog.V6.sql" })
             {
-                using Stream resource = typeof(LocalCatalog).Assembly.GetManifestResourceStream(
+                using Stream resource = typeof(SqliteCatalog).Assembly.GetManifestResourceStream(
                     "Praxis.Infrastructure." + version)!;
                 using StreamReader reader = new(resource);
                 using SqliteCommand command = connection.CreateCommand();
@@ -215,7 +215,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
             insert.ExecuteNonQuery();
         }
 
-        using LocalCatalog upgraded = LocalCatalog.Open(root);
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
         Assert.Equal(16, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
@@ -226,7 +226,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public void MissingEligibilityViewIsRejectedWithoutRewritingTheCatalog()
     {
-        using (LocalCatalog catalog = LocalCatalog.Open(root)) { }
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root)) { }
         using (SqliteConnection connection = new(new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(root, "catalog.sqlite"),
@@ -240,7 +240,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
             command.ExecuteNonQuery();
         }
 
-        Assert.Throws<InvalidDataException>(() => LocalCatalog.Open(root));
+        Assert.Throws<InvalidDataException>(() => SqliteCatalog.Open(root));
         Assert.Equal(0L, Scalar(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='view' AND name='eligible_enrichment_proposals'"));
     }
@@ -248,7 +248,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     [Fact]
     public async Task ReviewRejectsInvalidDecisionsCorrectionsAndUnknownSources()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal item = await Capture(catalog, "notes.md", "# Testable\nBody", "one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
@@ -266,7 +266,7 @@ public sealed class LocalHeadingProposalTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string filename, string contents, string key)
+        SqliteCatalog catalog, string filename, string contents, string key)
     {
         using MemoryStream stream = new(Encoding.UTF8.GetBytes(contents));
         return await catalog.Originals.CaptureFileAsync(

@@ -2,9 +2,9 @@ using Microsoft.Data.Sqlite;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Enrichment.Semantic;
 using Praxis.Infrastructure.Knowledge;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Enrichment;

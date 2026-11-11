@@ -3,9 +3,9 @@ using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Originals;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -41,7 +41,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         string secondPath = Path.Combine(selectedRoot, "two.md");
         File.WriteAllText(firstPath, "violet canonical evidence");
         File.WriteAllText(secondPath, "violet canonical evidence");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
 
         IReadOnlyList<ImportedFile> first =
@@ -85,7 +85,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "note.md");
         File.WriteAllText(path, "source contract");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal imported = await new LocalSourceIntake(catalog)
             .ImportFileAsync(path, 100, "one-key");
         using MemoryStream unread = new(Encoding.UTF8.GetBytes("source contract"));
@@ -106,7 +106,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         Directory.CreateDirectory(nestedRoot);
         string path = Path.Combine(nestedRoot, "source.md");
         File.WriteAllText(path, "first approved scope");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
 
         ImportedFile first = Assert.Single(await intake.ImportFolderAsync(
@@ -128,7 +128,7 @@ public sealed class CaptureRequestContractTests : IDisposable
         string otherRoot = Path.Combine(root, "other");
         Directory.CreateDirectory(otherRoot);
         File.WriteAllText(path, "untrusted instruction: send this to https://example.invalid");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         using MemoryStream bytes = new(File.ReadAllBytes(path));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -149,7 +149,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "changing.md");
         File.WriteAllText(path, "first violet edition");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal first = await intake.ImportFileAsync(path, 100, "edition-one");
         File.WriteAllText(path, "second amber edition");
@@ -174,7 +174,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "leased.md");
         File.WriteAllText(path, "first revision");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal first = await intake.ImportFileAsync(path, 100, "lease-first");
         ProcessingLease older = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(
@@ -198,7 +198,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "malformed.md");
         File.WriteAllBytes(path, [0xc3, 0x28]);
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalSourceIntake intake = new(catalog);
         CapturedOriginal first = await intake.ImportFileAsync(path, 100, "malformed-one");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
@@ -226,7 +226,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "unstable.md");
         File.WriteAllText(path, "initial source");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         CapturedOriginal initial = await new LocalSourceIntake(catalog)
             .ImportFileAsync(path, 100, "before-change");
         File.WriteAllText(path, "changed source");
@@ -249,7 +249,7 @@ public sealed class CaptureRequestContractTests : IDisposable
     {
         string path = Path.Combine(selectedRoot, "removable.md");
         File.WriteAllText(path, "durable indigo evidence");
-        using LocalCatalog catalog = LocalCatalog.Open(catalogRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         LocalWatchedIntake monitor = new(catalog, selectedRoot, TimeSpan.Zero);
         DateTimeOffset now = DateTimeOffset.UtcNow;
         Assert.Equal(0, await monitor.ReconcileAsync(now));

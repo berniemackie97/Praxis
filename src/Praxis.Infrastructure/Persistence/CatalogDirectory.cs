@@ -1,4 +1,4 @@
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
 /// <summary>Layout and access rules for the private catalog data directory.</summary>
 internal static class CatalogDirectory

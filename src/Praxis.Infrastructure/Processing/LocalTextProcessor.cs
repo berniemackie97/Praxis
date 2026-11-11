@@ -1,6 +1,6 @@
 using System.Text;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Processing;
 
@@ -8,7 +8,7 @@ namespace Praxis.Infrastructure.Processing;
 /// Extracts strictly decoded UTF-8 text from verified originals with a supported text
 /// extension. Other inputs receive an explicit unsupported or failed outcome, never guessed text.
 /// </summary>
-public sealed class LocalTextProcessor(LocalCatalog catalog) : ILocalProcessingHandler
+public sealed class LocalTextProcessor(SqliteCatalog catalog) : ILocalProcessingHandler
 {
     public const int MaximumTextBytes = 1024 * 1024;
 

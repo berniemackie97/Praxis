@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Recovery;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -31,7 +31,7 @@ public sealed class LocalSnapshotTests : IDisposable
     public async Task OpenWalCatalogRestoresExactHistoryAndHistoricalReceipts()
     {
         CapturedOriginal old, latest, shared;
-        using (LocalCatalog live = LocalCatalog.Open(Live))
+        using (SqliteCatalog live = SqliteCatalog.Open(Live))
         {
             using MemoryStream first = new([1, 2, 3]);
             old = await live.Originals.CaptureFileAsync(Source("note.md"), first, 100, "old");
@@ -50,7 +50,7 @@ public sealed class LocalSnapshotTests : IDisposable
 
         LocalSnapshotReport recovered = await LocalCatalogSnapshots.RestoreAsync(Backup, Restored, 10_000_000);
         Assert.Equal(2, recovered.ObjectCount);
-        using (LocalCatalog restored = LocalCatalog.Open(Restored))
+        using (SqliteCatalog restored = SqliteCatalog.Open(Restored))
         {
             using ThrowingReadStream notRead = new();
             CapturedOriginal historical = await restored.Originals.CaptureFileAsync(
@@ -90,9 +90,9 @@ public sealed class LocalSnapshotTests : IDisposable
         }.ToString()))
         {
             database.Open();
-            foreach (string name in new[] { "LocalCatalog.sql", "LocalCatalog.V2.sql" })
+            foreach (string name in new[] { "Catalog.V1.sql", "Catalog.V2.sql" })
             {
-                using Stream schema = typeof(LocalCatalog).Assembly
+                using Stream schema = typeof(SqliteCatalog).Assembly
                     .GetManifestResourceStream("Praxis.Infrastructure." + name)!;
                 using StreamReader reader = new(schema);
                 using SqliteCommand migration = database.CreateCommand();
@@ -109,7 +109,7 @@ public sealed class LocalSnapshotTests : IDisposable
         Assert.Equal(2, manifest!["CatalogVersion"]!.GetValue<int>());
 
         await LocalCatalogSnapshots.RestoreAsync(Backup, Restored, 10_000_000);
-        using LocalCatalog restored = LocalCatalog.Open(Restored);
+        using SqliteCatalog restored = SqliteCatalog.Open(Restored);
         using SqliteConnection databaseCheck = Connect(restored.DatabasePath);
         using SqliteCommand command = databaseCheck.CreateCommand();
         command.CommandText = "PRAGMA user_version";
@@ -119,7 +119,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task OfflineBackupRefusesACatalogThatIsOpenForIntake()
     {
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         await Assert.ThrowsAnyAsync<IOException>(() =>
             LocalCatalogSnapshots.BackupExistingAsync(Live, Backup, 10_000_000));
         Assert.False(Directory.Exists(Backup));
@@ -128,7 +128,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task SnapshotExcludesUncommittedPublishedObjects()
     {
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         using MemoryStream first = new([1]);
         await live.Originals.CaptureFileAsync(Source("revoked.md"), first, 10, "first");
         using (SqliteConnection db = Connect(live.DatabasePath))
@@ -152,7 +152,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task MissingOriginalCannotProduceCompletedBackup()
     {
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         using MemoryStream data = new([1, 2]);
         CapturedOriginal saved = await live.Originals.CaptureFileAsync(Source("a"), data, 10, "key");
         File.Delete(ObjectPath(Live, saved.Sha256));
@@ -166,7 +166,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task CorruptObjectAndTruncatedDatabasePreventRestore()
     {
-        using (LocalCatalog live = LocalCatalog.Open(Live))
+        using (SqliteCatalog live = SqliteCatalog.Open(Live))
         {
             using MemoryStream content = new([1, 2, 3]);
             await live.Originals.CaptureFileAsync(Source("a"), content, 10, "one");
@@ -189,7 +189,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task IncompatibleManifestOrUnexpectedFilesRejectWithoutOverwrite()
     {
-        using (LocalCatalog live = LocalCatalog.Open(Live))
+        using (SqliteCatalog live = SqliteCatalog.Open(Live))
         {
             await live.Recovery.BackupAsync(Backup, 10_000_000);
         }
@@ -212,7 +212,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task ExistingDestinationAndLowBudgetNeverOverwriteData()
     {
-        using (LocalCatalog live = LocalCatalog.Open(Live))
+        using (SqliteCatalog live = SqliteCatalog.Open(Live))
         {
             await live.Recovery.BackupAsync(Backup, 10_000_000);
         }
@@ -237,7 +237,7 @@ public sealed class LocalSnapshotTests : IDisposable
         string alias = Path.Combine(workspace, "workspace-alias");
         Directory.CreateSymbolicLink(alias, workspace);
 
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         string nestedBackup = Path.Combine(alias, Path.GetFileName(Live), "nested-backup");
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             live.Recovery.BackupAsync(nestedBackup, 10_000_000));
@@ -256,7 +256,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task BackupRejectsAnOversizedObjectBeforeCopyingIt()
     {
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         using MemoryStream input = new([1, 2, 3]);
         CapturedOriginal saved = await live.Originals.CaptureFileAsync(Source("oversized"), input, 10, "oversized");
         using (FileStream original = File.OpenWrite(ObjectPath(Live, saved.Sha256)))
@@ -273,7 +273,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task CancelledSnapshotDoesNotCreateDestination()
     {
-        using LocalCatalog live = LocalCatalog.Open(Live);
+        using SqliteCatalog live = SqliteCatalog.Open(Live);
         using CancellationTokenSource cancel = new();
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -285,7 +285,7 @@ public sealed class LocalSnapshotTests : IDisposable
     [Fact]
     public async Task PendingRequestsRemainInertAfterRestore()
     {
-        using (LocalCatalog live = LocalCatalog.Open(Live))
+        using (SqliteCatalog live = SqliteCatalog.Open(Live))
         {
             using MemoryStream data = new([1]);
             CapturedOriginal captured = await live.Originals.CaptureFileAsync(Source("a"), data, 10, "done");
@@ -301,7 +301,7 @@ public sealed class LocalSnapshotTests : IDisposable
         }
 
         await LocalCatalogSnapshots.RestoreAsync(Backup, Restored, 10_000_000);
-        using LocalCatalog catalog = LocalCatalog.Open(Restored);
+        using SqliteCatalog catalog = SqliteCatalog.Open(Restored);
         using SqliteConnection db2 = Connect(catalog.DatabasePath);
         using SqliteCommand check = db2.CreateCommand();
         check.CommandText = "SELECT state FROM ingest_requests WHERE request_key='queued'";

@@ -3,7 +3,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <InternalsVisibleTo Include="Praxis.Infrastructure.Tests" />
     <ProjectReference Include="../Praxis.Application/Praxis.Application.csproj" />
-    <EmbeddedResource Include="Catalog/Migrations/LocalCatalog*.sql"
+    <EmbeddedResource Include="Persistence/Migrations/Catalog.V*.sql"
                       LogicalName="Praxis.Infrastructure.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

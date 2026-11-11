@@ -1,6 +1,6 @@
 using Praxis.Domain.Intake;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 
 namespace Praxis.Infrastructure.Tests.Support;
@@ -12,7 +12,7 @@ namespace Praxis.Infrastructure.Tests.Support;
 internal sealed class IntakeHarness
 {
     internal IntakeHarness(
-        LocalCatalog catalog, string inbox, TimeSpan? quietPeriod = null,
+        SqliteCatalog catalog, string inbox, TimeSpan? quietPeriod = null,
         TimeSpan? rescanInterval = null, Action<string>? status = null)
     {
         Processing = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(100));

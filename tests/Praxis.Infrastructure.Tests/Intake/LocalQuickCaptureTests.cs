@@ -2,8 +2,8 @@ using System.Text;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Library;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -36,7 +36,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     {
         Guid id = Guid.NewGuid();
         QuickCaptureReceipt receipt;
-        using (LocalCatalog catalog = LocalCatalog.Open(dataRoot))
+        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             LocalQuickCapture capture = new(catalog, inbox);
             receipt = await capture.CaptureAsync(id, "Project Ideas", "The violet compass.");
@@ -55,7 +55,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
             Assert.Empty(Directory.EnumerateFiles(inbox, "*.part", SearchOption.TopDirectoryOnly));
         }
 
-        using LocalCatalog reopened = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
         LibraryItem item = Assert.Single(reopened.Library.List());
         Assert.Equal(receipt.Original.ItemId, item.ItemId);
         Assert.Single(reopened.Search.Query("violet"));
@@ -68,7 +68,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task IdenticalRetriesNeverMakeAnotherNoteOrRevision()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalQuickCapture capture = new(catalog, inbox);
         Guid id = Guid.NewGuid();
         QuickCaptureReceipt first = await capture.CaptureAsync(id, null, "Original thought");
@@ -88,7 +88,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task ChangedRetryCannotOverwriteOrDuplicateAnAcceptedNote()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalQuickCapture capture = new(catalog, inbox);
         Guid id = Guid.NewGuid();
         QuickCaptureReceipt original = await capture.CaptureAsync(id, "Research", "This text is preserved.");
@@ -105,7 +105,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task PublishedButUncommittedNoteIsRecoveredByTheExistingIntake()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Guid id = Guid.NewGuid();
         string target = Path.Combine(inbox, "Recover-" + id.ToString("N") + ".md");
         File.WriteAllText(target, "# Recover\n\nOffline thought");
@@ -119,7 +119,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task ReplacedExistingContentIsNotOverwrittenOnRetry()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         Guid id = Guid.NewGuid();
         LocalQuickCapture capture = new(catalog, inbox);
         QuickCaptureReceipt saved = await capture.CaptureAsync(id, "Topic", "Keep these bytes.");
@@ -134,7 +134,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task RejectedInputsCannotWriteAnInboxFile()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         LocalQuickCapture capture = new(catalog, inbox);
         Guid id = Guid.NewGuid();
         await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -158,7 +158,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task CatalogAndLinkedRootsAreNotValidCaptureDestinations()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             new LocalQuickCapture(catalog, dataRoot)
                 .CaptureAsync(Guid.NewGuid(), "Private", "Cannot write into the catalog."));
@@ -180,7 +180,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task CancellationBeforeCaptureLeavesNoOriginalOrReceipt()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         using CancellationTokenSource cts = new();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -193,7 +193,7 @@ public sealed class LocalQuickCaptureTests : IDisposable
     [Fact]
     public async Task OwnerPastedUrlIsOnlyPreservedAsText()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(dataRoot);
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         string url = "https://example.invalid/private?token=abc";
         QuickCaptureReceipt saved = await new LocalQuickCapture(catalog, inbox)
             .CaptureAsync(Guid.NewGuid(), "Reference", url);

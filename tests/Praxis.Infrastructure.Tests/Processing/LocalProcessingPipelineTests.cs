@@ -1,8 +1,8 @@
 using System.Text;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -34,7 +34,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task BackgroundPipelineExtractsAndProposesWithoutAnIntakeScan()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         LocalProcessingPipeline pipeline = LocalProcessingPipeline.CreateDefault(catalog, TimeSpan.FromMilliseconds(50));
         using CancellationTokenSource cancellation = new();
         Task running = pipeline.RunAsync(cancellation.Token);
@@ -52,7 +52,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task SlowProcessingDoesNotBlockWatchedIntakeCapture()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
         LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
         LocalWatchedIntake intake = new(catalog, inbox, TimeSpan.Zero, onCaptured: pipeline.Wake);
@@ -78,7 +78,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task ConcurrencyIsBoundedPerHandler()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         for (int index = 0; index < 5; index++)
         {
             await Capture(catalog, $"item{index}.txt", $"text {index}", $"key{index}");
@@ -103,7 +103,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task HandlerFaultFailsOnlyItsJobAndProcessingContinues()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal broken = await Capture(catalog, "broken.txt", "boom", "broken");
         CapturedOriginal healthy = await Capture(catalog, "healthy.txt", "fine", "healthy");
         List<string> reports = new();
@@ -129,7 +129,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task UnknownRuntimeFailureCodeCannotLeakThroughStatus()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         await Capture(catalog, "secret.txt", "sensitive content", "private");
         List<string> reports = new();
         LocalProcessingPipeline pipeline = new(catalog, [new UntrustedRuntimeCodeHandler()], status: reports.Add);
@@ -147,7 +147,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public async Task ShutdownLeavesInterruptedLeaseRecoverableInsteadOfFailed()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         await Capture(catalog, "slow.txt", "slow", "slow");
         BlockingHandler blocking = new(LocalProcessors.SourceText, maxConcurrency: 1);
         LocalProcessingPipeline pipeline = new(catalog, [blocking], TimeSpan.FromMilliseconds(50));
@@ -168,7 +168,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     [Fact]
     public void HandlersMustHaveDistinctProcessorsAndBoundedConcurrency()
     {
-        using LocalCatalog catalog = LocalCatalog.Open(root);
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
         Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog, []));
         Assert.Throws<ArgumentException>(() => new LocalProcessingPipeline(catalog,
             [new BlockingHandler("same", 1), new BlockingHandler("same", 1)]));
@@ -177,7 +177,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     }
 
     private async Task<CapturedOriginal> Capture(
-        LocalCatalog catalog, string filename, string contents, string key)
+        SqliteCatalog catalog, string filename, string contents, string key)
     {
         using MemoryStream stream = new(Encoding.UTF8.GetBytes(contents));
         return await catalog.Originals.CaptureFileAsync(
@@ -249,7 +249,7 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         }
     }
 
-    private sealed class FaultingHandler(LocalCatalog catalog, Guid faultingItem) : ILocalProcessingHandler
+    private sealed class FaultingHandler(SqliteCatalog catalog, Guid faultingItem) : ILocalProcessingHandler
     {
         public string ProcessorKey => LocalProcessors.SourceText;
         public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);

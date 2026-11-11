@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Processing;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Processing;
 

@@ -1,5 +1,5 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Catalog;

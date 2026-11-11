@@ -12,13 +12,13 @@ using Praxis.Infrastructure.Search;
 using Praxis.Infrastructure.Sources;
 using Praxis.Infrastructure.Verification;
 
-namespace Praxis.Infrastructure.Catalog;
+namespace Praxis.Infrastructure.Persistence;
 
 /// <summary>
 /// Owner-local catalog session. Owns the exclusive directory lock and database connection,
 /// and composes the responsibility-specific stores that operate on them.
 /// </summary>
-public sealed class LocalCatalog : IDisposable
+public sealed class SqliteCatalog : IDisposable
 {
     private readonly FileStream lockFile;
     private readonly CatalogDatabase database;
@@ -44,7 +44,7 @@ public sealed class LocalCatalog : IDisposable
     public LocalCatalogRecovery Recovery { get; }
     public LocalModelProfiles Models { get; }
 
-    private LocalCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
+    private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection)
     {
         DataDirectory = dataDirectory;
         DatabasePath = Path.Combine(dataDirectory, CatalogDirectory.DatabaseFile);
@@ -70,11 +70,11 @@ public sealed class LocalCatalog : IDisposable
         Models = new LocalModelProfiles(database);
     }
 
-    public static LocalCatalog Open(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
+    public static SqliteCatalog Open(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadWriteCreate);
 
-    internal static LocalCatalog OpenReadOnly(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadOnly);
+    internal static SqliteCatalog OpenReadOnly(string dataDirectory) => Open(dataDirectory, SqliteOpenMode.ReadOnly);
 
-    private static LocalCatalog Open(string dataDirectory, SqliteOpenMode mode)
+    private static SqliteCatalog Open(string dataDirectory, SqliteOpenMode mode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         if (!Path.IsPathFullyQualified(dataDirectory))
@@ -115,19 +115,19 @@ public sealed class LocalCatalog : IDisposable
             connection.Open();
             if (mode == SqliteOpenMode.ReadOnly)
             {
-                return new LocalCatalog(root, fileLock, connection);
+                return new SqliteCatalog(root, fileLock, connection);
             }
 
             CatalogSchema.Prepare(connection);
             if (OperatingSystem.IsWindows())
             {
-                return new LocalCatalog(root, fileLock, connection);
+                return new SqliteCatalog(root, fileLock, connection);
             }
 
             File.SetUnixFileMode(databasePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.SetUnixFileMode(lockPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 
-            return new LocalCatalog(root, fileLock, connection);
+            return new SqliteCatalog(root, fileLock, connection);
         }
         catch
         {

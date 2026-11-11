@@ -4,7 +4,7 @@ using System.Text.Json;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
-using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Processing;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -44,7 +44,7 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string workspace;
 
-    private RetrievalBenchmarkFixture(LocalCatalog catalog,
+    private RetrievalBenchmarkFixture(SqliteCatalog catalog,
         RetrievalJudgmentSet judgments, Dictionary<string, CapturedOriginal> originals, string workspace)
     {
         Catalog = catalog;
@@ -53,7 +53,7 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
         this.workspace = workspace;
     }
 
-    public LocalCatalog Catalog { get; }
+    public SqliteCatalog Catalog { get; }
     public RetrievalJudgmentSet Judgments { get; }
     public IReadOnlyDictionary<string, CapturedOriginal> Originals { get; }
     public string RuntimeDescription => RuntimeInformation.FrameworkDescription + " / " +
@@ -103,7 +103,7 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
             File.SetUnixFileMode(catalogPath, privateMode);
         }
 
-        LocalCatalog catalog = LocalCatalog.Open(catalogPath);
+        SqliteCatalog catalog = SqliteCatalog.Open(catalogPath);
         try
         {
             Dictionary<string, CapturedOriginal> originals = new(StringComparer.Ordinal);
@@ -138,7 +138,7 @@ internal sealed class RetrievalBenchmarkFixture : IDisposable
         }
     }
 
-    public static async Task ProcessSegmentsAsync(LocalCatalog catalog)
+    public static async Task ProcessSegmentsAsync(SqliteCatalog catalog)
     {
         LocalTextSegmenter segmenter = new(catalog);
         for (int index = 0; index < 128; index++)
