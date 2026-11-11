@@ -16,13 +16,14 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
 
     internal SqliteTextSearchIndex(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<SearchHit> Query(string query, int limit = 20)
+    public IReadOnlyList<SearchHit> Query(string query, int limit = 20, Guid? collectionId = null)
     {
         if (limit is < 1 or > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
+        ValidateCollection(collectionId);
         string expression = BuildTextQuery(query);
         return database.ExecuteRead(connection =>
         {
@@ -45,6 +46,12 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                        AND j.processor_key = d.processor_key AND j.state = 'completed'
                                                                    WHERE text_search MATCH $query
                                                                      AND s.status = 'active'
+                                                                     AND ($collection IS NULL OR EXISTS (
+                                                                                     SELECT 1 FROM source_collection_memberships membership
+                                                                                     JOIN source_collections scope ON scope.collection_id = membership.collection_id
+                                                                                     WHERE membership.source_id = s.source_id
+                                                                                       AND membership.collection_id = $collection
+                                                                                       AND scope.archived_utc IS NULL))
                                                                      AND v.revision = (
                                                                          SELECT MAX(latest.revision) FROM item_versions latest
                                                                          WHERE latest.item_id = v.item_id)
@@ -54,6 +61,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                    """);
             command.CommandTimeout = 5;
             command.Parameters.AddWithValue("$query", expression);
+            command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             command.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = command.ExecuteReader();
             List<SearchHit> hits = new();
@@ -75,9 +83,10 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         });
     }
 
-    public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates)
+    public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates, Guid? collectionId = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
+        ValidateCollection(collectionId);
         if (candidates.Count > 100)
         {
             throw new ArgumentOutOfRangeException(nameof(candidates));
@@ -104,8 +113,9 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                 FROM eligible_text_search e
                 JOIN item_versions v ON v.item_id = e.item_id AND v.revision = e.revision
                 WHERE e.item_id IN (
-                """ + string.Join(", ", parameters) + ")";
+                """ + string.Join(", ", parameters) + ")\n                AND ($collection IS NULL OR EXISTS (\n                                SELECT 1 FROM source_collection_memberships membership\n                                JOIN source_collections scope ON scope.collection_id = membership.collection_id\n                                WHERE membership.source_id = e.source_id\n                                  AND membership.collection_id = $collection\n                                  AND scope.archived_utc IS NULL))";
             command.CommandTimeout = 5;
+            command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             using SqliteDataReader reader = command.ExecuteReader();
             Dictionary<Guid, (Guid Source, int Revision, string Digest, string Locator)> current = new();
             while (reader.Read())
@@ -192,6 +202,14 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
             transaction.Commit();
             return eligible;
         });
+    }
+
+    private static void ValidateCollection(Guid? collectionId)
+    {
+        if (collectionId == Guid.Empty)
+        {
+            throw new ArgumentException("A nonempty collection is required.", nameof(collectionId));
+        }
     }
 
     private static string BuildTextQuery(string query)

@@ -14,7 +14,7 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
 
     public async Task<HybridSearchResults> QueryAsync(
         string query, IEmbeddingModel? model = null, int limit = 20,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Guid? collectionId = null)
     {
         if (limit is < 1 or > 100)
         {
@@ -24,25 +24,25 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
         cancellationToken.ThrowIfCancellationRequested();
         if (model is null)
         {
-            return new HybridSearchResults(lexical.RetainCurrent(lexical.Query(query, limit)), false);
+            return new HybridSearchResults(lexical.RetainCurrent(lexical.Query(query, limit, collectionId), collectionId), false);
         }
 
         IReadOnlyList<SemanticSearchHit> vectors =
-            await semantic.QueryAsync(query, model, PoolSize, cancellationToken);
+            await semantic.QueryAsync(query, model, PoolSize, cancellationToken, collectionId);
         // A source may be revoked or revised during the awaited model call. Read lexical
         // evidence only after the await so the fusion never resurrects an earlier result.
-        IReadOnlyList<SearchHit> keyword = lexical.Query(query, PoolSize);
+        IReadOnlyList<SearchHit> keyword = lexical.Query(query, PoolSize, collectionId);
         if (vectors.Count == 0)
         {
-            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray()), false);
+            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray(), collectionId), false);
         }
 
         // Only currently eligible vectors may influence the fused ranking.
         IReadOnlyList<SearchHit> currentVectors = lexical.RetainCurrent(
-            vectors.Select(vector => vector.Hit).ToArray());
+            vectors.Select(vector => vector.Hit).ToArray(), collectionId);
         if (currentVectors.Count == 0)
         {
-            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray()), false);
+            return new HybridSearchResults(lexical.RetainCurrent(keyword.Take(limit).ToArray(), collectionId), false);
         }
 
         Dictionary<Guid, (SearchHit Hit, double Score)> combined = new();
@@ -74,6 +74,6 @@ public sealed class HybridSearch(ITextSearchIndex lexical, SemanticRetriever sem
 
         // The two source lists were read at different times. A revocation or revision
         // may occur after the first read; only canonical evidence may cross this boundary.
-        return new HybridSearchResults(lexical.RetainCurrent(ranked), true);
+        return new HybridSearchResults(lexical.RetainCurrent(ranked, collectionId), true);
     }
 }

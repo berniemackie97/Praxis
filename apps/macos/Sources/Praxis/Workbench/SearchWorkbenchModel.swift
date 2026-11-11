@@ -8,6 +8,12 @@ final class SearchWorkbenchModel: ObservableObject {
     private var selectedHitId: String?
 
     @Published var query = ""
+    @Published var selectedCollectionId: String? {
+        didSet {
+            if selectedCollectionId != oldValue { clearResults() }
+        }
+    }
+    @Published private(set) var collections: [SourceCollection] = []
     @Published private(set) var hits: [SearchHit] = []
     @Published private(set) var videoClips: [VideoCue] = []
     @Published private(set) var preview = ""
@@ -20,18 +26,35 @@ final class SearchWorkbenchModel: ObservableObject {
         self.worker = worker
     }
 
+    func loadCollections() {
+        request("collections", ["limit": 200]) { model, response in
+            guard response.ok else { return }
+            model.collections = response.data?.collections ?? []
+            if let selected = model.selectedCollectionId,
+               !model.collections.contains(where: { $0.collectionId == selected }) {
+                model.selectedCollectionId = nil
+            }
+        }
+    }
+
     func submit() {
         clearResults()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return }
 
-        request("search", ["query": term]) { model, response in
+        var fields: [String: Any] = ["query": term]
+        if let selectedCollectionId { fields["collectionId"] = selectedCollectionId }
+        request("search", fields) { model, response in
             model.hits = response.data?.hits ?? []
             model.mode = response.data?.mode == "hybrid" ? "Hybrid search" : "Keyword search"
             model.notice = response.data?.notice
         }
-        request("mediaCues", ["query": term, "limit": 20]) { model, response in
-            model.videoClips = response.data?.clips ?? []
+        // Media cue queries do not yet accept collection scopes. Never mix unscoped
+        // caption results into a source-restricted search.
+        if selectedCollectionId == nil {
+            request("mediaCues", ["query": term, "limit": 20]) { model, response in
+                model.videoClips = response.data?.clips ?? []
+            }
         }
     }
 
@@ -60,14 +83,23 @@ final class SearchWorkbenchModel: ObservableObject {
         selectedHitId = hit.id
         preview = "Loading extracted text…"
         error = nil
-        let sent = request("preview", ["itemId": hit.itemId, "revision": hit.revision],
-                           forHit: hit.id) { model, response in
+        var fields: [String: Any] = [
+            "itemId": hit.itemId, "revision": hit.revision,
+            "sourceId": hit.sourceId, "originalSha256": hit.originalSha256
+        ]
+        if let selectedCollectionId { fields["collectionId"] = selectedCollectionId }
+        let sent = request("preview", fields, forHit: hit.id) { model, response in
             guard response.ok else {
                 model.preview = "Preview unavailable."
                 return
             }
 
             let data = response.data
+            if data?.outcome == "unavailable" {
+                model.hits.removeAll(where: { $0.id == hit.id })
+                model.preview = "This result is no longer current or in the selected collection."
+                return
+            }
             let outcome = data?.reasonCode ?? data?.outcome ?? "pending"
             model.preview = data?.content ??
                 "No extracted text (\(outcome)). The original remains preserved."

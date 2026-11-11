@@ -18,7 +18,22 @@ struct SearchView: View {
                     .disabled(model.indexing)
                     .help("Rebuild the derived semantic index from current permitted sources")
             }
+            HStack {
+                Picker("Search in", selection: $model.selectedCollectionId) {
+                    Text("All sources").tag(nil as String?)
+                    ForEach(model.collections) { collection in
+                        Text(collection.name).tag(Optional(collection.collectionId))
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: model.selectedCollectionId) { _, _ in model.submit() }
+                Button("Refresh collections") { model.loadCollections() }
+            }
             Text(model.mode).font(.caption).foregroundStyle(.secondary)
+            if model.selectedCollectionId != nil {
+                Text("Video caption cues are omitted from collection-filtered search.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let notice = model.notice {
                 Text(notice).font(.caption).foregroundStyle(.secondary)
             }
@@ -74,5 +89,6 @@ struct SearchView: View {
                 }
             }
         }
+        .onAppear { model.loadCollections() }
     }
 }

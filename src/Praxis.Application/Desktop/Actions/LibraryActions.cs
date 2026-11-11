@@ -32,7 +32,9 @@ public sealed class LibraryActions(
     {
         Guid itemId = fields.RequireGuid("itemId");
         int revision = fields.IntegerOrDefault("revision", 1, 1, int.MaxValue);
-        TextDerivative? derivative = text.Read(itemId, revision);
+        TextDerivative? derivative = text.ReadCurrent(itemId, revision,
+            fields.OptionalGuid("collectionId"), fields.OptionalGuid("sourceId"),
+            fields.OptionalText("originalSha256", 64, "The original digest is invalid."));
         return derivative is null
             ? new PreviewResponse("unavailable", null, null)
             : new PreviewResponse(derivative.Outcome,

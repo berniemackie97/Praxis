@@ -11,6 +11,11 @@ public interface ITextDerivativeRepository
 {
     TextDerivative? Read(Guid itemId, int revision);
 
+    /// <summary>Read only the latest active revision, optionally restricted to one current
+    /// collection membership and exact search-hit source/digest identity.</summary>
+    TextDerivative? ReadCurrent(Guid itemId, int revision, Guid? collectionId = null,
+        Guid? expectedSourceId = null, string? expectedSha256 = null);
+
     /// <summary>The source of a leased extraction job, or null when the lease is no longer held.</summary>
     LeasedTextSource? ReadLeasedSource(ProcessingLease lease);
 

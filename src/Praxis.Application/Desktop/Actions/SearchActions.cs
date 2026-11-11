@@ -28,23 +28,24 @@ public sealed class SearchActions(
     private async Task<SearchResponse> SearchAsync(DesktopRequestFields fields, CancellationToken cancellationToken)
     {
         string query = fields.RequireString("query", 256);
+        Guid? collectionId = fields.OptionalGuid("collectionId");
         ModelProfile? profile = profiles.Get(ModelProfile.LocalEmbedding);
         if (profile is not { Enabled: true })
         {
-            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit)), "lexical", null);
+            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit, collectionId), collectionId), "lexical", null);
         }
 
         try
         {
             using EmbeddingModelConnection connection = embeddings.Connect(profile, SearchTimeout);
             HybridSearchResults result = await new HybridSearch(lexical, new SemanticRetriever(vectors))
-                .QueryAsync(query, connection.Model, ResultLimit, cancellationToken);
+                .QueryAsync(query, connection.Model, ResultLimit, cancellationToken, collectionId);
             return new SearchResponse(result.Hits, result.UsedEmbeddings ? "hybrid" : "lexical",
                 result.UsedEmbeddings ? null : "No indexed embeddings for this model. Update the local semantic index to enable hybrid results.");
         }
         catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit)), "lexical",
+            return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit, collectionId), collectionId), "lexical",
                 "The local embedding runtime is unavailable; showing keyword results.");
         }
     }

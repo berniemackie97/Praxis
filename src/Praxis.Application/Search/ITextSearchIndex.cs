@@ -6,7 +6,7 @@ namespace Praxis.Application.Search;
 public interface ITextSearchIndex
 {
     /// <summary>Ranked lexical matches for an owner query; operators in the query are treated as text.</summary>
-    IReadOnlyList<SearchHit> Query(string query, int limit);
+    IReadOnlyList<SearchHit> Query(string query, int limit, Guid? collectionId = null);
 
     /// <summary>Rebuilds the index from canonical text within the given bounds; returns the documents indexed.</summary>
     int Rebuild(int maxDocuments, long maxTextBytes);
@@ -16,5 +16,5 @@ public interface ITextSearchIndex
     /// is no longer current. The canonical eligibility check executes as one bounded read.
     /// Candidates are not a permission grant or evidence that an answer is supported.
     /// </summary>
-    IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates);
+    IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates, Guid? collectionId = null);
 }

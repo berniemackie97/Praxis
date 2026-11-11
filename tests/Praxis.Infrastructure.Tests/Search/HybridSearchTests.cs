@@ -235,6 +235,55 @@ public sealed class HybridSearchTests : IDisposable
         Assert.Empty(result.Hits);
     }
 
+    [Fact]
+    public async Task CollectionScopedSearchFiltersBothRetrievalModesAndLateMembershipChanges()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
+        CapturedOriginal approved = await Capture(catalog, "approved.md",
+            "tangerine orchard protocol", "approved");
+        CapturedOriginal outside = await Capture(catalog, "outside.md",
+            "tangerine orchard private", "outside");
+        await SegmentNext(catalog);
+        await SegmentNext(catalog);
+
+        Guid collectionId = catalog.Collections.Create("Reviewed sources").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collectionId, approved.SourceId));
+        FixtureEmbeddingModel model = new();
+        Assert.Equal(2, (await new SemanticIndexer(catalog.Embeddings)
+            .RefreshAsync(model, rebuild: true)).Indexed);
+
+        HybridSearch search = new(catalog.Search, new SemanticRetriever(catalog.Embeddings));
+        HybridSearchResults all = await search.QueryAsync("citrus", model);
+        Assert.Equal(2, all.Hits.Count);
+
+        HybridSearchResults scoped = await search.QueryAsync(
+            "citrus", model, 20, default, collectionId);
+        Assert.True(scoped.UsedEmbeddings);
+        Assert.Equal(approved.SourceId, Assert.Single(scoped.Hits).SourceId);
+
+        SearchHit keyword = Assert.Single(catalog.Search.Query("tangerine", 20, collectionId));
+        Assert.Equal(approved.SourceId, keyword.SourceId);
+        Assert.Single(catalog.Search.RetainCurrent([keyword], collectionId));
+
+        Assert.True(catalog.Collections.RemoveSource(collectionId, approved.SourceId));
+        Assert.Empty(catalog.Search.RetainCurrent([keyword], collectionId));
+        Assert.Empty(catalog.Search.Query("tangerine", 20, collectionId));
+        HybridSearchResults removed = await search.QueryAsync(
+            "citrus", model, 20, default, collectionId);
+        Assert.False(removed.UsedEmbeddings);
+        Assert.Empty(removed.Hits);
+
+        Assert.True(catalog.Collections.AddSource(collectionId, outside.SourceId));
+        HybridSearchResults reassigned = await search.QueryAsync(
+            "citrus", model, 20, default, collectionId);
+        Assert.Equal(outside.SourceId, Assert.Single(reassigned.Hits).SourceId);
+
+        Assert.True(catalog.Collections.Archive(collectionId));
+        Assert.Empty(catalog.Search.Query("tangerine", 20, collectionId));
+        Assert.Empty((await search.QueryAsync("citrus", model, 20, default, collectionId)).Hits);
+        Assert.Equal(2, (await search.QueryAsync("citrus", model)).Hits.Count);
+    }
+
     private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string content, string request)
     {
         using MemoryStream bytes = new(Encoding.UTF8.GetBytes(content));

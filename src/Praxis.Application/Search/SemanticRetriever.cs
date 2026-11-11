@@ -10,7 +10,8 @@ public sealed class SemanticRetriever(ISemanticVectorStore vectors)
     public const int MaximumScannedVectors = 5_000;
 
     public async Task<IReadOnlyList<SemanticSearchHit>> QueryAsync(
-        string query, IEmbeddingModel model, int limit = 100, CancellationToken cancellationToken = default)
+        string query, IEmbeddingModel model, int limit = 100, CancellationToken cancellationToken = default,
+        Guid? collectionId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         ArgumentNullException.ThrowIfNull(model);
@@ -20,7 +21,7 @@ public sealed class SemanticRetriever(ISemanticVectorStore vectors)
         }
 
         string digest = EmbeddingVectors.ValidateModelDigest((await model.DescribeAsync(cancellationToken)).Digest);
-        if (!vectors.HasVectors(digest))
+        if (!vectors.HasVectors(digest, collectionId))
         {
             return [];
         }
@@ -37,6 +38,6 @@ public sealed class SemanticRetriever(ISemanticVectorStore vectors)
             throw new InvalidDataException("The embedding model changed during retrieval; rebuild the index.");
         }
 
-        return vectors.FindNearest(digest, queryVector, limit, MaximumScannedVectors, cancellationToken);
+        return vectors.FindNearest(digest, queryVector, limit, MaximumScannedVectors, cancellationToken, collectionId);
     }
 }

@@ -115,7 +115,7 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
         });
     }
 
-    public bool HasVectors(string modelDigest) => database.ExecuteRead(connection =>
+    public bool HasVectors(string modelDigest, Guid? collectionId = null) => database.ExecuteRead(connection =>
     {
         using SqliteCommand check = connection.CreateCommand("""
                                                              SELECT EXISTS(
@@ -123,14 +123,22 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
                                                                  JOIN eligible_semantic_segments e
                                                                    ON e.item_id = v.item_id AND e.revision = v.revision
                                                                    AND e.ordinal = v.ordinal AND e.source_digest = v.source_digest
-                                                                 WHERE v.model_digest = $model LIMIT 1)
+                                                                 WHERE v.model_digest = $model
+                                                                   AND ($collection IS NULL OR EXISTS (
+                                                                                   SELECT 1 FROM source_collection_memberships membership
+                                                                                   JOIN source_collections scope ON scope.collection_id = membership.collection_id
+                                                                                   WHERE membership.source_id = e.source_id
+                                                                                     AND membership.collection_id = $collection
+                                                                                     AND scope.archived_utc IS NULL)) LIMIT 1)
                                                              """);
         check.Parameters.AddWithValue("$model", modelDigest);
+        check.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
         return Convert.ToInt64(check.ExecuteScalar()) != 0;
     });
 
     public IReadOnlyList<SemanticSearchHit> FindNearest(
-        string modelDigest, float[] unitQuery, int limit, int maximumScanned, CancellationToken cancellationToken) =>
+        string modelDigest, float[] unitQuery, int limit, int maximumScanned, CancellationToken cancellationToken,
+        Guid? collectionId = null) =>
         database.ExecuteRead(connection =>
         {
             using SqliteCommand read = connection.CreateCommand("""
@@ -141,11 +149,18 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
                                                                     ON e.item_id = v.item_id AND e.revision = v.revision
                                                                     AND e.ordinal = v.ordinal AND e.source_digest = v.source_digest
                                                                 WHERE v.model_digest = $model
+                                                                  AND ($collection IS NULL OR EXISTS (
+                                                                                  SELECT 1 FROM source_collection_memberships membership
+                                                                                  JOIN source_collections scope ON scope.collection_id = membership.collection_id
+                                                                                  WHERE membership.source_id = e.source_id
+                                                                                    AND membership.collection_id = $collection
+                                                                                    AND scope.archived_utc IS NULL))
                                                                 ORDER BY e.item_id, e.ordinal
                                                                 LIMIT $limit
                                                                 """);
             read.CommandTimeout = 5;
             read.Parameters.AddWithValue("$model", modelDigest);
+            read.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             read.Parameters.AddWithValue("$limit", maximumScanned + 1);
             using SqliteDataReader reader = read.ExecuteReader();
             Dictionary<Guid, SemanticSearchHit> strongest = new();

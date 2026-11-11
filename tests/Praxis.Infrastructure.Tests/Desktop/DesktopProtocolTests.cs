@@ -123,6 +123,76 @@ public sealed class DesktopProtocolTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchAndPreviewHonorSelectedCollectionAndCurrentEvidence()
+    {
+        Directory.CreateDirectory(root);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(root,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        using MemoryStream firstText = new(System.Text.Encoding.UTF8.GetBytes("violet approved evidence"));
+        using MemoryStream secondText = new(System.Text.Encoding.UTF8.GetBytes("violet unrelated secret"));
+        CapturedOriginal allowed = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(root, "approved.txt"), firstText, firstText.Length, "approved");
+        CapturedOriginal excluded = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(root, "excluded.txt"), secondText, secondText.Length, "excluded");
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+
+        Guid collectionId = catalog.Collections.Create("Selected").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collectionId, allowed.SourceId));
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
+        using JsonDocument search = await Send(protocol,
+            $"""{"requestId":"find","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
+        Assert.True(search.RootElement.GetProperty("ok").GetBoolean());
+        JsonElement hit = Assert.Single(search.RootElement.GetProperty("data").GetProperty("hits").EnumerateArray());
+        Assert.Equal(allowed.SourceId.ToString("D"), hit.GetProperty("sourceId").GetString());
+        Assert.DoesNotContain("secret", hit.GetProperty("snippet").GetString()!);
+
+        using JsonDocument preview = await Send(protocol,
+            $"""{"requestId":"peek","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Equal("completed", preview.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+        Assert.Contains("approved", preview.RootElement.GetProperty("data").GetProperty("content").GetString()!);
+
+        using JsonDocument mismatched = await Send(protocol,
+            $"""{"requestId":"wrong","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{excluded.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Equal("unavailable", mismatched.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+
+        Assert.True(catalog.Collections.RemoveSource(collectionId, allowed.SourceId));
+        using JsonDocument removed = await Send(protocol,
+            $"""{"requestId":"removed","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Equal("unavailable", removed.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+
+        using JsonDocument deniedSearch = await Send(protocol,
+            $"""{"requestId":"denied","action":"search","query":"violet","collectionId":"{{collectionId:D}}"}""");
+        Assert.Empty(deniedSearch.RootElement.GetProperty("data").GetProperty("hits").EnumerateArray());
+
+        Assert.True(catalog.Collections.AddSource(collectionId, allowed.SourceId));
+        using MemoryStream revisedText = new(System.Text.Encoding.UTF8.GetBytes("amber updated evidence"));
+        CapturedOriginal revised = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(root, "approved.txt"), revisedText, revisedText.Length, "updated");
+        Assert.Equal(allowed.ItemId, revised.ItemId);
+        Assert.Equal(2, revised.Revision);
+
+        using JsonDocument stale = await Send(protocol,
+            $"""{"requestId":"stale","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":1,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{allowed.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Equal("unavailable", stale.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+
+        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+        using JsonDocument current = await Send(protocol,
+            $"""{"requestId":"latest","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Contains("updated", current.RootElement.GetProperty("data").GetProperty("content").GetString()!);
+
+        Assert.True(catalog.Sources.Revoke(allowed.SourceId));
+        using JsonDocument revoked = await Send(protocol,
+            $"""{"requestId":"revoked","action":"preview","itemId":"{{allowed.ItemId:D}}","revision":2,"sourceId":"{{allowed.SourceId:D}}","originalSha256":"{{revised.Sha256}}","collectionId":"{{collectionId:D}}"}""");
+        Assert.Equal("unavailable", revoked.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+    }
+
+    [Fact]
     public async Task PrivateQuickCaptureProtocolPreservesAndIndexesTheSubmittedNote()
     {
         string data = Path.Combine(root, "data");
