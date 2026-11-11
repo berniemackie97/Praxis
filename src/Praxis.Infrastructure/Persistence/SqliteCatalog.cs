@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Persistence.Collections;
 using Praxis.Infrastructure.Persistence.Enrichment;
 using Praxis.Infrastructure.Persistence.Knowledge;
@@ -41,7 +40,6 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteKnowledgeRepository Knowledge { get; }
     public SqliteVerificationRepository Verification { get; }
     public SqliteCollectionRepository Collections { get; }
-    public LocalMediaEvidence Media { get; }
     public LocalCatalogRecovery Recovery { get; }
     public SqliteModelProfileRepository Models { get; }
 
@@ -65,7 +63,6 @@ public sealed class SqliteCatalog : IDisposable
         Knowledge = new SqliteKnowledgeRepository(database, clock);
         Verification = new SqliteVerificationRepository(database, clock);
         Collections = new SqliteCollectionRepository(database, clock);
-        Media = new LocalMediaEvidence(Sources, Search, Text, objects);
         Recovery = new LocalCatalogRecovery(database, objects, dataDirectory);
         Models = new SqliteModelProfileRepository(database, clock);
     }

@@ -1,10 +1,10 @@
 using System.Buffers.Binary;
 
-namespace Praxis.Infrastructure.Media;
+namespace Praxis.Application.Media;
 
-internal static class LocalMediaHeaderParser
+public static class MediaHeaderParser
 {
-    internal static (string? Container, long? DurationMilliseconds) Read(ReadOnlySpan<byte> header, string extension)
+    public static (string? Container, long? DurationMilliseconds) Read(ReadOnlySpan<byte> header, string extension)
     {
         if (extension is ".webm" or ".mkv")
         {

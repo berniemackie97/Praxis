@@ -19,6 +19,12 @@ public interface IOriginalStore
     /// <summary>Reads a whole original after verifying its recorded length and SHA-256.</summary>
     Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Reads the first <paramref name="prefixBytes"/> of an original no larger than
+    /// <paramref name="maxBytes"/>, after verifying the whole object against its digest.
+    /// </summary>
+    Task<byte[]> ReadVerifiedPrefixAsync(OriginalObject original, int prefixBytes, long maxBytes, CancellationToken cancellationToken);
+
     /// <summary>Verifies the latest stored revision of an item against its recorded digest.</summary>
     Task VerifyAsync(Guid itemId, CancellationToken cancellationToken);
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Praxis.Application.Inference;
+using Praxis.Application.Media;
 using Praxis.Application.Processing;
 using Praxis.Application.Search;
 using Praxis.Application.Verification;
@@ -57,12 +58,12 @@ public sealed class LocalDesktopProtocol(SqliteCatalog catalog, LocalQuickCaptur
                 "semanticIndex" => await RefreshSemanticIndexAsync(fields, cancellationToken),
                 "mediaCues" => new
                 {
-                    clips = catalog.Media.SearchCues(fields.RequireString("query", 256),
+                    clips = new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).SearchCues(fields.RequireString("query", 256),
                         fields.IntegerOrDefault("limit", 20, 1, 50))
                 },
                 "mediaInspection" => new
                 {
-                    media = await catalog.Media.InspectAsync(fields.RequireGuid("sourceId"),
+                    media = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(fields.RequireGuid("sourceId"),
                         fields.OptionalInteger("revision", 1, int.MaxValue), cancellationToken)
                 },
                 "collections" => new

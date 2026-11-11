@@ -1,38 +1,38 @@
+using Praxis.Application.Originals;
+using Praxis.Application.Search;
+using Praxis.Application.Sources;
+using Praxis.Application.Text;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
 using Praxis.Domain.Sources;
 using Praxis.Domain.Text;
-using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Persistence.Search;
-using Praxis.Infrastructure.Persistence.Sources;
-using Praxis.Infrastructure.Persistence.Text;
 
-namespace Praxis.Infrastructure.Media;
+namespace Praxis.Application.Media;
 
 /// <summary>
 /// Read-only evidence about captured media: verified header inspection and timecoded caption
 /// cues bound to an exact video digest. Neither grants playback or decodes frames.
 /// </summary>
-public sealed class LocalMediaEvidence
+public sealed class MediaEvidence
 {
-    private readonly SqliteSourceRepository sources;
-    private readonly SqliteTextSearchIndex search;
-    private readonly SqliteTextDerivativeRepository text;
-    private readonly OriginalFileStore objects;
+    private readonly ISourceRepository sources;
+    private readonly ITextSearchIndex search;
+    private readonly ITextDerivativeRepository text;
+    private readonly IOriginalStore originals;
 
-    internal LocalMediaEvidence(SqliteSourceRepository sources, SqliteTextSearchIndex search, SqliteTextDerivativeRepository text, OriginalFileStore objects)
+    public MediaEvidence(ISourceRepository sources, ITextSearchIndex search, ITextDerivativeRepository text, IOriginalStore originals)
     {
         this.sources = sources;
         this.search = search;
         this.text = text;
-        this.objects = objects;
+        this.originals = originals;
     }
 
     public Task<MediaInspection> InspectAsync(Guid sourceId, CancellationToken cancellationToken = default) => InspectAsync(sourceId, expectedRevision: null, cancellationToken);
 
-    internal async Task<MediaInspection> InspectAsync(Guid sourceId, int? expectedRevision, CancellationToken cancellationToken)
+    public async Task<MediaInspection> InspectAsync(Guid sourceId, int? expectedRevision, CancellationToken cancellationToken)
     {
         if (sourceId == Guid.Empty)
         {
@@ -56,7 +56,7 @@ public sealed class LocalMediaEvidence
         byte[] header;
         try
         {
-            header = await objects.ReadVerifiedPrefixAsync(new OriginalObject(source.Digest, source.Length), 64 * 1024, 512L * 1024 * 1024, deadline.Token);
+            header = await originals.ReadVerifiedPrefixAsync(new OriginalObject(source.Digest, source.Length), 64 * 1024, 512L * 1024 * 1024, deadline.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -69,7 +69,7 @@ public sealed class LocalMediaEvidence
             throw new InvalidOperationException("The selected media source changed or was revoked.");
         }
 
-        (string? container, long? duration) = LocalMediaHeaderParser.Read(header, fileExtension);
+        (string? container, long? duration) = MediaHeaderParser.Read(header, fileExtension);
         return new MediaInspection(sourceId, source.ItemId, source.Revision, source.Digest, source.Length, fileExtension,
             container is null ? "unsupported" : "header_recognized", container, duration, container is null ? "unsupported_signature" : null,
             ProcessorKeys.MediaHeader);
@@ -114,7 +114,7 @@ public sealed class LocalMediaEvidence
             IReadOnlyList<TimedCue> cues;
             try
             {
-                cues = LocalTimedCaptionParser.Parse(content, extension);
+                cues = TimedCaptionParser.Parse(content, extension);
             }
             catch (InvalidDataException)
             {

@@ -1,11 +1,11 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Media;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Desktop;
 using Praxis.Infrastructure.FileSystem;
-using Praxis.Infrastructure.Media;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -39,7 +39,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
         {
             original = await Capture(catalog, "tutorial.mp4", contents, "video");
-            MediaInspection inspected = await catalog.Media.InspectAsync(original.SourceId);
+            MediaInspection inspected = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(original.SourceId);
             Assert.Equal("header_recognized", inspected.Outcome);
             Assert.Equal("iso-bmff", inspected.ContainerFamily);
             Assert.Equal(12_000L, inspected.DurationMilliseconds);
@@ -54,7 +54,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         }
 
         using SqliteCatalog reopened = SqliteCatalog.Open(dataRoot);
-        MediaInspection repeated = await reopened.Media.InspectAsync(original.SourceId);
+        MediaInspection repeated = await new MediaEvidence(reopened.Sources, reopened.Search, reopened.Text, reopened.Originals).InspectAsync(original.SourceId);
         Assert.Equal(original.Sha256, repeated.SourceSha256);
         Assert.Equal(12_000L, repeated.DurationMilliseconds);
     }
@@ -65,7 +65,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal fakeVideo = await Capture(catalog, "fake.mp4",
             Encoding.UTF8.GetBytes("not an mp4 video"), "fake");
-        MediaInspection unsupported = await catalog.Media.InspectAsync(fakeVideo.SourceId);
+        MediaInspection unsupported = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(fakeVideo.SourceId);
         Assert.Equal("unsupported", unsupported.Outcome);
         Assert.Null(unsupported.ContainerFamily);
         Assert.Null(unsupported.DurationMilliseconds);
@@ -75,7 +75,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         CapturedOriginal ebml = await Capture(catalog, "source.webm",
             [0x1a, 0x45, 0xdf, 0xa3, 0x87, 0x42, 0x82, 0x84,
                 0x77, 0x65, 0x62, 0x6d], "ebml");
-        MediaInspection recognized = await catalog.Media.InspectAsync(ebml.SourceId);
+        MediaInspection recognized = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(ebml.SourceId);
         Assert.Equal("header_recognized", recognized.Outcome);
         Assert.Equal("ebml", recognized.ContainerFamily);
         Assert.Null(recognized.DurationMilliseconds);
@@ -83,15 +83,15 @@ public sealed class LocalMediaInspectionTests : IDisposable
         CapturedOriginal invalidEbml = await Capture(catalog, "false.webm",
             [0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x00], "false-ebml");
         Assert.Equal("unsupported",
-            (await catalog.Media.InspectAsync(invalidEbml.SourceId)).Outcome);
+            (await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(invalidEbml.SourceId)).Outcome);
 
         CapturedOriginal mismatched = await Capture(catalog, "forged.webm", FastStartMovie(), "mismatch");
-        Assert.Equal("unsupported", (await catalog.Media.InspectAsync(
+        Assert.Equal("unsupported", (await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(
             mismatched.SourceId)).Outcome);
 
         CapturedOriginal text = await Capture(catalog, "not-video.txt", FastStartMovie(), "text");
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await catalog.Media.InspectAsync(text.SourceId));
+            await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(text.SourceId));
     }
 
     [Fact]
@@ -99,12 +99,12 @@ public sealed class LocalMediaInspectionTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal original = await Capture(catalog, "changed.mp4", FastStartMovie(), "original");
-        MediaInspection first = await catalog.Media.InspectAsync(original.SourceId);
+        MediaInspection first = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(original.SourceId);
         CapturedOriginal changed = await Capture(catalog, "changed.mp4",
             Encoding.ASCII.GetBytes("no longer valid media"), "changed");
         Assert.Equal(original.ItemId, changed.ItemId);
         Assert.Equal(original.Revision + 1, changed.Revision);
-        MediaInspection latest = await catalog.Media.InspectAsync(original.SourceId);
+        MediaInspection latest = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(original.SourceId);
         Assert.Equal(changed.Sha256, latest.SourceSha256);
         Assert.Equal(changed.Revision, latest.Revision);
         Assert.Equal("unsupported", latest.Outcome);
@@ -112,14 +112,14 @@ public sealed class LocalMediaInspectionTests : IDisposable
 
         Assert.True(catalog.Sources.Revoke(original.SourceId));
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await catalog.Media.InspectAsync(original.SourceId));
+            await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(original.SourceId));
 
         CapturedOriginal corrupt = await Capture(catalog, "damaged.mp4", FastStartMovie(), "corrupt");
         string objectPath = Path.Combine(dataRoot, "objects", corrupt.Sha256[..2],
             corrupt.Sha256[2..4], corrupt.Sha256);
         File.WriteAllBytes(objectPath, Encoding.ASCII.GetBytes("tampered"));
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await catalog.Media.InspectAsync(corrupt.SourceId));
+            await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(corrupt.SourceId));
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         using CancellationTokenSource cancelled = new();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            catalog.Media.InspectAsync(video.SourceId, cancelled.Token));
+            new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(video.SourceId, cancelled.Token));
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
                 new OriginalObject(video.Sha256, bytes.Length), 64,
                 bytes.Length - 1, CancellationToken.None));
 
-        MediaInspection first = await catalog.Media.InspectAsync(video.SourceId);
+        MediaInspection first = await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(video.SourceId);
         Assert.Equal("header_recognized", first.Outcome);
         Assert.Equal(12_000L, first.DurationMilliseconds);
 
@@ -218,7 +218,7 @@ public sealed class LocalMediaInspectionTests : IDisposable
         bytes[66_000] ^= 0xff;
         File.WriteAllBytes(objectPath, bytes);
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await catalog.Media.InspectAsync(video.SourceId));
+            await new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals).InspectAsync(video.SourceId));
     }
 
     [Fact]
@@ -227,20 +227,20 @@ public sealed class LocalMediaInspectionTests : IDisposable
         byte[] header = FastStartMovie();
         byte[] wrongTimescale = (byte[])header.Clone();
         BinaryPrimitives.WriteUInt32BigEndian(wrongTimescale.AsSpan(44, 4), 0);
-        Assert.Null(LocalMediaHeaderParser.Read(wrongTimescale, ".mp4").DurationMilliseconds);
+        Assert.Null(MediaHeaderParser.Read(wrongTimescale, ".mp4").DurationMilliseconds);
 
         byte[] unknownDuration = (byte[])header.Clone();
         BinaryPrimitives.WriteUInt32BigEndian(unknownDuration.AsSpan(48, 4),
             uint.MaxValue);
-        Assert.Null(LocalMediaHeaderParser.Read(unknownDuration, ".mp4")
+        Assert.Null(MediaHeaderParser.Read(unknownDuration, ".mp4")
             .DurationMilliseconds);
 
         byte[] unsupported = (byte[])header.Clone();
         unsupported[4] = 0xff;
-        Assert.Null(LocalMediaHeaderParser.Read(unsupported, ".mp4").Container);
+        Assert.Null(MediaHeaderParser.Read(unsupported, ".mp4").Container);
 
         Span<byte> truncated = header.AsSpan(0, 16);
-        (string? Container, long? DurationMilliseconds) recognized = LocalMediaHeaderParser.Read(truncated, ".mp4");
+        (string? Container, long? DurationMilliseconds) recognized = MediaHeaderParser.Read(truncated, ".mp4");
         Assert.Equal("iso-bmff", recognized.Container);
         Assert.Null(recognized.DurationMilliseconds);
     }
@@ -257,12 +257,12 @@ public sealed class LocalMediaInspectionTests : IDisposable
         media[32] = 1;
         BinaryPrimitives.WriteUInt32BigEndian(media.AsSpan(52, 4), 1_000);
         BinaryPrimitives.WriteUInt64BigEndian(media.AsSpan(56, 8), 25_000);
-        Assert.Equal(25_000L, LocalMediaHeaderParser.Read(media, ".mp4")
+        Assert.Equal(25_000L, MediaHeaderParser.Read(media, ".mp4")
             .DurationMilliseconds);
 
         BinaryPrimitives.WriteUInt64BigEndian(media.AsSpan(56, 8),
             ulong.MaxValue);
-        Assert.Null(LocalMediaHeaderParser.Read(media, ".mp4").DurationMilliseconds);
+        Assert.Null(MediaHeaderParser.Read(media, ".mp4").DurationMilliseconds);
     }
 
     private async Task<CapturedOriginal> Capture(

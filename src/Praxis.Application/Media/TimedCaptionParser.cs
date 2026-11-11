@@ -1,15 +1,15 @@
 using Praxis.Domain.Media;
 
-namespace Praxis.Infrastructure.Media;
+namespace Praxis.Application.Media;
 
-internal static class LocalTimedCaptionParser
+public static class TimedCaptionParser
 {
     private const int MaximumCues = 2_000;
     private const int MaximumCueCharacters = 700;
     private const long MaximumCueMilliseconds = 120_000;
     private const long MaximumMediaMilliseconds = 86_400_000;
 
-    internal static IReadOnlyList<TimedCue> Parse(string content, string extension)
+    public static IReadOnlyList<TimedCue> Parse(string content, string extension)
     {
         IReadOnlyList<(int Offset, string Text)> lines = ReadLines(content);
         if (extension == ".vtt" && (lines.Count == 0 || !lines[0].Text.StartsWith("WEBVTT", StringComparison.Ordinal) || (lines[0].Text.Length > 6 && !char.IsWhiteSpace(lines[0].Text[6]))))

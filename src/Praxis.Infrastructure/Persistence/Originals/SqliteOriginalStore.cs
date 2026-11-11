@@ -262,6 +262,9 @@ public sealed class SqliteOriginalStore : IOriginalStore
     public Task<byte[]> ReadVerifiedBytesAsync(OriginalObject original, int maxBytes, CancellationToken cancellationToken)
         => objects.ReadVerifiedBytesAsync(original, maxBytes, cancellationToken);
 
+    public Task<byte[]> ReadVerifiedPrefixAsync(OriginalObject original, int prefixBytes, long maxBytes, CancellationToken cancellationToken)
+        => objects.ReadVerifiedPrefixAsync(original, prefixBytes, maxBytes, cancellationToken);
+
     public async Task VerifyAsync(Guid itemId, CancellationToken cancellationToken = default)
     {
         if (itemId == Guid.Empty)
