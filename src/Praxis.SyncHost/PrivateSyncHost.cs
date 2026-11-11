@@ -65,6 +65,7 @@ public static class PrivateSyncHost
                         AutoReplenishment = true
                     }));
         });
+        builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
         builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
         builder.Logging.AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", LogLevel.Warning);
         builder.Logging.AddFilter("Microsoft.AspNetCore.Server.Kestrel", LogLevel.Warning);
