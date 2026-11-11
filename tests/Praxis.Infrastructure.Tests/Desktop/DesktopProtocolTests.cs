@@ -407,6 +407,66 @@ public sealed class DesktopProtocolTests : IDisposable
         await catalog.Originals.VerifyAsync(source.ItemId);
     }
 
+    [Fact]
+    public async Task DesktopExportUsesCurrentPreservedOriginalAndDeniesConflictsOrRevocation()
+    {
+        string data = Path.Combine(root, "catalog");
+        string exported = Path.Combine(root, "exported");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(exported);
+        if (!OperatingSystem.IsWindows())
+        {
+            const UnixFileMode mode = UnixFileMode.UserRead |
+                UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(root, mode);
+            File.SetUnixFileMode(data, mode);
+            File.SetUnixFileMode(exported, mode);
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
+        byte[] bytes = [0, 255, 17, 128, 42];
+        using MemoryStream stream = new(bytes);
+        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(root, "no-longer-present.bin"), stream, 1024, "binary");
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
+        string destination = Path.Combine(exported, "saved.bin");
+
+        string Request(string requestId, int revision, string output) => JsonSerializer.Serialize(new
+        {
+            requestId,
+            action = "exportOriginal",
+            itemId = captured.ItemId.ToString("D"),
+            revision,
+            destinationPath = output
+        });
+
+        using JsonDocument success = await Send(protocol, Request("success", 1, destination));
+        Assert.True(success.RootElement.GetProperty("ok").GetBoolean());
+        JsonElement receipt = success.RootElement.GetProperty("data").GetProperty("exported");
+        Assert.Equal(captured.ItemId.ToString("D"), receipt.GetProperty("itemId").GetString());
+        Assert.Equal(captured.Sha256, receipt.GetProperty("sha256").GetString());
+        Assert.Equal(bytes.LongLength, receipt.GetProperty("length").GetInt64());
+        Assert.Equal(bytes, File.ReadAllBytes(destination));
+
+        using JsonDocument conflict = await Send(protocol, Request("conflict", 1, destination));
+        Assert.False(conflict.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("already exists", conflict.RootElement.GetProperty("error").GetString());
+        Assert.Equal(bytes, File.ReadAllBytes(destination));
+
+        using JsonDocument wrongRevision = await Send(protocol,
+            Request("wrong", 2, Path.Combine(exported, "wrong.bin")));
+        Assert.False(wrongRevision.RootElement.GetProperty("ok").GetBoolean());
+        Assert.False(File.Exists(Path.Combine(exported, "wrong.bin")));
+
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument revoked = await Send(protocol,
+            Request("revoked", 1, Path.Combine(exported, "revoked.bin")));
+        Assert.False(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.False(File.Exists(Path.Combine(exported, "revoked.bin")));
+        Assert.Empty(Directory.EnumerateFiles(exported, ".praxis-export-*.part"));
+        await catalog.Originals.VerifyAsync(captured.ItemId);
+    }
+
     [Theory]
     [InlineData("""{"requestId":"x","action":"execute","command":"rm"}""")]
     [InlineData("""{"requestId":"x","action":"library","limit":10000}""")]

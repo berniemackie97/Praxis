@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Originals;
 using Praxis.Domain.Common;
@@ -299,76 +300,36 @@ public sealed class SqliteOriginalStore : IOriginalStore
             throw new ArgumentException("A valid item ID and latest revision are required.");
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
-        if (!Path.IsPathFullyQualified(destinationPath))
-        {
-            throw new ArgumentException("The export destination must be absolute.", nameof(destinationPath));
-        }
-
-        string requestedDestination = Path.GetFullPath(destinationPath);
-        string requestedFolder = Path.GetDirectoryName(requestedDestination)!;
-        if (!Directory.Exists(requestedFolder))
-        {
-            throw new DirectoryNotFoundException(requestedFolder);
-        }
-
-        string resolvedCatalog = FileSystemPaths.ResolveExisting(dataDirectory);
-        string folder = FileSystemPaths.ResolveExisting(requestedFolder);
-        string destination = Path.Combine(folder, Path.GetFileName(requestedDestination));
-        if (PathScope.Contains(resolvedCatalog, destination))
-        {
-            throw new InvalidOperationException("An export cannot be written inside the private catalog.");
-        }
-
-        if (File.Exists(destination) || Directory.Exists(destination))
-        {
-            throw new IOException("The export destination already exists and cannot be overwritten.");
-        }
-
+        using OriginalExportDestination destination = OriginalExportDestination.Open(destinationPath, dataDirectory);
         OriginalObject original = database.Execute(connection => CurrentExportableOriginal(connection, itemId, revision))
                                   ?? throw new InvalidOperationException("The selected source version is not active or current.");
 
-        string pending = Path.Combine(folder, ".praxis-export-" + Guid.NewGuid().ToString("N") + ".part");
-        try
+        await using (FileStream output = destination.CreateStaging())
         {
-            FileStreamOptions options = new()
+            await objects.CopyVerifiedAsync(original, output, cancellationToken);
+            await output.FlushAsync(cancellationToken);
+            output.Flush(flushToDisk: true);
+            output.Position = 0;
+            if (output.Length != original.Length ||
+                !CryptographicOperations.FixedTimeEquals(
+                    await SHA256.HashDataAsync(output, cancellationToken), Convert.FromHexString(original.Digest)))
             {
-                Mode = FileMode.CreateNew,
-                Access = FileAccess.Write,
-                Share = FileShare.None,
-                BufferSize = 64 * 1024,
-                Options = FileOptions.Asynchronous | FileOptions.SequentialScan
-            };
-            if (!OperatingSystem.IsWindows())
+                throw new InvalidDataException("The staged export failed integrity verification.");
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        database.Execute(connection =>
+        {
+            if (CurrentExportableOriginal(connection, itemId, revision) != original)
             {
-                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                throw new InvalidOperationException("The source changed or was revoked during export.");
             }
 
-            await using (FileStream output = new(pending, options))
-            {
-                await objects.CopyVerifiedAsync(original, output, cancellationToken);
-                await output.FlushAsync(cancellationToken);
-                output.Flush(flushToDisk: true);
-            }
+            destination.Publish();
+        });
 
-            cancellationToken.ThrowIfCancellationRequested();
-            // Publish under the catalog gate so revocation cannot interleave with the final check.
-            database.Execute(connection =>
-            {
-                if (CurrentExportableOriginal(connection, itemId, revision) != original)
-                {
-                    throw new InvalidOperationException("The source changed or was revoked during export.");
-                }
-
-                File.Move(pending, destination);
-            });
-
-            return new OriginalExport(itemId, revision, original.Digest, original.Length);
-        }
-        finally
-        {
-            File.Delete(pending);
-        }
+        return new OriginalExport(itemId, revision, original.Digest, original.Length);
     }
 
     private static OriginalObject? CurrentExportableOriginal(SqliteConnection connection, Guid itemId, int revision)
