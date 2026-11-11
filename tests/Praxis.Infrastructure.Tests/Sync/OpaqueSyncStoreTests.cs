@@ -218,7 +218,9 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         Assert.Equal(OpaqueSyncStatus.ResetRequired,
             store.Submit(rotatedWriter, initial with
             {
-                OperationId = Guid.NewGuid(), ExpectedRevision = 1, ContentEpoch = 2
+                OperationId = Guid.NewGuid(),
+                ExpectedRevision = 1,
+                ContentEpoch = 2
             }).Status);
         Assert.Equal(OpaqueSyncStatus.ResetRequired,
             store.Pull(rotatedReader,
