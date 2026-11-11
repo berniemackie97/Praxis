@@ -100,8 +100,9 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
             }
 
             command.CommandText = """
-                SELECT e.item_id, e.source_id, e.revision, e.source_digest, e.locator
+                SELECT e.item_id, e.source_id, e.revision, v.digest, e.locator
                 FROM eligible_text_search e
+                JOIN item_versions v ON v.item_id = e.item_id AND v.revision = e.revision
                 WHERE e.item_id IN (
                 """ + string.Join(", ", parameters) + ")";
             command.CommandTimeout = 5;
