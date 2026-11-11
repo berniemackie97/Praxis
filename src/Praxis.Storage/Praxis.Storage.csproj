@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" />
-    <InternalsVisibleTo Include="Praxis.Storage.Tests" />
-    <ProjectReference Include="../Praxis.Inference/Praxis.Inference.csproj" />
-    <EmbeddedResource Include="Catalog/Migrations/LocalCatalog*.sql"
-                      LogicalName="Praxis.Storage.%(Filename)%(Extension)" />
-  </ItemGroup>
-</Project>

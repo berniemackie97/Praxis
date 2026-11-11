@@ -1,7 +1,7 @@
-using Praxis.Storage.Catalog;
-using Praxis.Storage.Intake;
-using Praxis.Storage.Processing;
-using Praxis.Storage.Verification;
+using Praxis.Infrastructure.Catalog;
+using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Processing;
+using Praxis.Infrastructure.Verification;
 using Praxis.Worker.Desktop;
 
 namespace Praxis.Worker.Intake;

@@ -1,19 +1,19 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Praxis.Api/Praxis.Api.csproj" />
-    <Project Path="src/Praxis.Inference/Praxis.Inference.csproj" />
+    <Project Path="src/Praxis.Application/Praxis.Application.csproj" />
+    <Project Path="src/Praxis.Domain/Praxis.Domain.csproj" />
+    <Project Path="src/Praxis.Infrastructure/Praxis.Infrastructure.csproj" />
     <Project Path="src/Praxis.Knowledge/Praxis.Knowledge.csproj" />
-    <Project Path="src/Praxis.Storage/Praxis.Storage.csproj" />
     <Project Path="src/Praxis.Worker/Praxis.Worker.csproj" />
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/Praxis.Storage.RecoveryCheck/Praxis.Storage.RecoveryCheck.csproj" />
+    <Project Path="tools/Praxis.RecoveryCheck/Praxis.RecoveryCheck.csproj" />
     <Project Path="tools/Praxis.VaultCli/Praxis.VaultCli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Praxis.Api.Tests/Praxis.Api.Tests.csproj" />
-    <Project Path="tests/Praxis.Inference.Tests/Praxis.Inference.Tests.csproj" />
+    <Project Path="tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj" />
     <Project Path="tests/Praxis.Knowledge.Tests/Praxis.Knowledge.Tests.csproj" />
-    <Project Path="tests/Praxis.Storage.Tests/Praxis.Storage.Tests.csproj" />
   </Folder>
 </Solution>

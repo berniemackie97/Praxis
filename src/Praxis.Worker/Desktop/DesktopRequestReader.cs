@@ -1,5 +1,5 @@
 using System.Text;
-using Praxis.Storage.Desktop;
+using Praxis.Infrastructure.Desktop;
 
 namespace Praxis.Worker.Desktop;
 

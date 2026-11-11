@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
-using Praxis.Storage.Recovery;
-using Praxis.Storage.Security;
+using Praxis.Infrastructure.Recovery;
+using Praxis.Infrastructure.Security;
 
 namespace Praxis.Worker.Recovery;
 

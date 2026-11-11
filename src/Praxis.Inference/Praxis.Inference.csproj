@@ -1,5 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <InternalsVisibleTo Include="Praxis.Inference.Tests" />
-  </ItemGroup>
-</Project>

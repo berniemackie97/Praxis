@@ -37,14 +37,20 @@
           "SQLitePCLRaw.core": "2.1.13"
         }
       },
-      "praxis.inference": {
+      "praxis.application": {
+        "type": "Project",
+        "dependencies": {
+          "Praxis.Domain": "[1.0.0, )"
+        }
+      },
+      "praxis.domain": {
         "type": "Project"
       },
-      "praxis.storage": {
+      "praxis.infrastructure": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.14, )",
-          "Praxis.Inference": "[1.0.0, )"
+          "Praxis.Application": "[1.0.0, )"
         }
       },
       "Microsoft.Data.Sqlite": {

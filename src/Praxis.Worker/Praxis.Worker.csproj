@@ -3,6 +3,6 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../Praxis.Storage/Praxis.Storage.csproj" />
+    <ProjectReference Include="../Praxis.Infrastructure/Praxis.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
