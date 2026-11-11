@@ -195,7 +195,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
 
         await CatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(restored);
-        Assert.Equal(16, reopened.SchemaVersion);
+        Assert.Equal(17, reopened.SchemaVersion);
         ProcessingJob job = Assert.Single(reopened.Processing.List());
         Assert.Equal("canceled", job.State);
         Assert.DoesNotContain(reopened.Processing.List(), j => j.State == "running");
@@ -271,7 +271,7 @@ public sealed class ProcessingLifecycleTests : IDisposable
         Assert.Equal(1, (await CatalogSnapshots.VerifyAsync(backup, 10_000_000)).ObjectCount);
         await CatalogSnapshots.RestoreAsync(backup, restored, 10_000_000);
         using SqliteCatalog catalog = SqliteCatalog.Open(restored);
-        Assert.Equal(16, catalog.SchemaVersion);
+        Assert.Equal(17, catalog.SchemaVersion);
         Assert.Equal("queued", Assert.Single(catalog.Processing.List()).State);
         using MemoryStream replay = new();
         CapturedOriginal accepted = await catalog.Originals.CaptureFileAsync(Source("legacy"), replay, 0, "old-receipt");

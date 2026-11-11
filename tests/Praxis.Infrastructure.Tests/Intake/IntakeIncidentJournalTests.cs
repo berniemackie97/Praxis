@@ -18,7 +18,9 @@ public sealed class IntakeIncidentJournalTests : IDisposable
         Directory.CreateDirectory(root);
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            UnixFileMode privateDirectory = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(workspace, privateDirectory);
+            File.SetUnixFileMode(root, privateDirectory);
         }
     }
 
