@@ -19,7 +19,8 @@ public sealed class ClientOpaqueNoteCipherTests
             record, 1, OpaqueSyncAction.Upsert, 1, original);
 
         Assert.True(encrypted.Length > 29);
-        Assert.DoesNotContain("Some private text", Convert.ToBase64String(encrypted));
+        Assert.Equal(-1, encrypted.AsSpan().IndexOf(
+            System.Text.Encoding.UTF8.GetBytes("Some private text")));
         Assert.Equal(original, ClientOpaqueNoteCipher.Decrypt(key, space, collectionEpoch,
             record, 1, OpaqueSyncAction.Upsert, 1, encrypted));
         Assert.ThrowsAny<CryptographicException>(() => ClientOpaqueNoteCipher.Decrypt(
