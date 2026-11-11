@@ -81,6 +81,8 @@ def main():
         invalid = root / "private-location-must-not-leak"
         invalid.mkdir(mode=0o700)
         (invalid / "evidence.json").write_text("{", encoding="utf-8")
+        if os.name != "nt":
+            (invalid / "evidence.json").chmod(0o600)
         refused = run("--set-verify", invalid)
         if (refused.returncode != 1 or refused.stdout or
                 refused.stderr.strip() != FAILURE):
