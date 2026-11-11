@@ -78,7 +78,7 @@ internal sealed class IntakeStatusTracker
         }
     }
 
-    internal void RecordSuccessfulScan(DateTimeOffset now, int observedFiles, int imported)
+    internal void RecordSuccessfulScan(DateTimeOffset now, int observedFiles, int imported, bool notificationsUnavailable = false)
     {
         string? transition;
         lock (gate)
@@ -88,9 +88,11 @@ internal sealed class IntakeStatusTracker
                 .Take(ReportedFileErrors)
                 .Select(entry => new IntakeFileError(entry.Key, entry.Value))
                 .ToArray();
-            current = new IntakeStatus(IsPaused ? "paused" : fileErrors.Count == 0 ? "watching" : "degraded", IsPaused,
+            bool degraded = fileErrors.Count != 0 || notificationsUnavailable;
+            current = new IntakeStatus(IsPaused ? "paused" : degraded ? "degraded" : "watching", IsPaused,
                 now, observedFiles, checked(current.ImportedSinceStart + imported), fileErrors.Count,
-                Array.AsReadOnly(reported), fileErrors.Count == 0 ? null : $"{fileErrors.Count} source error(s) need attention.");
+                Array.AsReadOnly(reported), fileErrors.Count != 0 ? $"{fileErrors.Count} source error(s) need attention." :
+                    notificationsUnavailable ? "Filesystem notifications are unavailable; using periodic scans." : null);
             transition = SignificantTransition(current.State);
         }
 

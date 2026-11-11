@@ -117,9 +117,9 @@ public sealed class WatchedFolderIntake
 
     /// <summary>Runs one reconciliation pass; returns the number of new revisions captured.</summary>
     public async Task<int> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken = default) =>
-        (await ReconcileCoreAsync(now, cancellationToken)).Imported;
+        (await ReconcileCoreAsync(now, notificationsUnavailable: false, cancellationToken)).Imported;
 
-    private async Task<WatchedScanResult> ReconcileCoreAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<WatchedScanResult> ReconcileCoreAsync(DateTimeOffset now, bool notificationsUnavailable, CancellationToken cancellationToken)
     {
         await scanLock.WaitAsync(cancellationToken);
         bool sharedHeld = false;
@@ -152,7 +152,7 @@ public sealed class WatchedFolderIntake
                 notifyCaptured();
             }
 
-            status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported);
+            status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported, notificationsUnavailable);
             return result;
         }
         finally
@@ -192,17 +192,12 @@ public sealed class WatchedFolderIntake
 
                     lastScanStarted = clock.GetUtcNow();
                     watcher = MaintainWatcher(watcher);
-                    WatchedScanResult? scan = await TryScanAsync(cancellationToken);
+                    WatchedScanResult? scan = await TryScanAsync(watcher is null, cancellationToken);
                     if (scan is { NextScanDelay: { } due })
                     {
                         delay = due < rescanInterval ? due : rescanInterval;
                     }
 
-                    if (scan is not null && watcher is null && Directory.Exists(root) &&
-                        Volatile.Read(ref requiresApproval) == 0)
-                    {
-                        status.SetState("degraded", "Filesystem notifications are unavailable; using periodic scans.");
-                    }
                 }
 
                 await wakeSignal.WaitAsync(delay, cancellationToken);
@@ -324,11 +319,11 @@ public sealed class WatchedFolderIntake
         return null;
     }
 
-    private async Task<WatchedScanResult?> TryScanAsync(CancellationToken cancellationToken)
+    private async Task<WatchedScanResult?> TryScanAsync(bool notificationsUnavailable, CancellationToken cancellationToken)
     {
         try
         {
-            return await ReconcileCoreAsync(clock.GetUtcNow(), cancellationToken);
+            return await ReconcileCoreAsync(clock.GetUtcNow(), notificationsUnavailable, cancellationToken);
         }
         catch (IOException)
         {
