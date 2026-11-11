@@ -17,6 +17,12 @@ struct IntakeStatus: Decodable {
     let problem: String?
 }
 
+struct WatchedRootStatus: Decodable, Identifiable {
+    let path: String
+    let status: IntakeStatus
+    var id: String { path }
+}
+
 struct SourceMovement: Decodable, Identifiable {
     let sourceId: String
     let previousPath: String

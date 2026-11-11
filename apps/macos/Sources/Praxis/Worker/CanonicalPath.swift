@@ -22,3 +22,28 @@ enum CanonicalPath {
         }
     }
 }
+
+/// Owner-selected folder identity captured by Foundation; changing device or inode requires
+/// a new explicit choice, even when the filesystem path has been reused.
+enum WatchedFolderSettings {
+    static func folders(_ value: String) throws -> [String] {
+        try JSONDecoder().decode([String].self, from: Data(value.utf8))
+    }
+
+    static func approvals(_ value: String) throws -> [String: String] {
+        try JSONDecoder().decode([String: String].self, from: Data(value.utf8))
+    }
+
+    static func encode<T: Encodable>(_ value: T) -> String {
+        String(decoding: (try? JSONEncoder().encode(value)) ?? Data(), as: UTF8.self)
+    }
+
+    static func identity(_ url: URL) -> String? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let device = attributes[.systemNumber] as? NSNumber,
+              let inode = attributes[.systemFileNumber] as? NSNumber else {
+            return nil
+        }
+        return "\(device.uint64Value):\(inode.uint64Value)"
+    }
+}
