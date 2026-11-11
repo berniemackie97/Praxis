@@ -11,6 +11,8 @@ namespace Praxis.Worker.Hosting;
 internal sealed class WorkerConsoleFormatter(TimeProvider clock) : ConsoleFormatter(FormatterName)
 {
     internal const string FormatterName = "praxis-worker";
+    private readonly string runId = Guid.NewGuid().ToString("N");
+    private long sequence;
 
     public override void Write<TState>(in LogEntry<TState> logEntry, IExternalScopeProvider? scopeProvider, TextWriter textWriter)
     {
@@ -21,8 +23,12 @@ internal sealed class WorkerConsoleFormatter(TimeProvider clock) : ConsoleFormat
         }
 
         textWriter.Write('[');
-        textWriter.Write(clock.GetLocalNow().ToString("O"));
-        textWriter.Write("] ");
+        textWriter.Write(clock.GetUtcNow().ToString("O"));
+        textWriter.Write("] run=");
+        textWriter.Write(runId);
+        textWriter.Write(" seq=");
+        textWriter.Write(Interlocked.Increment(ref sequence));
+        textWriter.Write(' ');
         textWriter.WriteLine(message);
     }
 }
