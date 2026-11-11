@@ -30,10 +30,6 @@ struct SearchView: View {
                 Button("Refresh collections") { model.loadCollections() }
             }
             Text(model.mode).font(.caption).foregroundStyle(.secondary)
-            if model.selectedCollectionId != nil {
-                Text("Video caption cues are omitted from collection-filtered search.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             if let notice = model.notice {
                 Text(notice).font(.caption).foregroundStyle(.secondary)
             }
@@ -90,5 +86,6 @@ struct SearchView: View {
             }
         }
         .onAppear { model.loadCollections() }
+        .onDisappear { model.clearResults() }
     }
 }
