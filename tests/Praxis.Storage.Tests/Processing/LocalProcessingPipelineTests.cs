@@ -126,6 +126,24 @@ public sealed class LocalProcessingPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task UnknownRuntimeFailureCodeCannotLeakThroughStatus()
+    {
+        using LocalCatalog catalog = LocalCatalog.Open(root);
+        await Capture(catalog, "secret.txt", "sensitive content", "private");
+        List<string> reports = new();
+        LocalProcessingPipeline pipeline = new(catalog, [new UntrustedRuntimeCodeHandler()], status: reports.Add);
+
+        Assert.True(await pipeline.ProcessNextAsync());
+
+        string report = Assert.Single(reports);
+        Assert.Contains("runtime_unavailable", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-bearing-code", report, StringComparison.Ordinal);
+        ProcessingJob job = Assert.Single(catalog.Processing.List());
+        Assert.Equal("queued", job.State);
+        Assert.Equal(0, job.Attempt);
+    }
+
+    [Fact]
     public async Task ShutdownLeavesInterruptedLeaseRecoverableInsteadOfFailed()
     {
         using LocalCatalog catalog = LocalCatalog.Open(root);
@@ -181,6 +199,18 @@ public sealed class LocalProcessingPipelineTests : IDisposable
         {
             Directory.Delete(workspace, recursive: true);
         }
+    }
+
+    private sealed class UntrustedRuntimeCodeHandler : ILocalProcessingHandler
+    {
+        public string ProcessorKey => LocalProcessors.SourceText;
+        public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
+        public int MaxConcurrency => 1;
+
+        public bool TryReopenWork() => false;
+
+        public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken) =>
+            throw new ProcessorUnavailableException("secret-bearing-code");
     }
 
     private sealed class BlockingHandler(string processorKey, int maxConcurrency) : ILocalProcessingHandler

@@ -209,18 +209,23 @@ public sealed class LocalProcessingPipeline
         {
             // Interrupted by shutdown: the lease expires and the job is reclaimed later.
         }
-        catch (ProcessorUnavailableException)
+        catch (ProcessorUnavailableException unavailable)
         {
             catalog.Processing.Defer(lease);
             TimeSpan delay = BackOff(handler);
-            report($"Processing runtime unavailable; retrying in {delay.TotalSeconds:0} s or on the next wake.");
+            string cause = unavailable.Code switch
+            {
+                "model_disabled" or "model_unavailable" or "model_missing" or "model_server_error" => unavailable.Code,
+                _ => "runtime_unavailable"
+            };
+            report($"Processing runtime unavailable ({cause}); retrying in {delay.TotalSeconds:0} s or on the next wake.");
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             // Isolation boundary: a defective handler fails its own job, durably and without
             // persisting exception text, rather than stopping every other processor.
             catalog.Processing.Finish(lease, ProcessingCompletion.Failed, FaultCode);
-            report("Processing failed; inspect owner-local processing status.");
+            report($"Processing failed ({exception.GetType().Name}); inspect owner-local processing status.");
         }
     }
 
