@@ -86,12 +86,14 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(OpaqueSyncStatus.InvalidRequest,
             (await client.SubmitAsync(mutation with
             {
-                OperationId = Guid.NewGuid(), Ciphertext = new byte[2]
+                OperationId = Guid.NewGuid(),
+                Ciphertext = new byte[2]
             })).Status);
         Assert.Equal(OpaqueSyncStatus.WrongCollectionEpoch,
             (await client.SubmitAsync(mutation with
             {
-                OperationId = Guid.NewGuid(), CollectionEpoch = Guid.NewGuid()
+                OperationId = Guid.NewGuid(),
+                CollectionEpoch = Guid.NewGuid()
             })).Status);
         Assert.Equal(OpaqueSyncStatus.InvalidCursor,
             (await client.PullAsync(host.Pull(host.FirstDevice, 1, 100))).Status);
