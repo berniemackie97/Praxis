@@ -4,6 +4,8 @@
 
 Praxis is a local-first **personal knowledge intelligence and agent platform** that works **without Obsidian, a cloud account, or an AI provider**. The product is not complete when it merely browses or searches files: it must progressively interpret supported knowledge, connect corroborating evidence across sources, investigate questions, and produce actionable, cited conclusions without inventing facts. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Obsidian remains an optional editor/source adapter.
 
+**Approved hosting and inference direction (November 11, 2026):** [ADR 0041](../decisions/0041-hybrid-local-first-deployment.md) specifies a hybrid local-first product: owner-local macOS first, optional owner-managed private host second, optional remote hosting later. Local installations remain offline-capable but may call individually authorized online LLMs and agents; local-data ownership, source security-space classification and remote model disclosure are separate decisions. This does not postpone the intelligent MVP behind remote sync or require local inference for every task.
+
 ## Actual product MVP: intelligent Second Brain
 
 **Owner decision (November 9, 2026):** The first product release must be an integrated, production-quality, agent-powered system. A functional Inbox, local text index or collection browser alone is a foundational delivery checkpoint (#130), not an MVP release. The cross-stage acceptance gate is **#170**.
