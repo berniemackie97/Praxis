@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Praxis.Domain.Security;
@@ -39,9 +40,17 @@ public sealed class OpaqueSyncTransportClient : IDisposable
             throw new ArgumentException("An authenticated HTTPS endpoint and device are required.");
         }
 
+        // .NET 10's default macOS Secure Transport client does not support TLS 1.3.
+        // The Network.framework backend is opt-in and affects only client-side TLS.
+        if (OperatingSystem.IsMacOS())
+        {
+            AppContext.SetSwitch("System.Net.Security.UseNetworkFramework", true);
+        }
+
         HttpClientHandler handler = new()
         {
             ClientCertificateOptions = ClientCertificateOption.Manual,
+            SslProtocols = SslProtocols.Tls13,
             ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
                 certificate is not null &&
                 (errors & (SslPolicyErrors.RemoteCertificateNameMismatch |
