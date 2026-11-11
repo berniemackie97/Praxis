@@ -54,6 +54,17 @@ public sealed partial class OpaqueSyncStore
             return Reject(OpaqueSyncStatus.InvalidRequest);
         }
 
+        using (SqliteCommand epochCheck = Command(transaction, """
+            SELECT 1 FROM sync_records
+            WHERE space_id=$space AND key_epoch<>$epoch LIMIT 1
+            """, ("$space", space), ("$epoch", scope.ContentEpoch)))
+        {
+            if (epochCheck.ExecuteScalar() is not null)
+            {
+                return Reject(OpaqueSyncStatus.ResetRequired);
+            }
+        }
+
         byte[] digest = HashRequest(request, payload!);
         using (SqliteCommand prior = Command(transaction, """
             SELECT request_hash, sequence, revision
