@@ -10,6 +10,8 @@ final class WorkbenchModel: ObservableObject {
     @Published private(set) var semanticOutcome = "pending"
     @Published private(set) var intakeStatus: IntakeStatus?
     @Published private(set) var intakeRoots: [WatchedRootStatus] = []
+    @Published private(set) var intakeBacklog: ProcessingBacklog?
+    @Published private(set) var intakeIncidents: [IntakeIncident] = []
     @Published private(set) var assignedCollectionIds: [String] = []
     @Published private(set) var sourceMoves: [SourceMovement] = []
     @Published private(set) var selectedCollectionId = ""
@@ -254,6 +256,8 @@ final class WorkbenchModel: ObservableObject {
         running = false
         watchedInboxes = []
         intakeRoots = []
+        intakeBacklog = nil
+        intakeIncidents = []
         approvedRootIdentities = [:]
         intakeStatus = nil
         savingNote = false
@@ -309,6 +313,8 @@ final class WorkbenchModel: ObservableObject {
         case .intakeStatus, .intakePause, .intakeRescan, .intakeApproveRoot:
             if let status = data?.status { intakeStatus = status }
             if let roots = data?.roots { intakeRoots = roots }
+            if let backlog = data?.backlog { intakeBacklog = backlog }
+            if let incidents = data?.incidents { intakeIncidents = incidents }
             if action == .intakePause {
                 message = intakeStatus?.paused == true
                     ? "New source capture paused; already queued processing may finish."

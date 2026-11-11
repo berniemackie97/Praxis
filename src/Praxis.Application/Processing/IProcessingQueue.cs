@@ -10,6 +10,9 @@ public interface IProcessingQueue
 {
     IReadOnlyList<ProcessingJob> List(int limit);
 
+    /// <summary>Current-revision work for active sources; excludes superseded and revoked jobs.</summary>
+    ProcessingBacklog Backlog();
+
     /// <summary>Queues a processor for the current revision of an active source; false when it already exists or is not current.</summary>
     bool Queue(Guid itemId, int revision, string processorKey);
 

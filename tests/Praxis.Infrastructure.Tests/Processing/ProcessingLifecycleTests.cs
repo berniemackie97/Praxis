@@ -51,6 +51,43 @@ public sealed class ProcessingLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task BacklogCountsOnlyCurrentJobsForActiveSourcesAcrossRestart()
+    {
+        Guid preserved;
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            Assert.Equal(new ProcessingBacklog(0, 0, 0), catalog.Processing.Backlog());
+
+            using MemoryStream original = new([1]);
+            CapturedOriginal first = await catalog.Originals.CaptureFileAsync(Source("backlog"), original, 10, "backlog-first");
+            Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+
+            ProcessingLease lease = Assert.IsType<ProcessingLease>(catalog.Processing.TryClaim(TimeSpan.FromMinutes(1)));
+            Assert.Equal(new ProcessingBacklog(0, 1, 0), catalog.Processing.Backlog());
+            Assert.True(catalog.Processing.Finish(lease, ProcessingCompletion.Failed, "invalid_content"));
+            Assert.Equal(new ProcessingBacklog(0, 0, 1), catalog.Processing.Backlog());
+
+            using MemoryStream revised = new([2]);
+            CapturedOriginal second = await catalog.Originals.CaptureFileAsync(Source("backlog"), revised, 10, "backlog-second");
+            Assert.Equal(first.ItemId, second.ItemId);
+            Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+
+            using MemoryStream separate = new([3]);
+            CapturedOriginal independent = await catalog.Originals.CaptureFileAsync(Source("other"), separate, 10, "backlog-other");
+            Assert.Equal(new ProcessingBacklog(2, 0, 0), catalog.Processing.Backlog());
+            Assert.True(catalog.Sources.Revoke(independent.SourceId));
+            Assert.Equal(new ProcessingBacklog(1, 0, 0), catalog.Processing.Backlog());
+            await catalog.Originals.VerifyAsync(first.ItemId);
+            await catalog.Originals.VerifyAsync(independent.ItemId);
+            preserved = first.ItemId;
+        }
+
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
+        Assert.Equal(new ProcessingBacklog(1, 0, 0), reopened.Processing.Backlog());
+        await reopened.Originals.VerifyAsync(preserved);
+    }
+
+    [Fact]
     public async Task ClaimedJobSurvivesRestartAndExpiredLeaseIsFenced()
     {
         DateTimeOffset time = new(2026, 11, 8, 23, 0, 0, TimeSpan.Zero);

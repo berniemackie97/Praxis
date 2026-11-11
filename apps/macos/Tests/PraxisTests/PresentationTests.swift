@@ -21,6 +21,37 @@ struct PresentationTests {
         #expect(FileManager.default.fileExists(atPath: worker))
     }
 
+
+    @Test func processingBacklogDecodesFromDesktopReply() throws {
+        let response = """
+            {"requestId":"intake","ok":true,
+             "data":{"backlog":{"queued":2,"running":1,"failed":3}}}
+            """
+        let decoded = try JSONDecoder().decode(WorkerResponse.self, from: Data(response.utf8))
+        let backlog = try #require(decoded.data?.backlog)
+        #expect(backlog.queued == 2)
+        #expect(backlog.running == 1)
+        #expect(backlog.failed == 3)
+    }
+
+
+    @Test func intakeIncidentsDecodeWithResolvedAndOpenStates() throws {
+        let response = """
+            {"requestId":"intake","ok":true,
+             "data":{"incidents":[
+               {"incidentId":2,"rootPath":"/private/tmp/inbox","state":"reapproval_required",
+                "startedUtc":"2026-11-11T01:00:00Z","resolvedUtc":null},
+               {"incidentId":1,"rootPath":"/private/tmp/inbox","state":"offline",
+                "startedUtc":"2026-11-11T00:00:00Z","resolvedUtc":"2026-11-11T01:00:00Z"}]}}
+            """
+        let decoded = try JSONDecoder().decode(WorkerResponse.self, from: Data(response.utf8))
+        let incidents = try #require(decoded.data?.incidents)
+        #expect(incidents.count == 2)
+        #expect(incidents[0].state == "reapproval_required")
+        #expect(incidents[0].resolvedUtc == nil)
+        #expect(incidents[1].resolvedUtc != nil)
+    }
+
     @Test func countsUseSingularAndPlural() {
         #expect(Count.label(1, "source") == "1 source")
         #expect(Count.label(3, "mention") == "3 mentions")

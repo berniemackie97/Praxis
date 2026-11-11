@@ -19,7 +19,8 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
 
     public WatchedFolderIntakeGroup(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, IReadOnlyList<string> approvedRoots,
         Action<string>? status = null, Action? onCaptured = null,
-        TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, TimeProvider? clock = null)
+        TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, TimeProvider? clock = null,
+        IIntakeIncidentJournal? incidents = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -57,7 +58,8 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
 
         SemaphoreSlim sharedScanLock = new(1, 1);
         monitors = roots.Select(path => new WatchedFolderIntake(sources, originals, catalogDirectory, path, quietPeriod, rescanInterval,
-            status, onCaptured, sharedScanLock, clock)).ToArray();
+            status, onCaptured, sharedScanLock, clock,
+            state => incidents?.RecordState(path, state))).ToArray();
     }
 
     public IReadOnlyList<WatchedRootStatus> RootStatuses() =>
@@ -146,6 +148,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
         string state = paused ? "paused" :
             states.All(status => status.State == "offline") ? "offline" :
             states.Any(status => status.State is "offline" or "degraded" or "reapproval_required" or "stopped") ? "degraded" :
+            states.Any(status => status.State == "scanning") ? "scanning" :
             states.Any(status => status.State is "starting" or "resuming") ? "starting" : "watching";
         int affected = states.Count(status => status.State is "offline" or "degraded" or "reapproval_required" or "stopped");
         DateTimeOffset? lastScan = states.All(status => status.LastSuccessfulScanUtc is not null)

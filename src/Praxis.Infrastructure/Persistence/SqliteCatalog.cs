@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence.Collections;
+using Praxis.Infrastructure.Persistence.Intake;
 using Praxis.Infrastructure.Persistence.Enrichment;
 using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Library;
@@ -32,6 +33,7 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteOriginalStore Originals { get; }
     public SqliteLibraryReader Library { get; }
     public SqliteProcessingQueue Processing { get; }
+    public SqliteIntakeIncidentJournal IntakeIncidents { get; }
     public SqliteTextDerivativeRepository Text { get; }
     public SqliteTextSegmentRepository Segments { get; }
     public SqliteTextSearchIndex Search { get; }
@@ -53,6 +55,7 @@ public sealed class SqliteCatalog : IDisposable
 
         Sources = new SqliteSourceRepository(database, clock);
         Processing = new SqliteProcessingQueue(database, clock);
+        IntakeIncidents = new SqliteIntakeIncidentJournal(database, clock);
         Originals = new SqliteOriginalStore(database, objects, dataDirectory, clock);
         Library = new SqliteLibraryReader(database);
         Text = new SqliteTextDerivativeRepository(database, clock);

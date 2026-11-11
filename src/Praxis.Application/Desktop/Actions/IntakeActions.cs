@@ -1,11 +1,13 @@
 using Praxis.Application.Desktop.Contracts;
 using Praxis.Application.Intake;
+using Praxis.Application.Processing;
 using Praxis.Domain.Intake;
 
 namespace Praxis.Application.Desktop.Actions;
 
 /// <summary>Health and owner controls of supervised folder intake.</summary>
-public sealed class IntakeActions(IIntakeSupervisor? intake = null) : IDesktopActionGroup
+public sealed class IntakeActions(IIntakeSupervisor? intake = null, IProcessingQueue? processingQueue = null,
+    IIntakeIncidentJournal? incidents = null) : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
     [
@@ -25,5 +27,6 @@ public sealed class IntakeActions(IIntakeSupervisor? intake = null) : IDesktopAc
 
     private IIntakeSupervisor Supervisor() => intake ?? throw new InvalidOperationException("Supervised intake is not configured.");
 
-    private IntakeResponse Respond(IntakeStatus status) => new(status, intake?.RootStatuses());
+    private IntakeResponse Respond(IntakeStatus status) =>
+        new(status, intake?.RootStatuses(), processingQueue?.Backlog(), incidents?.Recent(20));
 }

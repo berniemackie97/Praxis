@@ -313,6 +313,24 @@ public sealed class DesktopProtocolTests : IDisposable
             """{"requestId":"initial","action":"intakeStatus"}""");
         Assert.Equal("starting", initial.RootElement.GetProperty("data")
             .GetProperty("status").GetProperty("state").GetString());
+        JsonElement initialBacklog = initial.RootElement.GetProperty("data").GetProperty("backlog");
+        Assert.Equal(0, initialBacklog.GetProperty("queued").GetInt64());
+        Assert.Equal(0, initialBacklog.GetProperty("running").GetInt64());
+        Assert.Equal(0, initialBacklog.GetProperty("failed").GetInt64());
+        Assert.Equal(0, initial.RootElement.GetProperty("data").GetProperty("incidents").GetArrayLength());
+
+        using MemoryStream pending = new([7, 8]);
+        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(Path.GetDirectoryName(root)!, "external-source.txt"), pending, 100, "queued-health");
+        using JsonDocument queuedStatus = await Send(service,
+            """{"requestId":"queue","action":"intakeStatus"}""");
+        Assert.Equal(1, queuedStatus.RootElement.GetProperty("data")
+            .GetProperty("backlog").GetProperty("queued").GetInt64());
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument revokedStatus = await Send(service,
+            """{"requestId":"revoked","action":"intakeStatus"}""");
+        Assert.Equal(0, revokedStatus.RootElement.GetProperty("data")
+            .GetProperty("backlog").GetProperty("queued").GetInt64());
 
         using JsonDocument paused = await Send(service,
             """{"requestId":"pause","action":"intakePause","paused":true}""");

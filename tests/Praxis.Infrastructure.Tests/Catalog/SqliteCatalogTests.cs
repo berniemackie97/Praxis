@@ -26,16 +26,17 @@ public sealed class SqliteCatalogTests : IDisposable
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        Assert.Equal(16, catalog.SchemaVersion);
+        Assert.Equal(17, catalog.SchemaVersion);
         Assert.Equal(Path.Combine(root, "catalog.sqlite"), catalog.DatabasePath);
         using SqliteConnection reader = Connect(catalog.DatabasePath);
-        Assert.Equal(16L, Scalar(reader, "PRAGMA user_version"));
+        Assert.Equal(17L, Scalar(reader, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(reader, "PRAGMA foreign_keys"));
         Assert.Equal(2L, Scalar(reader, "PRAGMA synchronous"));
         Assert.Equal("wal", Scalar(reader, "PRAGMA journal_mode"));
         Assert.Equal(14L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('original_objects', 'sources', 'items', 'item_versions', 'ingest_requests', 'processing_jobs', 'text_derivatives', 'search_index_keys', 'source_collections', 'source_collection_memberships', 'enrichment_runs', 'enrichment_proposals', 'enrichment_reviews', 'source_locator_moves')"));
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='capture_request_context'"));
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='semantic_vectors'"));
+        Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='intake_incidents'"));
         Assert.Equal("ok", Scalar(reader, "PRAGMA integrity_check"));
         Assert.Equal(0L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
     }
@@ -110,19 +111,49 @@ public sealed class SqliteCatalogTests : IDisposable
         string path = Path.Combine(root, "catalog.sqlite");
         using (SqliteConnection connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 17");
+            Execute(connection, "PRAGMA user_version = 18");
         }
 
         Assert.Throws<NotSupportedException>(() => SqliteCatalog.Open(root));
         using (SqliteConnection connection = Connect(path))
         {
-            Assert.Equal(17L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(18L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
         File.WriteAllBytes(path, [5, 7, 9]);
         Assert.Throws<SqliteException>(() => SqliteCatalog.Open(root));
         Assert.Equal([5, 7, 9], File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void VersionSixteenUpgradesIncidentJournalWithoutChangingSourceData()
+    {
+        string databasePath;
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            databasePath = catalog.DatabasePath;
+            using SqliteConnection connection = Connect(databasePath);
+            InsertSource(connection, "preserved-source", "original.md");
+        }
+
+        using (SqliteConnection connection = Connect(databasePath))
+        {
+            Execute(connection, """
+                DROP INDEX intake_incidents_recent;
+                DROP INDEX intake_incidents_open_root;
+                DROP TABLE intake_incidents;
+                PRAGMA user_version = 16;
+                """);
+        }
+
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
+        Assert.Equal(17, upgraded.SchemaVersion);
+        using SqliteConnection verified = Connect(upgraded.DatabasePath);
+        Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM sources"));
+        Assert.Equal("preserved-source", Scalar(verified, "SELECT source_id FROM sources"));
+        Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM intake_incidents"));
+        Assert.Equal(17L, Scalar(verified, "PRAGMA user_version"));
     }
 
     [Fact]
@@ -153,9 +184,9 @@ public sealed class SqliteCatalogTests : IDisposable
 
         using (SqliteCatalog upgraded = SqliteCatalog.Open(root))
         {
-            Assert.Equal(16, upgraded.SchemaVersion);
+            Assert.Equal(17, upgraded.SchemaVersion);
             using SqliteConnection connection = Connect(upgraded.DatabasePath);
-            Assert.Equal(16L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(17L, Scalar(connection, "PRAGMA user_version"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM sources"));
             Assert.Equal(1L, Scalar(connection, "SELECT COUNT(*) FROM item_versions"));
             Assert.Equal(1L, Scalar(connection,
@@ -164,7 +195,7 @@ public sealed class SqliteCatalogTests : IDisposable
 
         using SqliteCatalog reopened = SqliteCatalog.Open(root);
         using SqliteConnection verified = Connect(reopened.DatabasePath);
-        Assert.Equal(16L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(17L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM original_objects"));
         Assert.Equal(1L, Scalar(verified, "SELECT COUNT(*) FROM processing_jobs"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM text_derivatives"));
@@ -189,6 +220,7 @@ public sealed class SqliteCatalogTests : IDisposable
                 DROP TRIGGER semantic_vectors_new_version;
                 DROP TRIGGER semantic_vectors_source_revoked;
                 DROP TABLE semantic_vectors;
+                DROP TABLE intake_incidents;
                 DROP TABLE capture_request_context;
                 DROP INDEX ingest_requests_source_revision;
                 PRAGMA user_version = 14;
@@ -196,7 +228,7 @@ public sealed class SqliteCatalogTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
-        Assert.Equal(16, upgraded.SchemaVersion);
+        Assert.Equal(17, upgraded.SchemaVersion);
         Assert.Equal("file", upgraded.Sources.ReadProvenance(sourceId)!.SourceKind);
         Assert.Null(upgraded.Sources.ReadProvenance(sourceId)!.CaptureRoute);
         CaptureReceipt receipt = Assert.Single(upgraded.Sources.ListCaptureReceipts(sourceId));
