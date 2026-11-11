@@ -128,6 +128,11 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
                     status = RescanIntake(),
                     roots = group?.RootStatuses()
                 },
+                "intakeApproveRoot" => new
+                {
+                    status = RequireGroup().ApproveRoot(fields.RequireString("path", 4_096)),
+                    roots = group?.RootStatuses()
+                },
                 "preview" => Preview(fields),
                 "verify" => await VerifyAsync(fields, cancellationToken),
                 "retry" => Retry(fields),
@@ -198,6 +203,8 @@ public sealed class LocalDesktopProtocol(LocalCatalog catalog, LocalQuickCapture
     }
 
     private LocalWatchedIntake RequireMonitor() => monitor ?? throw new InvalidOperationException("Supervised intake is not configured.");
+
+    private LocalWatchedIntakeGroup RequireGroup() => group ?? throw new InvalidOperationException("Folder reapproval requires supervised intake.");
 
     private LocalIntakeStatus IntakeStatus() => group?.Snapshot() ?? RequireMonitor().Snapshot();
 

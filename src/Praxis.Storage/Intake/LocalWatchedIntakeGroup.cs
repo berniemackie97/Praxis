@@ -70,6 +70,21 @@ public sealed class LocalWatchedIntakeGroup
         return Snapshot();
     }
 
+    public LocalIntakeStatus ApproveRoot(string selectedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selectedPath);
+        LocalWatchedIntake? monitor = monitors.FirstOrDefault(candidate =>
+            Path.IsPathFullyQualified(selectedPath) &&
+            CatalogPaths.Canonicalize(selectedPath) == candidate.RootPath);
+        if (monitor is null)
+        {
+            throw new ArgumentException("The selected folder is not approved for intake.", nameof(selectedPath));
+        }
+
+        monitor.ApproveRoot(selectedPath);
+        return Snapshot();
+    }
+
     public LocalIntakeStatus RequestRescan()
     {
         foreach (LocalWatchedIntake monitor in monitors)
@@ -117,10 +132,10 @@ public sealed class LocalWatchedIntakeGroup
         bool paused = states.All(status => status.Paused);
         string state = paused ? "paused" :
             states.All(status => status.State == "offline") ? "offline" :
-            states.Any(status => status.State is "offline" or "degraded") ? "degraded" :
+            states.Any(status => status.State is "offline" or "degraded" or "reapproval_required") ? "degraded" :
             states.Any(status => status.State is "starting" or "resuming") ? "starting" :
             states.All(status => status.State == "stopped") ? "stopped" : "watching";
-        int affected = states.Count(status => status.State is "offline" or "degraded");
+        int affected = states.Count(status => status.State is "offline" or "degraded" or "reapproval_required");
         DateTimeOffset? lastScan = states.All(status => status.LastSuccessfulScanUtc is not null)
             ? states.Min(status => status.LastSuccessfulScanUtc) : null;
         return new LocalIntakeStatus(
