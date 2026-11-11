@@ -52,7 +52,7 @@ def main():
 
         overflow = run_worker(catalog, inbox, exact + b" \n" + request("must-not-run") + b"\n")
         require(
-            overflow.returncode == 1 and not overflow.stdout and b"size limit" in overflow.stderr,
+            overflow.returncode == 1 and not overflow.stdout and b"invalid_input" in overflow.stderr,
             "An oversized frame was accepted or the next request executed",
             overflow,
         )

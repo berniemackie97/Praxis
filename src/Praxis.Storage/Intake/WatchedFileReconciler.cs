@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Praxis.Storage.Catalog;
 using Praxis.Storage.Originals;
 using Praxis.Storage.Sources;
@@ -203,8 +202,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
                     throw new InvalidDataException("The source changed during capture; a new scan is required.");
                 }
 
-                report("Captured source revision " + captured.Revision +
-                    ": " + JsonSerializer.Serialize(file.SourcePath));
+                report("Captured source revision " + captured.Revision + ".");
                 capturedRevision = true;
             }
 
@@ -223,8 +221,7 @@ internal sealed class WatchedFileReconciler(LocalCatalog catalog, LocalSourceInt
     {
         if (status.RecordFileError(path, message))
         {
-            report("Intake error: " + JsonSerializer.Serialize(path) +
-                ": " + JsonSerializer.Serialize(message));
+            report("Intake file error; inspect owner-local intake status.");
         }
     }
 

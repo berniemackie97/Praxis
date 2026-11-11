@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Praxis.Storage.Catalog;
 
 namespace Praxis.Storage.Intake;
@@ -158,8 +157,7 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
         {
-            report("Observed directory move could not preserve identities: " +
-                JsonSerializer.Serialize(entry.Current) + ": " + JsonSerializer.Serialize(exception.Message));
+            report("Observed directory move could not preserve identities.");
             return (hashed, true);
         }
     }
@@ -177,16 +175,12 @@ internal sealed class ObservedRenameCorrelator(LocalCatalog catalog, LocalSource
             string digest = await IntakeFileRules.HashAsync(current, cancellationToken);
             if (IntakeFileRules.IsStable(file) && catalog.Sources.RelocateObservedFile(previous, current, digest))
             {
-                report("Preserved file source identity after observed rename: " +
-                    JsonSerializer.Serialize(previous) + " -> " +
-                    JsonSerializer.Serialize(current));
+                report("Preserved file source identity after observed rename.");
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException)
         {
-            report("Observed file move could not preserve identity: " +
-                JsonSerializer.Serialize(current) + ": " +
-                JsonSerializer.Serialize(exception.Message));
+            report("Observed file move could not preserve identity.");
         }
     }
 

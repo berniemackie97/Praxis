@@ -34,6 +34,6 @@ internal static class DesktopStdioSession
             }
         }
 
-        await WorkerServices.RunAsync(cancellationToken, ServeAsync, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
+        await WorkerServices.RunAsync(cancellationToken, allowDesktopExit: true, ServeAsync, monitor.RunAsync, processing.RunAsync, verification.RunAsync);
     }
 }
