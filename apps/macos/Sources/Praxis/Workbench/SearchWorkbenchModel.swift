@@ -8,7 +8,7 @@ final class SearchWorkbenchModel: ObservableObject {
     private var selectedHitId: String?
 
     @Published var query = ""
-    @Published var selectedCollectionId: String? {
+    @Published var selectedCollectionId: String? = nil {
         didSet {
             if selectedCollectionId != oldValue { clearResults() }
         }
