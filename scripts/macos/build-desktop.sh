@@ -7,7 +7,7 @@ artifacts="$root/.artifacts"
 destination="$artifacts/Praxis.app"
 derived="$artifacts/XcodeDerivedData"
 
-if [[ $# -ne 0 && ( $# -ne 1 || "$1" != "--archive-existing" ) ]]; then
+if [[ $# -ne 0 && ( $# -ne 1 || "${1:-}" != "--archive-existing" ) ]]; then
   echo "Usage: scripts/macos/build-desktop.sh [--archive-existing]" >&2
   exit 2
 fi
