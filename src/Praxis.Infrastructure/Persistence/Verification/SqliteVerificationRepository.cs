@@ -349,6 +349,11 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         var (id, payload, provider) = next;
         var lease = Guid.NewGuid();
         connection.Run(transaction, """
+            UPDATE verification_invocations SET status = 'released', finished_utc = $now,
+                failure_code = 'lease_expired'
+            WHERE request_id = $id AND status = 'running'
+            """, ("$id", id), ("$now", time));
+        connection.Run(transaction, """
             UPDATE verification_requests SET status = 'running', lease_key = $lease, lease_until_utc = $until,
                 started_utc = $now WHERE request_id = $id
             """, ("$lease", lease.ToString("D")), ("$until", CatalogValues.Timestamp(now + LeaseDuration)),
@@ -408,6 +413,16 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 """, ("$now", now), ("$model", model.Model), ("$version", model.Digest),
                 ("$input", result.InputTokens), ("$output", result.OutputTokens),
                 ("$duration", (long)result.Duration.TotalMilliseconds), ("$id", id));
+            connection.Run(transaction, """
+                UPDATE verification_invocations
+                SET status = 'completed', finished_utc = $now, model_name = $model,
+                    model_version = $version, input_tokens = $input,
+                    output_tokens = $output, duration_ms = $duration
+                WHERE attempt_id = $attempt AND status = 'running'
+                """, ("$now", now), ("$model", model.Model), ("$version", model.Digest),
+                ("$input", result.InputTokens), ("$output", result.OutputTokens),
+                ("$duration", (long)result.Duration.TotalMilliseconds),
+                ("$attempt", claim.LeaseKey.ToString("D")));
             KnowledgeLinker.RecomputeInferredTypes(connection, transaction, affected, now);
             transaction.Commit();
             return true;
@@ -415,18 +430,19 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     }
 
     public bool Release(ClaimedVerification claim, DateTimeOffset retryAfter, string failureCode) =>
-        Finish(claim, """
+        Finish(claim, "released", """
             UPDATE verification_requests SET status = 'approved', lease_key = NULL, lease_until_utc = NULL,
                 retry_after_utc = $retry, failure_code = $code WHERE request_id = $id
             """, ("$retry", CatalogValues.Timestamp(retryAfter)), ("$code", failureCode));
 
     public bool Fail(ClaimedVerification claim, string failureCode) =>
-        Finish(claim, """
+        Finish(claim, "failed", """
             UPDATE verification_requests SET status = 'failed', lease_key = NULL, lease_until_utc = NULL,
                 completed_utc = $now, failure_code = $code WHERE request_id = $id
             """, ("$now", CatalogValues.Timestamp(clock.GetUtcNow())), ("$code", failureCode));
 
-    private bool Finish(ClaimedVerification claim, string sql, params (string Name, object? Value)[] parameters) =>
+    private bool Finish(ClaimedVerification claim, string outcome, string sql,
+        params (string Name, object? Value)[] parameters) =>
         database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
@@ -436,6 +452,12 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             }
 
             connection.Run(transaction, sql, [.. parameters, ("$id", claim.RequestId.ToString("D"))]);
+            connection.Run(transaction, """
+                UPDATE verification_invocations SET status = $outcome, finished_utc = $now, failure_code = $code
+                WHERE attempt_id = $attempt AND status = 'running'
+                """, ("$outcome", outcome), ("$now", CatalogValues.Timestamp(clock.GetUtcNow())),
+                ("$code", parameters.Single(entry => entry.Name == "$code").Value),
+                ("$attempt", claim.LeaseKey.ToString("D")));
             transaction.Commit();
             return true;
         });
@@ -494,7 +516,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         SqliteConnection connection, SqliteTransaction transaction, string providerId, DateTimeOffset now)
     {
         using var query = connection.CreateCommand("""
-            SELECT COUNT(*) FROM verification_requests
+            SELECT COUNT(*) FROM verification_invocations
             WHERE provider_id = $provider AND started_utc >= $day
             """);
         query.Transaction = transaction;
@@ -506,8 +528,10 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     private static bool HoldsLease(SqliteConnection connection, SqliteTransaction transaction, ClaimedVerification claim)
     {
         using var query = connection.CreateCommand("""
-            SELECT 1 FROM verification_requests
-            WHERE request_id = $id AND status = 'running' AND lease_key = $lease
+            SELECT 1 FROM verification_requests r
+            JOIN verification_providers p ON p.provider_id = r.provider_id
+                AND p.config_revision = r.approved_provider_revision AND p.enabled = 1
+            WHERE r.request_id = $id AND r.status = 'running' AND r.lease_key = $lease
             """);
         query.Transaction = transaction;
         query.Parameters.AddWithValue("$id", claim.RequestId.ToString("D"));
