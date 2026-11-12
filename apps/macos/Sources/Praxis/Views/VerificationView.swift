@@ -176,7 +176,9 @@ private struct VerificationDetailView: View {
                 Button("Decline") { model.decline() }
                 Button("Approve and send") { model.approve() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(providers.isEmpty || model.excluded.count >= items.count)
+                    .disabled(providers.isEmpty || model.excluded.count >= items.count ||
+                        (model.providerChoice.isEmpty &&
+                         !providers.contains(where: { $0.providerId == VerificationProvider.ollama })))
             }
             if model.providerChoice == "" {
                 Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
