@@ -630,6 +630,10 @@ public sealed class PrivateSyncHostTests
             (await ownerClient.PullAsync(new OpaqueSyncPull(
                 1, host.Space, host.CollectionEpoch, host.FirstDevice, 2, 0, 100))).Status);
 
+        await Assert.ThrowsAsync<CryptographicException>(() =>
+            OwnerNoteKeyRotation.RotateAsync(owner, host.Space, 1, 2,
+                newKey, new byte[32], ownerClient));
+
         OpaqueSyncRotationReceipt rotated = await OwnerNoteKeyRotation.RotateAsync(
             owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), ownerClient);
         Assert.Equal(OpaqueSyncStatus.Applied, rotated.Status);
