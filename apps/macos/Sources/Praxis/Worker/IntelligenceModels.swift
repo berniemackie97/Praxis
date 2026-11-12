@@ -45,8 +45,14 @@ struct VerificationProvider: Decodable, Identifiable, Equatable {
 
 struct ModelProfileData: Decodable { let profile: ModelProfile? }
 struct InstalledModelsData: Decodable { let models: [InstalledModel] }
+struct ProviderAllowance: Decodable {
+    let provider: VerificationProvider
+    let startedToday: Int
+}
+
 struct ProvidersData: Decodable {
     let providers: [VerificationProvider]
     let discovered: [String: String]
+    let allowances: [ProviderAllowance]
 }
 struct ProviderSavedData: Decodable { let provider: VerificationProvider }
