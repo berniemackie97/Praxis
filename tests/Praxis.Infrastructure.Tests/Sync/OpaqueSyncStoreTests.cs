@@ -301,6 +301,89 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         Assert.Throws<NotSupportedException>(() => OpaqueSyncStore.Open(root));
     }
 
+    [Fact]
+    public void PrunedHistoryUsesStableOpaqueSnapshotPagesAndRetainsReceipts()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope writer = Scope(device, space, SecurityPermission.Write);
+        AuthorizedSpaceScope reader = Scope(device, space, SecurityPermission.Read);
+        Guid[] recordIds = Enumerable.Range(0, 18).Select(_ => Guid.NewGuid()).ToArray();
+        OpaqueSyncMutation[] edits = recordIds.Select(id =>
+            Request(space, epoch, device, Guid.NewGuid(), id, 0, OpaqueSyncAction.Upsert))
+            .ToArray();
+        foreach (OpaqueSyncMutation mutation in edits)
+        {
+            Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, mutation).Status);
+        }
+
+        store.PruneThrough(space, 17);
+        Assert.Equal(OpaqueSyncStatus.CursorExpired,
+            store.Pull(reader, new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).Status);
+        OpaqueSyncSnapshotPage first = store.Snapshot(reader,
+            new OpaqueSyncSnapshotPull(1, space, epoch, device, 1, 0, Guid.Empty, 16));
+        Assert.Equal(OpaqueSyncStatus.Ok, first.Status);
+        Assert.Equal(18, first.HeadSequence);
+        Assert.Equal(18, first.TotalRecords);
+        Assert.Equal(16, first.Records.Count);
+        Assert.Equal(recordIds.ToHashSet(),
+            first.Records.Select(record => record.RecordId)
+                .Concat(store.Snapshot(reader, new OpaqueSyncSnapshotPull(
+                    1, space, epoch, device, 1, first.HeadSequence,
+                    first.Records[^1].RecordId, 16)).Records.Select(record => record.RecordId))
+                .ToHashSet());
+        Assert.Equal(18, store.Snapshot(reader, new OpaqueSyncSnapshotPull(
+            1, space, epoch, device, 1, 0, Guid.Empty, 16)).TotalRecords);
+
+        OpaqueSyncMutation added = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, added).Status);
+        OpaqueSyncSnapshotPage changed = store.Snapshot(reader,
+            new OpaqueSyncSnapshotPull(1, space, epoch, device, 1, 18,
+                first.Records[^1].RecordId, 16));
+        Assert.Equal(OpaqueSyncStatus.InvalidCursor, changed.Status);
+        Assert.Empty(changed.Records);
+        Assert.Equal(0, changed.HeadSequence);
+        Assert.Equal(0, changed.TotalRecords);
+
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, edits[0]).Status);
+        Assert.Equal(OpaqueSyncStatus.CursorExpired,
+            store.Pull(reader, new OpaqueSyncPull(1, space, epoch, device, 1, 16, 100)).Status);
+    }
+
+    [Fact]
+    public void SnapshotReadRejectsForeignScopesAndIllegalBoundsWithoutPrivateMetadata()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope reader = Scope(device, space, SecurityPermission.Read);
+        OpaqueSyncSnapshotPull valid =
+            new(1, space, epoch, device, 1, 0, Guid.Empty, 16);
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            store.Snapshot(Scope(device, space, SecurityPermission.Write), valid));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            store.Snapshot(reader, valid with { DeviceId = Guid.NewGuid() }));
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            store.Snapshot(reader, valid with { ContentEpoch = 2 }));
+        foreach (OpaqueSyncSnapshotPull invalid in new[]
+        {
+            valid with { CollectionEpoch = Guid.NewGuid() },
+            valid with { ProtocolVersion = 2 },
+            valid with { Limit = 17 },
+            valid with { ExpectedHead = -1 },
+            valid with { AfterRecordId = Guid.NewGuid() }
+        })
+        {
+            OpaqueSyncSnapshotPage rejected = store.Snapshot(reader, invalid);
+            Assert.NotEqual(OpaqueSyncStatus.Ok, rejected.Status);
+            Assert.Empty(rejected.Records);
+            Assert.Equal(0, rejected.TotalRecords);
+            Assert.Equal(0, rejected.HeadSequence);
+        }
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
