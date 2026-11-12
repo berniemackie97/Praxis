@@ -246,13 +246,18 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     }
 
     public VerificationRequestView? Approve(
-        Guid requestId, string reviewedPayload, string providerId, string approvedPayload, IReadOnlySet<int> includedOrdinals)
+        Guid requestId, string reviewedPayload, string providerId, int providerRevision,
+        string approvedPayload, IReadOnlySet<int> includedOrdinals)
     {
         RequireId(requestId);
         ArgumentException.ThrowIfNullOrEmpty(reviewedPayload);
         ArgumentException.ThrowIfNullOrEmpty(providerId);
         ArgumentException.ThrowIfNullOrEmpty(approvedPayload);
         ArgumentNullException.ThrowIfNull(includedOrdinals);
+        if (providerRevision < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(providerRevision));
+        }
         var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
@@ -260,10 +265,14 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             var id = requestId.ToString("D");
             if (connection.Run(transaction, """
                     UPDATE verification_requests SET status = 'approved', provider_id = $provider, payload = $approved,
-                        decided_utc = $now, retry_after_utc = NULL
+                        approved_provider_revision = $revision, decided_utc = $now,
+                        retry_after_utc = NULL, failure_code = NULL
                     WHERE request_id = $id AND status = 'awaiting_approval' AND payload = $reviewed
+                      AND EXISTS (SELECT 1 FROM verification_providers p
+                                  WHERE p.provider_id = $provider AND p.enabled = 1
+                                    AND p.config_revision = $revision)
                     """, ("$provider", providerId), ("$approved", approvedPayload), ("$now", now), ("$id", id),
-                    ("$reviewed", reviewedPayload)) != 1)
+                    ("$reviewed", reviewedPayload), ("$revision", providerRevision)) != 1)
             {
                 return null;
             }
@@ -305,9 +314,11 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         var time = CatalogValues.Timestamp(now);
         using var transaction = connection.BeginTransaction();
         using var query = connection.CreateCommand("""
-            SELECT r.request_id, r.payload, p.provider_id, p.executable, p.model, p.cost_weight, p.daily_limit
+            SELECT r.request_id, r.payload, p.provider_id, p.executable, p.model, p.cost_weight,
+                   p.daily_limit, p.endpoint, p.config_revision
             FROM verification_requests r
             JOIN verification_providers p ON p.provider_id = r.provider_id AND p.enabled = 1
+                AND p.config_revision = r.approved_provider_revision
             WHERE (r.status = 'approved' AND (r.retry_after_utc IS NULL OR r.retry_after_utc <= $now))
                OR (r.status = 'running' AND r.lease_until_utc <= $now)
             ORDER BY r.decided_utc, r.request_id LIMIT 20
@@ -320,8 +331,10 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             while (reader.Read())
             {
                 candidates.Add((reader.GetString(0), reader.GetString(1), new VerificationProvider(reader.GetString(2),
-                    reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetInt32(5),
-                    reader.GetInt32(6), true)));
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetInt32(5),
+                    reader.GetInt32(6), true, reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.GetInt32(8))));
             }
         }
 
@@ -340,6 +353,12 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 started_utc = $now WHERE request_id = $id
             """, ("$lease", lease.ToString("D")), ("$until", CatalogValues.Timestamp(now + LeaseDuration)),
             ("$now", time), ("$id", id));
+        connection.Run(transaction, """
+            INSERT INTO verification_invocations
+                (attempt_id, request_id, provider_id, provider_revision, started_utc, status)
+            VALUES ($attempt, $request, $provider, $revision, $now, 'running')
+            """, ("$attempt", lease.ToString("D")), ("$request", id),
+            ("$provider", provider.ProviderId), ("$revision", provider.Revision), ("$now", time));
         var ordinals = Ordinals(connection, transaction, id);
         transaction.Commit();
         return new ClaimedVerification(Guid.Parse(id), lease, provider, payload, ordinals);
