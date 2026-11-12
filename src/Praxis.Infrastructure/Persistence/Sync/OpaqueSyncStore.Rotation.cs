@@ -48,7 +48,7 @@ public sealed partial class OpaqueSyncStore
             request.PreviousEpoch == long.MaxValue ||
             request.ContentEpoch != request.PreviousEpoch + 1 ||
             request.ContentEpoch != scope.ContentEpoch ||
-            request.ExpectedHead <= 0 || request.ExpectedHead != head ||
+            request.ExpectedHead <= 0 || request.ExpectedHead > head ||
             record is null || record.RecordId == Guid.Empty ||
             record.Revision < 1 || record.ContentEpoch != request.ContentEpoch ||
             record.Ciphertext is null || record.Ciphertext.Length is < 29 or > MaxPayloadBytes)
@@ -60,7 +60,12 @@ public sealed partial class OpaqueSyncStore
         {
             return new OpaqueSyncRotationReceipt(OpaqueSyncStatus.Applied,
                 request.SpaceId, request.CollectionEpoch, request.DeviceId,
-                request.RotationId, head, scope.ContentEpoch, 0);
+                request.RotationId, request.ExpectedHead, scope.ContentEpoch, 0);
+        }
+
+        if (request.ExpectedHead != head)
+        {
+            return Reject(OpaqueSyncStatus.InvalidCursor);
         }
 
         if (currentEpoch != 0 && currentEpoch != request.PreviousEpoch)
@@ -176,7 +181,7 @@ public sealed partial class OpaqueSyncStore
             request.PreviousEpoch == long.MaxValue ||
             request.ContentEpoch != request.PreviousEpoch + 1 ||
             request.ContentEpoch != scope.ContentEpoch ||
-            request.ExpectedHead <= 0 || request.ExpectedHead != head)
+            request.ExpectedHead <= 0 || request.ExpectedHead > head)
         {
             return Reject(OpaqueSyncStatus.InvalidRequest);
         }
@@ -185,7 +190,12 @@ public sealed partial class OpaqueSyncStore
         {
             return new OpaqueSyncRotationReceipt(OpaqueSyncStatus.Applied,
                 request.SpaceId, request.CollectionEpoch, request.DeviceId,
-                request.RotationId, head, scope.ContentEpoch, 0);
+                request.RotationId, request.ExpectedHead, scope.ContentEpoch, 0);
+        }
+
+        if (request.ExpectedHead != head)
+        {
+            return Reject(OpaqueSyncStatus.InvalidCursor);
         }
 
         if (currentEpoch != 0 && currentEpoch != request.PreviousEpoch)

@@ -471,6 +471,15 @@ public sealed class OpaqueSyncStoreTests : IDisposable
                 new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).Status);
             Assert.Equal(OpaqueSyncStatus.ResetRequired,
                 resumed.Submit(Scope(device, space, SecurityPermission.Write), first).Status);
+            OpaqueSyncMutation afterRotation = Request(space, epoch, device,
+                Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert) with
+            {
+                ContentEpoch = 2
+            };
+            Assert.Equal(3, resumed.Submit(newWriter, afterRotation).Sequence);
+            Assert.Equal(2, resumed.CommitRotation(newWriter, commit).HeadSequence);
+            Assert.Equal(OpaqueSyncStatus.Applied,
+                resumed.CommitRotation(newWriter, commit).Status);
         }
     }
 
