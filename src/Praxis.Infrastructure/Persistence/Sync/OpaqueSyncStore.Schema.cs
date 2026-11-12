@@ -20,7 +20,7 @@ public sealed partial class OpaqueSyncStore
 
             pragma.CommandText = "PRAGMA user_version";
             int version = Convert.ToInt32(pragma.ExecuteScalar());
-            if (version is not (0 or 1))
+            if (version is not (0 or 1 or 2))
             {
                 throw new NotSupportedException("The sync database schema is unsupported.");
             }
@@ -81,9 +81,40 @@ public sealed partial class OpaqueSyncStore
             }
         }
 
+        if (version <= 1)
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand upgrade = connection.CreateCommand();
+            upgrade.Transaction = transaction;
+            upgrade.CommandText = """
+                ALTER TABLE sync_spaces ADD COLUMN content_epoch INTEGER NOT NULL
+                    DEFAULT 0 CHECK(content_epoch >= 0);
+                ALTER TABLE sync_spaces ADD COLUMN last_rotation_id TEXT;
+                CREATE TABLE sync_rotation (
+                    space_id TEXT PRIMARY KEY REFERENCES sync_spaces(space_id),
+                    rotation_id TEXT NOT NULL,
+                    expected_head INTEGER NOT NULL CHECK(expected_head >= 1),
+                    old_epoch INTEGER NOT NULL CHECK(old_epoch >= 1),
+                    new_epoch INTEGER NOT NULL CHECK(new_epoch >= 2)
+                ) STRICT;
+                CREATE TABLE sync_rotation_records (
+                    space_id TEXT NOT NULL REFERENCES sync_rotation(space_id) ON DELETE CASCADE,
+                    record_id TEXT NOT NULL,
+                    revision INTEGER NOT NULL CHECK(revision >= 1),
+                    deleted INTEGER NOT NULL CHECK(deleted IN (0, 1)),
+                    ciphertext BLOB NOT NULL CHECK(length(ciphertext) BETWEEN 29 AND 65536),
+                    PRIMARY KEY(space_id, record_id)
+                ) STRICT;
+                PRAGMA user_version=2;
+                """;
+            upgrade.ExecuteNonQuery();
+            transaction.Commit();
+        }
+
         foreach (string name in new[]
         {
-            "sync_spaces", "sync_records", "sync_events", "sync_receipts"
+            "sync_spaces", "sync_records", "sync_events", "sync_receipts",
+            "sync_rotation", "sync_rotation_records"
         })
         {
             using SqliteCommand check = connection.CreateCommand();
