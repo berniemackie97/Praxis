@@ -31,7 +31,7 @@ public sealed partial class OfflineNoteSynchronizer(
         {
             Guid epoch = journal.CollectionEpoch;
             Guid deviceId = journal.DeviceId;
-            int conflictsBefore = journal.Conflicts.Count;
+            int conflictsBefore = journal.Conflicts.Count + journal.IncomingCollisions.Count;
 
             (int accepted, NoteSyncState? early) =
                 await SubmitPendingAsync(epoch, deviceId, cancellationToken).ConfigureAwait(false);
@@ -52,7 +52,8 @@ public sealed partial class OfflineNoteSynchronizer(
 
     private NoteSyncProgress Progress(NoteSyncState state, int accepted,
         int applied, bool snapshot, int conflictsBefore) =>
-        new(state, accepted, journal.Conflicts.Count - conflictsBefore,
+        new(state, accepted,
+            Math.Max(0, journal.Conflicts.Count + journal.IncomingCollisions.Count - conflictsBefore),
             applied, snapshot, journal.Cursor, journal.Pending.Count,
-            journal.Conflicts.Count);
+            journal.Conflicts.Count + journal.IncomingCollisions.Count);
 }
