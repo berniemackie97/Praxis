@@ -10,6 +10,7 @@ using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Inference.Subscription;
+using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -278,7 +279,7 @@ public sealed class VerificationTests : IDisposable
         try
         {
             Environment.SetEnvironmentVariable("PATH", bin);
-            Assert.Equal(Path.Combine(bin, "claude"), new SubscriptionVerifierModelFactory().DiscoverExecutables()[VerificationProvider.ClaudeCode]);
+            Assert.Equal(Path.Combine(bin, "claude"), new VerificationModelFactory().DiscoverExecutables()[VerificationProvider.ClaudeCode]);
         }
         finally
         {
@@ -294,7 +295,7 @@ public sealed class VerificationTests : IDisposable
     }
 
     private void SaveProvider(SqliteCatalog catalog, string provider, int weight, int dailyLimit = 20, bool enabled = true) =>
-        new VerificationProviderConfiguration(catalog.Verification, new SubscriptionVerifierModelFactory())
+        new VerificationProviderConfiguration(catalog.Verification, new VerificationModelFactory())
             .Save(new VerificationProvider(provider, executable, null, weight, dailyLimit, enabled));
 
     private static VerificationRunner Runner(SqliteCatalog catalog, Func<VerificationProvider, IChatModel> models) =>
