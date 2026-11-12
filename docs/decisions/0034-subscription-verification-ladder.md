@@ -19,7 +19,7 @@ Anthropic's terms describe plan sign-in as intended for ordinary individual use 
 
 **Approval and payload.** Requests wait for approval. The stored payload is exactly what is sent: per item, the claim, its verbatim quote, about 220 characters of context and the source file name, nothing else. Approval can exclude items and redact phrases; redaction replaces every case-insensitive occurrence in all text values. Excluding an item does not remove that name from other items' context; redaction does.
 
-**Routing.** Providers carry an owner-set cost weight and daily request limit. Approval routes to the named provider or the lowest-weight enabled provider with allowance left today. Paid API providers are not part of this design.
+**Routing.** Providers carry an owner-set cost weight and daily attempt limit. An omitted selection routes only to an enabled local Ollama instance. An external verifier is selected by its explicit provider ID for that request; neither unavailability nor exhaustion permits an automatic switch. Paid API providers are not part of this design.
 
 **Failures.** Missing or expired sign-in waits 6 hours, exhausted plan quota 1 hour, unreachable or timed-out 10 minutes, all as `approved` with `retry_after`; saving the provider clears the wait and wakes the runner. Malformed answers fail the request. Provider text is never stored or reported; only codes are.
 
@@ -108,9 +108,14 @@ already transmitted cannot be withdrawn. Caller cancellation releases
 the claim with a delay and an attempt ledger entry; it never switches to an
 unselected provider or treats cancellation as a successful verdict.
 
-**Scope limit:** this checks proposal eligibility and current visibility for
-entity-type requests, but does not implement the separately scoped source
-classification and export permission system in #32. Provider-side consumption
+**Scope limit:** this checks the current revision of each included proposal
+and requires some currently visible supporting mentions for an entity-type
+request. The latter is not a complete per-context source-revision snapshot:
+in a multi-source entity request, a context whose source was revoked may
+remain in the previously approved text while another mention remains visible.
+Complete per-context source authority, classification and export permission
+must be implemented and tested in #32 before that type of external disclosure
+is considered safe. Provider-side consumption
 limits remain those of the installed runtime and subscription, not a measured
 cross-provider cost contract.
 
