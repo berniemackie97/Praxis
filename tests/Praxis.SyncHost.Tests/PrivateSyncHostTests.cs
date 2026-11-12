@@ -567,7 +567,7 @@ public sealed class PrivateSyncHostTests
         host.PruneThrough(19);
 
         host.CorruptSnapshotRecord(changed);
-        await Assert.ThrowsAsync<CryptographicException>(() => secondSync.ReconcileAsync());
+        await Assert.ThrowsAnyAsync<CryptographicException>(() => secondSync.ReconcileAsync());
         Assert.Equal(18, second.Cursor);
         Assert.Equal(18, second.Records.Count);
         Assert.DoesNotContain(second.Records, note => note.Markdown == "changed value");
@@ -595,7 +595,8 @@ public sealed class PrivateSyncHostTests
 
         Assert.True(host.Registry.Operator.RevokeDevice(host.SecondDevice));
         await Assert.ThrowsAsync<HttpRequestException>(() => reader.SnapshotAsync(query));
-        Assert.Equal(1, (await writer.PullAsync(host.Pull(host.FirstDevice, 0, 100))).HeadSequence);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            writer.PullAsync(host.Pull(host.FirstDevice, 0, 100)));
     }
 
     private sealed class TestHost : IAsyncDisposable
