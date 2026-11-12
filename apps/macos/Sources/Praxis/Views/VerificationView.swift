@@ -72,6 +72,8 @@ enum FailureCode {
         case "model_unavailable": "provider not reachable"
         case "model_timeout": "timed out"
         case "model_invalid_response": "unusable answer"
+        case "provider_changed": "provider configuration changed; approve again"
+        case "model_missing": "model is not installed"
         default: code
         }
     }
@@ -94,7 +96,8 @@ private struct VerificationDetailView: View {
                 if request.awaitingApproval {
                     approval
                 } else if let tokens = request.inputTokens {
-                    Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens, counted against your plan.")
+                    Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens, counted against the selected provider's daily request allowance.")
+
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Text(request.awaitingApproval ? "What approval will send" : "What was sent").font(.headline)
@@ -163,7 +166,7 @@ private struct VerificationDetailView: View {
             }
             HStack {
                 Picker("Send to", selection: $model.providerChoice) {
-                    Text("Cheapest available").tag("")
+                    Text("Local Ollama (if enabled)").tag("")
                     ForEach(providers) { provider in
                         Text(VerificationProvider.displayName(provider.providerId)).tag(provider.providerId)
                     }
@@ -175,8 +178,16 @@ private struct VerificationDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(providers.isEmpty || model.excluded.count >= items.count)
             }
+            if model.providerChoice == "" {
+                Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if model.providerChoice != VerificationProvider.ollama {
+                Text("External disclosure: approval sends exactly the reviewed and redacted payload through the selected signed-in CLI. Subscription limits apply.")
+                    .font(.caption).foregroundColor(.orange)
+            }
             if providers.isEmpty {
-                Text("Enable Codex or Claude Code under Models first.").font(.caption).foregroundColor(.orange)
+                Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
+                    .font(.caption).foregroundColor(.orange)
             }
         }
     }
