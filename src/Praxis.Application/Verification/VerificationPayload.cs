@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -18,9 +19,7 @@ public static class VerificationPayload
     {
         var payload = new JsonObject { ["items"] = new JsonArray(items.Select(item => (JsonNode)item).ToArray()) };
         var text = payload.ToJsonString();
-        return text.Length <= MaximumBytes
-            ? text
-            : throw new InvalidOperationException("The verification request is too large; verify fewer items.");
+        return EnsureBounded(text);
     }
 
     /// <summary>Text surrounding an evidence span, on one line, for the verifier's judgement.</summary>
@@ -63,10 +62,15 @@ public static class VerificationPayload
         }
 
         Redact(root, redactions);
-        return (root.ToJsonString(), items.Select(item => Ordinal(item!)).ToHashSet());
+        return (EnsureBounded(root.ToJsonString()), items.Select(item => Ordinal(item!)).ToHashSet());
     }
 
     public static int Ordinal(JsonNode item) => item["ordinal"]!.GetValue<int>();
+
+    private static string EnsureBounded(string payload) =>
+        Encoding.UTF8.GetByteCount(payload) <= MaximumBytes
+            ? payload
+            : throw new InvalidOperationException("The verification request is too large; verify fewer items.");
 
     private static void Redact(JsonNode node, IReadOnlyCollection<string> redactions)
     {

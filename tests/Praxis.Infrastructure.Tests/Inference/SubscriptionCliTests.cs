@@ -120,6 +120,27 @@ public sealed class SubscriptionCliTests : IDisposable
     }
 
     [Fact]
+    public async Task CodexAnswerFileCannotBypassTheProviderOutputLimit()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var codex = Script("codex", """
+            out=""; prev=""
+            for arg in "$@"; do if [ "$prev" = "-o" ]; then out="$arg"; fi; prev="$arg"; done
+            cat > /dev/null
+            head -c 4194305 /dev/zero > "$out"
+            echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+            """);
+
+        InferenceException error = await Assert.ThrowsAsync<InferenceException>(() =>
+            new CodexChatModel(codex).CompleteAsync(Request(), CancellationToken.None));
+        Assert.Equal(InferenceFailure.InvalidResponse, error.Failure);
+    }
+
+    [Fact]
     public void CodexFailureEventsAreDetected()
     {
         var (_, _, failure) = CodexChatModel.ReadEvents(

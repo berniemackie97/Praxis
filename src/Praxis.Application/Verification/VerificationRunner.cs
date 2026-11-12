@@ -63,6 +63,7 @@ public sealed class VerificationRunner(
     /// <summary>Sends one approved request; returns false when none is ready.</summary>
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (repository.Claim() is not { } claim)
         {
             return false;
@@ -79,6 +80,7 @@ public sealed class VerificationRunner(
                 return true;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             using ModelConnection connection = models.Create(claim.Provider);
             IChatModel model = connection.Model;
             ModelIdentity identity = await model.DescribeAsync(cancellationToken);
@@ -91,6 +93,7 @@ public sealed class VerificationRunner(
                     "The local model changed during verification.");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             IReadOnlyList<VerificationVerdict> verdicts = VerdictReader.Read(result.Content, claim.Ordinals);
             if (repository.Complete(claim, identity, result, verdicts))
             {
@@ -98,8 +101,13 @@ public sealed class VerificationRunner(
             }
             else
             {
-                report("Verification result discarded because the approval changed.");
+                report("Verification result discarded because the approval or source changed.");
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            repository.Release(claim, clock.GetUtcNow() + TimeSpan.FromMinutes(10), "model_canceled");
+            throw;
         }
         catch (InferenceException exception) when (RetryDelay(exception.Failure) is { } delay)
         {

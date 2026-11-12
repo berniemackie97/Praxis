@@ -19,7 +19,7 @@ Anthropic's terms describe plan sign-in as intended for ordinary individual use 
 
 **Approval and payload.** Requests wait for approval. The stored payload is exactly what is sent: per item, the claim, its verbatim quote, about 220 characters of context and the source file name, nothing else. Approval can exclude items and redact phrases; redaction replaces every case-insensitive occurrence in all text values. Excluding an item does not remove that name from other items' context; redaction does.
 
-**Routing.** Providers carry an owner-set cost weight and daily request limit. Approval routes to the named provider or the lowest-weight enabled provider with allowance left today. Paid API providers are not part of this design.
+**Routing.** Providers carry an owner-set cost weight and daily attempt limit. An omitted selection routes only to an enabled local Ollama instance. An external verifier is selected by its explicit provider ID for that request; neither unavailability nor exhaustion permits an automatic switch. Paid API providers are not part of this design.
 
 **Failures.** Missing or expired sign-in waits 6 hours, exhausted plan quota 1 hour, unreachable or timed-out 10 minutes, all as `approved` with `retry_after`; saving the provider clears the wait and wakes the runner. Malformed answers fail the request. Provider text is never stored or reported; only codes are.
 
@@ -40,9 +40,9 @@ Claude Code with an expired sign-in was classified `model_unauthenticated` and l
 No direct paid-API or local-OpenAI-compatible verifier yet. Plan usage limits are not visible to Praxis beyond the daily request limits it enforces itself. The verifier sees only the excerpt context, so it can call a correct but under-described item `uncertain`.
 
 
-## Proposed #31 extension: local-first verification and versioned approval
+## Implemented #31 boundary: local-first verification and versioned approval
 
-This section describes the pending #31 implementation, **not** a new accepted release
+This section records the current implementation, **not** a validated product release
 gate. The original Codex/Claude CLI integration and its recorded measurements above
 remain historical. Verification now uses a single disposable model-session contract:
 loopback-only Ollama (no network egress), or the owner's explicitly selected Codex
@@ -89,6 +89,37 @@ Over-budget evidence fails without calling a model; the owner must narrow
 the request. Local Ollama checks that its installed model digest has not
 changed during completion. This is a conservative guard, **not** a complete
 provider-specific tokenizer accounting or demonstrated local-model accuracy.
+
+**Request integrity at the model boundary.** The reviewed payload is bounded by
+UTF-8 bytes before and after exclusions and redactions, and the response is bounded
+to 64 KiB. The Codex CLI's structured answer file is independently capped at 4 MiB,
+in addition to the bounded CLI event output, before it is loaded into memory.
+Every included ordinal must have exactly one well-formed verdict;
+missing, duplicated or malformed entries fail the whole request without applying
+partial verdicts. Extra ordinals not sent to the model are ignored. A response
+that cannot judge an item must explicitly say `uncertain`; silently omitting it
+does not count as abstention. Type corrections only promote a verified type
+when the item was supported, and owner decisions still take precedence.
+
+An approved request is rechecked against the currently eligible source
+revision or entity evidence at approval, at dispatch and before committing
+the result. Revoked or superseded evidence produces the safe
+`source_changed` failure, fences a running attempt, and requires a newly
+reviewed request rather than sending a stale approved payload. Requests
+already transmitted cannot be withdrawn. Caller cancellation releases
+the claim with a delay and an attempt ledger entry; it never switches to an
+unselected provider or treats cancellation as a successful verdict.
+
+**Scope limit:** this checks the current revision of each included proposal
+and requires some currently visible supporting mentions for an entity-type
+request. The latter is not a complete per-context source-revision snapshot:
+in a multi-source entity request, a context whose source was revoked may
+remain in the previously approved text while another mention remains visible.
+Complete per-context source authority, classification and export permission
+must be implemented and tested in #32 before that type of external disclosure
+is considered safe. Provider-side consumption
+limits remain those of the installed runtime and subscription, not a measured
+cross-provider cost contract.
 
 **Acceptance remaining:** exact-head .NET migration and negative tests,
 first-party macOS review, actual installed Ollama runtime behavior on the

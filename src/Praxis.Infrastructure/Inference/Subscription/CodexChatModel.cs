@@ -72,6 +72,12 @@ public sealed class CodexChatModel : IChatModel
             throw SubscriptionCli.Classify((failure ?? "") + " " + result.Stderr, "Codex did not return an answer.");
         }
 
+        if (new FileInfo(answerPath).Length > CliProcess.MaximumOutputBytes)
+        {
+            throw new InferenceException(InferenceFailure.InvalidResponse,
+                "The verifier returned more structured output than allowed.");
+        }
+
         var answer = await File.ReadAllTextAsync(answerPath, cancellationToken);
         return new ChatResult(answer.Trim(), inputTokens, outputTokens, started.Elapsed);
     }
