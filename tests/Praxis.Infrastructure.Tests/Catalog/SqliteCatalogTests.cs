@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
+using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -111,13 +112,13 @@ public sealed class SqliteCatalogTests : IDisposable
         string path = Path.Combine(root, "catalog.sqlite");
         using (SqliteConnection connection = Connect(path))
         {
-            Execute(connection, "PRAGMA user_version = 18");
+            Execute(connection, "PRAGMA user_version = 19");
         }
 
         Assert.Throws<NotSupportedException>(() => SqliteCatalog.Open(root));
         using (SqliteConnection connection = Connect(path))
         {
-            Assert.Equal(18L, Scalar(connection, "PRAGMA user_version"));
+            Assert.Equal(19L, Scalar(connection, "PRAGMA user_version"));
         }
 
         File.Delete(path);
@@ -129,22 +130,12 @@ public sealed class SqliteCatalogTests : IDisposable
     [Fact]
     public void VersionSixteenUpgradesIncidentJournalWithoutChangingSourceData()
     {
-        string databasePath;
-        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
-        {
-            databasePath = catalog.DatabasePath;
-            using SqliteConnection connection = Connect(databasePath);
-            InsertSource(connection, "preserved-source", "original.md");
-        }
-
+        CreateLegacyCatalog(16);
+        string databasePath = Path.Combine(root, "catalog.sqlite");
         using (SqliteConnection connection = Connect(databasePath))
         {
-            Execute(connection, """
-                DROP INDEX intake_incidents_recent;
-                DROP INDEX intake_incidents_open_root;
-                DROP TABLE intake_incidents;
-                PRAGMA user_version = 16;
-                """);
+            InsertSource(connection, "preserved-source", "original.md");
+            Assert.Null(Scalar(connection, "SELECT name FROM sqlite_master WHERE name = 'intake_incidents'"));
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
@@ -154,6 +145,36 @@ public sealed class SqliteCatalogTests : IDisposable
         Assert.Equal("preserved-source", Scalar(verified, "SELECT source_id FROM sources"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM intake_incidents"));
         Assert.Equal(18L, Scalar(verified, "PRAGMA user_version"));
+    }
+
+    [Fact]
+    public void VersionSeventeenPreservesVerifierApprovalAndAttemptHistory()
+    {
+        CreateLegacyCatalog(17);
+        using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
+        {
+            Execute(connection, """
+                INSERT INTO verification_providers
+                    (provider_id, executable, model, cost_weight, daily_limit, enabled, updated_utc)
+                VALUES ('codex', '/usr/local/bin/codex', 'gpt-5.2', 10, 20, 1, '2026-11-08T00:00:00Z');
+                INSERT INTO verification_requests
+                    (request_id, reason, status, provider_id, payload, created_utc, decided_utc,
+                     started_utc, completed_utc, model_name, model_version, input_tokens, output_tokens, duration_ms)
+                VALUES ('legacy-verification', 'owner_request', 'completed', 'codex', '{"items":[]}',
+                        '2026-11-08T00:00:00Z', '2026-11-08T00:01:00Z', '2026-11-08T00:02:00Z',
+                        '2026-11-08T00:03:00Z', 'gpt-5.2', 'old-model-digest', 21, 7, 120);
+                """);
+        }
+
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
+        using SqliteConnection verified = Connect(upgraded.DatabasePath);
+        Assert.Equal(18L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal(1L, Scalar(verified, "SELECT config_revision FROM verification_providers WHERE provider_id='codex'"));
+        Assert.Equal(1L, Scalar(verified, "SELECT approved_provider_revision FROM verification_requests WHERE request_id='legacy-verification'"));
+        Assert.Equal("legacy", Scalar(verified, "SELECT status FROM verification_invocations WHERE request_id='legacy-verification'"));
+        Assert.Equal(21L, Scalar(verified, "SELECT input_tokens FROM verification_invocations WHERE request_id='legacy-verification'"));
+        Assert.Equal("old-model-digest", Scalar(verified, "SELECT model_version FROM verification_invocations WHERE request_id='legacy-verification'"));
+        Assert.Null(Scalar(verified, "PRAGMA foreign_key_check"));
     }
 
     [Fact]
@@ -204,27 +225,33 @@ public sealed class SqliteCatalogTests : IDisposable
     [Fact]
     public async Task PriorSchemaReceiptsUpgradeWithoutManufacturingAuthorization()
     {
-        Guid sourceId;
-        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
-        {
-            using MemoryStream bytes = new("Legacy original"u8.ToArray());
-            CapturedOriginal original = await catalog.Originals.CaptureFileAsync(
-                Path.Combine(TestPaths.Temp, "legacy-file.md"), bytes, 200, "legacy-key");
-            sourceId = original.SourceId;
-        }
+        CreateLegacyCatalog(14);
+        Guid sourceId = Guid.NewGuid();
+        Guid itemId = Guid.NewGuid();
+        using MemoryStream bytes = new("Legacy original"u8.ToArray());
+        OriginalObject original = await new OriginalFileStore(root).PublishAsync(
+            bytes, 200, CancellationToken.None);
 
         using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
         {
-            Execute(connection, """
-                DROP VIEW eligible_semantic_segments;
-                DROP TRIGGER semantic_vectors_new_version;
-                DROP TRIGGER semantic_vectors_source_revoked;
-                DROP TABLE semantic_vectors;
-                DROP TABLE intake_incidents;
-                DROP TABLE capture_request_context;
-                DROP INDEX ingest_requests_source_revision;
-                PRAGMA user_version = 14;
-                """);
+            using SqliteCommand seed = connection.CreateCommand();
+            seed.CommandText = """
+                INSERT INTO original_objects (digest, byte_length, recorded_utc)
+                VALUES ($digest, $length, '2026-11-08T00:00:00Z');
+                INSERT INTO sources (source_id, source_kind, locator, created_utc)
+                VALUES ($source, 'file', $locator, '2026-11-08T00:00:00Z');
+                INSERT INTO items (item_id, source_id) VALUES ($item, $source);
+                INSERT INTO item_versions (item_id, revision, digest, observed_utc)
+                VALUES ($item, 1, $digest, '2026-11-08T00:00:00Z');
+                INSERT INTO ingest_requests (request_key, source_id, state, attempt, revision)
+                VALUES ('legacy-key', $source, 'committed', 1, 1);
+                """;
+            seed.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            seed.Parameters.AddWithValue("$item", itemId.ToString("D"));
+            seed.Parameters.AddWithValue("$digest", original.Digest);
+            seed.Parameters.AddWithValue("$length", original.Length);
+            seed.Parameters.AddWithValue("$locator", Path.Combine(TestPaths.Temp, "legacy-file.md"));
+            seed.ExecuteNonQuery();
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
@@ -236,7 +263,7 @@ public sealed class SqliteCatalogTests : IDisposable
         Assert.Null(receipt.Route);
         Assert.Null(receipt.AuthorityBasis);
         Assert.Null(receipt.RecordedUtc);
-        await upgraded.Originals.VerifyAsync(upgraded.Sources.ReadProvenance(sourceId)!.ItemId);
+        await upgraded.Originals.VerifyAsync(itemId);
     }
 
     [Fact]
@@ -321,6 +348,36 @@ public sealed class SqliteCatalogTests : IDisposable
         {
             Directory.Delete(other);
         }
+    }
+
+    private void CreateLegacyCatalog(int version)
+    {
+        if (version is < 1 or > 17)
+        {
+            throw new ArgumentOutOfRangeException(nameof(version));
+        }
+
+        using SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite"));
+        Execute(connection, "PRAGMA foreign_keys = OFF");
+        using (SqliteTransaction transaction = connection.BeginTransaction())
+        {
+            for (int target = 1; target <= version; target++)
+            {
+                using Stream resource = typeof(SqliteCatalog).Assembly
+                    .GetManifestResourceStream($"Praxis.Infrastructure.Catalog.V{target}.sql")!;
+                using StreamReader source = new(resource);
+                using SqliteCommand migration = connection.CreateCommand();
+                migration.Transaction = transaction;
+                migration.CommandText = source.ReadToEnd();
+                migration.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+        }
+
+        Execute(connection, "PRAGMA foreign_keys = ON");
+        Assert.Equal((long)version, Scalar(connection, "PRAGMA user_version"));
+        Assert.Null(Scalar(connection, "PRAGMA foreign_key_check"));
     }
 
     private static SqliteConnection Connect(string path)
