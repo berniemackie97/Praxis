@@ -9,7 +9,6 @@ using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
