@@ -15,7 +15,8 @@ public sealed class VerificationActions(
     public IEnumerable<DesktopAction> Actions =>
     [
         DesktopAction.Of("verificationProviders", _ => new VerificationProvidersResponse(
-            verification.ListProviders(), verifierModels.DiscoverExecutables())),
+            verification.ListProviders(), verifierModels.DiscoverExecutables(),
+            verification.ListEnabledProviderAllowances())),
         DesktopAction.Of("verificationProviderSave", SaveProvider),
         DesktopAction.Of("verifications", fields => new VerificationRequestsResponse(
             verification.List(fields.IntegerOrDefault("limit", 50, 1, 200)))),
