@@ -26,7 +26,7 @@ internal static class TestDesktop
             new OriginalActions(catalog.Originals),
             new CollectionActions(catalog.Collections),
             new SearchActions(catalog.Search, catalog.Embeddings, catalog.Models, new OllamaEmbeddingModelConnector()),
-            new MediaActions(new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals)),
+            new MediaActions(new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals, catalog.Collections)),
             new CaptureActions(quickCapture, intake, processing),
             new EnrichmentActions(catalog.Proposals),
             new IntakeActions(intake, catalog.Processing, catalog.IntakeIncidents),

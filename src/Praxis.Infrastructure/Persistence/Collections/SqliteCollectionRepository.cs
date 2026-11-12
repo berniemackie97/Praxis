@@ -188,6 +188,28 @@ public sealed class SqliteCollectionRepository : ICollectionRepository
         });
     }
 
+    public bool ContainsActiveSource(Guid collectionId, Guid sourceId)
+    {
+        ValidateCollectionId(collectionId);
+        ValidateCollectionId(sourceId);
+        return database.ExecuteRead(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand("""
+                SELECT EXISTS (
+                    SELECT 1 FROM source_collection_memberships membership
+                    JOIN source_collections c ON c.collection_id = membership.collection_id
+                    JOIN sources s ON s.source_id = membership.source_id
+                    WHERE membership.collection_id = $collection
+                      AND membership.source_id = $source
+                      AND c.archived_utc IS NULL AND s.status = 'active'
+                    LIMIT 1)
+                """);
+            command.Parameters.AddWithValue("$collection", collectionId.ToString("D"));
+            command.Parameters.AddWithValue("$source", sourceId.ToString("D"));
+            return Convert.ToInt64(command.ExecuteScalar()) != 0;
+        });
+    }
+
     private static void ValidateCollectionId(Guid id)
     {
         if (id == Guid.Empty)

@@ -24,29 +24,53 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
         this.clock = clock;
     }
 
-    public TextDerivative? Read(Guid itemId, int revision)
+    public TextDerivative? Read(Guid itemId, int revision) =>
+        ReadEvidence(itemId, revision, false, null, null, null);
+
+    public TextDerivative? ReadCurrent(Guid itemId, int revision, Guid? collectionId = null,
+        Guid? expectedSourceId = null, string? expectedSha256 = null) =>
+        ReadEvidence(itemId, revision, true, collectionId, expectedSourceId, expectedSha256);
+
+    private TextDerivative? ReadEvidence(Guid itemId, int revision, bool currentOnly,
+        Guid? collectionId, Guid? expectedSourceId, string? expectedSha256)
     {
-        if (itemId == Guid.Empty || revision < 1)
+        if (itemId == Guid.Empty || revision < 1 || collectionId == Guid.Empty ||
+            expectedSourceId == Guid.Empty)
         {
-            throw new ArgumentException("A valid item and revision are required.");
+            throw new ArgumentException("A valid item, revision and scope are required.");
         }
 
         return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
-                                                                   SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
-                                                                   FROM text_derivatives d
-                                                                   JOIN processing_jobs j ON j.item_id = d.item_id
-                                                                       AND j.revision = d.revision AND j.processor_key = d.processor_key
-                                                                   JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
-                                                                       AND v.digest = d.source_digest
-                                                                   JOIN items i ON i.item_id = d.item_id
-                                                                   JOIN sources s ON s.source_id = i.source_id
-                                                                   WHERE d.item_id = $item AND d.revision = $revision
-                                                                     AND d.processor_key = $processor AND s.status = 'active'
-                                                                     AND j.state = d.outcome
-                                                                   """);
+                SELECT s.source_id, d.source_digest, d.outcome, d.content, d.reason_code, d.created_utc
+                FROM text_derivatives d
+                JOIN processing_jobs j ON j.item_id = d.item_id
+                    AND j.revision = d.revision AND j.processor_key = d.processor_key
+                JOIN item_versions v ON v.item_id = d.item_id AND v.revision = d.revision
+                    AND v.digest = d.source_digest
+                JOIN items i ON i.item_id = d.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE d.item_id = $item AND d.revision = $revision
+                  AND d.processor_key = $processor AND s.status = 'active'
+                  AND j.state = d.outcome
+                  AND ($current = 0 OR v.revision = (
+                      SELECT MAX(latest.revision) FROM item_versions latest
+                      WHERE latest.item_id = v.item_id))
+                  AND ($source IS NULL OR s.source_id = $source)
+                  AND ($digest IS NULL OR v.digest = $digest)
+                  AND ($collection IS NULL OR EXISTS (
+                      SELECT 1 FROM source_collection_memberships membership
+                      JOIN source_collections scope ON scope.collection_id = membership.collection_id
+                      WHERE membership.source_id = s.source_id
+                        AND membership.collection_id = $collection
+                        AND scope.archived_utc IS NULL))
+                """);
             ProcessingJobParameters.Bind(command, itemId, revision, ProcessorKeys.SourceText);
+            command.Parameters.AddWithValue("$current", currentOnly ? 1 : 0);
+            command.Parameters.AddWithValue("$source", (object?)expectedSourceId?.ToString("D") ?? DBNull.Value);
+            command.Parameters.AddWithValue("$digest", (object?)expectedSha256 ?? DBNull.Value);
+            command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             using SqliteDataReader reader = command.ExecuteReader();
             return reader.Read()
                 ? new TextDerivative(Guid.Parse(reader.GetString(0)), itemId, revision,

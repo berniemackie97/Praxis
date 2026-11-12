@@ -20,12 +20,12 @@ public interface ISemanticVectorStore
     /// </summary>
     int Store(string modelDigest, bool rebuild, IReadOnlyList<SegmentEmbedding> embeddings);
 
-    bool HasVectors(string modelDigest);
+    bool HasVectors(string modelDigest, Guid? collectionId = null);
 
     /// <summary>
     /// Exact nearest-neighbor search: the strongest eligible segment per item, most similar first.
     /// Throws when the index holds more than <paramref name="maximumScanned"/> vectors for the model.
     /// </summary>
     IReadOnlyList<SemanticSearchHit> FindNearest(
-        string modelDigest, float[] unitQuery, int limit, int maximumScanned, CancellationToken cancellationToken);
+        string modelDigest, float[] unitQuery, int limit, int maximumScanned, CancellationToken cancellationToken, Guid? collectionId = null);
 }
