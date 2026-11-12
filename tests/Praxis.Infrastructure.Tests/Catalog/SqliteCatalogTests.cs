@@ -180,13 +180,9 @@ public sealed class SqliteCatalogTests : IDisposable
     [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
-        string path = Path.Combine(root, "catalog.sqlite");
-        using (SqliteConnection connection = Connect(path))
+        CreateLegacyCatalog(1);
+        using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
         {
-            using Stream resource = typeof(SqliteCatalog).Assembly
-                .GetManifestResourceStream("Praxis.Infrastructure.Catalog.V1.sql")!;
-            using StreamReader reader = new(resource);
-            Execute(connection, reader.ReadToEnd());
             InsertSource(connection, "old-source", "source.md");
             Execute(connection, """
                 INSERT INTO original_objects VALUES
@@ -200,7 +196,6 @@ public sealed class SqliteCatalogTests : IDisposable
                 INSERT INTO ingest_requests (request_key, source_id, state, attempt, failure_code)
                     VALUES ('old-queued', 'old-source', 'queued', 0, NULL);
                 """);
-            Assert.Equal(1L, Scalar(connection, "PRAGMA user_version"));
         }
 
         using (SqliteCatalog upgraded = SqliteCatalog.Open(root))
