@@ -128,6 +128,17 @@ public sealed partial class OpaqueSyncStore
                 floor = reader.GetInt64(1);
             }
 
+            using (SqliteCommand active = Command(transaction,
+                "SELECT 1 FROM sync_rotation WHERE space_id=$space LIMIT 1",
+                ("$space", space)))
+            {
+                if (active.ExecuteScalar() is not null)
+                {
+                    throw new InvalidOperationException(
+                        "Cannot prune history while a content-key rotation is staged.");
+                }
+            }
+
             if (sequence < floor || sequence > head)
             {
                 throw new ArgumentOutOfRangeException(nameof(sequence));

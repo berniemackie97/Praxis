@@ -23,7 +23,7 @@ public sealed partial class OpaqueSyncStore
     }
 
     private OpaqueSyncRotationReceipt StageRotation(AuthorizedSpaceScope scope,
-        OpaqueSyncRotationStage request)
+        OpaqueSyncRotationStage request, bool write)
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
         string space = Id(scope.SpaceId);
@@ -151,7 +151,7 @@ public sealed partial class OpaqueSyncStore
     }
 
     private OpaqueSyncRotationReceipt CommitRotation(AuthorizedSpaceScope scope,
-        OpaqueSyncRotationCommit request)
+        OpaqueSyncRotationCommit request, bool write)
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
         string space = Id(scope.SpaceId);
