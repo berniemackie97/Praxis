@@ -75,6 +75,8 @@ enum FailureCode {
         case "provider_changed": "provider configuration changed; approve again"
         case "model_missing": "model is not installed"
         case "model_context_exceeded": "reviewed context exceeds the model budget; narrow the request"
+        case "model_canceled": "model request canceled; a fresh attempt remains subject to daily limits"
+        case "source_changed": "source evidence changed or was revoked; create a new request"
         default: code
         }
     }
