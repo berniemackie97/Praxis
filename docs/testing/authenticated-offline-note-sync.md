@@ -24,7 +24,7 @@ The following remain **unsatisfied** and must not be checked off until verified:
 - **Remote attachment transfer and atomic note references:** owned by #20, not provided by note-only ciphertext events.
 - **Independent real devices and operational release:** genuine network interruption, revocation and epoch rollover on owner-approved hardware, reliable CA/key escrow policy, supported-host TLS 1.3, and current-head Linux/Windows/macOS verification under #65/#137. macOS test-only loopback TLS 1.2 does **not** certify a production macOS sync host.
 
-The next remaining recovery boundary is consistent authenticated, bounded encrypted snapshots and key-epoch rebootstrap. Do not introduce parallel note storage or an unsafe raw-plaintext HTTP adapter.
+The remaining recovery boundary is **content-key epoch migration**: the owner must recover the previous key and its complete current projection, prepare ciphertext authenticated under the new epoch, and commit a full replacement with transactionally fenced revisions before newly enrolled clients can bootstrap. The current host refuses mixed old/new epochs and leaves old ciphertext intact; it does **not** silently rewrite key epochs, reset cursors, or discard outstanding edits. A locally authenticated snapshot is not a collection-wide signed completeness proof against a malicious host that deliberately hides unknown records. Do not introduce parallel plaintext storage or an unsafe raw-plaintext HTTP adapter.
 
 ## Reproducible verification
 

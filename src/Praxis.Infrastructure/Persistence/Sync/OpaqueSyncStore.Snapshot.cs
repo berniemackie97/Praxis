@@ -5,6 +5,8 @@ namespace Praxis.Infrastructure.Persistence.Sync;
 public sealed partial class OpaqueSyncStore
 {
     private const int MaximumSnapshotPage = 16;
+    private const int MaximumSnapshotRecords = 10_000;
+    private const long MaximumSnapshotCiphertextBytes = 24L * 1024 * 1024;
 
     private OpaqueSyncSnapshotPage ReadSnapshot(OpaqueSyncSnapshotPull request)
     {
@@ -129,6 +131,21 @@ public sealed partial class OpaqueSyncStore
             if (sequence < floor || sequence > head)
             {
                 throw new ArgumentOutOfRangeException(nameof(sequence));
+            }
+
+            using (SqliteCommand budget = Command(transaction, """
+                SELECT COUNT(*), COALESCE(SUM(length(ciphertext)), 0)
+                FROM sync_records WHERE space_id=$space
+                """, ("$space", space)))
+            using (SqliteDataReader reader = budget.ExecuteReader())
+            {
+                reader.Read();
+                if (reader.GetInt64(0) > MaximumSnapshotRecords ||
+                    reader.GetInt64(1) > MaximumSnapshotCiphertextBytes)
+                {
+                    throw new InvalidOperationException(
+                        "Event history cannot be pruned while the current encrypted projection exceeds the client recovery limit.");
+                }
             }
 
             using (SqliteCommand remove = Command(transaction, """
