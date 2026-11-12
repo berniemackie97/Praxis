@@ -18,7 +18,6 @@ using Praxis.Application.Text;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference.Ollama;
-using Praxis.Infrastructure.Inference.Subscription;
 using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
