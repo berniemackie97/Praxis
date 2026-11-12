@@ -79,6 +79,7 @@ public sealed class VerificationRunner(
                 return true;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             using ModelConnection connection = models.Create(claim.Provider);
             IChatModel model = connection.Model;
             ModelIdentity identity = await model.DescribeAsync(cancellationToken);
@@ -91,6 +92,7 @@ public sealed class VerificationRunner(
                     "The local model changed during verification.");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             IReadOnlyList<VerificationVerdict> verdicts = VerdictReader.Read(result.Content, claim.Ordinals);
             if (repository.Complete(claim, identity, result, verdicts))
             {
