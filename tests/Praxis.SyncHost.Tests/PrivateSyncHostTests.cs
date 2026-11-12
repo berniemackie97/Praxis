@@ -420,7 +420,7 @@ public sealed class PrivateSyncHostTests
 
         Assert.Equal(NoteSyncState.ConflictsPending, (await secondSync.ReconcileAsync()).State);
         Assert.Equal("other/second.md",
-            Assert.Single(second.Records.Where(record => record.Id == secondRecord)).Path);
+            Assert.Single(second.Records, record => record.Id == secondRecord).Path);
 
         second.ResolveIncoming(firstRecord, LocalNoteAction.Upsert, "same/path.md");
         Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
