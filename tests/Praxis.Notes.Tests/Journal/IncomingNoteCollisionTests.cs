@@ -194,6 +194,110 @@ public sealed class IncomingNoteCollisionTests : IDisposable
         Assert.Equal(remote, Assert.Single(journal.IncomingCollisions).Remote);
     }
 
+    [Fact]
+    public void ResolvingPendingRenamePromotesRetainedIncomingWithoutRewritingRemoteRevision()
+    {
+        Guid originalId = Guid.NewGuid(), incomingId = Guid.NewGuid();
+        using OfflineNoteJournal journal = Open();
+        LocalNoteState original = new(originalId, 1, "one.md", "original", false);
+        PendingNoteEdit first = journal.Queue(originalId, LocalNoteAction.Upsert,
+            original.Path, original.Markdown);
+        journal.Accept(first.OperationId, 1, original);
+        journal.ApplyPage(0, [new AppliedNoteChange(1, original)]);
+
+        PendingNoteEdit rename = journal.Queue(originalId, LocalNoteAction.Upsert,
+            "TWO.md", "renamed original");
+        LocalNoteState incoming = new(incomingId, 1, "two.md", "newly arrived", false);
+        journal.ApplyPage(1, [new AppliedNoteChange(2, incoming)]);
+        Assert.Equal(incoming, Assert.Single(journal.IncomingCollisions).Remote);
+        Assert.DoesNotContain(journal.Records, item => item.Id == incomingId);
+
+        journal.Reject(rename.OperationId, LocalNoteConflictReason.PathCollision, original);
+        PendingNoteEdit resolution = journal.Resolve(rename.OperationId,
+            LocalNoteAction.Upsert, "three.md", "renamed original");
+        Assert.Equal(1, resolution.ExpectedRevision);
+        Assert.Empty(journal.IncomingCollisions);
+        Assert.Contains(incoming, journal.Records);
+        Assert.Equal(2, journal.Cursor);
+
+        LocalNoteState renamed = original with
+        {
+            Revision = 2, Path = "three.md", Markdown = "renamed original"
+        };
+        journal.Accept(resolution.OperationId, 3, renamed);
+        journal.ApplyPage(2, [new AppliedNoteChange(3, renamed)]);
+        Assert.Equal(3, journal.Cursor);
+        Assert.Empty(journal.AcknowledgedChanges);
+        Assert.Contains(incoming, journal.Records);
+        Assert.Contains(renamed, journal.Records);
+    }
+
+    [Fact]
+    public void AcceptedLocalRenameReleasesRetainedRemoteOnlyAfterDurableAcceptance()
+    {
+        Guid originalId = Guid.NewGuid(), incomingId = Guid.NewGuid();
+        using OfflineNoteJournal journal = Open();
+        LocalNoteState original = new(originalId, 1, "shared.md", "local", false);
+        PendingNoteEdit first = journal.Queue(originalId, LocalNoteAction.Upsert,
+            original.Path, original.Markdown);
+        journal.Accept(first.OperationId, 1, original);
+        journal.ApplyPage(0, [new AppliedNoteChange(1, original)]);
+        LocalNoteState incoming = new(incomingId, 1, "SHARED.md", "remote", false);
+        journal.ApplyPage(1, [new AppliedNoteChange(2, incoming)]);
+
+        PendingNoteEdit rename = journal.Queue(originalId, LocalNoteAction.Upsert,
+            "renamed.md", "local");
+        Assert.Single(journal.IncomingCollisions);
+        LocalNoteState accepted = original with { Revision = 2, Path = "renamed.md" };
+        journal.Accept(rename.OperationId, 3, accepted);
+        Assert.Empty(journal.IncomingCollisions);
+        Assert.Contains(incoming, journal.Records);
+        Assert.Contains(accepted, journal.Records);
+        Assert.Equal(2, journal.Cursor);
+
+        journal.ApplyPage(2, [new AppliedNoteChange(3, accepted)]);
+        Assert.Equal(3, journal.Cursor);
+        Assert.Empty(journal.AcknowledgedChanges);
+    }
+
+    [Fact]
+    public void DeletingBlockerReleasesOnlyFirstCandidateAndUpdatesRemainingBlockerAfterRestart()
+    {
+        Guid originalId = Guid.NewGuid(), firstIncomingId = Guid.NewGuid(), secondIncomingId = Guid.NewGuid();
+        using (OfflineNoteJournal journal = Open())
+        {
+            LocalNoteState original = new(originalId, 1, "same.md", "original", false);
+            PendingNoteEdit edit = journal.Queue(originalId, LocalNoteAction.Upsert,
+                original.Path, original.Markdown);
+            journal.Accept(edit.OperationId, 1, original);
+            journal.ApplyPage(0, [new AppliedNoteChange(1, original)]);
+
+            LocalNoteState first = new(firstIncomingId, 1, "same.md", "first", false);
+            LocalNoteState second = new(secondIncomingId, 1, "same.md", "second", false);
+            journal.ApplyPage(1,
+            [
+                new AppliedNoteChange(2, first),
+                new AppliedNoteChange(3, second)
+            ]);
+            Assert.Equal(2, journal.IncomingCollisions.Count);
+            journal.ApplyPage(3, [new AppliedNoteChange(4, original with
+            {
+                Revision = 2, Deleted = true
+            })]);
+            Assert.Empty(journal.Pending);
+            Assert.Equal(4, journal.Cursor);
+            Assert.Equal(first, Assert.Single(journal.Records, note => !note.Deleted));
+            IncomingNoteCollision remaining = Assert.Single(journal.IncomingCollisions);
+            Assert.Equal(second, remaining.Remote);
+            Assert.Equal(firstIncomingId, remaining.BlockingRecordId);
+        }
+
+        using OfflineNoteJournal reopened = Open();
+        Assert.Equal(4, reopened.Cursor);
+        Assert.Equal(firstIncomingId, Assert.Single(reopened.Records, note => !note.Deleted).Id);
+        Assert.Equal(secondIncomingId, Assert.Single(reopened.IncomingCollisions).Remote.Id);
+    }
+
     private OfflineNoteJournal Open() => OfflineNoteJournal.Open(directory, epoch, device);
 
     public void Dispose()
