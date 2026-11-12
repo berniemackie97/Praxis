@@ -383,15 +383,35 @@ public sealed class OfflineNoteJournal : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            if (snapshot.Records is null || snapshot.CollectionEpoch != state.CollectionEpoch || snapshot.Cursor < 0)
+            if (snapshot.Records is null ||
+                snapshot.Records.Any(record => record is null) ||
+                snapshot.CollectionEpoch != state.CollectionEpoch || snapshot.Cursor < 0)
             {
                 throw new InvalidDataException("The snapshot uses an incompatible collection epoch or cursor.");
             }
 
             LocalJournalState candidate = state.Copy();
             candidate.Cursor = snapshot.Cursor;
-            candidate.Records = snapshot.Records.ToList();
+            candidate.Records = [];
+            candidate.IncomingCollisions = [];
             candidate.AwaitingPull.RemoveAll(change => change.Sequence <= snapshot.Cursor);
+
+            // Preserve established local path claims before admitting newly discovered notes.
+            HashSet<Guid> preferred = state.Records.Select(record => record.Id).ToHashSet();
+            foreach (LocalNoteState record in snapshot.Records
+                         .OrderByDescending(record => preferred.Contains(record.Id)))
+            {
+                Guid blocker = FindPathBlocker(candidate, record);
+                if (blocker == Guid.Empty)
+                {
+                    candidate.Records.Add(record);
+                }
+                else
+                {
+                    candidate.IncomingCollisions.Add(new IncomingNoteCollision(record, blocker));
+                }
+            }
+
             AddStaleConflicts(candidate);
             Commit(candidate);
         }

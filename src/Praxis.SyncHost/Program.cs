@@ -52,9 +52,19 @@ if (args is ["provision", var spaceText, var epochText] &&
     return;
 }
 
+if (args is ["prune", var pruneSpaceText, var sequenceText] &&
+    Guid.TryParse(pruneSpaceText, out Guid pruneSpace) &&
+    long.TryParse(sequenceText, NumberStyles.None, CultureInfo.InvariantCulture,
+        out long sequence))
+{
+    store.PruneThrough(pruneSpace, sequence);
+    return;
+}
+
 if (args.Length != 0)
 {
-    throw new ArgumentException("Use no arguments to serve, or provision <space-guid> <epoch-guid>.");
+    throw new ArgumentException(
+        "Use no arguments to serve, provision <space-guid> <epoch-guid>, or prune <space-guid> <sequence>.");
 }
 
 string serverPath = Absolute("PRAXIS_SYNC_TLS_PFX");

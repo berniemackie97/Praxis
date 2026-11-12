@@ -130,6 +130,41 @@ public sealed class OpaqueSyncTransportClient : IDisposable
             cancellationToken) ?? throw new InvalidDataException("The sync page is missing.");
     }
 
+    public async Task<OpaqueSyncSnapshotPage> SnapshotAsync(
+        OpaqueSyncSnapshotPull request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.DeviceId != deviceId)
+        {
+            throw new ArgumentException("The snapshot request does not belong to this device.", nameof(request));
+        }
+
+        for (int retry = 0; ; retry++)
+        {
+            try
+            {
+                (Guid challengeId, byte[] signature) = await Authorize(
+                    request.SpaceId, SecurityPermission.Read, cancellationToken);
+                using HttpResponseMessage response = await http.PostAsJsonAsync("v1/sync/snapshot",
+                    new SyncSnapshotRequest(challengeId, signature, request), cancellationToken);
+                if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Conflict or
+                    HttpStatusCode.BadRequest))
+                {
+                    response.EnsureSuccessStatusCode();
+                }
+
+                return await response.Content.ReadFromJsonAsync<OpaqueSyncSnapshotPage>(
+                    cancellationToken) ?? throw new InvalidDataException("The encrypted snapshot page is missing.");
+            }
+            catch (HttpRequestException error) when (
+                error.StatusCode == HttpStatusCode.TooManyRequests && retry < 18)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
     private async Task<(Guid, byte[])> Authorize(Guid spaceId, SecurityPermission permission,
         CancellationToken cancellationToken)
     {

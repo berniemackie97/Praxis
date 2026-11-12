@@ -196,13 +196,128 @@ public sealed class AuthenticatedNoteExchange : INoteSyncExchange, IDisposable
             page.NextCursor, page.HeadSequence, changes.AsReadOnly());
     }
 
-    public Task<NoteSnapshotResult> SnapshotAsync(Guid securitySpaceId,
+    public async Task<NoteSnapshotResult> SnapshotAsync(Guid securitySpaceId,
         Guid collectionEpoch, Guid deviceId, CancellationToken cancellationToken)
     {
         EnsureOpen();
         CheckScope(ProtocolVersion, securitySpaceId, collectionEpoch, deviceId);
-        throw new NotSupportedException(
-            "An authenticated, consistent encrypted reset snapshot is not available; the local journal remains intact.");
+        const int pageLimit = 16;
+        const int maxRecords = 10_000;
+        const int maxCiphertextBytes = 24 * 1024 * 1024;
+        List<LocalNoteState> records = [];
+        Guid after = Guid.Empty;
+        long head = 0;
+        long total = -1;
+        long receivedBytes = 0;
+
+        for (int pageNumber = 0; pageNumber <= maxRecords / pageLimit; pageNumber++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            OpaqueSyncSnapshotPage page = await transport.SnapshotAsync(
+                new OpaqueSyncSnapshotPull(ProtocolVersion, spaceId, collectionEpoch,
+                    deviceId, contentEpoch, head, after, pageLimit), cancellationToken)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (page is null || page.SpaceId != spaceId ||
+                page.CollectionEpoch != collectionEpoch || page.DeviceId != deviceId ||
+                page.RequestedHead != head || page.AfterRecordId != after ||
+                page.Records is null || page.Records.Count > pageLimit)
+            {
+                throw new InvalidDataException("The encrypted snapshot page has an invalid scope.");
+            }
+
+            if (page.Status != OpaqueSyncStatus.Ok)
+            {
+                if (page.HeadSequence != 0 || page.TotalRecords != 0 ||
+                    page.Records.Count != 0)
+                {
+                    throw new InvalidDataException("A rejected snapshot disclosed private state.");
+                }
+
+                throw page.Status switch
+                {
+                    OpaqueSyncStatus.ResetRequired => new InvalidOperationException(
+                        "The encrypted snapshot requires an explicit content-key recovery."),
+                    OpaqueSyncStatus.WrongCollectionEpoch => new InvalidOperationException(
+                        "The collection epoch has changed; local edits remain intact."),
+                    OpaqueSyncStatus.UnsupportedProtocolVersion => new NotSupportedException(
+                        "The encrypted snapshot protocol is unsupported."),
+                    _ => new InvalidDataException(
+                        "The encrypted snapshot changed or was rejected during recovery.")
+                };
+            }
+
+            if (page.HeadSequence < journal.Cursor ||
+                (head != 0 && page.HeadSequence != head) ||
+                page.TotalRecords is < 0 or > maxRecords ||
+                (total >= 0 && total != page.TotalRecords))
+            {
+                throw new InvalidDataException("The encrypted snapshot is not a stable bounded projection.");
+            }
+
+            head = page.HeadSequence;
+            total = page.TotalRecords;
+            foreach (OpaqueSyncSnapshotRecord record in page.Records)
+            {
+                if (record is null || record.RecordId == Guid.Empty ||
+                    record.Revision <= 0 || record.ContentEpoch != contentEpoch ||
+                    record.Ciphertext is null ||
+                    record.Ciphertext.Length is < 29 or > 65536 ||
+                    after != Guid.Empty && string.CompareOrdinal(
+                        record.RecordId.ToString("N"), after.ToString("N")) <= 0)
+                {
+                    throw new InvalidDataException("The encrypted snapshot record is invalid or unordered.");
+                }
+
+                receivedBytes = checked(receivedBytes + record.Ciphertext.Length);
+                if (receivedBytes > maxCiphertextBytes || records.Count == maxRecords)
+                {
+                    throw new InvalidDataException("The encrypted snapshot exceeds the local checkpoint budget.");
+                }
+
+                records.Add(DecryptSnapshotRecord(record));
+                after = record.RecordId;
+            }
+
+            if (records.Count == total)
+            {
+                return new NoteSnapshotResult(ProtocolVersion, spaceId, deviceId,
+                    new LocalNoteSnapshot(collectionEpoch, head, records.AsReadOnly()));
+            }
+
+            if (page.Records.Count != pageLimit)
+            {
+                throw new InvalidDataException("The encrypted snapshot is incomplete.");
+            }
+
+            // Each page needs a new proof challenge. Pace recovery under the host's
+            // per-certificate request budget rather than restarting from page zero.
+            await Task.Delay(TimeSpan.FromMilliseconds(1250), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        throw new InvalidDataException("The encrypted snapshot exceeded its page budget.");
+    }
+
+    private LocalNoteState DecryptSnapshotRecord(OpaqueSyncSnapshotRecord record)
+    {
+        OpaqueSyncAction action = record.Deleted ? OpaqueSyncAction.Delete : OpaqueSyncAction.Upsert;
+        OpaqueNoteContent note;
+        try
+        {
+            note = ClientOpaqueNoteCipher.Decrypt(contentKey, spaceId,
+                journal.CollectionEpoch, record.RecordId, record.Revision,
+                action, contentEpoch, record.Ciphertext);
+        }
+        catch (CryptographicException) when (!record.Deleted)
+        {
+            note = ClientOpaqueNoteCipher.Decrypt(contentKey, spaceId,
+                journal.CollectionEpoch, record.RecordId, record.Revision,
+                OpaqueSyncAction.Restore, contentEpoch, record.Ciphertext);
+        }
+
+        return new LocalNoteState(record.RecordId, record.Revision,
+            note.Path, note.Markdown, record.Deleted);
     }
 
     private LocalNoteState Decode(OpaqueSyncEvent change, LocalNoteState? prior,

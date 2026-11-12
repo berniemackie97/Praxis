@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.Http;
@@ -482,6 +483,121 @@ public sealed class PrivateSyncHostTests
         Assert.False(first.Records.Single(record => record.Id == secondRecord).Deleted);
     }
 
+    [Fact]
+    public async Task ExpiredCursorRecoversAuthenticatedSnapshotWithoutDroppingOfflineConflict()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("snapshot-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("snapshot-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstExchange = host.Exchange(first, firstClient, "snapshot-outbox-first");
+        using AuthenticatedNoteExchange secondExchange = host.Exchange(second, secondClient, "snapshot-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstExchange);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondExchange);
+        Guid record = Guid.NewGuid();
+
+        first.Queue(record, LocalNoteAction.Upsert, "original.md", "initial");
+        await firstSync.ReconcileAsync();
+        await secondSync.ReconcileAsync();
+        PendingNoteEdit offline = second.Queue(record, LocalNoteAction.Upsert,
+            "offline.md", "unsent contribution");
+
+        for (int i = 0; i < 3; i++)
+        {
+            first.Queue(record, LocalNoteAction.Upsert, "original.md", "updated-" + i);
+            await firstSync.ReconcileAsync();
+        }
+
+        host.PruneThrough(4);
+        NoteSyncProgress restored = await secondSync.ReconcileAsync();
+        Assert.True(restored.SnapshotApplied);
+        Assert.Equal(4, second.Cursor);
+        Assert.Equal("updated-2", Assert.Single(second.Records).Markdown);
+        Assert.Equal(offline.OperationId, Assert.Single(second.Pending).OperationId);
+        Assert.Equal(LocalNoteConflictReason.StaleRevision,
+            Assert.Single(second.Conflicts).Reason);
+
+        second.Resolve(offline.OperationId, LocalNoteAction.Upsert,
+            "offline.md", "merged contribution");
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(5, first.Cursor);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+        Assert.Empty(second.Conflicts);
+    }
+
+    [Fact]
+    public async Task EncryptedSnapshotTransfersMultiplePagesAndRejectsTamperingWithoutCheckpointChange()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("pages-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("pages-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstExchange = host.Exchange(first, firstClient, "pages-outbox-first");
+        using AuthenticatedNoteExchange secondExchange = host.Exchange(second, secondClient, "pages-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstExchange);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondExchange);
+
+        for (int i = 0; i < 18; i++)
+        {
+            first.Queue(Guid.NewGuid(), LocalNoteAction.Upsert,
+                $"private/{i:00}.md", "body-" + i);
+        }
+
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        host.PruneThrough(18);
+        Assert.True((await secondSync.ReconcileAsync()).SnapshotApplied);
+        Assert.Equal(18, second.Cursor);
+        Assert.Equal(18, second.Records.Count);
+        Assert.Equal(first.Records.OrderBy(note => note.Id).ToArray(),
+            second.Records.OrderBy(note => note.Id).ToArray());
+
+        Guid changed = second.Records[0].Id;
+        first.Queue(changed, LocalNoteAction.Upsert,
+            second.Records[0].Path, "changed value");
+        await firstSync.ReconcileAsync();
+        host.PruneThrough(19);
+
+        host.CorruptSnapshotRecord(changed);
+        await Assert.ThrowsAsync<CryptographicException>(() => secondSync.ReconcileAsync());
+        Assert.Equal(18, second.Cursor);
+        Assert.Equal(18, second.Records.Count);
+        Assert.DoesNotContain(second.Records, note => note.Markdown == "changed value");
+    }
+
+    [Fact]
+    public async Task SnapshotRequiresCurrentAuthorizedDeviceEvenAfterItPreviouslyHadReadAccess()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient writer = host.ConnectFirst();
+        using OpaqueSyncTransportClient reader = host.ConnectSecond();
+        Guid id = Guid.NewGuid();
+        OpaqueSyncMutation mutation = host.Mutation(host.FirstDevice, id,
+            Guid.NewGuid(), 0, OpaqueSyncAction.Upsert,
+            host.Encrypt(id, 1, OpaqueSyncAction.Upsert,
+                new OpaqueNoteContent("private.md", "sensitive")));
+        Assert.Equal(OpaqueSyncStatus.Applied, (await writer.SubmitAsync(mutation)).Status);
+        OpaqueSyncSnapshotPull query = new(1, host.Space, host.CollectionEpoch,
+            host.SecondDevice, 1, 0, Guid.Empty, 16);
+        OpaqueSyncSnapshotPage before = await reader.SnapshotAsync(query);
+        Assert.Equal(OpaqueSyncStatus.Ok, before.Status);
+        Assert.Single(before.Records);
+        Assert.Equal(mutation.Ciphertext, before.Records[0].Ciphertext);
+
+        Assert.True(host.Registry.Operator.RevokeDevice(host.SecondDevice));
+        await Assert.ThrowsAsync<HttpRequestException>(() => reader.SnapshotAsync(query));
+        Assert.Equal(1, (await writer.PullAsync(host.Pull(host.FirstDevice, 0, 100))).HeadSequence);
+    }
+
     private sealed class TestHost : IAsyncDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(),
@@ -658,6 +774,25 @@ public sealed class PrivateSyncHostTests
 
         public OpaqueSyncPull Pull(Guid device, long cursor, int limit) =>
             new(1, Space, CollectionEpoch, device, 1, cursor, limit);
+
+        public void PruneThrough(long sequence) => store.PruneThrough(Space, sequence);
+
+        public void CorruptSnapshotRecord(Guid recordId)
+        {
+            using SqliteConnection database = new(
+                $"Data Source={Path.Combine(root, "sync", "sync.sqlite")};Pooling=False");
+            database.Open();
+            using SqliteCommand select = database.CreateCommand();
+            select.CommandText = "SELECT ciphertext FROM sync_records WHERE record_id=$record";
+            select.Parameters.AddWithValue("$record", recordId.ToString("N"));
+            byte[] cipher = (byte[])select.ExecuteScalar()!;
+            cipher[^1] ^= 0x01;
+            using SqliteCommand update = database.CreateCommand();
+            update.CommandText = "UPDATE sync_records SET ciphertext=$cipher WHERE record_id=$record";
+            update.Parameters.AddWithValue("$cipher", cipher);
+            update.Parameters.AddWithValue("$record", recordId.ToString("N"));
+            Assert.Equal(1, update.ExecuteNonQuery());
+        }
 
         public byte[] SignFirst(byte[] message) => firstSigner.SignData(
             message, HashAlgorithmName.SHA256,
