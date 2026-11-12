@@ -211,6 +211,7 @@ public sealed class OfflineNoteJournal : IDisposable
             candidate.Records.Add(accepted);
             candidate.Pending.Remove(edit);
             candidate.AwaitingPull.Add(new AcceptedNoteReceipt(operationId, acceptedSequence, accepted));
+            ReleaseUnblockedIncoming(candidate);
             Commit(candidate);
         }
     }
@@ -278,6 +279,7 @@ public sealed class OfflineNoteJournal : IDisposable
             PendingNoteEdit result = incoming is null
                 ? Stage(candidate, recordId, replacement, path, markdown)
                 : StageIncomingResolution(candidate, incoming, replacement, path, markdown);
+            ReleaseUnblockedIncoming(candidate);
             Commit(candidate);
             return result;
         }
@@ -369,6 +371,7 @@ public sealed class OfflineNoteJournal : IDisposable
                 candidate.Cursor++;
             }
 
+            ReleaseUnblockedIncoming(candidate);
             AddStaleConflicts(candidate);
             Commit(candidate);
         }
@@ -438,7 +441,8 @@ public sealed class OfflineNoteJournal : IDisposable
         return edit;
     }
 
-    private static Guid FindPathBlocker(LocalJournalState candidate, LocalNoteState incoming)
+    private static Guid FindPathBlocker(LocalJournalState candidate, LocalNoteState incoming,
+        bool includeIncoming = true)
     {
         if (incoming.Deleted)
         {
@@ -464,10 +468,39 @@ public sealed class OfflineNoteJournal : IDisposable
             return reserved.RecordId;
         }
 
-        return candidate.IncomingCollisions.FirstOrDefault(collision =>
-            collision.Remote.Id != incoming.Id && !collision.Remote.Deleted &&
-            string.Equals(collision.Remote.Path, incoming.Path, StringComparison.OrdinalIgnoreCase))
-            ?.Remote.Id ?? Guid.Empty;
+        return includeIncoming
+            ? candidate.IncomingCollisions.FirstOrDefault(collision =>
+                collision.Remote.Id != incoming.Id && !collision.Remote.Deleted &&
+                string.Equals(collision.Remote.Path, incoming.Path, StringComparison.OrdinalIgnoreCase))
+                ?.Remote.Id ?? Guid.Empty
+            : Guid.Empty;
+    }
+
+    private static void ReleaseUnblockedIncoming(LocalJournalState candidate)
+    {
+        foreach (IncomingNoteCollision collision in candidate.IncomingCollisions.ToArray())
+        {
+            if (candidate.Pending.Any(edit => edit.RecordId == collision.Remote.Id))
+            {
+                continue;
+            }
+
+            Guid blocker = FindPathBlocker(candidate, collision.Remote, includeIncoming: false);
+            if (blocker != Guid.Empty)
+            {
+                if (blocker != collision.BlockingRecordId)
+                {
+                    int index = candidate.IncomingCollisions.IndexOf(collision);
+                    candidate.IncomingCollisions[index] = collision with { BlockingRecordId = blocker };
+                }
+
+                continue;
+            }
+
+            candidate.IncomingCollisions.Remove(collision);
+            candidate.Records.RemoveAll(record => record.Id == collision.Remote.Id);
+            candidate.Records.Add(collision.Remote);
+        }
     }
 
     private static PendingNoteEdit StageIncomingResolution(LocalJournalState candidate,

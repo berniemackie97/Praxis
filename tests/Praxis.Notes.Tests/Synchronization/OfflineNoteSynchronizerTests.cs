@@ -155,10 +155,15 @@ public sealed class OfflineNoteSynchronizerTests : IDisposable
             Assert.Single(second.Conflicts).Reason);
         Assert.Equal(rename.OperationId, Assert.Single(second.Pending).OperationId);
         Assert.Equal("TWO.md", Assert.Single(second.Pending).Path);
-        Assert.Contains(second.Records, note => note.Id == b && note.Path == "two.md");
+        Assert.DoesNotContain(second.Records, note => note.Id == b);
+        IncomingNoteCollision retained = Assert.Single(second.IncomingCollisions);
+        Assert.Equal(b, retained.Remote.Id);
+        Assert.Equal("two.md", retained.Remote.Path);
 
         second.Resolve(rename.OperationId, LocalNoteAction.Upsert,
             "three.md", "renamed one");
+        Assert.Empty(second.IncomingCollisions);
+        Assert.Contains(second.Records, note => note.Id == b && note.Path == "two.md");
         await secondSync.ReconcileAsync();
         await firstSync.ReconcileAsync();
         Assert.Equal(first.Records.ToArray(), second.Records.ToArray());

@@ -418,20 +418,18 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
         Assert.Empty(first.IncomingCollisions);
 
-        Assert.Equal(NoteSyncState.ConflictsPending, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
         Assert.Equal("other/second.md",
             Assert.Single(second.Records, record => record.Id == secondRecord).Path);
-
-        second.ResolveIncoming(firstRecord, LocalNoteAction.Upsert, "same/path.md");
-        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
-        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal("same/path.md",
+            Assert.Single(second.Records, record => record.Id == firstRecord).Path);
 
         Assert.Empty(first.IncomingCollisions);
         Assert.Empty(second.IncomingCollisions);
         Assert.Empty(first.Pending);
         Assert.Empty(second.Pending);
-        Assert.Equal(4, first.Cursor);
-        Assert.Equal(4, second.Cursor);
+        Assert.Equal(3, first.Cursor);
+        Assert.Equal(3, second.Cursor);
         Assert.Equal(first.Records.OrderBy(record => record.Id).ToArray(),
             second.Records.OrderBy(record => record.Id).ToArray());
         Assert.Equal("first contents",
@@ -469,14 +467,13 @@ public sealed class PrivateSyncHostTests
         Assert.Equal("first private body",
             second.Records.Single(record => record.Id == firstRecord).Markdown);
 
-        Assert.Equal(NoteSyncState.ConflictsPending, (await firstSync.ReconcileAsync()).State);
-        Assert.True(first.Records.Single(record => record.Id == firstRecord).Deleted);
-        first.ResolveIncoming(secondRecord, LocalNoteAction.Upsert, "same.md");
         Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
-        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.True(first.Records.Single(record => record.Id == firstRecord).Deleted);
+        Assert.Empty(first.IncomingCollisions);
+        Assert.Equal("same.md", first.Records.Single(record => record.Id == secondRecord).Path);
 
-        Assert.Equal(4, first.Cursor);
-        Assert.Equal(4, second.Cursor);
+        Assert.Equal(3, first.Cursor);
+        Assert.Equal(3, second.Cursor);
         Assert.Empty(first.IncomingCollisions);
         Assert.Empty(second.IncomingCollisions);
         Assert.Equal(first.Records.OrderBy(record => record.Id).ToArray(),
