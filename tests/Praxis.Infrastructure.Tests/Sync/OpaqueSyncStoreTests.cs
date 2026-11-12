@@ -408,6 +408,105 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             .Ciphertext);
     }
 
+    [Fact]
+    public void StagedEpochRotationRetainsOldProjectionUntilCompleteAtomicCommit()
+    {
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        Guid rotation = Guid.NewGuid();
+        OpaqueSyncMutation first = Request(space, epoch, device, Guid.NewGuid(),
+            Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        OpaqueSyncMutation second = Request(space, epoch, device, Guid.NewGuid(),
+            Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        OpaqueSyncRotationCommit commit = new(1, space, epoch, device,
+            rotation, 2, 1, 2);
+        OpaqueSyncSnapshotRecord sealedFirst =
+            new(first.RecordId, 1, false, 2, RandomNumberGenerator.GetBytes(48));
+        OpaqueSyncSnapshotRecord sealedSecond =
+            new(second.RecordId, 1, false, 2, RandomNumberGenerator.GetBytes(48));
+        AuthorizedSpaceScope newWriter = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Write, 2);
+        AuthorizedSpaceScope newReader = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Read, 2);
+
+        using (OpaqueSyncStore store = OpaqueSyncStore.Open(root))
+        {
+            store.Provision(space, epoch);
+            AuthorizedSpaceScope oldWriter = Scope(device, space, SecurityPermission.Write);
+            Assert.Equal(1, store.Submit(oldWriter, first).Sequence);
+            Assert.Equal(2, store.Submit(oldWriter, second).Sequence);
+
+            OpaqueSyncRotationStage stage = new(1, space, epoch, device,
+                rotation, 2, 1, 2, sealedFirst);
+            Assert.Equal(OpaqueSyncStatus.Ok, store.StageRotation(newWriter, stage).Status);
+            Assert.Equal(OpaqueSyncStatus.InvalidRequest, store.CommitRotation(newWriter, commit).Status);
+            Assert.Equal(OpaqueSyncStatus.ResetRequired,
+                store.Snapshot(newReader, new OpaqueSyncSnapshotPull(
+                    1, space, epoch, device, 2, 0, Guid.Empty, 16)).Status);
+            Assert.Equal(first.Ciphertext, Assert.Single(store.Pull(
+                Scope(device, space, SecurityPermission.Read),
+                new OpaqueSyncPull(1, space, epoch, device, 1, 0, 1)).Changes).Ciphertext);
+        }
+
+        using (OpaqueSyncStore resumed = OpaqueSyncStore.Open(root))
+        {
+            Assert.Equal(OpaqueSyncStatus.Ok, resumed.StageRotation(newWriter,
+                new OpaqueSyncRotationStage(1, space, epoch, device, rotation, 2, 1, 2,
+                    sealedSecond)).Status);
+            OpaqueSyncRotationReceipt completed = resumed.CommitRotation(newWriter, commit);
+            Assert.Equal(OpaqueSyncStatus.Applied, completed.Status);
+            Assert.Equal(2, completed.HeadSequence);
+            Assert.Equal(completed.Status, resumed.CommitRotation(newWriter, commit).Status);
+            Assert.Equal(OpaqueSyncStatus.CursorExpired, resumed.Pull(newReader,
+                new OpaqueSyncPull(1, space, epoch, device, 2, 0, 100)).Status);
+            OpaqueSyncSnapshotPage snapshot = resumed.Snapshot(newReader,
+                new OpaqueSyncSnapshotPull(1, space, epoch, device, 2, 0, Guid.Empty, 16));
+            Assert.Equal(OpaqueSyncStatus.Ok, snapshot.Status);
+            Assert.Equal(2, snapshot.TotalRecords);
+            Assert.Contains(snapshot.Records, item =>
+                item.RecordId == first.RecordId && item.Ciphertext.SequenceEqual(sealedFirst.Ciphertext));
+            Assert.Contains(snapshot.Records, item =>
+                item.RecordId == second.RecordId && item.Ciphertext.SequenceEqual(sealedSecond.Ciphertext));
+            Assert.Equal(OpaqueSyncStatus.ResetRequired, resumed.Pull(
+                Scope(device, space, SecurityPermission.Read),
+                new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).Status);
+            Assert.Equal(OpaqueSyncStatus.ResetRequired,
+                resumed.Submit(Scope(device, space, SecurityPermission.Write), first).Status);
+        }
+    }
+
+    [Fact]
+    public void EpochRotationRejectsStaleHeadAndIncompleteProjectionWithoutMutation()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        Guid rotation = Guid.NewGuid(), record = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope oldWriter = Scope(device, space, SecurityPermission.Write);
+        AuthorizedSpaceScope newWriter = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Write, 2);
+        OpaqueSyncMutation first = Request(space, epoch, device,
+            Guid.NewGuid(), record, 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(oldWriter, first).Status);
+
+        OpaqueSyncRotationStage staged = new(1, space, epoch, device,
+            rotation, 1, 1, 2, new OpaqueSyncSnapshotRecord(record, 1, false, 2,
+                RandomNumberGenerator.GetBytes(48)));
+        Assert.Equal(OpaqueSyncStatus.Ok, store.StageRotation(newWriter, staged).Status);
+        Assert.Throws<InvalidOperationException>(() => store.PruneThrough(space, 1));
+
+        OpaqueSyncMutation added = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(2, store.Submit(oldWriter, added).Sequence);
+        Assert.Equal(OpaqueSyncStatus.InvalidRequest, store.CommitRotation(newWriter,
+            new OpaqueSyncRotationCommit(1, space, epoch, device,
+                rotation, 1, 1, 2)).Status);
+        Assert.Equal(2, store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
+        Assert.Equal(OpaqueSyncStatus.Ok, store.Snapshot(
+            Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncSnapshotPull(1, space, epoch, device, 1, 0, Guid.Empty, 16)).Status);
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
