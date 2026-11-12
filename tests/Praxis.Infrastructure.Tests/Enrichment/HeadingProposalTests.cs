@@ -171,7 +171,7 @@ public sealed class HeadingProposalTests : IDisposable
 
         await CatalogSnapshots.RestoreAsync(backup, target, 20_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(target);
-        Assert.Equal(17, restored.SchemaVersion);
+        Assert.Equal(18, restored.SchemaVersion);
         Assert.Equal("accepted",
             Assert.Single(restored.Proposals.List(first.SourceId)).Status);
         Assert.Equal("pending",
@@ -216,7 +216,7 @@ public sealed class HeadingProposalTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
-        Assert.Equal(17, upgraded.SchemaVersion);
+        Assert.Equal(18, upgraded.SchemaVersion);
         Assert.Equal("Research", Assert.Single(upgraded.Collections.List()).Name);
         Assert.False(ProcessingDriver.Topics(upgraded).ProcessNext());
         Assert.Empty(upgraded.Proposals.List(Guid.NewGuid()));
