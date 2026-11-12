@@ -80,8 +80,9 @@ public sealed partial class OfflineNoteSynchronizer
             applied += page.Changes.Count;
             if (journal.Cursor >= page.HeadSequence)
             {
-                return (journal.Outbound().Count > 0
-                    ? NoteSyncState.MoreWork : NoteSyncState.UpToDate, applied, snapshotApplied);
+                return (journal.Outbound().Count > 0 ? NoteSyncState.MoreWork :
+                    journal.IncomingCollisions.Count > 0 ? NoteSyncState.ConflictsPending :
+                    NoteSyncState.UpToDate, applied, snapshotApplied);
             }
 
             if (page.Changes.Count == 0)

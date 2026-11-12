@@ -376,7 +376,7 @@ public sealed class PrivateSyncHostTests
     }
 
     [Fact]
-    public async Task HostOpaquePathCollisionStopsBeforeAdvancingTheClientCheckpoint()
+    public async Task HostOpaquePathCollisionIsDurablyQuarantinedAndResolvesWithoutOverwrite()
     {
         await using TestHost host = new();
         await host.StartAsync();
@@ -395,18 +395,94 @@ public sealed class PrivateSyncHostTests
         Guid secondRecord = Guid.NewGuid();
         first.Queue(firstRecord, LocalNoteAction.Upsert, "same/path.md", "first contents");
         second.Queue(secondRecord, LocalNoteAction.Upsert, "same/path.md", "second contents");
-        await firstSync.ReconcileAsync();
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => secondSync.ReconcileAsync());
-        Assert.Equal(0, second.Cursor);
+        NoteSyncProgress secondConflict = await secondSync.ReconcileAsync();
+        Assert.Equal(NoteSyncState.ConflictsPending, secondConflict.State);
+        Assert.Equal(1, secondConflict.NewConflicts);
+        Assert.Equal(2, second.Cursor);
         Assert.Equal(secondRecord, Assert.Single(second.Records).Id);
-        Assert.Single(second.AcknowledgedChanges);
+        Assert.Equal(firstRecord, Assert.Single(second.IncomingCollisions).Remote.Id);
         Assert.Empty(second.Pending);
+        Assert.Empty(second.AcknowledgedChanges);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => firstSync.ReconcileAsync());
-        Assert.Equal(1, first.Cursor);
+        NoteSyncProgress firstConflict = await firstSync.ReconcileAsync();
+        Assert.Equal(NoteSyncState.ConflictsPending, firstConflict.State);
+        Assert.Equal(2, first.Cursor);
         Assert.Equal(firstRecord, Assert.Single(first.Records).Id);
+        Assert.Equal(secondRecord, Assert.Single(first.IncomingCollisions).Remote.Id);
+
+        PendingNoteEdit rename = first.ResolveIncoming(
+            secondRecord, LocalNoteAction.Upsert, "other/second.md");
+        Assert.Equal(1, rename.ExpectedRevision);
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Empty(first.IncomingCollisions);
+
+        Assert.Equal(NoteSyncState.ConflictsPending, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal("other/second.md",
+            Assert.Single(second.Records, record => record.Id == secondRecord).Path);
+
+        second.ResolveIncoming(firstRecord, LocalNoteAction.Upsert, "same/path.md");
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+
+        Assert.Empty(first.IncomingCollisions);
+        Assert.Empty(second.IncomingCollisions);
         Assert.Empty(first.Pending);
+        Assert.Empty(second.Pending);
+        Assert.Equal(4, first.Cursor);
+        Assert.Equal(4, second.Cursor);
+        Assert.Equal(first.Records.OrderBy(record => record.Id).ToArray(),
+            second.Records.OrderBy(record => record.Id).ToArray());
+        Assert.Equal("first contents",
+            first.Records.Single(record => record.Id == firstRecord).Markdown);
+        Assert.Equal("other/second.md",
+            first.Records.Single(record => record.Id == secondRecord).Path);
+    }
+
+    [Fact]
+    public async Task QuarantinedRemoteDeletionIsAuthenticatedAndReleasesOriginalPath()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("delete-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("delete-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstExchange = host.Exchange(first, firstClient, "delete-outbox-first");
+        using AuthenticatedNoteExchange secondExchange = host.Exchange(second, secondClient, "delete-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstExchange);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondExchange);
+
+        Guid firstRecord = Guid.NewGuid(), secondRecord = Guid.NewGuid();
+        first.Queue(firstRecord, LocalNoteAction.Upsert, "same.md", "first private body");
+        second.Queue(secondRecord, LocalNoteAction.Upsert, "same.md", "second private body");
+        await firstSync.ReconcileAsync();
+        Assert.Equal(NoteSyncState.ConflictsPending, (await secondSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.ConflictsPending, (await firstSync.ReconcileAsync()).State);
+
+        second.ResolveIncoming(firstRecord, LocalNoteAction.Delete);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+        Assert.True(second.Records.Single(record => record.Id == firstRecord).Deleted);
+        Assert.Equal("first private body",
+            second.Records.Single(record => record.Id == firstRecord).Markdown);
+
+        Assert.Equal(NoteSyncState.ConflictsPending, (await firstSync.ReconcileAsync()).State);
+        Assert.True(first.Records.Single(record => record.Id == firstRecord).Deleted);
+        first.ResolveIncoming(secondRecord, LocalNoteAction.Upsert, "same.md");
+        Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
+
+        Assert.Equal(4, first.Cursor);
+        Assert.Equal(4, second.Cursor);
+        Assert.Empty(first.IncomingCollisions);
+        Assert.Empty(second.IncomingCollisions);
+        Assert.Equal(first.Records.OrderBy(record => record.Id).ToArray(),
+            second.Records.OrderBy(record => record.Id).ToArray());
+        Assert.True(first.Records.Single(record => record.Id == firstRecord).Deleted);
+        Assert.False(first.Records.Single(record => record.Id == secondRecord).Deleted);
     }
 
     private sealed class TestHost : IAsyncDisposable

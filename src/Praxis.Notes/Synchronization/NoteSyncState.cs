@@ -6,5 +6,6 @@ public enum NoteSyncState
     MoreWork,
     EpochChanged,
     CursorResetRequired,
-    KeyResetRequired
+    KeyResetRequired,
+    ConflictsPending
 }

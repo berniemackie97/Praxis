@@ -93,6 +93,17 @@ public sealed class OfflineNoteJournal : IDisposable
         }
     }
 
+    public IReadOnlyList<IncomingNoteCollision> IncomingCollisions
+    {
+        get
+        {
+            lock (gate)
+            {
+                EnsureOpen(); return Array.AsReadOnly(state.IncomingCollisions.ToArray());
+            }
+        }
+    }
+
     public IReadOnlyList<RejectedNoteEdit> Conflicts
     {
         get
@@ -133,6 +144,10 @@ public sealed class OfflineNoteJournal : IDisposable
             EnsureOpen();
             HashSet<Guid> blocked = state.Conflicts.Select(item => item.Edit.RecordId).ToHashSet();
             Dictionary<Guid, long> revisions = state.Records.ToDictionary(record => record.Id, record => record.Revision);
+            foreach (IncomingNoteCollision collision in state.IncomingCollisions)
+            {
+                revisions[collision.Remote.Id] = collision.Remote.Revision;
+            }
             HashSet<Guid> seen = [];
             return Array.AsReadOnly(state.Pending.Where(item => seen.Add(item.RecordId) && !blocked.Contains(item.RecordId)
                 && item.ExpectedRevision == revisions.GetValueOrDefault(item.RecordId)).ToArray());
@@ -174,7 +189,9 @@ public sealed class OfflineNoteJournal : IDisposable
             }
 
             PendingNoteEdit edit = FirstPending(operationId);
-            LocalNoteState? current = state.Records.FirstOrDefault(record => record.Id == edit.RecordId);
+            LocalNoteState? current = state.IncomingCollisions
+                .FirstOrDefault(collision => collision.Remote.Id == edit.RecordId)?.Remote
+                ?? state.Records.FirstOrDefault(record => record.Id == edit.RecordId);
             if (state.Conflicts.Any(conflict => conflict.Edit.OperationId == operationId) || edit.ExpectedRevision != (current?.Revision ?? 0))
             {
                 throw new InvalidOperationException("The operation is blocked by an unresolved conflict.");
@@ -190,6 +207,7 @@ public sealed class OfflineNoteJournal : IDisposable
 
             LocalJournalState candidate = state.Copy();
             candidate.Records.RemoveAll(record => record.Id == accepted.Id);
+            candidate.IncomingCollisions.RemoveAll(collision => collision.Remote.Id == accepted.Id);
             candidate.Records.Add(accepted);
             candidate.Pending.Remove(edit);
             candidate.AwaitingPull.Add(new AcceptedNoteReceipt(operationId, acceptedSequence, accepted));
@@ -243,7 +261,12 @@ public sealed class OfflineNoteJournal : IDisposable
             RejectedNoteEdit conflict = state.Conflicts.SingleOrDefault(item => item.Edit.OperationId == conflictedOperationId)
                                         ?? throw new InvalidOperationException("The operation has no recorded conflict.");
             Guid recordId = conflict.Edit.RecordId;
-            if (state.Pending.Count(item => item.RecordId == recordId) != 1 || state.Records.FirstOrDefault(record => record.Id == recordId) != conflict.Current)
+            IncomingNoteCollision? incoming = state.IncomingCollisions
+                .FirstOrDefault(item => item.Remote.Id == recordId);
+            LocalNoteState? current = incoming?.Remote ??
+                state.Records.FirstOrDefault(record => record.Id == recordId);
+            if (state.Pending.Count(item => item.RecordId == recordId) != 1 ||
+                current != conflict.Current)
             {
                 throw new InvalidOperationException("Resolve dependent edits and refresh the authoritative record before rebasing.");
             }
@@ -252,9 +275,33 @@ public sealed class OfflineNoteJournal : IDisposable
             candidate.Pending.Remove(conflict.Edit);
             candidate.Conflicts.Remove(conflict);
             candidate.Resolved.Add(conflict);
-            PendingNoteEdit result = Stage(candidate, recordId, replacement, path, markdown);
+            PendingNoteEdit result = incoming is null
+                ? Stage(candidate, recordId, replacement, path, markdown)
+                : StageIncomingResolution(candidate, incoming, replacement, path, markdown);
             Commit(candidate);
             return result;
+        }
+    }
+
+    public PendingNoteEdit ResolveIncoming(Guid recordId, LocalNoteAction action, string? path = null)
+    {
+        lock (gate)
+        {
+            EnsureOpen();
+            IncomingNoteCollision collision = state.IncomingCollisions
+                .SingleOrDefault(item => item.Remote.Id == recordId)
+                ?? throw new InvalidOperationException("The record has no unresolved incoming collision.");
+            if (state.Pending.Any(edit => edit.RecordId == recordId) ||
+                state.Conflicts.Any(conflict => conflict.Edit.RecordId == recordId))
+            {
+                throw new InvalidOperationException("Resolve existing edits for this record first.");
+            }
+
+            LocalJournalState candidate = state.Copy();
+            PendingNoteEdit resolution = StageIncomingResolution(candidate, collision,
+                action, path, collision.Remote.Markdown);
+            Commit(candidate);
+            return resolution;
         }
     }
 
@@ -290,14 +337,33 @@ public sealed class OfflineNoteJournal : IDisposable
                 }
                 else
                 {
-                    LocalNoteState? existing = candidate.Records.FirstOrDefault(record => record.Id == change.Record.Id);
+                    IncomingNoteCollision? incoming = candidate.IncomingCollisions
+                        .FirstOrDefault(item => item.Remote.Id == change.Record.Id);
+                    LocalNoteState? existing = incoming?.Remote ??
+                        candidate.Records.FirstOrDefault(record => record.Id == change.Record.Id);
                     if (change.Record.Revision != (existing?.Revision ?? 0) + 1)
                     {
                         throw new InvalidDataException("The remote record revision is inconsistent.");
                     }
 
-                    candidate.Records.RemoveAll(record => record.Id == change.Record.Id);
-                    candidate.Records.Add(change.Record);
+                    Guid blocker = FindPathBlocker(candidate, change.Record);
+                    if (blocker != Guid.Empty)
+                    {
+                        candidate.IncomingCollisions.RemoveAll(item => item.Remote.Id == change.Record.Id);
+                        candidate.IncomingCollisions.Add(new IncomingNoteCollision(change.Record, blocker));
+                    }
+                    else if (incoming is not null &&
+                             candidate.Pending.Any(edit => edit.RecordId == change.Record.Id))
+                    {
+                        candidate.IncomingCollisions.RemoveAll(item => item.Remote.Id == change.Record.Id);
+                        candidate.IncomingCollisions.Add(incoming with { Remote = change.Record });
+                    }
+                    else
+                    {
+                        candidate.IncomingCollisions.RemoveAll(item => item.Remote.Id == change.Record.Id);
+                        candidate.Records.RemoveAll(record => record.Id == change.Record.Id);
+                        candidate.Records.Add(change.Record);
+                    }
                 }
 
                 candidate.Cursor++;
@@ -330,6 +396,11 @@ public sealed class OfflineNoteJournal : IDisposable
 
     private PendingNoteEdit Stage(LocalJournalState candidate, Guid recordId, LocalNoteAction action, string? path, string? markdown)
     {
+        if (candidate.IncomingCollisions.Any(collision => collision.Remote.Id == recordId))
+        {
+            throw new InvalidOperationException("Resolve the incoming note collision before editing this record.");
+        }
+
         if (recordId == Guid.Empty)
         {
             throw new ArgumentException("The record identity must be nonempty.", nameof(recordId));
@@ -367,6 +438,63 @@ public sealed class OfflineNoteJournal : IDisposable
         return edit;
     }
 
+    private static Guid FindPathBlocker(LocalJournalState candidate, LocalNoteState incoming)
+    {
+        if (incoming.Deleted)
+        {
+            return Guid.Empty;
+        }
+
+        LocalNoteState? active = candidate.Records.FirstOrDefault(record =>
+            record.Id != incoming.Id && !record.Deleted &&
+            string.Equals(record.Path, incoming.Path, StringComparison.OrdinalIgnoreCase));
+        if (active is not null)
+        {
+            return active.Id;
+        }
+
+        PendingNoteEdit? reserved = candidate.Pending
+            .Where(edit => edit.RecordId != incoming.Id)
+            .GroupBy(edit => edit.RecordId)
+            .Select(group => group.Last())
+            .FirstOrDefault(edit => edit.Action != LocalNoteAction.Delete &&
+                string.Equals(edit.Path, incoming.Path, StringComparison.OrdinalIgnoreCase));
+        if (reserved is not null)
+        {
+            return reserved.RecordId;
+        }
+
+        return candidate.IncomingCollisions.FirstOrDefault(collision =>
+            collision.Remote.Id != incoming.Id && !collision.Remote.Deleted &&
+            string.Equals(collision.Remote.Path, incoming.Path, StringComparison.OrdinalIgnoreCase))
+            ?.Remote.Id ?? Guid.Empty;
+    }
+
+    private static PendingNoteEdit StageIncomingResolution(LocalJournalState candidate,
+        IncomingNoteCollision collision, LocalNoteAction action, string? path, string? markdown)
+    {
+        if (collision.Remote.Deleted
+            ? action != LocalNoteAction.Restore
+            : action is not (LocalNoteAction.Upsert or LocalNoteAction.Delete))
+        {
+            throw new InvalidOperationException("The resolution does not match the incoming note lifecycle.");
+        }
+
+        PendingNoteEdit resolution = new(Guid.NewGuid(), collision.Remote.Id,
+            collision.Remote.Revision, action,
+            action == LocalNoteAction.Delete ? null : path,
+            action == LocalNoteAction.Delete ? null : markdown);
+        JournalCheckpoint.ValidateEdit(resolution);
+        if (action != LocalNoteAction.Delete &&
+            FindPathBlocker(candidate, collision.Remote with { Path = path! }) != Guid.Empty)
+        {
+            throw new InvalidOperationException("The resolved note path is already reserved.");
+        }
+
+        candidate.Pending.Add(resolution);
+        return resolution;
+    }
+
     private PendingNoteEdit FirstPending(Guid operationId)
     {
         PendingNoteEdit edit = state.Pending.FirstOrDefault(item => item.OperationId == operationId) ?? throw new InvalidOperationException("The operation is not queued.");
@@ -379,7 +507,9 @@ public sealed class OfflineNoteJournal : IDisposable
     {
         foreach (PendingNoteEdit edit in candidate.Pending.GroupBy(item => item.RecordId).Select(group => group.First()))
         {
-            LocalNoteState? current = candidate.Records.FirstOrDefault(record => record.Id == edit.RecordId);
+            LocalNoteState? current = candidate.IncomingCollisions
+                .FirstOrDefault(collision => collision.Remote.Id == edit.RecordId)?.Remote
+                ?? candidate.Records.FirstOrDefault(record => record.Id == edit.RecordId);
             if (edit.ExpectedRevision != (current?.Revision ?? 0))
             {
                 int index = candidate.Conflicts.FindIndex(conflict => conflict.Edit.OperationId == edit.OperationId);

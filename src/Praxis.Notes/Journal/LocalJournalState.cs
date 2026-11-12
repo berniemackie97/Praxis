@@ -8,6 +8,7 @@ internal sealed class LocalJournalState
     public List<LocalNoteState> Records { get; set; } = [];
     public List<PendingNoteEdit> Pending { get; set; } = [];
     public List<RejectedNoteEdit> Conflicts { get; set; } = [];
+    public List<IncomingNoteCollision> IncomingCollisions { get; set; } = [];
     public List<RejectedNoteEdit> Resolved { get; set; } = [];
     public List<AcceptedNoteReceipt> AwaitingPull { get; set; } = [];
 
@@ -19,6 +20,7 @@ internal sealed class LocalJournalState
         Records = [.. Records],
         Pending = [.. Pending],
         Conflicts = [.. Conflicts],
+        IncomingCollisions = [.. IncomingCollisions],
         Resolved = [.. Resolved],
         AwaitingPull = [.. AwaitingPull]
     };
