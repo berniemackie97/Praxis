@@ -248,7 +248,7 @@ def reconcile_issues(plan, items, dependencies):
     issues = {
         issue["number"]: issue
         for issue in gh_json(
-            "issue", "list", "-R", repo, "--state", "all", "--limit", "200",
+            "issue", "list", "-R", repo, "--state", "all", "--limit", "1000",
             "--json", "number,title,state,labels,milestone,parent,blockedBy",
         )
     }
@@ -410,7 +410,7 @@ def reconcile_project(plan, project, items, issues):
             raise RuntimeError(f"{field_name} field is missing required options.")
 
     listing = gh_json("project", "item-list", number, "--owner", owner,
-                      "--format", "json", "--limit", "200")
+                      "--format", "json", "--limit", "1000")
     existing = listing["items"]
     if len(existing) != listing["totalCount"]:
         raise RuntimeError("Project item list is truncated; refusing reconciliation.")
@@ -538,7 +538,7 @@ def main():
         issue["number"]: issue
         for issue in gh_json(
             "issue", "list", "-R", plan["repository"], "--state", "all",
-            "--limit", "200", "--json", "number,state,id"
+            "--limit", "1000", "--json", "number,state,id"
         )
     }
     reconcile_project(plan, project, items, issues)
