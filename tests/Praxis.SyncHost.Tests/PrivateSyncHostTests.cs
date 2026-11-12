@@ -573,6 +573,31 @@ public sealed class PrivateSyncHostTests
         Assert.DoesNotContain(second.Records, note => note.Markdown == "changed value");
     }
 
+    [Fact]
+    public async Task SnapshotRequiresCurrentAuthorizedDeviceEvenAfterItPreviouslyHadReadAccess()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient writer = host.ConnectFirst();
+        using OpaqueSyncTransportClient reader = host.ConnectSecond();
+        Guid id = Guid.NewGuid();
+        OpaqueSyncMutation mutation = host.Mutation(host.FirstDevice, id,
+            Guid.NewGuid(), 0, OpaqueSyncAction.Upsert,
+            host.Encrypt(id, 1, OpaqueSyncAction.Upsert,
+                new OpaqueNoteContent("private.md", "sensitive")));
+        Assert.Equal(OpaqueSyncStatus.Applied, (await writer.SubmitAsync(mutation)).Status);
+        OpaqueSyncSnapshotPull query = new(1, host.Space, host.CollectionEpoch,
+            host.SecondDevice, 1, 0, Guid.Empty, 16);
+        OpaqueSyncSnapshotPage before = await reader.SnapshotAsync(query);
+        Assert.Equal(OpaqueSyncStatus.Ok, before.Status);
+        Assert.Single(before.Records);
+        Assert.Equal(mutation.Ciphertext, before.Records[0].Ciphertext);
+
+        Assert.True(host.Registry.Operator.RevokeDevice(host.SecondDevice));
+        await Assert.ThrowsAsync<HttpRequestException>(() => reader.SnapshotAsync(query));
+        Assert.Equal(1, (await writer.PullAsync(host.Pull(host.FirstDevice, 0, 100))).HeadSequence);
+    }
+
     private sealed class TestHost : IAsyncDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(),

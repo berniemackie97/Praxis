@@ -383,6 +383,31 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public void SnapshotRefusesMixedKeyEpochsAndPreservesEncryptedProjection()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope owner = Scope(device, space, SecurityPermission.Write);
+        OpaqueSyncMutation mutation = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(owner, mutation).Status);
+
+        AuthorizedSpaceScope newEpoch = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Read, 2);
+        OpaqueSyncSnapshotPage denied = store.Snapshot(newEpoch,
+            new OpaqueSyncSnapshotPull(1, space, epoch, device, 2, 0, Guid.Empty, 16));
+        Assert.Equal(OpaqueSyncStatus.ResetRequired, denied.Status);
+        Assert.Empty(denied.Records);
+        Assert.Equal(0, denied.HeadSequence);
+        Assert.Equal(0, denied.TotalRecords);
+        Assert.Equal(mutation.Ciphertext, Assert.Single(store.Snapshot(
+            Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncSnapshotPull(1, space, epoch, device, 1, 0, Guid.Empty, 16)).Records)
+            .Ciphertext);
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 

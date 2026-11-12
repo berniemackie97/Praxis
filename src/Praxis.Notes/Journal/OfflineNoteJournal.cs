@@ -383,7 +383,9 @@ public sealed class OfflineNoteJournal : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            if (snapshot.Records is null || snapshot.CollectionEpoch != state.CollectionEpoch || snapshot.Cursor < 0)
+            if (snapshot.Records is null ||
+                snapshot.Records.Any(record => record is null) ||
+                snapshot.CollectionEpoch != state.CollectionEpoch || snapshot.Cursor < 0)
             {
                 throw new InvalidDataException("The snapshot uses an incompatible collection epoch or cursor.");
             }
