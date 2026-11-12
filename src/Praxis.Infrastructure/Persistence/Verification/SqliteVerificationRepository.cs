@@ -287,6 +287,13 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                     ("$id", id), ("$ordinal", ordinal));
             }
 
+            if (!EvidenceIsCurrent(connection, transaction, id))
+            {
+                RejectStale(connection, transaction, id, now);
+                transaction.Commit();
+                return null;
+            }
+
             transaction.Commit();
             return Read(connection, null, id);
         });
@@ -338,11 +345,27 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             }
         }
 
-        // The oldest request whose provider still has allowance today; others wait for tomorrow.
-        var next = candidates.FirstOrDefault(candidate =>
-            StartedToday(connection, transaction, candidate.Provider.ProviderId, now) < candidate.Provider.DailyLimit);
+        // Invalidate obsolete reviewed evidence before dispatch, without a different provider.
+        (string Id, string Payload, VerificationProvider Provider) next = default;
+        foreach (var candidate in candidates)
+        {
+            if (!EvidenceIsCurrent(connection, transaction, candidate.Id))
+            {
+                RejectStale(connection, transaction, candidate.Id, time);
+                continue;
+            }
+
+            if (StartedToday(connection, transaction, candidate.Provider.ProviderId, now) <
+                candidate.Provider.DailyLimit)
+            {
+                next = candidate;
+                break;
+            }
+        }
+
         if (next.Id is null)
         {
+            transaction.Commit();
             return null;
         }
 
@@ -372,6 +395,14 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     public bool Complete(
         ClaimedVerification claim, ModelIdentity model, ChatResult result, IReadOnlyList<VerificationVerdict> verdicts)
     {
+        ArgumentNullException.ThrowIfNull(verdicts);
+        if (verdicts.Count != claim.Ordinals.Count ||
+            verdicts.Select(verdict => verdict.Ordinal).ToHashSet().Count != verdicts.Count ||
+            verdicts.Any(verdict => !claim.Ordinals.Contains(verdict.Ordinal)))
+        {
+            throw new ArgumentException("Every approved item needs one valid verdict.", nameof(verdicts));
+        }
+
         var now = CatalogValues.Timestamp(clock.GetUtcNow());
         return database.Execute(connection =>
         {
@@ -379,6 +410,13 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             var id = claim.RequestId.ToString("D");
             if (!HoldsLease(connection, transaction, claim))
             {
+                return false;
+            }
+
+            if (!EvidenceIsCurrent(connection, transaction, id))
+            {
+                RejectStale(connection, transaction, id, now);
+                transaction.Commit();
                 return false;
             }
 
@@ -396,7 +434,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 }
 
                 affected.Add(entity);
-                if (verdict.CorrectedType is { } type)
+                if (verdict.Verdict == "supported" && verdict.CorrectedType is { } type)
                 {
                     connection.Run(transaction, """
                         UPDATE knowledge_entities SET entity_type = $type, type_origin = 'verified', updated_utc = $now
@@ -461,6 +499,46 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             transaction.Commit();
             return true;
         });
+
+    private static bool EvidenceIsCurrent(SqliteConnection connection, SqliteTransaction transaction, string request)
+    {
+        using var query = connection.CreateCommand("""
+            SELECT EXISTS (
+                SELECT 1 FROM verification_items WHERE request_id = $request AND included = 1
+            ) AND NOT EXISTS (
+                SELECT 1 FROM verification_items i
+                WHERE i.request_id = $request AND i.included = 1 AND (
+                    (i.proposal_id IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM eligible_enrichment_proposals p
+                        WHERE p.proposal_id = i.proposal_id
+                    ))
+                    OR (i.entity_id IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM knowledge_entities e
+                        JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
+                        WHERE e.entity_id = i.entity_id AND e.status = 'active'
+                    ))
+                )
+            )
+            """);
+        query.Transaction = transaction;
+        query.Parameters.AddWithValue("$request", request);
+        return Convert.ToInt64(query.ExecuteScalar()) == 1;
+    }
+
+    private static void RejectStale(SqliteConnection connection, SqliteTransaction transaction, string request, string now)
+    {
+        connection.Run(transaction, """
+            UPDATE verification_invocations
+            SET status = 'failed', finished_utc = $now, failure_code = 'source_changed'
+            WHERE request_id = $request AND status = 'running'
+            """, ("$request", request), ("$now", now));
+        connection.Run(transaction, """
+            UPDATE verification_requests
+            SET status = 'failed', completed_utc = $now, failure_code = 'source_changed',
+                lease_key = NULL, lease_until_utc = NULL, retry_after_utc = NULL
+            WHERE request_id = $request AND status IN ('awaiting_approval', 'approved', 'running')
+            """, ("$request", request), ("$now", now));
+    }
 
     private static bool Create(
         SqliteConnection connection, SqliteTransaction transaction, string reason,
