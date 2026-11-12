@@ -26,6 +26,12 @@ The owner requires that the first intelligent release be **general-purpose**, no
 
 The evidence model must allow selectors suited to each modality: code symbol/span/revision, text paragraph, video start/end/source timebase, and structured financial record/field. Provider-known transaction types are deterministic; AI enrichment remains reviewable and permissioned. This expands the product's required workflows, not the authority of its models or the scope of its accounts.
 
+## Vision expansion — November 11, 2026
+
+Four epics capture the long-range owner vision without changing the #130/#170 gates: **#287** orchestrated multi-model intelligence (tiered cascade, generator–verifier chains, cost ledger, local-model accuracy amplification, cascaded intake), **#288** universal ingestion (connector SDK, credential vault, owner-authored ingestion rules, personal connector catalog, video/audio/image intelligence), **#289** agent runtime (risk-tiered terminal/app/browser actions, skills, MCP client, context-efficient memory for external agents) and **#290** ambient voice and proactive assistance (wake word, intent routing, briefings). Features #291–#302 and children #303–#353 carry native parent and blocked-by links.
+
+**Availability rule:** an open leaf issue with any open native blocker has Status **Blocked**; one with none has **Ready** unless it is already In Progress, In Review or Verification. Epics and features are containers and stay Backlog until a child starts. Run `python3 scripts/github/availability.py --apply` after closing an issue so newly unblocked work shows as Ready.
+
 ## Work item hierarchy
 
 | Level | Purpose | Completion condition |
