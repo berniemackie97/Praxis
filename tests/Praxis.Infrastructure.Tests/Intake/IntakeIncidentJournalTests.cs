@@ -53,7 +53,7 @@ public sealed class IntakeIncidentJournalTests : IDisposable
         string restored = Path.Combine(workspace, "restored");
         await CatalogSnapshots.RestoreAsync(Path.Combine(workspace, "backup"), restored, 20_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(restored, clock);
-        Assert.Equal(17, reopened.SchemaVersion);
+        Assert.Equal(18, reopened.SchemaVersion);
         Assert.Equal(2, reopened.IntakeIncidents.Recent(20).Count);
         Assert.All(reopened.IntakeIncidents.Recent(20), incident => Assert.NotNull(incident.ResolvedUtc));
     }
@@ -114,6 +114,11 @@ public sealed class IntakeIncidentJournalTests : IDisposable
             Assert.Equal("reapproval_required", catalog.IntakeIncidents.Recent(20)[0].State);
             group.ApproveRoot(absent);
             await WaitForAsync(() => group.RootStatuses()[0].Status.State == "watching");
+            await WaitForAsync(() =>
+            {
+                var incidents = catalog.IntakeIncidents.Recent(20);
+                return incidents.Count == 2 && incidents.All(incident => incident.ResolvedUtc is not null);
+            });
             Assert.All(catalog.IntakeIncidents.Recent(20), incident => Assert.NotNull(incident.ResolvedUtc));
         }
         finally
