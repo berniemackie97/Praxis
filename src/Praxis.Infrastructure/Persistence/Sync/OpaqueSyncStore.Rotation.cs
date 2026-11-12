@@ -43,12 +43,13 @@ public sealed partial class OpaqueSyncStore
             return Reject(OpaqueSyncStatus.UnsupportedProtocolVersion);
         }
 
+        OpaqueSyncSnapshotRecord? record = request.Record;
         if (request.RotationId == Guid.Empty || request.PreviousEpoch < 1 ||
             request.PreviousEpoch == long.MaxValue ||
             request.ContentEpoch != request.PreviousEpoch + 1 ||
             request.ContentEpoch != scope.ContentEpoch ||
             request.ExpectedHead <= 0 || request.ExpectedHead != head ||
-            request.Record is not { } record || record.RecordId == Guid.Empty ||
+            record is null || record.RecordId == Guid.Empty ||
             record.Revision < 1 || record.ContentEpoch != request.ContentEpoch ||
             record.Ciphertext is null || record.Ciphertext.Length is < 29 or > MaxPayloadBytes)
         {
