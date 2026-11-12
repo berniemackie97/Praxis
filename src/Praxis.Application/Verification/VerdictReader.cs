@@ -10,10 +10,18 @@ public static class VerdictReader
 {
     public static IReadOnlyList<VerificationVerdict> Read(string json, IReadOnlySet<int> sent)
     {
+        ArgumentNullException.ThrowIfNull(sent);
+        if (string.IsNullOrWhiteSpace(json) || sent.Count == 0 ||
+            System.Text.Encoding.UTF8.GetByteCount(json) > 64 * 1024)
+        {
+            throw Invalid();
+        }
+
         try
         {
             using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("verdicts", out var verdicts) ||
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("verdicts", out var verdicts) ||
                 verdicts.ValueKind != JsonValueKind.Array)
             {
                 throw Invalid();
@@ -23,26 +31,45 @@ public static class VerdictReader
             foreach (var item in verdicts.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object ||
-                    !item.TryGetProperty("ordinal", out var ordinalValue) || !ordinalValue.TryGetInt32(out var ordinal) ||
-                    !sent.Contains(ordinal) || result.ContainsKey(ordinal) ||
-                    Text(item, "verdict") is not ("supported" or "unsupported" or "uncertain") ||
-                    Text(item, "correctedType") is not { } corrected ||
-                    (corrected != VerificationPrompt.NoTypeChange && !KnowledgeVocabulary.EntityTypes.Contains(corrected)))
+                    !item.TryGetProperty("ordinal", out var ordinalValue) ||
+                    ordinalValue.ValueKind != JsonValueKind.Number ||
+                    !ordinalValue.TryGetInt32(out var ordinal))
                 {
-                    continue; // Answers about items that were not sent, or malformed entries, are ignored.
+                    throw Invalid();
                 }
 
-                var note = Text(item, "note")?.Trim();
-                result[ordinal] = new VerificationVerdict(ordinal, Text(item, "verdict")!,
+                if (!sent.Contains(ordinal))
+                {
+                    continue;
+                }
+
+                string? verdict = Text(item, "verdict");
+                string? corrected = Text(item, "correctedType");
+                string? note = Text(item, "note");
+                if (verdict is not ("supported" or "unsupported" or "uncertain") ||
+                    corrected is null || note is null || result.ContainsKey(ordinal) ||
+                    (corrected != VerificationPrompt.NoTypeChange && !KnowledgeVocabulary.EntityTypes.Contains(corrected)))
+                {
+                    throw Invalid();
+                }
+
+                note = note.Trim();
+                result.Add(ordinal, new VerificationVerdict(ordinal, verdict,
                     corrected == VerificationPrompt.NoTypeChange ? null : corrected,
-                    string.IsNullOrEmpty(note) ? null : note.Length <= 300 ? note : note[..300]);
+                    note.Length == 0 ? null : note.Length <= 300 ? note : note[..300]));
+            }
+
+            if (result.Count != sent.Count)
+            {
+                throw Invalid();
             }
 
             return result.Values.OrderBy(verdict => verdict.Ordinal).ToArray();
         }
         catch (JsonException exception)
         {
-            throw new InferenceException(InferenceFailure.InvalidResponse, "The verifier returned malformed JSON.", exception);
+            throw new InferenceException(InferenceFailure.InvalidResponse,
+                "The verifier returned malformed JSON.", exception);
         }
     }
 
