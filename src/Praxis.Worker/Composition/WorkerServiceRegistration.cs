@@ -19,6 +19,7 @@ using Praxis.Application.Verification;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Inference.Subscription;
+using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Worker.Desktop;
@@ -51,7 +52,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
 
-        services.AddSingleton<IVerifierModelFactory, SubscriptionVerifierModelFactory>();
+        services.AddSingleton<IVerifierModelFactory, VerificationModelFactory>();
         services.AddSingleton<IChatModelConnector, OllamaChatModelConnector>();
         services.AddSingleton<IEmbeddingModelConnector, OllamaEmbeddingModelConnector>();
         services.AddSingleton<ILocalModelDirectory, OllamaModelDirectory>();
