@@ -29,6 +29,12 @@ With identity/data-directory variables set, provision a selected owner-approved 
 
     dotnet run --project src/Praxis.SyncHost -c Release -- provision <space-guid> <epoch-guid>
 
+To compact one provisioned space's event history, stop the host process, retain a verified backup of the sync database and identity registry, verify the target cursor and record projection, and explicitly run:
+
+    dotnet run --project src/Praxis.SyncHost -c Release -- prune <space-guid> <last-sequence-to-remove>
+
+This command uses the same exclusive sync-store lease, refuses a sequence beyond the committed head or before the existing floor, retains the latest encrypted record projection and idempotent receipts, and refuses compaction if the recoverable projection exceeds the local recovery budget. It does not rotate keys. This operation is irreversible without the operator's verified backup.
+
 After the TLS variables are set, start the separate network process using:
 
     dotnet run --project src/Praxis.SyncHost -c Release --no-build
