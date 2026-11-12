@@ -63,6 +63,7 @@ public sealed class VerificationRunner(
     /// <summary>Sends one approved request; returns false when none is ready.</summary>
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (repository.Claim() is not { } claim)
         {
             return false;
