@@ -165,7 +165,7 @@ public sealed class VerificationTests : IDisposable
         Guid a = catalog.Verification.RequestForSource(first.SourceId)!.Value;
         Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a,
             providerId: VerificationProvider.Codex).ProviderId);
-        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts())).ProcessNextAsync());
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => VerdictsFor(catalog.Verification.Get(a)!))).ProcessNextAsync());
 
         Guid b = catalog.Verification.RequestForSource(second.SourceId)!.Value;
         Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b,
@@ -209,7 +209,7 @@ public sealed class VerificationTests : IDisposable
         {
             // Re-saving the provider (for example, after signing in) retries without waiting.
             SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
-            Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts())).ProcessNextAsync());
+            Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => VerdictsFor(catalog.Verification.Get(request)!))).ProcessNextAsync());
             Assert.Equal("completed", catalog.Verification.Get(request)!.Status);
         }
     }
@@ -323,7 +323,7 @@ public sealed class VerificationTests : IDisposable
         Assert.Equal(1, catalog.Verification.ListProviders().Single(
             provider => provider.IsLocal).Revision);
 
-        ScriptedChatModel local = new(_ => Verdicts());
+        ScriptedChatModel local = new(_ => VerdictsFor(catalog.Verification.Get(request)!));
         var contacted = new List<string>();
         Assert.True(await Runner(catalog, provider =>
         {
@@ -440,6 +440,144 @@ public sealed class VerificationTests : IDisposable
             allowance => allowance.Provider.ProviderId == VerificationProvider.ClaudeCode).StartedToday);
     }
 
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("partial")]
+    [InlineData("duplicate")]
+    [InlineData("string_ordinal")]
+    [InlineData("truncated")]
+    public async Task InvalidOrIncompleteVerdictsNeverCompleteOrMutateKnowledge(string reply)
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "malformed.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        int alex = Ordinal(catalog, request, "Alex Rivera");
+        int hacker = Ordinal(catalog, request, "Hacker Inc");
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        string answer = reply switch
+        {
+            "empty" => Verdicts(),
+            "partial" => Verdicts((alex, "unsupported", "none")),
+            "duplicate" => Verdicts((alex, "unsupported", "none"), (alex, "supported", "none"),
+                (hacker, "unsupported", "none")),
+            "string_ordinal" => """
+                {"verdicts":[{"ordinal":"1","verdict":"unsupported","correctedType":"none","note":"checked"}]}
+                """,
+            _ => "{\"verdicts\":["
+        };
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => answer)).ProcessNextAsync());
+        VerificationRequestView failed = catalog.Verification.Get(request)!;
+        Assert.Equal(("failed", "model_invalid_response"), (failed.Status, failed.FailureCode));
+        Assert.All(failed.Items, item => Assert.Null(item.Verdict));
+        Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
+    public async Task UnsupportedVerdictCannotPromoteAnEntityType()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "unsupported.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        int alex = Ordinal(catalog, request, "Alex Rivera");
+        int hacker = Ordinal(catalog, request, "Hacker Inc");
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
+            Verdicts((alex, "unsupported", "organization"), (hacker, "uncertain", "none")))).ProcessNextAsync());
+        Guid proposal = catalog.Proposals.List(source.SourceId)
+            .Single(candidate => candidate.Value == "Alex Rivera").ProposalId;
+        Assert.True(catalog.Proposals.Review(proposal, "accepted"));
+        EntitySummary restored = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Alex Rivera");
+        Assert.Equal("person", restored.EntityType);
+        Assert.NotEqual("verified", restored.TypeOrigin);
+    }
+
+    [Fact]
+    public async Task RevokedSourceCannotBeApprovedOrDispatched()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal original = await Enrich(catalog, "revoked.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid awaiting = catalog.Verification.RequestForSource(original.SourceId)!.Value;
+        Assert.True(catalog.Sources.Revoke(original.SourceId));
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(awaiting,
+                providerId: VerificationProvider.Codex));
+        Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(awaiting)!.Status,
+            catalog.Verification.Get(awaiting)!.FailureCode));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+
+        CapturedOriginal second = await Enrich(catalog, "revoked-later.md", Meeting);
+        Guid approved = catalog.Verification.RequestForSource(second.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(approved, providerId: VerificationProvider.Codex);
+        Assert.True(catalog.Sources.Revoke(second.SourceId));
+        Assert.False(await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
+            "A revoked source must never invoke a provider.")).ProcessNextAsync());
+        Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(approved)!.Status,
+            catalog.Verification.Get(approved)!.FailureCode));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+        await catalog.Originals.VerifyAsync(original.ItemId);
+        await catalog.Originals.VerifyAsync(second.ItemId);
+    }
+
+    [Fact]
+    public async Task RevokingDuringInferenceFencesVerdictsAndLogsTheAttempt()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "revoked-running.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+
+        VerificationVerdict[] verdicts = claim.Ordinals.Select(ordinal =>
+            new VerificationVerdict(ordinal, "supported", null, null)).ToArray();
+        Assert.False(catalog.Verification.Complete(claim, new ScriptedChatModel(_ => "").Identity,
+            new ChatResult(VerdictsFor(catalog.Verification.Get(request)!), 100, 20, TimeSpan.FromSeconds(1)), verdicts));
+        VerificationRequestView failed = catalog.Verification.Get(request)!;
+        Assert.Equal(("failed", "source_changed"), (failed.Status, failed.FailureCode));
+        Assert.All(failed.Items, item => Assert.Null(item.Verdict));
+        Assert.Equal(1, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
+    public async Task CanceledInvocationReturnsToApprovedQueueWithoutChangingTheProvider()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "cancel.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1, dailyLimit: 1);
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 2);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        using CancellationTokenSource cancellation = new();
+        ScriptedChatModel model = new(_ =>
+        {
+            cancellation.Cancel();
+            throw new OperationCanceledException(cancellation.Token);
+        });
+
+        VerificationRunner runner = Runner(catalog, provider =>
+        {
+            Assert.Equal(VerificationProvider.Codex, provider.ProviderId);
+            return model;
+        });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await runner.ProcessNextAsync(cancellation.Token));
+
+        VerificationRequestView approved = catalog.Verification.Get(request)!;
+        Assert.Equal(("approved", "model_canceled"), (approved.Status, approved.FailureCode));
+        Assert.Equal(1, catalog.Verification.ListEnabledProviderAllowances()
+            .Single(provider => provider.Provider.ProviderId == VerificationProvider.Codex).StartedToday);
+        Assert.False(await runner.ProcessNextAsync());
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
@@ -465,6 +603,10 @@ public sealed class VerificationTests : IDisposable
         {
             verdicts = verdicts.Select(verdict => new { ordinal = verdict.Ordinal, verdict = verdict.Verdict, correctedType = verdict.Type, note = "checked" })
         });
+
+    private static string VerdictsFor(VerificationRequestView request) =>
+        Verdicts(request.Items.Where(item => item.Included)
+            .Select(item => (item.Ordinal, "uncertain", "none")).ToArray());
 
     /// <summary>Answers with every known name present in the excerpt, quoting the name itself.</summary>
     private ScriptedChatModel LocalModel() => new(request =>
