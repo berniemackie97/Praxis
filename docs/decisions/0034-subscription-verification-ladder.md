@@ -40,9 +40,9 @@ Claude Code with an expired sign-in was classified `model_unauthenticated` and l
 No direct paid-API or local-OpenAI-compatible verifier yet. Plan usage limits are not visible to Praxis beyond the daily request limits it enforces itself. The verifier sees only the excerpt context, so it can call a correct but under-described item `uncertain`.
 
 
-## Proposed #31 extension: local-first verification and versioned approval
+## Implemented #31 boundary: local-first verification and versioned approval
 
-This section describes the pending #31 implementation, **not** a new accepted release
+This section records the current implementation, **not** a validated product release
 gate. The original Codex/Claude CLI integration and its recorded measurements above
 remain historical. Verification now uses a single disposable model-session contract:
 loopback-only Ollama (no network egress), or the owner's explicitly selected Codex
@@ -89,6 +89,30 @@ Over-budget evidence fails without calling a model; the owner must narrow
 the request. Local Ollama checks that its installed model digest has not
 changed during completion. This is a conservative guard, **not** a complete
 provider-specific tokenizer accounting or demonstrated local-model accuracy.
+
+**Request integrity at the model boundary.** The reviewed payload is bounded by
+UTF-8 bytes before and after exclusions and redactions, and the response is bounded
+to 64 KiB. Every included ordinal must have exactly one well-formed verdict;
+missing, duplicated or malformed entries fail the whole request without applying
+partial verdicts. Extra ordinals not sent to the model are ignored. A response
+that cannot judge an item must explicitly say `uncertain`; silently omitting it
+does not count as abstention. Type corrections only promote a verified type
+when the item was supported, and owner decisions still take precedence.
+
+An approved request is rechecked against the currently eligible source
+revision or entity evidence at approval, at dispatch and before committing
+the result. Revoked or superseded evidence produces the safe
+`source_changed` failure, fences a running attempt, and requires a newly
+reviewed request rather than sending a stale approved payload. Requests
+already transmitted cannot be withdrawn. Caller cancellation releases
+the claim with a delay and an attempt ledger entry; it never switches to an
+unselected provider or treats cancellation as a successful verdict.
+
+**Scope limit:** this checks proposal eligibility and current visibility for
+entity-type requests, but does not implement the separately scoped source
+classification and export permission system in #32. Provider-side consumption
+limits remain those of the installed runtime and subscription, not a measured
+cross-provider cost contract.
 
 **Acceptance remaining:** exact-head .NET migration and negative tests,
 first-party macOS review, actual installed Ollama runtime behavior on the
