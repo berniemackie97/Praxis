@@ -90,8 +90,9 @@ public sealed partial class OpaqueSyncStore
         long revision = 0;
         bool exists = false;
         bool deleted = false;
+        long previousCiphertextBytes = 0;
         using (SqliteCommand record = Command(transaction, """
-            SELECT space_id, revision, deleted
+            SELECT space_id, revision, deleted, length(ciphertext)
             FROM sync_records WHERE record_id=$record
             """, ("$record", Id(request.RecordId))))
         using (SqliteDataReader reader = record.ExecuteReader())
@@ -106,6 +107,7 @@ public sealed partial class OpaqueSyncStore
                 exists = true;
                 revision = reader.GetInt64(1);
                 deleted = reader.GetInt64(2) != 0;
+                previousCiphertextBytes = reader.GetInt64(3);
             }
         }
 
@@ -118,10 +120,14 @@ public sealed partial class OpaqueSyncStore
         }
 
         using (SqliteCommand budget = Command(transaction, """
-            SELECT (SELECT COUNT(*) FROM sync_events WHERE space_id=$space),
-                   (SELECT COALESCE(SUM(length(ciphertext)), 0)
+            SELECT
+                (SELECT COUNT(*) FROM sync_events WHERE space_id=$space),
+                (SELECT COALESCE(SUM(length(ciphertext)), 0)
                     FROM sync_events WHERE space_id=$space)
-                 + (SELECT COALESCE(SUM(length(ciphertext)), 0)
+                  + (SELECT COALESCE(SUM(length(ciphertext)), 0)
+                    FROM sync_records WHERE space_id=$space),
+                (SELECT COUNT(*) FROM sync_records WHERE space_id=$space),
+                (SELECT COALESCE(SUM(length(ciphertext)), 0)
                     FROM sync_records WHERE space_id=$space)
             """, ("$space", space)))
         using (SqliteDataReader reader = budget.ExecuteReader())
@@ -129,8 +135,11 @@ public sealed partial class OpaqueSyncStore
             reader.Read();
             long stored = reader.GetInt64(1);
             int acceptedBytes = payload!.Length;
+            long projectedBytes = reader.GetInt64(3) - previousCiphertextBytes + acceptedBytes;
             if (reader.GetInt64(0) >= MaximumEvents ||
-                stored + acceptedBytes * 2L > MaximumStoredBytes)
+                stored + acceptedBytes * 2L > MaximumStoredBytes ||
+                reader.GetInt64(2) + (exists ? 0 : 1) > MaximumSnapshotRecords ||
+                projectedBytes > MaximumSnapshotCiphertextBytes)
             {
                 return Reject(OpaqueSyncStatus.QuotaExceeded);
             }

@@ -625,6 +625,43 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         Assert.Equal(2L, Convert.ToInt64(check.ExecuteScalar()));
     }
 
+    [Fact]
+    public void NewWritesCannotGrowBeyondRecoverableEncryptedProjectionBudget()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope writer = Scope(device, space, SecurityPermission.Write);
+        OpaqueSyncMutation original = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, original).Status);
+
+        using Microsoft.Data.Sqlite.SqliteConnection legacy = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False");
+        legacy.Open();
+        using (Microsoft.Data.Sqlite.SqliteCommand oversized = legacy.CreateCommand())
+        {
+            oversized.CommandText = """
+                UPDATE sync_records SET ciphertext=zeroblob(25165824)
+                WHERE record_id=$record
+                """;
+            oversized.Parameters.AddWithValue("$record", original.RecordId.ToString("N"));
+            Assert.Equal(1, oversized.ExecuteNonQuery());
+        }
+
+        OpaqueSyncMutation another = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.QuotaExceeded, store.Submit(writer, another).Status);
+        Assert.Equal(1, store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
+
+        OpaqueSyncMutation replacement = Request(space, epoch, device,
+            Guid.NewGuid(), original.RecordId, 1, OpaqueSyncAction.Upsert);
+        Assert.Equal(OpaqueSyncStatus.Applied, store.Submit(writer, replacement).Status);
+        Assert.Equal(2, store.Pull(Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).HeadSequence);
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
