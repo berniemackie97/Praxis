@@ -578,6 +578,53 @@ public sealed class OpaqueSyncStoreTests : IDisposable
                 new OpaqueSyncPull(1, space, epoch, device, 2, 0, 100)).Status);
     }
 
+    [Fact]
+    public void ExistingVersionOneSyncDatabaseUpgradesWithoutLosingOpaqueHistory()
+    {
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        OpaqueSyncMutation mutation = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        using (OpaqueSyncStore created = OpaqueSyncStore.Open(root))
+        {
+            created.Provision(space, epoch);
+            Assert.Equal(OpaqueSyncStatus.Applied,
+                created.Submit(Scope(device, space, SecurityPermission.Write), mutation).Status);
+        }
+
+        using (Microsoft.Data.Sqlite.SqliteConnection old = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False"))
+        {
+            old.Open();
+            using Microsoft.Data.Sqlite.SqliteCommand downgrade = old.CreateCommand();
+            downgrade.CommandText = """
+                DROP TABLE sync_rotation_records;
+                DROP TABLE sync_rotation;
+                ALTER TABLE sync_spaces DROP COLUMN last_rotation_id;
+                ALTER TABLE sync_spaces DROP COLUMN content_epoch;
+                PRAGMA user_version=1;
+                """;
+            downgrade.ExecuteNonQuery();
+        }
+
+        using (OpaqueSyncStore migrated = OpaqueSyncStore.Open(root))
+        {
+            OpaqueSyncPage page = migrated.Pull(
+                Scope(device, space, SecurityPermission.Read),
+                new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100));
+            Assert.Equal(1, page.HeadSequence);
+            Assert.Equal(mutation.Ciphertext, Assert.Single(page.Changes).Ciphertext);
+            Assert.Equal(OpaqueSyncStatus.Applied,
+                migrated.Submit(Scope(device, space, SecurityPermission.Write), mutation).Status);
+        }
+
+        using Microsoft.Data.Sqlite.SqliteConnection verified = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False");
+        verified.Open();
+        using Microsoft.Data.Sqlite.SqliteCommand check = verified.CreateCommand();
+        check.CommandText = "PRAGMA user_version";
+        Assert.Equal(2L, Convert.ToInt64(check.ExecuteScalar()));
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
