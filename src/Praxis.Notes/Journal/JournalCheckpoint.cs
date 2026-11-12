@@ -89,6 +89,7 @@ internal static class JournalCheckpoint
     {
         if (state.CollectionEpoch == Guid.Empty || state.DeviceId == Guid.Empty || state.Cursor < 0 || state.Records is null
             || state.Pending is null || state.Conflicts is null || state.Resolved is null || state.AwaitingPull is null
+            || state.IncomingCollisions is null || state.IncomingCollisions.Count > MaxConflicts
             || state.Records.Count > MaxRecords || state.Pending.Count > MaxPending || state.Conflicts.Count > MaxConflicts
             || state.Resolved.Count > MaxConflicts || state.AwaitingPull.Count > MaxPending)
         {
@@ -103,6 +104,25 @@ internal static class JournalCheckpoint
             if (!ids.Add(record.Id) || !record.Deleted && !paths.Add(record.Path))
             {
                 throw new InvalidDataException("The local checkpoint contains duplicate note identities or paths.");
+            }
+        }
+
+        HashSet<Guid> incomingIds = new();
+        foreach (IncomingNoteCollision? collision in state.IncomingCollisions)
+        {
+            if (collision is null || collision.Remote is null ||
+                collision.BlockingRecordId == Guid.Empty ||
+                collision.BlockingRecordId == collision.Remote.Id)
+            {
+                throw new InvalidDataException("The incoming note collision is invalid.");
+            }
+
+            ValidateRecord(collision.Remote);
+            LocalNoteState? current = state.Records.FirstOrDefault(record => record.Id == collision.Remote.Id);
+            if (!incomingIds.Add(collision.Remote.Id) ||
+                collision.Remote.Revision <= (current?.Revision ?? 0))
+            {
+                throw new InvalidDataException("The incoming note collision has inconsistent revision history.");
             }
         }
 

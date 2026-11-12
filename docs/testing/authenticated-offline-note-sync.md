@@ -17,14 +17,14 @@ The local checkpoint and sidecar do not constitute an encrypted complete backup,
 
 The merged host test fixture is the real HTTPS client-certificate + one-time proof path, with a disposable pinned CA and independent persisted client journal directories. New tests exercise bidirectional convergence, stale offline edit recovery, sealed deletion and restoration, lost receipt followed by host and client restart, changed-key denial, and rejection of legacy unsealed deletion. Unit tests cover byte-stable replay, private permissions, directory binding, foreign epoch/device and non-destructive pruning.
 
-The following remain **unsatisfied** and must not be checked off by the passing tests above:
+The following remain **unsatisfied** and must not be checked off until verified:
 
-- **Atomic path-collision recovery:** a client-held ciphertext server cannot inspect note paths. The journal currently rejects a pulled page that would create duplicate active paths without advancing the cursor; it does not yet expose a durable, user-resolvable incoming-path collision. That requires an explicit client-side reconciliation design, not weakening catalog path invariants or making the server decrypt.
+- **Incoming path collisions:** when a decrypted remote note conflicts with an active or pending local path, the journal checkpoints its authenticated content in a separate incoming-collision projection, advances the durable event cursor, and reports `ConflictsPending`. The active projection keeps unique paths. `ResolveIncoming` requires an explicit new path or deletion of the incoming record; it creates a normal durable operation that the encrypted outbox submits with the remote revision. Retries, stale revisions, and process restarts retain unresolved remote content. This implementation must pass owner-executed tests before acceptance.
 - **Consistent encrypted snapshot/rebootstrap:** the host can signal stale/invalid cursor and key reset, but has no authenticated consistent, bounded snapshot endpoint. `SnapshotAsync` deliberately fails closed and leaves outbox/cursor intact. Rotation and pruned-history recovery must be added and independently tested before #18 completion.
 - **Remote attachment transfer and atomic note references:** owned by #20, not provided by note-only ciphertext events.
 - **Independent real devices and operational release:** genuine network interruption, revocation and epoch rollover on owner-approved hardware, reliable CA/key escrow policy, supported-host TLS 1.3, and current-head Linux/Windows/macOS verification under #65/#137. macOS test-only loopback TLS 1.2 does **not** certify a production macOS sync host.
 
-The next cohesive work should implement encrypted bounded host snapshots and client-side name-collision reconciliation in the same journal contract; do not introduce parallel note storage or an unsafe raw-plaintext HTTP adapter.
+The next remaining recovery boundary is consistent authenticated, bounded encrypted snapshots and key-epoch rebootstrap. Do not introduce parallel note storage or an unsafe raw-plaintext HTTP adapter.
 
 ## Reproducible verification
 

@@ -52,7 +52,9 @@ public sealed class AuthenticatedNoteExchange : INoteSyncExchange, IDisposable
         }
 
         OpaqueSyncMutation mutation = outbox.GetOrSeal(request.Edit, spaceId,
-            journal.CollectionEpoch, journal.DeviceId, contentEpoch, contentKey, journal.Records);
+            journal.CollectionEpoch, journal.DeviceId, contentEpoch, contentKey,
+            journal.IncomingCollisions.Select(collision => collision.Remote)
+                .Concat(journal.Records).ToArray());
         OpaqueSyncReceipt receipt = await transport.SubmitAsync(mutation, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -147,6 +149,11 @@ public sealed class AuthenticatedNoteExchange : INoteSyncExchange, IDisposable
         }
 
         Dictionary<Guid, LocalNoteState> projected = journal.Records.ToDictionary(note => note.Id);
+        foreach (IncomingNoteCollision collision in journal.IncomingCollisions)
+        {
+            projected[collision.Remote.Id] = collision.Remote;
+        }
+
         Dictionary<long, AcceptedNoteReceipt> acknowledged = journal.AcknowledgedChanges
             .ToDictionary(receipt => receipt.Sequence);
         List<AppliedNoteChange> changes = new(page.Changes.Count);
@@ -245,7 +252,9 @@ public sealed class AuthenticatedNoteExchange : INoteSyncExchange, IDisposable
 
     private LocalNoteState AcceptedRecord(PendingNoteEdit edit)
     {
-        LocalNoteState? existing = journal.Records.FirstOrDefault(note => note.Id == edit.RecordId);
+        LocalNoteState? existing = journal.IncomingCollisions
+            .FirstOrDefault(collision => collision.Remote.Id == edit.RecordId)?.Remote
+            ?? journal.Records.FirstOrDefault(note => note.Id == edit.RecordId);
         return edit.Action == LocalNoteAction.Delete
             ? existing is { Deleted: false }
                 ? existing with { Revision = edit.ExpectedRevision + 1, Deleted = true }
