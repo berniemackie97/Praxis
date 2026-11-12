@@ -22,8 +22,8 @@ public sealed partial class OpaqueSyncStore
             reader.IsDBNull(3) ? null : reader.GetString(3));
     }
 
-    private OpaqueSyncRotationReceipt StageRotation(AuthorizedSpaceScope scope,
-        OpaqueSyncRotationStage request, bool write)
+    private OpaqueSyncRotationReceipt WriteRotationStage(AuthorizedSpaceScope scope,
+        OpaqueSyncRotationStage request)
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
         string space = Id(scope.SpaceId);
@@ -150,8 +150,8 @@ public sealed partial class OpaqueSyncStore
             head, scope.ContentEpoch, count);
     }
 
-    private OpaqueSyncRotationReceipt CommitRotation(AuthorizedSpaceScope scope,
-        OpaqueSyncRotationCommit request, bool write)
+    private OpaqueSyncRotationReceipt WriteRotationCommit(AuthorizedSpaceScope scope,
+        OpaqueSyncRotationCommit request)
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
         string space = Id(scope.SpaceId);

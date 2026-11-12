@@ -161,7 +161,7 @@ public sealed partial class OpaqueSyncStore : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            return StageRotation(scope, request, write: true);
+            return WriteRotationStage(scope, request);
         }
     }
 
@@ -177,7 +177,7 @@ public sealed partial class OpaqueSyncStore : IDisposable
         lock (gate)
         {
             EnsureOpen();
-            return CommitRotation(scope, request, write: true);
+            return WriteRotationCommit(scope, request);
         }
     }
 
