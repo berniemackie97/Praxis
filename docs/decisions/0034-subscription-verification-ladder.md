@@ -92,7 +92,9 @@ provider-specific tokenizer accounting or demonstrated local-model accuracy.
 
 **Request integrity at the model boundary.** The reviewed payload is bounded by
 UTF-8 bytes before and after exclusions and redactions, and the response is bounded
-to 64 KiB. Every included ordinal must have exactly one well-formed verdict;
+to 64 KiB. The Codex CLI's structured answer file is independently capped at 4 MiB,
+in addition to the bounded CLI event output, before it is loaded into memory.
+Every included ordinal must have exactly one well-formed verdict;
 missing, duplicated or malformed entries fail the whole request without applying
 partial verdicts. Extra ordinals not sent to the model are ignored. A response
 that cannot judge an item must explicitly say `uncertain`; silently omitting it
