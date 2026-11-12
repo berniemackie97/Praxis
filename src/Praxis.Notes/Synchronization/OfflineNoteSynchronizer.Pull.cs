@@ -140,12 +140,14 @@ public sealed partial class OfflineNoteSynchronizer
             }
         }
 
-        foreach (LocalNoteState existing in local.Records)
+        foreach (LocalNoteState existing in local.Records.Concat(
+                     local.IncomingCollisions.Select(collision => collision.Remote)))
         {
             if (!incoming.TryGetValue(existing.Id, out LocalNoteState? remote) ||
-                remote.Revision < existing.Revision)
+                remote.Revision < existing.Revision ||
+                remote.Revision == existing.Revision && remote != existing)
             {
-                throw new InvalidDataException("The reset rolls back a durable local record.");
+                throw new InvalidDataException("The reset rolls back or contradicts a durable local record.");
             }
         }
     }

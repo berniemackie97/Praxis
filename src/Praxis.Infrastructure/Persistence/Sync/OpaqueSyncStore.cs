@@ -149,6 +149,23 @@ public sealed partial class OpaqueSyncStore : IDisposable
         }
     }
 
+    internal OpaqueSyncSnapshotPage Snapshot(AuthorizedSpaceScope scope, OpaqueSyncSnapshotPull request)
+    {
+        if (scope.Permission != SecurityPermission.Read ||
+            request.SpaceId != scope.SpaceId ||
+            request.DeviceId != scope.DeviceId ||
+            request.ContentEpoch != scope.ContentEpoch)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        lock (gate)
+        {
+            EnsureOpen();
+            return ReadSnapshot(request);
+        }
+    }
+
     internal OpaqueSyncPage Pull(AuthorizedSpaceScope scope, OpaqueSyncPull request)
     {
         if (scope.Permission != SecurityPermission.Read ||

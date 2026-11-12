@@ -303,6 +303,50 @@ public sealed class IncomingNoteCollisionTests : IDisposable
         Assert.Equal(secondIncomingId, Assert.Single(reopened.IncomingCollisions).Remote.Id);
     }
 
+    [Fact]
+    public void SnapshotRebootstrapQuarantinesNewPathClaimsAndRetainsTheirAuthenticatedContent()
+    {
+        Guid localId = Guid.NewGuid(), incomingId = Guid.NewGuid();
+        using OfflineNoteJournal journal = Open();
+        LocalNoteState local = new(localId, 1, "same.md", "local", false);
+        PendingNoteEdit initial = journal.Queue(localId, LocalNoteAction.Upsert,
+            local.Path, local.Markdown);
+        journal.Accept(initial.OperationId, 1, local);
+        journal.ApplyPage(0, [new AppliedNoteChange(1, local)]);
+
+        LocalNoteState incoming = new(incomingId, 1, "SAME.md", "remote", false);
+        journal.Rebootstrap(new LocalNoteSnapshot(epoch, 2, [incoming, local]));
+        Assert.Equal(2, journal.Cursor);
+        Assert.Equal(local, Assert.Single(journal.Records));
+        Assert.Equal(incoming, Assert.Single(journal.IncomingCollisions).Remote);
+
+        PendingNoteEdit rename = journal.Queue(localId, LocalNoteAction.Upsert,
+            "renamed.md", "local");
+        LocalNoteState renamed = local with { Revision = 2, Path = "renamed.md" };
+        journal.Accept(rename.OperationId, 3, renamed);
+        Assert.Empty(journal.IncomingCollisions);
+        Assert.Contains(incoming, journal.Records);
+        Assert.Contains(renamed, journal.Records);
+        journal.ApplyPage(2, [new AppliedNoteChange(3, renamed)]);
+        Assert.Equal(3, journal.Cursor);
+    }
+
+    [Fact]
+    public void InvalidSnapshotCannotPartiallyReplaceLiveJournalOrPendingOutbox()
+    {
+        Guid localId = Guid.NewGuid();
+        using OfflineNoteJournal journal = Open();
+        PendingNoteEdit pending = journal.Queue(localId, LocalNoteAction.Upsert,
+            "offline.md", "private contribution");
+        LocalNoteState duplicate = new(Guid.NewGuid(), 1, "same.md", "a", false);
+        Assert.Throws<InvalidDataException>(() =>
+            journal.Rebootstrap(new LocalNoteSnapshot(epoch, 5, [duplicate, duplicate])));
+        Assert.Equal(0, journal.Cursor);
+        Assert.Empty(journal.Records);
+        Assert.Empty(journal.IncomingCollisions);
+        Assert.Equal(pending, Assert.Single(journal.Pending));
+    }
+
     private OfflineNoteJournal Open() => OfflineNoteJournal.Open(directory, epoch, device);
 
     public void Dispose()
