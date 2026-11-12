@@ -103,14 +103,26 @@ public sealed class VerificationRunner(
         }
         catch (InferenceException exception) when (RetryDelay(exception.Failure) is { } delay)
         {
-            repository.Release(claim, clock.GetUtcNow() + delay, exception.Code);
-            report($"Verification runtime unavailable; retrying after {delay.TotalMinutes:0} min." +
-                (exception.Failure == InferenceFailure.Unauthenticated ? " Sign in to the provider CLI to resume." : ""));
+            if (repository.Release(claim, clock.GetUtcNow() + delay, exception.Code))
+            {
+                report($"Verification runtime unavailable; retrying after {delay.TotalMinutes:0} min." +
+                    (exception.Failure == InferenceFailure.Unauthenticated ? " Sign in to the provider CLI to resume." : ""));
+            }
+            else
+            {
+                report("Verification runtime result discarded because the approval changed.");
+            }
         }
         catch (InferenceException exception)
         {
-            repository.Fail(claim, exception.Code);
-            report("Verification failed; inspect owner-local verification status.");
+            if (repository.Fail(claim, exception.Code))
+            {
+                report("Verification failed; inspect owner-local verification status.");
+            }
+            else
+            {
+                report("Verification runtime result discarded because the approval changed.");
+            }
         }
 
         return true;
