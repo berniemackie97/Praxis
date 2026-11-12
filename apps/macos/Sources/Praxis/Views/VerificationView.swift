@@ -74,6 +74,7 @@ enum FailureCode {
         case "model_invalid_response": "unusable answer"
         case "provider_changed": "provider configuration changed; approve again"
         case "model_missing": "model is not installed"
+        case "model_context_exceeded": "reviewed context exceeds the model budget; narrow the request"
         default: code
         }
     }
