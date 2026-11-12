@@ -70,7 +70,8 @@ public sealed class VerificationRunner(
 
         try
         {
-            IChatModel model = models.Create(claim.Provider);
+            using ModelConnection connection = models.Create(claim.Provider);
+            IChatModel model = connection.Model;
             ModelIdentity identity = await model.DescribeAsync(cancellationToken);
             ChatResult result = await model.CompleteAsync(new ChatRequest(
                 VerificationPrompt.Messages(claim.Payload), VerificationPrompt.Schema,
