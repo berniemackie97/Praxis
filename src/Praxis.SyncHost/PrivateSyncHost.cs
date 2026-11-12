@@ -256,6 +256,51 @@ public static class PrivateSyncHost
             }
         });
 
+        app.MapPost("/v1/sync/snapshot", async (HttpContext context) =>
+        {
+            SyncSnapshotRequest? request = await Read<SyncSnapshotRequest>(context);
+            if (request?.Snapshot is not { } snapshot ||
+                request.Signature is not { Length: 64 })
+            {
+                return Results.BadRequest();
+            }
+
+            VerifiedCertificateIdentity? identity =
+                Identify(context, registry, trustedDeviceRoot, snapshot.DeviceId);
+            if (identity is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            VerifiedDeviceProof? proof =
+                registry.DeviceProofs.Authenticate(request.ChallengeId, request.Signature);
+            if (proof is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            try
+            {
+                OpaqueSyncSnapshotPage page = gateway.Snapshot(identity, proof, snapshot);
+                int status = page.Status switch
+                {
+                    OpaqueSyncStatus.Ok => StatusCodes.Status200OK,
+                    OpaqueSyncStatus.WrongCollectionEpoch or
+                    OpaqueSyncStatus.ResetRequired => StatusCodes.Status409Conflict,
+                    _ => StatusCodes.Status400BadRequest
+                };
+                return Results.Json(page, statusCode: status);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
+        });
+
         return app;
     }
 

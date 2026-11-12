@@ -19,6 +19,20 @@ public sealed class OpaqueSyncGateway(SecurityRegistry registry, OpaqueSyncStore
             mutation.ContentEpoch, scope => store.Submit(scope, mutation));
     }
 
+    public OpaqueSyncSnapshotPage Snapshot(VerifiedCertificateIdentity session,
+        VerifiedDeviceProof proof, OpaqueSyncSnapshotPull request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(proof);
+        if (proof.DeviceId != request.DeviceId || proof.SpaceId != request.SpaceId)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        return registry.ProtectedData.ExecuteSpace(session, proof, SecurityPermission.Read,
+            request.ContentEpoch, scope => store.Snapshot(scope, request));
+    }
+
     public OpaqueSyncPage Pull(VerifiedCertificateIdentity session,
         VerifiedDeviceProof proof, OpaqueSyncPull request)
     {
