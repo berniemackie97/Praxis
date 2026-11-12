@@ -30,16 +30,17 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     public IReadOnlyList<VerificationProvider> ListProviders() => database.ExecuteRead(connection =>
     {
         using var query = connection.CreateCommand("""
-            SELECT provider_id, executable, model, cost_weight, daily_limit, enabled
+            SELECT provider_id, executable, model, cost_weight, daily_limit, enabled, endpoint, config_revision
             FROM verification_providers ORDER BY cost_weight, provider_id
             """);
         using var reader = query.ExecuteReader();
         var providers = new List<VerificationProvider>();
         while (reader.Read())
         {
-            providers.Add(new VerificationProvider(reader.GetString(0), reader.GetString(1),
+            providers.Add(new VerificationProvider(reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4),
-                reader.GetInt64(5) == 1));
+                reader.GetInt64(5) == 1, reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7)));
         }
 
         return providers;
@@ -48,23 +49,51 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
     public void SaveProvider(VerificationProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
+        provider.EnsureValid();
         var now = CatalogValues.Timestamp(clock.GetUtcNow());
         database.Execute(connection =>
         {
             using var transaction = connection.BeginTransaction();
             connection.Run(transaction, """
                 INSERT INTO verification_providers
-                    (provider_id, executable, model, cost_weight, daily_limit, enabled, updated_utc)
-                VALUES ($id, $executable, $model, $weight, $limit, $enabled, $now)
-                ON CONFLICT(provider_id) DO UPDATE SET executable = excluded.executable,
-                    model = excluded.model, cost_weight = excluded.cost_weight,
-                    daily_limit = excluded.daily_limit, enabled = excluded.enabled,
-                    updated_utc = excluded.updated_utc
-                """, ("$id", provider.ProviderId), ("$executable", provider.Executable), ("$model", provider.Model),
+                    (provider_id, executable, endpoint, model, cost_weight, daily_limit, enabled, updated_utc)
+                VALUES ($id, $executable, $endpoint, $model, $weight, $limit, $enabled, $now)
+                ON CONFLICT(provider_id) DO UPDATE SET
+                    config_revision = verification_providers.config_revision + CASE WHEN
+                        verification_providers.executable IS NOT excluded.executable OR
+                        verification_providers.endpoint IS NOT excluded.endpoint OR
+                        verification_providers.model IS NOT excluded.model THEN 1 ELSE 0 END,
+                    executable = excluded.executable, endpoint = excluded.endpoint, model = excluded.model,
+                    cost_weight = excluded.cost_weight, daily_limit = excluded.daily_limit,
+                    enabled = excluded.enabled, updated_utc = excluded.updated_utc
+                """, ("$id", provider.ProviderId), ("$executable", provider.Executable),
+                ("$endpoint", provider.Endpoint), ("$model", provider.Model),
                 ("$weight", provider.CostWeight), ("$limit", provider.DailyLimit),
                 ("$enabled", provider.Enabled ? 1 : 0), ("$now", now));
-            // Saving a provider is the owner's signal that it is ready again (for example, after
-            // signing in), so requests waiting on it are retried now instead of at their delay.
+
+            // A disabled or reconfigured target invalidates previous approvals and running
+            // leases. Previously sent content cannot be recalled; the attempt remains logged.
+            connection.Run(transaction, """
+                UPDATE verification_invocations SET status = 'provider_changed', finished_utc = $now
+                WHERE provider_id = $id AND status = 'running' AND request_id IN (
+                    SELECT r.request_id FROM verification_requests r
+                    JOIN verification_providers p ON p.provider_id = r.provider_id
+                    WHERE r.provider_id = $id AND r.status = 'running'
+                      AND (p.enabled = 0 OR r.approved_provider_revision <> p.config_revision))
+                """, ("$id", provider.ProviderId), ("$now", now));
+            connection.Run(transaction, """
+                UPDATE verification_requests
+                SET status = 'awaiting_approval', decided_utc = NULL, lease_key = NULL,
+                    lease_until_utc = NULL, retry_after_utc = NULL,
+                    approved_provider_revision = NULL, failure_code = 'provider_changed'
+                WHERE provider_id = $id AND status IN ('approved', 'running')
+                  AND EXISTS (
+                      SELECT 1 FROM verification_providers p WHERE p.provider_id = $id
+                        AND (p.enabled = 0 OR approved_provider_revision <> p.config_revision))
+                """, ("$id", provider.ProviderId));
+
+            // Unchanged, enabled credentials may be retried without changing the approved
+            // destination or model. A new destination requires a fresh owner approval.
             connection.Run(transaction, """
                 UPDATE verification_requests SET retry_after_utc = NULL
                 WHERE provider_id = $id AND status = 'approved'
@@ -80,8 +109,8 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         {
             using var transaction = connection.BeginTransaction();
             using var query = connection.CreateCommand("""
-                SELECT provider_id, executable, model, cost_weight, daily_limit FROM verification_providers
-                WHERE enabled = 1 ORDER BY cost_weight, provider_id
+                SELECT provider_id, executable, model, cost_weight, daily_limit, endpoint, config_revision
+                FROM verification_providers WHERE enabled = 1 ORDER BY cost_weight, provider_id
                 """);
             query.Transaction = transaction;
             var providers = new List<VerificationProvider>();
@@ -89,8 +118,10 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             {
                 while (reader.Read())
                 {
-                    providers.Add(new VerificationProvider(reader.GetString(0), reader.GetString(1),
-                        reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4), true));
+                    providers.Add(new VerificationProvider(reader.GetString(0),
+                        reader.IsDBNull(1) ? null : reader.GetString(1),
+                        reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4),
+                        true, reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetInt32(6)));
                 }
             }
 
