@@ -33,13 +33,15 @@ public sealed class VerificationActions(
 
     private VerificationProviderResponse SaveProvider(DesktopRequestFields fields)
     {
+        string id = fields.RequireString("providerId", 32);
         VerificationProvider saved = providers.Save(new VerificationProvider(
-            fields.RequireString("providerId", 32),
-            fields.RequireString("executable", 1024),
+            id,
+            id == VerificationProvider.Ollama ? null : fields.RequireString("executable", 1024),
             fields.OptionalText("model", 100, "The provider model is invalid."),
             fields.IntegerOrDefault("costWeight", 10, 0, 1000),
             fields.IntegerOrDefault("dailyLimit", 20, 1, 500),
-            fields.RequireBoolean("enabled")));
+            fields.RequireBoolean("enabled"),
+            id == VerificationProvider.Ollama ? fields.RequireString("endpoint", 256) : null));
         runner?.Wake();
         return new VerificationProviderResponse(saved);
     }
