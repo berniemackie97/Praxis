@@ -619,6 +619,14 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 2);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        using CancellationTokenSource alreadyCanceled = new();
+        alreadyCanceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
+                "An already-canceled call must not claim an attempt.")).ProcessNextAsync(alreadyCanceled.Token));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances()
+            .Single(provider => provider.Provider.ProviderId == VerificationProvider.Codex).StartedToday);
+
         using CancellationTokenSource cancellation = new();
         ScriptedChatModel model = new(_ =>
         {
