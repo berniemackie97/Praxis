@@ -10,6 +10,7 @@ final class IntelligenceSettingsModel: ObservableObject {
     @Published private(set) var embeddingProfile: ModelProfile?
     @Published private(set) var installedModels: [InstalledModel] = []
     @Published private(set) var providers: [VerificationProvider] = []
+    @Published private(set) var allowances: [ProviderAllowance] = []
     @Published private(set) var discovered: [String: String] = [:]
     /// The latest failure or confirmation; setting one clears the other.
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
@@ -28,6 +29,7 @@ final class IntelligenceSettingsModel: ObservableObject {
         }
         channel.send("verificationProviders", as: ProvidersData.self, failed: report) { [weak self] data in
             self?.providers = data.providers
+            self?.allowances = data.allowances
             self?.discovered = data.discovered
         }
     }
@@ -61,16 +63,22 @@ final class IntelligenceSettingsModel: ObservableObject {
     }
 
     func saveProvider(
-        _ providerId: String, executable: String, model: String, costWeight: Int, dailyLimit: Int, enabled: Bool
+        _ providerId: String, executable: String, endpoint: String, model: String,
+        costWeight: Int, dailyLimit: Int, enabled: Bool
     ) {
         var fields: [String: Any] = [
-            "providerId": providerId, "executable": executable,
+            "providerId": providerId,
             "costWeight": costWeight, "dailyLimit": dailyLimit, "enabled": enabled
         ]
+        if providerId == VerificationProvider.ollama {
+            fields["endpoint"] = endpoint
+        } else {
+            fields["executable"] = executable
+        }
         let trimmed = model.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty { fields["model"] = trimmed }
         channel.send("verificationProviderSave", fields, as: ProviderSavedData.self, failed: report) { [weak self] _ in
-            self?.notice = "\(VerificationProvider.displayName(providerId)) saved. Waiting requests are retried."
+            self?.notice = "\(VerificationProvider.displayName(providerId)) saved. Review Verification for affected requests."
             self?.refresh()
         }
     }

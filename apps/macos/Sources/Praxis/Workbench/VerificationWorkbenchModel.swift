@@ -77,7 +77,7 @@ final class VerificationWorkbenchModel: ObservableObject {
         if !providerChoice.isEmpty { fields["providerId"] = providerChoice }
         channel.send("verificationApprove", fields, as: VerificationData.self, failed: report) { [weak self] data in
             let provider = data.request?.providerId.map(VerificationProvider.displayName) ?? "a verifier"
-            self?.notice = "Approved. Sending to \(provider)."
+            self?.notice = "Approved for \(provider)."
             self?.refresh()
         }
     }

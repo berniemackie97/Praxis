@@ -17,14 +17,17 @@ struct InstalledModel: Decodable, Identifiable {
     var id: String { name }
 }
 
-/// A subscription CLI the owner allows to verify local results.
+/// A local model or explicitly allowed subscription CLI for reviewed verification.
 struct VerificationProvider: Decodable, Identifiable, Equatable {
+    static let ollama = "ollama"
     static let codex = "codex"
     static let claudeCode = "claude-code"
 
     let providerId: String
-    let executable: String
+    let executable: String?
+    let endpoint: String?
     let model: String?
+    let revision: Int
     let costWeight: Int
     let dailyLimit: Int
     let enabled: Bool
@@ -32,6 +35,7 @@ struct VerificationProvider: Decodable, Identifiable, Equatable {
 
     static func displayName(_ providerId: String) -> String {
         switch providerId {
+        case ollama: "Local Ollama (on this Mac)"
         case codex: "Codex (ChatGPT plan)"
         case claudeCode: "Claude Code (Claude plan)"
         default: providerId
@@ -41,8 +45,14 @@ struct VerificationProvider: Decodable, Identifiable, Equatable {
 
 struct ModelProfileData: Decodable { let profile: ModelProfile? }
 struct InstalledModelsData: Decodable { let models: [InstalledModel] }
+struct ProviderAllowance: Decodable {
+    let provider: VerificationProvider
+    let startedToday: Int
+}
+
 struct ProvidersData: Decodable {
     let providers: [VerificationProvider]
     let discovered: [String: String]
+    let allowances: [ProviderAllowance]
 }
 struct ProviderSavedData: Decodable { let provider: VerificationProvider }

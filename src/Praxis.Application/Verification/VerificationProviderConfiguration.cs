@@ -1,3 +1,4 @@
+using Praxis.Application.Inference;
 using Praxis.Domain.Verification;
 
 namespace Praxis.Application.Verification;
@@ -9,9 +10,13 @@ public sealed class VerificationProviderConfiguration(IVerificationRepository re
     {
         ArgumentNullException.ThrowIfNull(provider);
         provider.EnsureValid();
-        // Constructing the adapter validates the executable path and model name.
-        _ = models.Create(provider);
+        // Disabling a provider must remain possible even if its CLI was uninstalled.
+        if (provider.Enabled)
+        {
+            using ModelConnection connection = models.Create(provider);
+        }
+
         repository.SaveProvider(provider);
-        return provider;
+        return repository.ListProviders().Single(saved => saved.ProviderId == provider.ProviderId);
     }
 }

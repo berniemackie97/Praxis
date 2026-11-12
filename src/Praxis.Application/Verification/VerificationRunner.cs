@@ -70,25 +70,59 @@ public sealed class VerificationRunner(
 
         try
         {
-            IChatModel model = models.Create(claim.Provider);
+            IReadOnlyList<ChatMessage> messages = VerificationPrompt.Messages(claim.Payload);
+            if (messages.Sum(message => System.Text.Encoding.UTF8.GetByteCount(message.Content)) >
+                ContextTokens - MaximumOutputTokens - 1_024)
+            {
+                repository.Fail(claim, "model_context_exceeded");
+                report("Verification context exceeds its bounded budget; narrow the reviewed items.");
+                return true;
+            }
+
+            using ModelConnection connection = models.Create(claim.Provider);
+            IChatModel model = connection.Model;
             ModelIdentity identity = await model.DescribeAsync(cancellationToken);
             ChatResult result = await model.CompleteAsync(new ChatRequest(
-                VerificationPrompt.Messages(claim.Payload), VerificationPrompt.Schema,
-                MaximumOutputTokens, ContextTokens), cancellationToken);
+                messages, VerificationPrompt.Schema, MaximumOutputTokens, ContextTokens), cancellationToken);
+            if (claim.Provider.IsLocal &&
+                (await model.DescribeAsync(cancellationToken)).Digest != identity.Digest)
+            {
+                throw new InferenceException(InferenceFailure.InvalidResponse,
+                    "The local model changed during verification.");
+            }
+
             IReadOnlyList<VerificationVerdict> verdicts = VerdictReader.Read(result.Content, claim.Ordinals);
-            repository.Complete(claim, identity, result, verdicts);
-            report($"Verification completed: {verdicts.Count} of {claim.Ordinals.Count} item(s) judged.");
+            if (repository.Complete(claim, identity, result, verdicts))
+            {
+                report($"Verification completed: {verdicts.Count} of {claim.Ordinals.Count} item(s) judged.");
+            }
+            else
+            {
+                report("Verification result discarded because the approval changed.");
+            }
         }
         catch (InferenceException exception) when (RetryDelay(exception.Failure) is { } delay)
         {
-            repository.Release(claim, clock.GetUtcNow() + delay, exception.Code);
-            report($"Verification runtime unavailable; retrying after {delay.TotalMinutes:0} min." +
-                (exception.Failure == InferenceFailure.Unauthenticated ? " Sign in to the provider CLI to resume." : ""));
+            if (repository.Release(claim, clock.GetUtcNow() + delay, exception.Code))
+            {
+                report($"Verification runtime unavailable; retrying after {delay.TotalMinutes:0} min." +
+                    (exception.Failure == InferenceFailure.Unauthenticated ? " Sign in to the provider CLI to resume." : ""));
+            }
+            else
+            {
+                report("Verification runtime result discarded because the approval changed.");
+            }
         }
         catch (InferenceException exception)
         {
-            repository.Fail(claim, exception.Code);
-            report("Verification failed; inspect owner-local verification status.");
+            if (repository.Fail(claim, exception.Code))
+            {
+                report("Verification failed; inspect owner-local verification status.");
+            }
+            else
+            {
+                report("Verification runtime result discarded because the approval changed.");
+            }
         }
 
         return true;

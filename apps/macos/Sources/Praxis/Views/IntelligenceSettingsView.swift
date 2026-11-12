@@ -1,7 +1,7 @@
 import Combine
 import SwiftUI
 
-/// The local enrichment model and the subscription CLIs that may verify its results.
+/// Owner-selected local and explicit subscription models for knowledge verification.
 struct IntelligenceSettingsView: View {
     @ObservedObject var model: IntelligenceSettingsModel
 
@@ -14,9 +14,11 @@ struct IntelligenceSettingsView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Stronger-model verification").font(.headline)
-                    Text("Praxis runs your own signed-in CLIs, never API keys. Each request waits for your approval. Lower cost weight is tried first; the daily limit caps requests per provider.")
+                    Text("Local Ollama runs only on this Mac. Codex and Claude CLIs can send the reviewed payload online only when explicitly selected during approval. No API keys are used. Daily limits count every attempted invocation, including retries.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                ProviderSettings(model: model, providerId: VerificationProvider.ollama, defaultWeight: 0,
+                                 modelHint: "Installed local chat model")
                 ProviderSettings(model: model, providerId: VerificationProvider.codex, defaultWeight: 10,
                                  modelHint: "Leave empty for the plan default")
                 ProviderSettings(model: model, providerId: VerificationProvider.claudeCode, defaultWeight: 50,
@@ -137,6 +139,7 @@ private struct ProviderSettings: View {
     let defaultWeight: Int
     let modelHint: String
     @State private var executable = ""
+    @State private var endpoint = "http://127.0.0.1:11434"
     @State private var modelName = ""
     @State private var costWeight = 10
     @State private var dailyLimit = 20
@@ -153,12 +156,26 @@ private struct ProviderSettings: View {
                 Spacer()
                 Text(saved.map { $0.enabled ? "enabled" : "disabled" } ?? "not set up")
                     .font(.caption).foregroundStyle(.secondary)
+                if let allowance = model.allowances.first(where: { $0.provider.providerId == providerId }) {
+                    Text("\(allowance.startedToday)/\(allowance.provider.dailyLimit) attempts today")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             HStack {
-                TextField("Path to the CLI", text: $executable).textFieldStyle(.roundedBorder)
-                if let found = model.discovered[providerId], found != executable {
-                    Button("Use \(URL(fileURLWithPath: found).lastPathComponent) found on PATH") { executable = found }
-                        .help(found)
+                if providerId == VerificationProvider.ollama {
+                    TextField("Loopback Ollama endpoint", text: $endpoint).textFieldStyle(.roundedBorder)
+                    if let profile = model.profile {
+                        Button("Use enrichment model") {
+                            endpoint = profile.endpoint
+                            modelName = profile.model
+                        }
+                    }
+                } else {
+                    TextField("Path to the CLI", text: $executable).textFieldStyle(.roundedBorder)
+                    if let found = model.discovered[providerId], found != executable {
+                        Button("Use \(URL(fileURLWithPath: found).lastPathComponent) found on PATH") { executable = found }
+                            .help(found)
+                    }
                 }
             }
             HStack {
@@ -167,10 +184,12 @@ private struct ProviderSettings: View {
                 Stepper("\(dailyLimit) per day", value: $dailyLimit, in: 1...500)
                 Spacer()
                 Button("Save") {
-                    model.saveProvider(providerId, executable: executable, model: modelName,
-                                       costWeight: costWeight, dailyLimit: dailyLimit, enabled: enabled)
+                    model.saveProvider(providerId, executable: executable, endpoint: endpoint,
+                                       model: modelName, costWeight: costWeight,
+                                       dailyLimit: dailyLimit, enabled: enabled)
                 }
-                .disabled(executable.isEmpty)
+                .disabled(providerId == VerificationProvider.ollama
+                    ? (endpoint.isEmpty || modelName.isEmpty) : executable.isEmpty)
             }
         }
         .padding(10)
@@ -187,7 +206,8 @@ private struct ProviderSettings: View {
             if executable.isEmpty { executable = model.discovered[providerId] ?? "" }
             return
         }
-        executable = saved.executable
+        executable = saved.executable ?? ""
+        endpoint = saved.endpoint ?? endpoint
         modelName = saved.model ?? ""
         costWeight = saved.costWeight
         dailyLimit = saved.dailyLimit

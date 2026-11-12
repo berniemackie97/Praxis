@@ -9,7 +9,7 @@ using Praxis.Domain.Knowledge;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Verification;
-using Praxis.Infrastructure.Inference.Subscription;
+using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -78,7 +78,7 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
-    public async Task ApprovalSendsExactlyTheNarrowedPayloadToTheCheapestProvider()
+    public async Task ApprovalSendsExactlyTheNarrowedPayloadToExplicitProvider()
     {
         using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
@@ -90,7 +90,8 @@ public sealed class VerificationTests : IDisposable
 
         // Excluding an item removes it; a name in another item's context needs a redaction.
         VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
-            request, excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"]);
+            request, providerId: VerificationProvider.Codex,
+            excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"]);
 
         Assert.Equal(VerificationProvider.Codex, approved.ProviderId);
         var verifier = new ScriptedChatModel(_ => Verdicts((hacker, "unsupported", "none")));
@@ -124,7 +125,8 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "supported", "person")))).ProcessNextAsync());
 
@@ -140,7 +142,8 @@ public sealed class VerificationTests : IDisposable
 
         Assert.True(catalog.Knowledge.SetType(hackerEntity.EntityId, "organization"));
         Guid second = catalog.Verification.RequestForEntity(hackerEntity.EntityId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(second);
+        new VerificationApproval(catalog.Verification).Approve(second,
+            providerId: VerificationProvider.Codex);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts((1, "supported", "person")))).ProcessNextAsync());
         EntitySummary owned = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("organization", "owner"), (owned.EntityType, owned.TypeOrigin));
@@ -160,11 +163,13 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50, dailyLimit: 5);
 
         Guid a = catalog.Verification.RequestForSource(first.SourceId)!.Value;
-        Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a).ProviderId);
+        Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a,
+            providerId: VerificationProvider.Codex).ProviderId);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts())).ProcessNextAsync());
 
         Guid b = catalog.Verification.RequestForSource(second.SourceId)!.Value;
-        Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b).ProviderId);
+        Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b,
+            providerId: VerificationProvider.ClaudeCode).ProviderId);
 
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50, dailyLimit: 5, enabled: false);
         Guid c = catalog.Verification.RequestForSource(third.SourceId)!.Value;
@@ -185,7 +190,8 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex);
         var reports = new List<string>();
         var runner = new VerificationRunner(catalog.Verification,
             new DelegatingVerifierModelFactory(_ => new ScriptedChatModel(_ => throw new InferenceException(failure, "provider text with secrets"))),
@@ -217,7 +223,8 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request, excludedOrdinals: [alex]);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex, excludedOrdinals: [alex]);
 
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "uncertain", "none"), (99, "unsupported", "none")))).ProcessNextAsync());
@@ -244,13 +251,22 @@ public sealed class VerificationTests : IDisposable
             {"requestId":"2","action":"verificationProviderSave","providerId":"codex","executable":{{JsonSerializer.Serialize(executable)}},"costWeight":5,"dailyLimit":3,"enabled":true}
             """);
         Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, saved.RootElement.GetProperty("data").GetProperty("provider").GetProperty("revision").GetInt32());
+
+        using JsonDocument updated = await Send(protocol, $"""
+            {"requestId":"2b","action":"verificationProviderSave","providerId":"codex","executable":{{JsonSerializer.Serialize(executable)}},"model":"gpt-5.2","costWeight":5,"dailyLimit":3,"enabled":true}
+            """);
+        Assert.True(updated.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(2, updated.RootElement.GetProperty("data").GetProperty("provider").GetProperty("revision").GetInt32());
+        Assert.Equal(2, catalog.Verification.ListProviders().Single(
+            provider => provider.ProviderId == VerificationProvider.Codex).Revision);
 
         using JsonDocument created = await Send(protocol,
             $$"""{"requestId":"3","action":"verificationRequestSource","sourceId":"{{source.SourceId}}"}""");
         string request = created.RootElement.GetProperty("data").GetProperty("verificationId").GetString()!;
 
         using JsonDocument approved = await Send(protocol,
-            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","redactions":["Rivera"]}""");
+            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","redactions":["Rivera"]}""");
         JsonElement view = approved.RootElement.GetProperty("data").GetProperty("request");
         Assert.Equal("approved", view.GetProperty("status").GetString());
         Assert.DoesNotContain("Rivera", view.GetProperty("payload").GetString(), StringComparison.Ordinal);
@@ -278,12 +294,150 @@ public sealed class VerificationTests : IDisposable
         try
         {
             Environment.SetEnvironmentVariable("PATH", bin);
-            Assert.Equal(Path.Combine(bin, "claude"), new SubscriptionVerifierModelFactory().DiscoverExecutables()[VerificationProvider.ClaudeCode]);
+            Assert.Equal(Path.Combine(bin, "claude"), new VerificationModelFactory().DiscoverExecutables()[VerificationProvider.ClaudeCode]);
         }
         finally
         {
             Environment.SetEnvironmentVariable("PATH", path);
         }
+    }
+
+    [Fact]
+    public async Task UnspecifiedProviderUsesOnlyLocalOllamaAndNeverSendsToAvailableCli()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "private.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(request));
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+        Assert.Null(catalog.Verification.Get(request)!.ProviderId);
+
+        new VerificationProviderConfiguration(catalog.Verification, new VerificationModelFactory())
+            .Save(new VerificationProvider(VerificationProvider.Ollama, null, "qwen:9b",
+                0, 2, true, "http://127.0.0.1:11434"));
+        VerificationRequestView selected = new VerificationApproval(catalog.Verification).Approve(request);
+        Assert.Equal(VerificationProvider.Ollama, selected.ProviderId);
+        Assert.Equal(1, catalog.Verification.ListProviders().Single(
+            provider => provider.IsLocal).Revision);
+
+        ScriptedChatModel local = new(_ => Verdicts());
+        var contacted = new List<string>();
+        Assert.True(await Runner(catalog, provider =>
+        {
+            contacted.Add(provider.ProviderId);
+            return local;
+        }).ProcessNextAsync());
+        Assert.Equal([VerificationProvider.Ollama], contacted);
+        Assert.Equal("completed", catalog.Verification.Get(request)!.Status);
+        Assert.Equal(1, catalog.Verification.ListEnabledProviderAllowances().Single(
+            allowance => allowance.Provider.IsLocal).StartedToday);
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
+    public async Task ProviderTargetChangeRequiresFreshApprovalAndRejectsOldLease()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "changed.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        ClaimedVerification old = catalog.Verification.Claim()!;
+        Assert.Equal(1, old.Provider.Revision);
+
+        new VerificationProviderConfiguration(catalog.Verification, new VerificationModelFactory())
+            .Save(new VerificationProvider(VerificationProvider.Codex, executable, "gpt-5.2",
+                10, 20, true));
+        VerificationRequestView awaiting = catalog.Verification.Get(request)!;
+        Assert.Equal("awaiting_approval", awaiting.Status);
+        Assert.Equal("provider_changed", awaiting.FailureCode);
+        Assert.False(catalog.Verification.Fail(old, "model_invalid_response"));
+        Assert.Null(catalog.Verification.Claim());
+
+        VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
+            request, providerId: VerificationProvider.Codex);
+        Assert.Equal("approved", approved.Status);
+        ClaimedVerification fresh = catalog.Verification.Claim()!;
+        Assert.Equal(2, fresh.Provider.Revision);
+        Assert.Equal("gpt-5.2", fresh.Provider.Model);
+        Assert.Equal(2, catalog.Verification.ListEnabledProviderAllowances().Single(
+            allowance => allowance.Provider.ProviderId == VerificationProvider.Codex).StartedToday);
+        Assert.True(catalog.Verification.Fail(fresh, "model_invalid_response"));
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
+    public async Task DisablingASelectedProviderRetractsItsApproval()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "disabled.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.ClaudeCode);
+
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10, enabled: false);
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+        Assert.Null(catalog.Verification.Claim());
+
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10);
+        Assert.Null(catalog.Verification.Claim());
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.ClaudeCode);
+        Assert.NotNull(catalog.Verification.Claim());
+    }
+
+    [Fact]
+    public void UninstalledCliCanBeDisabledWithoutRequiringItsExecutable()
+    {
+        using SqliteCatalog catalog = Open();
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
+        File.Delete(executable);
+
+        var configuration = new VerificationProviderConfiguration(catalog.Verification,
+            new VerificationModelFactory());
+        VerificationProvider disabled = configuration.Save(new VerificationProvider(
+            VerificationProvider.Codex, executable, null, 10, 20, false));
+
+        Assert.False(disabled.Enabled);
+        Assert.False(catalog.Verification.ListProviders().Single().Enabled);
+        Assert.Throws<InferenceException>(() => configuration.Save(disabled with { Enabled = true }));
+    }
+
+    [Fact]
+    public async Task FailedAttemptUsesDailyAllowanceWithoutFallbackOrSilentRetry()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "quota.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1, dailyLimit: 1);
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 20);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        List<string> invoked = [];
+        VerificationRunner runner = Runner(catalog, provider =>
+        {
+            invoked.Add(provider.ProviderId);
+            return new ScriptedChatModel(_ => throw new InferenceException(
+                InferenceFailure.Unavailable, "no local CLI connection"));
+        });
+        Assert.True(await runner.ProcessNextAsync());
+        Assert.Equal([VerificationProvider.Codex], invoked);
+        Assert.Equal("approved", catalog.Verification.Get(request)!.Status);
+
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1, dailyLimit: 1);
+        Assert.False(await runner.ProcessNextAsync());
+        Assert.Equal([VerificationProvider.Codex], invoked);
+        Assert.Equal(1, catalog.Verification.ListEnabledProviderAllowances().Single(
+            allowance => allowance.Provider.ProviderId == VerificationProvider.Codex).StartedToday);
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single(
+            allowance => allowance.Provider.ProviderId == VerificationProvider.ClaudeCode).StartedToday);
     }
 
     private SqliteCatalog Open()
@@ -294,7 +448,7 @@ public sealed class VerificationTests : IDisposable
     }
 
     private void SaveProvider(SqliteCatalog catalog, string provider, int weight, int dailyLimit = 20, bool enabled = true) =>
-        new VerificationProviderConfiguration(catalog.Verification, new SubscriptionVerifierModelFactory())
+        new VerificationProviderConfiguration(catalog.Verification, new VerificationModelFactory())
             .Save(new VerificationProvider(provider, executable, null, weight, dailyLimit, enabled));
 
     private static VerificationRunner Runner(SqliteCatalog catalog, Func<VerificationProvider, IChatModel> models) =>

@@ -47,7 +47,8 @@ public interface IVerificationRepository
     /// Returns null when the request is no longer awaiting approval with that payload.
     /// </summary>
     VerificationRequestView? Approve(
-        Guid requestId, string reviewedPayload, string providerId, string approvedPayload, IReadOnlySet<int> includedOrdinals);
+        Guid requestId, string reviewedPayload, string providerId, int providerRevision,
+        string approvedPayload, IReadOnlySet<int> includedOrdinals);
 
     bool Decline(Guid requestId);
 
