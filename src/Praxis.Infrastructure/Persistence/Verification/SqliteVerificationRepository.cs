@@ -346,7 +346,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         }
 
         // Invalidate obsolete reviewed evidence before dispatch, without a different provider.
-        (string Id, string Payload, VerificationProvider Provider) next = default;
+        (string Id, string Payload, VerificationProvider Provider)? next = null;
         foreach (var candidate in candidates)
         {
             if (!EvidenceIsCurrent(connection, transaction, candidate.Id))
@@ -363,13 +363,13 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             }
         }
 
-        if (next.Id is null)
+        if (next is null)
         {
             transaction.Commit();
             return null;
         }
 
-        var (id, payload, provider) = next;
+        var (id, payload, provider) = next.Value;
         var lease = Guid.NewGuid();
         connection.Run(transaction, """
             UPDATE verification_invocations SET status = 'released', finished_utc = $now,
