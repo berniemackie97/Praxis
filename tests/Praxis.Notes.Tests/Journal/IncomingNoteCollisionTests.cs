@@ -168,6 +168,32 @@ public sealed class IncomingNoteCollisionTests : IDisposable
         Assert.Equal(4, journal.Cursor);
     }
 
+    [Fact]
+    public void MalformedMultiEventCollisionPageCannotPartiallyAdvanceCheckpoint()
+    {
+        Guid localId = Guid.NewGuid(), remoteId = Guid.NewGuid();
+        using OfflineNoteJournal journal = Open();
+        LocalNoteState local = new(localId, 1, "same.md", "local", false);
+        PendingNoteEdit initial = journal.Queue(localId, LocalNoteAction.Upsert,
+            local.Path, local.Markdown);
+        journal.Accept(initial.OperationId, 1, local);
+        journal.ApplyPage(0, [new AppliedNoteChange(1, local)]);
+        LocalNoteState remote = new(remoteId, 1, "same.md", "remote", false);
+
+        Assert.Throws<InvalidDataException>(() => journal.ApplyPage(1,
+        [
+            new AppliedNoteChange(2, remote),
+            new AppliedNoteChange(3, remote with { Revision = 3 })
+        ]));
+        Assert.Equal(1, journal.Cursor);
+        Assert.Empty(journal.IncomingCollisions);
+        Assert.Equal(local, Assert.Single(journal.Records));
+
+        journal.ApplyPage(1, [new AppliedNoteChange(2, remote)]);
+        Assert.Equal(2, journal.Cursor);
+        Assert.Equal(remote, Assert.Single(journal.IncomingCollisions).Remote);
+    }
+
     private OfflineNoteJournal Open() => OfflineNoteJournal.Open(directory, epoch, device);
 
     public void Dispose()
