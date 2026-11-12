@@ -476,6 +476,27 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task DirectRepositoryCompletionAlsoRequiresEveryApprovedOrdinal()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "incomplete-direct.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+        int first = claim.Ordinals.Min();
+
+        Assert.Throws<ArgumentException>(() => catalog.Verification.Complete(claim,
+            new ScriptedChatModel(_ => "").Identity,
+            new ChatResult(Verdicts((first, "supported", "none")), 1, 1, TimeSpan.Zero),
+            [new VerificationVerdict(first, "supported", null, null)]));
+        Assert.Equal("running", catalog.Verification.Get(request)!.Status);
+        Assert.True(catalog.Verification.Fail(claim, "model_invalid_response"));
+        Assert.All(catalog.Verification.Get(request)!.Items, item => Assert.Null(item.Verdict));
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
     public async Task UnsupportedVerdictCannotPromoteAnEntityType()
     {
         using SqliteCatalog catalog = Open();
