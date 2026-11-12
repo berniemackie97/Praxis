@@ -99,8 +99,8 @@ public sealed class SealedNoteOutboxTests : IDisposable
         Assert.False(File.Exists(Path.Combine(root, a.OperationId.ToString("N") + ".json")));
         Assert.True(File.Exists(Path.Combine(root, b.OperationId.ToString("N") + ".json")));
         outbox.Prune([]);
-        Assert.Empty(Directory.EnumerateFiles(root, "*.json")
-            .Where(path => Path.GetFileName(path) != "outbox-context.json"));
+        Assert.DoesNotContain(Directory.EnumerateFiles(root, "*.json")
+, path => Path.GetFileName(path) != "outbox-context.json");
     }
 
     [Fact]

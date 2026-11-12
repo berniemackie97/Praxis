@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
+using Praxis.Infrastructure.Security.Cryptography;
 using Praxis.Notes.Journal;
 using Praxis.Notes.Synchronization;
-using Praxis.Infrastructure.Security.Cryptography;
 
 namespace Praxis.Infrastructure.Persistence.Sync;
 

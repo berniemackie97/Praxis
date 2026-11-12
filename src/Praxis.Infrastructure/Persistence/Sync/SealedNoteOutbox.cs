@@ -1,8 +1,7 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Praxis.Notes.Journal;
 using Praxis.Infrastructure.Security.Cryptography;
+using Praxis.Notes.Journal;
 
 namespace Praxis.Infrastructure.Persistence.Sync;
 
