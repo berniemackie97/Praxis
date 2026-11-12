@@ -1,4 +1,5 @@
 using Praxis.Domain.Verification;
+using Praxis.Application.Inference;
 
 namespace Praxis.Application.Verification;
 
@@ -10,7 +11,7 @@ public sealed class VerificationProviderConfiguration(IVerificationRepository re
         ArgumentNullException.ThrowIfNull(provider);
         provider.EnsureValid();
         // Constructing the adapter validates the executable path and model name.
-        _ = models.Create(provider);
+        using ModelConnection connection = models.Create(provider);
         repository.SaveProvider(provider);
         return provider;
     }
