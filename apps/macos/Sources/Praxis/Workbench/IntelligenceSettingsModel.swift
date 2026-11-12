@@ -10,6 +10,7 @@ final class IntelligenceSettingsModel: ObservableObject {
     @Published private(set) var embeddingProfile: ModelProfile?
     @Published private(set) var installedModels: [InstalledModel] = []
     @Published private(set) var providers: [VerificationProvider] = []
+    @Published private(set) var allowances: [ProviderAllowance] = []
     @Published private(set) var discovered: [String: String] = [:]
     /// The latest failure or confirmation; setting one clears the other.
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
@@ -28,6 +29,7 @@ final class IntelligenceSettingsModel: ObservableObject {
         }
         channel.send("verificationProviders", as: ProvidersData.self, failed: report) { [weak self] data in
             self?.providers = data.providers
+            self?.allowances = data.allowances
             self?.discovered = data.discovered
         }
     }
