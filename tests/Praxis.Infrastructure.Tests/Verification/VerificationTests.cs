@@ -525,6 +525,49 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task SupersededSourceRevisionCannotReusePreviouslyApprovedContext()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "superseded.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        using MemoryStream next = new(Encoding.UTF8.GetBytes("# Edited\nThis is a different revision."));
+        CapturedOriginal newer = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(workspace, "superseded.md"), next, 200_000, Guid.NewGuid().ToString("N"));
+        Assert.Equal(source.SourceId, newer.SourceId);
+        Assert.Equal(source.Revision + 1, newer.Revision);
+
+        Assert.False(await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
+            "A superseded source must not be dispatched.")).ProcessNextAsync());
+        VerificationRequestView rejected = catalog.Verification.Get(request)!;
+        Assert.Equal(("failed", "source_changed"), (rejected.Status, rejected.FailureCode));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+        await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    [Fact]
+    public void PayloadCannotExceedItsByteBudgetDuringPlanningOrReview()
+    {
+        JsonObject item = new()
+        {
+            ["ordinal"] = 1,
+            ["kind"] = "entity",
+            ["context"] = new string('a', VerificationPayload.MaximumBytes)
+        };
+        Assert.Throws<InvalidOperationException>(() => VerificationPayload.Serialize([item]));
+
+        string initial = VerificationPayload.Serialize([new JsonObject
+        {
+            ["ordinal"] = 1,
+            ["name"] = new string('a', 7_000)
+        }]);
+        Assert.Throws<InvalidOperationException>(() =>
+            VerificationPayload.Narrow(initial, [], ["a"]));
+    }
+
+    [Fact]
     public async Task RevokingDuringInferenceFencesVerdictsAndLogsTheAttempt()
     {
         using SqliteCatalog catalog = Open();
