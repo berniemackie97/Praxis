@@ -68,6 +68,17 @@ public sealed class SpaceKeyDistribution(SecurityRegistry registry)
                 }
             }
 
+            using (SqliteCommand previous = SecurityRegistry.Command(connection, transaction,
+                "SELECT commitment FROM space_key_epochs WHERE space_id=$space ORDER BY epoch DESC LIMIT 1",
+                ("$space", SecurityRegistry.Id(signed.SpaceId))))
+            {
+                if (previous.ExecuteScalar() is byte[] prior &&
+                    CryptographicOperations.FixedTimeEquals(prior, signed.KeyCommitment))
+                {
+                    throw new InvalidOperationException("A new key epoch must use a different content key.");
+                }
+            }
+
             using (SqliteCommand save = SecurityRegistry.Command(connection, transaction, """
                 INSERT INTO space_key_epochs
                     (space_id, epoch, commitment, signer_device_id, recovery_nonce,

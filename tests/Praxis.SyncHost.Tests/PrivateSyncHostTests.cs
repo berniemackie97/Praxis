@@ -631,7 +631,7 @@ public sealed class PrivateSyncHostTests
                 1, host.Space, host.CollectionEpoch, host.FirstDevice, 2, 0, 100))).Status);
 
         OpaqueSyncRotationReceipt rotated = await OwnerNoteKeyRotation.RotateAsync(
-            owner, host.Space, 1, 2, newKey, ownerClient);
+            owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), ownerClient);
         Assert.Equal(OpaqueSyncStatus.Applied, rotated.Status);
         Assert.Equal(1, rotated.HeadSequence);
         Assert.Equal(1, owner.Cursor);
@@ -660,7 +660,7 @@ public sealed class PrivateSyncHostTests
                 2, 0, Guid.Empty, 16)));
         Assert.Equal(OpaqueSyncStatus.Applied,
             (await OwnerNoteKeyRotation.RotateAsync(
-                owner, host.Space, 1, 2, newKey, ownerClient)).Status);
+                owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), ownerClient)).Status);
     }
 
     [Fact]
@@ -680,7 +680,7 @@ public sealed class PrivateSyncHostTests
             LocalNoteAction.Upsert, "offline.md", "unsent");
         byte[] newKey = host.PublishNextKeyEpoch();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            OwnerNoteKeyRotation.RotateAsync(owner, host.Space, 1, 2, newKey, client));
+            OwnerNoteKeyRotation.RotateAsync(owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), client));
         Assert.Equal(pending, Assert.Single(owner.Pending));
         Assert.Equal(1, owner.Cursor);
         Assert.Equal(OpaqueSyncStatus.ResetRequired,
@@ -715,7 +715,7 @@ public sealed class PrivateSyncHostTests
 
         byte[] nextKey = host.PublishNextKeyEpoch();
         OpaqueSyncRotationReceipt rotation = await OwnerNoteKeyRotation.RotateAsync(
-            first, host.Space, 1, 2, nextKey, firstClient);
+            first, host.Space, 1, 2, nextKey, SHA256.HashData(nextKey), firstClient);
         Assert.Equal(OpaqueSyncStatus.Applied, rotation.Status);
 
         using AuthenticatedNoteExchange secondNew = new(

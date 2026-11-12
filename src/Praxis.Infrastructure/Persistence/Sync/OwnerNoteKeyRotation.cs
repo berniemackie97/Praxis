@@ -10,17 +10,26 @@ public static class OwnerNoteKeyRotation
 {
     public static async Task<OpaqueSyncRotationReceipt> RotateAsync(
         OfflineNoteJournal journal, Guid spaceId, long previousEpoch,
-        long newEpoch, byte[] newContentKey, OpaqueSyncTransportClient transport,
+        long newEpoch, byte[] newContentKey, byte[] trustedKeyCommitment,
+        OpaqueSyncTransportClient transport,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(journal);
         ArgumentNullException.ThrowIfNull(newContentKey);
+        ArgumentNullException.ThrowIfNull(trustedKeyCommitment);
         ArgumentNullException.ThrowIfNull(transport);
         if (spaceId == Guid.Empty || previousEpoch < 1 ||
             previousEpoch == long.MaxValue || newEpoch != previousEpoch + 1 ||
-            newContentKey.Length != 32)
+            newContentKey.Length != 32 || trustedKeyCommitment.Length != 32)
         {
             throw new ArgumentException("The key rotation needs a valid space and adjacent key epochs.");
+        }
+
+        if (!CryptographicOperations.FixedTimeEquals(
+                SHA256.HashData(newContentKey), trustedKeyCommitment))
+        {
+            throw new CryptographicException(
+                "The new note content key does not match the independently trusted publication.");
         }
 
         long head = journal.Cursor;
