@@ -526,7 +526,7 @@ public sealed class PrivateSyncHostTests
         Assert.Equal(NoteSyncState.UpToDate, (await secondSync.ReconcileAsync()).State);
         Assert.Equal(NoteSyncState.UpToDate, (await firstSync.ReconcileAsync()).State);
         Assert.Equal(5, first.Cursor);
-        Assert.Equal(first.Records, second.Records);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
         Assert.Empty(second.Conflicts);
     }
 

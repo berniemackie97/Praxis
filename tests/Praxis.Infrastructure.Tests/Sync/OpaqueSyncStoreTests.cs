@@ -327,12 +327,11 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         Assert.Equal(18, first.HeadSequence);
         Assert.Equal(18, first.TotalRecords);
         Assert.Equal(16, first.Records.Count);
-        Assert.Equal(recordIds.ToHashSet(),
+        Assert.True(recordIds.ToHashSet().SetEquals(
             first.Records.Select(record => record.RecordId)
                 .Concat(store.Snapshot(reader, new OpaqueSyncSnapshotPull(
                     1, space, epoch, device, 1, first.HeadSequence,
-                    first.Records[^1].RecordId, 16)).Records.Select(record => record.RecordId))
-                .ToHashSet());
+                    first.Records[^1].RecordId, 16)).Records.Select(record => record.RecordId))));
         Assert.Equal(18, store.Snapshot(reader, new OpaqueSyncSnapshotPull(
             1, space, epoch, device, 1, 0, Guid.Empty, 16)).TotalRecords);
 
