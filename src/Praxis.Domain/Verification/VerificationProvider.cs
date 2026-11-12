@@ -5,7 +5,7 @@ namespace Praxis.Domain.Verification;
 /// <summary>Owner-configured verifier. CLI executables and loopback model endpoints are distinct.</summary>
 public sealed record VerificationProvider(
     string ProviderId, string? Executable, string? Model, int CostWeight, int DailyLimit, bool Enabled,
-    string? Endpoint = null)
+    string? Endpoint = null, int Revision = 1)
 {
     public const string Ollama = "ollama";
     public const string Codex = "codex";
@@ -20,7 +20,7 @@ public sealed record VerificationProvider(
             throw new ArgumentException("The verification provider is not supported.", nameof(ProviderId));
         }
 
-        if (CostWeight is < 0 or > 1000 || DailyLimit is < 1 or > 500)
+        if (Revision < 1 || CostWeight is < 0 or > 1000 || DailyLimit is < 1 or > 500)
         {
             throw new ArgumentOutOfRangeException(nameof(CostWeight), "Weights are 0–1000 and daily limits 1–500.");
         }
