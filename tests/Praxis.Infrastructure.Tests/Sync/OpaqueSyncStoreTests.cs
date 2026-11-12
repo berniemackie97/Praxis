@@ -507,6 +507,68 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             new OpaqueSyncSnapshotPull(1, space, epoch, device, 1, 0, Guid.Empty, 16)).Status);
     }
 
+    [Fact]
+    public void FailedRotationCommitRollsBackEveryCiphertextAndKeepsRetryableStaging()
+    {
+        using OpaqueSyncStore store = OpaqueSyncStore.Open(root);
+        Guid space = Guid.NewGuid(), epoch = Guid.NewGuid(), device = Guid.NewGuid();
+        Guid rotation = Guid.NewGuid();
+        store.Provision(space, epoch);
+        AuthorizedSpaceScope writer = Scope(device, space, SecurityPermission.Write);
+        AuthorizedSpaceScope newWriter = new(Guid.NewGuid(), device, space,
+            SecurityPermission.Write, 2);
+        OpaqueSyncMutation first = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        OpaqueSyncMutation second = Request(space, epoch, device,
+            Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
+        store.Submit(writer, first);
+        store.Submit(writer, second);
+        foreach (OpaqueSyncMutation original in new[] { first, second })
+        {
+            Assert.Equal(OpaqueSyncStatus.Ok, store.StageRotation(newWriter,
+                new OpaqueSyncRotationStage(1, space, epoch, device,
+                    rotation, 2, 1, 2, new OpaqueSyncSnapshotRecord(
+                        original.RecordId, 1, false, 2,
+                        RandomNumberGenerator.GetBytes(48)))).Status);
+        }
+
+        using Microsoft.Data.Sqlite.SqliteConnection fault = new(
+            $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False");
+        fault.Open();
+        using (Microsoft.Data.Sqlite.SqliteCommand create = fault.CreateCommand())
+        {
+            create.CommandText = """
+                CREATE TRIGGER fail_rotation BEFORE UPDATE OF key_epoch ON sync_records
+                BEGIN SELECT RAISE(ABORT, 'synthetic rotation fault'); END;
+                """;
+            create.ExecuteNonQuery();
+        }
+
+        OpaqueSyncRotationCommit commit = new(1, space, epoch, device,
+            rotation, 2, 1, 2);
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(() =>
+            store.CommitRotation(newWriter, commit));
+        OpaqueSyncPage unchanged = store.Pull(
+            Scope(device, space, SecurityPermission.Read),
+            new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100));
+        Assert.Equal(2, unchanged.HeadSequence);
+        Assert.Equal(first.Ciphertext, unchanged.Changes[0].Ciphertext);
+        Assert.Equal(second.Ciphertext, unchanged.Changes[1].Ciphertext);
+
+        using (Microsoft.Data.Sqlite.SqliteCommand drop = fault.CreateCommand())
+        {
+            drop.CommandText = "DROP TRIGGER fail_rotation";
+            drop.ExecuteNonQuery();
+        }
+
+        Assert.Equal(OpaqueSyncStatus.Applied,
+            store.CommitRotation(newWriter, commit).Status);
+        Assert.Equal(OpaqueSyncStatus.CursorExpired,
+            store.Pull(new AuthorizedSpaceScope(Guid.NewGuid(), device, space,
+                SecurityPermission.Read, 2),
+                new OpaqueSyncPull(1, space, epoch, device, 2, 0, 100)).Status);
+    }
+
     private static AuthorizedSpaceScope Scope(Guid device, Guid space, SecurityPermission permission) =>
         new(Guid.NewGuid(), device, space, permission, 1);
 
