@@ -6,6 +6,7 @@ using Praxis.Application.Processing;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Inference.Subscription;
+using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 
@@ -19,7 +20,7 @@ internal static class TestDesktop
         ProcessingPipeline? processing = null, VerificationRunner? verification = null, WatchedFolderIntakeGroup? group = null)
     {
         IIntakeSupervisor? intake = group is not null ? group : monitor is null ? null : new SingleFolderIntakeSupervisor(monitor);
-        SubscriptionVerifierModelFactory verifierModels = new();
+        VerificationModelFactory verifierModels = new();
         return new DesktopProtocol(
         [
             new LibraryActions(catalog.Library, catalog.Text, catalog.Sources, catalog.Processing, processing),
