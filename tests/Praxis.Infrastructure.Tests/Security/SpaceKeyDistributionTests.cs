@@ -442,7 +442,18 @@ public sealed class SpaceKeyDistributionTests : IDisposable
             recipients, pins, contentKey, ClientSpaceKeys.GenerateRecoverySecret());
         Assert.Throws<InvalidOperationException>(() =>
             registry.SpaceKeys.Publish(proof, repeated));
-        Assert.Equal(1, registry.SpaceKeys.Download(
+
+        SpaceKeyPublication fresh = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 2, device, signer,
+            recipients, pins, ClientSpaceKeys.GenerateContentKey(),
+            ClientSpaceKeys.GenerateRecoverySecret());
+        registry.SpaceKeys.Publish(proof, fresh);
+        SpaceKeyPublication older = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 3, device, signer,
+            recipients, pins, contentKey, ClientSpaceKeys.GenerateRecoverySecret());
+        Assert.Throws<InvalidOperationException>(() =>
+            registry.SpaceKeys.Publish(proof, older));
+        Assert.Equal(2, registry.SpaceKeys.Download(
             Prove(registry, signer, device, space, SecurityPermission.Read))!.Epoch);
     }
 
