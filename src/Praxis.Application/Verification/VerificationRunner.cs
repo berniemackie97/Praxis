@@ -98,8 +98,13 @@ public sealed class VerificationRunner(
             }
             else
             {
-                report("Verification result discarded because the approval changed.");
+                report("Verification result discarded because the approval or source changed.");
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            repository.Release(claim, clock.GetUtcNow() + TimeSpan.FromMinutes(10), "model_canceled");
+            throw;
         }
         catch (InferenceException exception) when (RetryDelay(exception.Failure) is { } delay)
         {
