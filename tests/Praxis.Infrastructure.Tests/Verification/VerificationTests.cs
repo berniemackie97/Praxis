@@ -253,7 +253,7 @@ public sealed class VerificationTests : IDisposable
         Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(1, saved.RootElement.GetProperty("data").GetProperty("provider").GetProperty("revision").GetInt32());
 
-        using JsonDocument updated = await Send(protocol, $"""
+        using JsonDocument updated = await Send(protocol, $$"""
             {"requestId":"2b","action":"verificationProviderSave","providerId":"codex","executable":{{JsonSerializer.Serialize(executable)}},"model":"gpt-5.2","costWeight":5,"dailyLimit":3,"enabled":true}
             """);
         Assert.True(updated.RootElement.GetProperty("ok").GetBoolean());
