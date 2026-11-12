@@ -14,17 +14,25 @@ public sealed class VerificationModelFactory : IVerifierModelFactory
     {
         ArgumentNullException.ThrowIfNull(provider);
         provider.EnsureValid();
-        return provider.ProviderId switch
+        try
         {
-            VerificationProvider.Ollama => new OllamaChatModelConnector().Connect(
-                new ModelProfile(ModelProfile.LocalEnrichment, ModelProfile.OllamaProvider,
-                    provider.Endpoint!, provider.Model!, 32_768, true).Normalized()),
-            VerificationProvider.Codex => new ModelConnection(
-                new CodexChatModel(provider.Executable!, provider.Model)),
-            VerificationProvider.ClaudeCode => new ModelConnection(
-                new ClaudeCodeChatModel(provider.Executable!, provider.Model ?? "sonnet")),
-            _ => throw new NotSupportedException("The verification provider is not supported.")
-        };
+            return provider.ProviderId switch
+            {
+                VerificationProvider.Ollama => new OllamaChatModelConnector().Connect(
+                    new ModelProfile(ModelProfile.LocalEnrichment, ModelProfile.OllamaProvider,
+                        provider.Endpoint!, provider.Model!, 32_768, true).Normalized()),
+                VerificationProvider.Codex => new ModelConnection(
+                    new CodexChatModel(provider.Executable!, provider.Model)),
+                VerificationProvider.ClaudeCode => new ModelConnection(
+                    new ClaudeCodeChatModel(provider.Executable!, provider.Model ?? "sonnet")),
+                _ => throw new NotSupportedException("The verification provider is not supported.")
+            };
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InferenceException(InferenceFailure.Unavailable,
+                "The configured verifier is no longer available.", exception);
+        }
     }
 
     public IReadOnlyDictionary<string, string> DiscoverExecutables()
