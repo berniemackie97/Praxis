@@ -363,6 +363,29 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task DisablingASelectedProviderRetractsItsApproval()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "disabled.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.ClaudeCode);
+
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10, enabled: false);
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+        Assert.Null(catalog.Verification.Claim());
+
+        SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10);
+        Assert.Null(catalog.Verification.Claim());
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.ClaudeCode);
+        Assert.NotNull(catalog.Verification.Claim());
+    }
+
+    [Fact]
     public async Task FailedAttemptUsesDailyAllowanceWithoutFallbackOrSilentRetry()
     {
         using SqliteCatalog catalog = Open();
