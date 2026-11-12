@@ -1,16 +1,21 @@
+using Praxis.Domain.Models;
+
 namespace Praxis.Domain.Verification;
 
-/// <summary>A stronger model the owner has enabled, ordered for routing by cost weight.</summary>
+/// <summary>Owner-configured verifier. CLI executables and loopback model endpoints are distinct.</summary>
 public sealed record VerificationProvider(
-    string ProviderId, string Executable, string? Model, int CostWeight, int DailyLimit, bool Enabled)
+    string ProviderId, string? Executable, string? Model, int CostWeight, int DailyLimit, bool Enabled,
+    string? Endpoint = null)
 {
+    public const string Ollama = "ollama";
     public const string Codex = "codex";
     public const string ClaudeCode = "claude-code";
 
-    /// <summary>Rejects unsupported providers and out-of-range routing weights or daily limits.</summary>
+    public bool IsLocal => ProviderId == Ollama;
+
     public void EnsureValid()
     {
-        if (ProviderId is not (Codex or ClaudeCode))
+        if (ProviderId is not (Ollama or Codex or ClaudeCode))
         {
             throw new ArgumentException("The verification provider is not supported.", nameof(ProviderId));
         }
@@ -18,6 +23,21 @@ public sealed record VerificationProvider(
         if (CostWeight is < 0 or > 1000 || DailyLimit is < 1 or > 500)
         {
             throw new ArgumentOutOfRangeException(nameof(CostWeight), "Weights are 0–1000 and daily limits 1–500.");
+        }
+
+        if (IsLocal)
+        {
+            if (Executable is not null || Endpoint is null || Model is null)
+            {
+                throw new ArgumentException("Local verification requires an Ollama endpoint and model, not a CLI executable.");
+            }
+
+            _ = new ModelProfile(ModelProfile.LocalEnrichment, ModelProfile.OllamaProvider,
+                Endpoint, Model, 32_768, true).Normalized();
+        }
+        else if (Endpoint is not null || string.IsNullOrWhiteSpace(Executable))
+        {
+            throw new ArgumentException("External verification requires an executable and no Ollama endpoint.");
         }
     }
 }
