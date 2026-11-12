@@ -689,6 +689,59 @@ public sealed class PrivateSyncHostTests
                 2, 0, Guid.Empty, 16))).Status);
     }
 
+    [Fact]
+    public async Task OfflineEditOnSecondAuthorizedDeviceSurvivesKeyEpochMigration()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("epoch-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("epoch-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstOld =
+            host.Exchange(first, firstClient, "epoch-outbox-first");
+        using AuthenticatedNoteExchange secondOld =
+            host.Exchange(second, secondClient, "epoch-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstOld);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondOld);
+        Guid note = Guid.NewGuid();
+        first.Queue(note, LocalNoteAction.Upsert, "team.md", "original");
+        await firstSync.ReconcileAsync();
+        await secondSync.ReconcileAsync();
+        PendingNoteEdit offline = second.Queue(note, LocalNoteAction.Upsert,
+            "team.md", "offline contribution");
+
+        byte[] nextKey = host.PublishNextKeyEpoch();
+        OpaqueSyncRotationReceipt rotation = await OwnerNoteKeyRotation.RotateAsync(
+            first, host.Space, 1, 2, nextKey, firstClient);
+        Assert.Equal(OpaqueSyncStatus.Applied, rotation.Status);
+
+        using AuthenticatedNoteExchange secondNew = new(
+            second, host.Space, 2, nextKey, secondClient,
+            host.NewClientDirectory("epoch2-second-outbox"));
+        OfflineNoteSynchronizer secondUpdated = new(second, host.Space, secondNew);
+        NoteSyncProgress restored = await secondUpdated.RecoverKeyEpochAsync();
+        Assert.True(restored.SnapshotApplied);
+        Assert.Equal(offline.OperationId, Assert.Single(second.Pending).OperationId);
+        Assert.Equal("original", Assert.Single(second.Records).Markdown);
+        Assert.Equal(NoteSyncState.MoreWork, restored.State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondUpdated.ReconcileAsync()).State);
+        Assert.Empty(second.Pending);
+        Assert.Empty(second.Conflicts);
+
+        using AuthenticatedNoteExchange firstNew = new(
+            first, host.Space, 2, nextKey, firstClient,
+            host.NewClientDirectory("epoch2-first-outbox"));
+        OfflineNoteSynchronizer firstUpdated = new(first, host.Space, firstNew);
+        Assert.True((await firstUpdated.RecoverKeyEpochAsync()).SnapshotApplied);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+        Assert.Equal("offline contribution", Assert.Single(first.Records).Markdown);
+        Assert.Equal(2, first.Cursor);
+        Assert.Equal(2, second.Cursor);
+    }
+
     private sealed class TestHost : IAsyncDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(),
