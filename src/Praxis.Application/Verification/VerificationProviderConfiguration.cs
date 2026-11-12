@@ -17,6 +17,6 @@ public sealed class VerificationProviderConfiguration(IVerificationRepository re
         }
 
         repository.SaveProvider(provider);
-        return provider;
+        return repository.ListProviders().Single(saved => saved.ProviderId == provider.ProviderId);
     }
 }

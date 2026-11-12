@@ -251,6 +251,15 @@ public sealed class VerificationTests : IDisposable
             {"requestId":"2","action":"verificationProviderSave","providerId":"codex","executable":{{JsonSerializer.Serialize(executable)}},"costWeight":5,"dailyLimit":3,"enabled":true}
             """);
         Assert.True(saved.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(1, saved.RootElement.GetProperty("data").GetProperty("provider").GetProperty("revision").GetInt32());
+
+        using JsonDocument updated = await Send(protocol, $"""
+            {"requestId":"2b","action":"verificationProviderSave","providerId":"codex","executable":{{JsonSerializer.Serialize(executable)}},"model":"gpt-5.2","costWeight":5,"dailyLimit":3,"enabled":true}
+            """);
+        Assert.True(updated.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(2, updated.RootElement.GetProperty("data").GetProperty("provider").GetProperty("revision").GetInt32());
+        Assert.Equal(2, catalog.Verification.ListProviders().Single(
+            provider => provider.ProviderId == VerificationProvider.Codex).Revision);
 
         using JsonDocument created = await Send(protocol,
             $$"""{"requestId":"3","action":"verificationRequestSource","sourceId":"{{source.SourceId}}"}""");

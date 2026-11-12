@@ -78,7 +78,7 @@ final class IntelligenceSettingsModel: ObservableObject {
         let trimmed = model.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty { fields["model"] = trimmed }
         channel.send("verificationProviderSave", fields, as: ProviderSavedData.self, failed: report) { [weak self] _ in
-            self?.notice = "\(VerificationProvider.displayName(providerId)) saved. Waiting requests are retried."
+            self?.notice = "\(VerificationProvider.displayName(providerId)) saved. Review Verification for affected requests."
             self?.refresh()
         }
     }
