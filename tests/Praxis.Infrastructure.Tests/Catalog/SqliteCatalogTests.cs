@@ -151,29 +151,39 @@ public sealed class SqliteCatalogTests : IDisposable
     public void VersionSeventeenPreservesVerifierApprovalAndAttemptHistory()
     {
         CreateLegacyCatalog(17);
+        Guid requestId = Guid.NewGuid();
         using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
         {
-            Execute(connection, """
+            using SqliteCommand seed = connection.CreateCommand();
+            seed.CommandText = """
                 INSERT INTO verification_providers
                     (provider_id, executable, model, cost_weight, daily_limit, enabled, updated_utc)
                 VALUES ('codex', '/usr/local/bin/codex', 'gpt-5.2', 10, 20, 1, '2026-11-08T00:00:00Z');
                 INSERT INTO verification_requests
                     (request_id, reason, status, provider_id, payload, created_utc, decided_utc,
                      started_utc, completed_utc, model_name, model_version, input_tokens, output_tokens, duration_ms)
-                VALUES ('legacy-verification', 'owner_request', 'completed', 'codex', '{"items":[]}',
+                VALUES ($request, 'owner_request', 'completed', 'codex', '{"items":[]}',
                         '2026-11-08T00:00:00Z', '2026-11-08T00:01:00Z', '2026-11-08T00:02:00Z',
                         '2026-11-08T00:03:00Z', 'gpt-5.2', 'old-model-digest', 21, 7, 120);
-                """);
+                """;
+            seed.Parameters.AddWithValue("$request", requestId.ToString("D"));
+            seed.ExecuteNonQuery();
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
+        var restored = upgraded.Verification.Get(requestId)!;
+        Assert.Equal("completed", restored.Status);
+        Assert.Equal("codex", restored.ProviderId);
+        Assert.Equal("gpt-5.2", restored.ModelName);
+        Assert.Equal(21, restored.InputTokens);
         using SqliteConnection verified = Connect(upgraded.DatabasePath);
         Assert.Equal(18L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(verified, "SELECT config_revision FROM verification_providers WHERE provider_id='codex'"));
-        Assert.Equal(1L, Scalar(verified, "SELECT approved_provider_revision FROM verification_requests WHERE request_id='legacy-verification'"));
-        Assert.Equal("legacy", Scalar(verified, "SELECT status FROM verification_invocations WHERE request_id='legacy-verification'"));
-        Assert.Equal(21L, Scalar(verified, "SELECT input_tokens FROM verification_invocations WHERE request_id='legacy-verification'"));
-        Assert.Equal("old-model-digest", Scalar(verified, "SELECT model_version FROM verification_invocations WHERE request_id='legacy-verification'"));
+        Assert.Equal(1L, Scalar(verified, "SELECT approved_provider_revision FROM verification_requests"));
+        Assert.Equal(requestId.ToString("D"), Scalar(verified, "SELECT request_id FROM verification_invocations"));
+        Assert.Equal("legacy", Scalar(verified, "SELECT status FROM verification_invocations"));
+        Assert.Equal(21L, Scalar(verified, "SELECT input_tokens FROM verification_invocations"));
+        Assert.Equal("old-model-digest", Scalar(verified, "SELECT model_version FROM verification_invocations"));
         Assert.Null(Scalar(verified, "PRAGMA foreign_key_check"));
     }
 
