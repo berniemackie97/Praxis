@@ -156,6 +156,10 @@ private struct ProviderSettings: View {
                 Spacer()
                 Text(saved.map { $0.enabled ? "enabled" : "disabled" } ?? "not set up")
                     .font(.caption).foregroundStyle(.secondary)
+                if let allowance = model.allowances.first(where: { $0.provider.providerId == providerId }) {
+                    Text("\(allowance.startedToday)/\(allowance.provider.dailyLimit) attempts today")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             HStack {
                 if providerId == VerificationProvider.ollama {
