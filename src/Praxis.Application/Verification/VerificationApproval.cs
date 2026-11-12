@@ -22,9 +22,11 @@ public sealed class VerificationApproval(IVerificationRepository repository)
         string payload = repository.ReadAwaitingPayload(requestId)
             ?? throw new InvalidOperationException(NotAwaitingApproval);
         VerificationProvider provider = VerificationRouter.Route(repository.ListEnabledProviderAllowances(), providerId)
-            ?? throw new InvalidOperationException("No enabled verifier has allowance left today.");
+            ?? throw new InvalidOperationException(providerId is null
+                ? "Enable a local Ollama verifier or explicitly select an external provider."
+                : "The selected verifier is disabled or has reached its daily limit.");
         (string narrowed, IReadOnlySet<int> kept) = VerificationPayload.Narrow(payload, excludedOrdinals ?? [], redactions ?? []);
-        return repository.Approve(requestId, payload, provider.ProviderId, narrowed, kept)
+        return repository.Approve(requestId, payload, provider.ProviderId, provider.Revision, narrowed, kept)
             ?? throw new InvalidOperationException(NotAwaitingApproval);
     }
 }
