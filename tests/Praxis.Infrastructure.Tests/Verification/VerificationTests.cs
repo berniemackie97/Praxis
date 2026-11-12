@@ -79,7 +79,7 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
-    public async Task ApprovalSendsExactlyTheNarrowedPayloadToTheCheapestProvider()
+    public async Task ApprovalSendsExactlyTheNarrowedPayloadToExplicitProvider()
     {
         using SqliteCatalog catalog = Open();
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
@@ -91,7 +91,8 @@ public sealed class VerificationTests : IDisposable
 
         // Excluding an item removes it; a name in another item's context needs a redaction.
         VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
-            request, excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"]);
+            request, providerId: VerificationProvider.Codex,
+            excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"]);
 
         Assert.Equal(VerificationProvider.Codex, approved.ProviderId);
         var verifier = new ScriptedChatModel(_ => Verdicts((hacker, "unsupported", "none")));
@@ -125,7 +126,8 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "supported", "person")))).ProcessNextAsync());
 
@@ -141,7 +143,8 @@ public sealed class VerificationTests : IDisposable
 
         Assert.True(catalog.Knowledge.SetType(hackerEntity.EntityId, "organization"));
         Guid second = catalog.Verification.RequestForEntity(hackerEntity.EntityId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(second);
+        new VerificationApproval(catalog.Verification).Approve(second,
+            providerId: VerificationProvider.Codex);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts((1, "supported", "person")))).ProcessNextAsync());
         EntitySummary owned = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("organization", "owner"), (owned.EntityType, owned.TypeOrigin));
@@ -161,11 +164,13 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50, dailyLimit: 5);
 
         Guid a = catalog.Verification.RequestForSource(first.SourceId)!.Value;
-        Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a).ProviderId);
+        Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a,
+            providerId: VerificationProvider.Codex).ProviderId);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts())).ProcessNextAsync());
 
         Guid b = catalog.Verification.RequestForSource(second.SourceId)!.Value;
-        Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b).ProviderId);
+        Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b,
+            providerId: VerificationProvider.ClaudeCode).ProviderId);
 
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50, dailyLimit: 5, enabled: false);
         Guid c = catalog.Verification.RequestForSource(third.SourceId)!.Value;
@@ -186,7 +191,8 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "meeting.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex);
         var reports = new List<string>();
         var runner = new VerificationRunner(catalog.Verification,
             new DelegatingVerifierModelFactory(_ => new ScriptedChatModel(_ => throw new InferenceException(failure, "provider text with secrets"))),
@@ -218,7 +224,8 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request, excludedOrdinals: [alex]);
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex, excludedOrdinals: [alex]);
 
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "uncertain", "none"), (99, "unsupported", "none")))).ProcessNextAsync());
@@ -251,7 +258,7 @@ public sealed class VerificationTests : IDisposable
         string request = created.RootElement.GetProperty("data").GetProperty("verificationId").GetString()!;
 
         using JsonDocument approved = await Send(protocol,
-            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","redactions":["Rivera"]}""");
+            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","redactions":["Rivera"]}""");
         JsonElement view = approved.RootElement.GetProperty("data").GetProperty("request");
         Assert.Equal("approved", view.GetProperty("status").GetString());
         Assert.DoesNotContain("Rivera", view.GetProperty("payload").GetString(), StringComparison.Ordinal);
