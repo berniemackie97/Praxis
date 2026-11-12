@@ -385,6 +385,23 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public void UninstalledCliCanBeDisabledWithoutRequiringItsExecutable()
+    {
+        using SqliteCatalog catalog = Open();
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
+        File.Delete(executable);
+
+        var configuration = new VerificationProviderConfiguration(catalog.Verification,
+            new VerificationModelFactory());
+        VerificationProvider disabled = configuration.Save(new VerificationProvider(
+            VerificationProvider.Codex, executable, null, 10, 20, false));
+
+        Assert.False(disabled.Enabled);
+        Assert.False(catalog.Verification.ListProviders().Single().Enabled);
+        Assert.Throws<InferenceException>(() => configuration.Save(disabled with { Enabled = true }));
+    }
+
+    [Fact]
     public async Task FailedAttemptUsesDailyAllowanceWithoutFallbackOrSilentRetry()
     {
         using SqliteCatalog catalog = Open();
