@@ -137,7 +137,9 @@ public sealed class IncomingNoteCollisionTests : IDisposable
             "offline.md", "private offline contribution");
         LocalNoteState moved = previousRemote with
         {
-            Revision = 2, Path = "occupied.md", Markdown = "remote edited"
+            Revision = 2,
+            Path = "occupied.md",
+            Markdown = "remote edited"
         };
         journal.ApplyPage(2, [new AppliedNoteChange(3, moved)]);
 
@@ -157,7 +159,8 @@ public sealed class IncomingNoteCollisionTests : IDisposable
 
         LocalNoteState accepted = moved with
         {
-            Revision = 3, Path = "combined.md",
+            Revision = 3,
+            Path = "combined.md",
             Markdown = "private offline contribution + reviewed remote"
         };
         journal.Accept(resolution.OperationId, 4, accepted);
@@ -222,7 +225,9 @@ public sealed class IncomingNoteCollisionTests : IDisposable
 
         LocalNoteState renamed = original with
         {
-            Revision = 2, Path = "three.md", Markdown = "renamed original"
+            Revision = 2,
+            Path = "three.md",
+            Markdown = "renamed original"
         };
         journal.Accept(resolution.OperationId, 3, renamed);
         journal.ApplyPage(2, [new AppliedNoteChange(3, renamed)]);

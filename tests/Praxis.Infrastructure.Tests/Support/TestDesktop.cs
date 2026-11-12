@@ -4,8 +4,8 @@ using Praxis.Application.Intake;
 using Praxis.Application.Media;
 using Praxis.Application.Processing;
 using Praxis.Application.Verification;
-using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Inference;
+using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 
