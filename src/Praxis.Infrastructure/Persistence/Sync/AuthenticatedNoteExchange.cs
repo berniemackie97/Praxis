@@ -289,6 +289,11 @@ public sealed class AuthenticatedNoteExchange : INoteSyncExchange, IDisposable
             {
                 throw new InvalidDataException("The encrypted snapshot is incomplete.");
             }
+
+            // Each page needs a new proof challenge. Pace recovery under the host's
+            // per-certificate request budget rather than restarting from page zero.
+            await Task.Delay(TimeSpan.FromMilliseconds(1250), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         throw new InvalidDataException("The encrypted snapshot exceeded its page budget.");

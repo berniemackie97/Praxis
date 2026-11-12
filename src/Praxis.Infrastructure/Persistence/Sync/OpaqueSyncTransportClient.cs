@@ -139,18 +139,30 @@ public sealed class OpaqueSyncTransportClient : IDisposable
             throw new ArgumentException("The snapshot request does not belong to this device.", nameof(request));
         }
 
-        (Guid challengeId, byte[] signature) = await Authorize(
-            request.SpaceId, SecurityPermission.Read, cancellationToken);
-        using HttpResponseMessage response = await http.PostAsJsonAsync("v1/sync/snapshot",
-            new SyncSnapshotRequest(challengeId, signature, request), cancellationToken);
-        if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Conflict or
-            HttpStatusCode.BadRequest))
+        for (int retry = 0; ; retry++)
         {
-            response.EnsureSuccessStatusCode();
-        }
+            try
+            {
+                (Guid challengeId, byte[] signature) = await Authorize(
+                    request.SpaceId, SecurityPermission.Read, cancellationToken);
+                using HttpResponseMessage response = await http.PostAsJsonAsync("v1/sync/snapshot",
+                    new SyncSnapshotRequest(challengeId, signature, request), cancellationToken);
+                if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Conflict or
+                    HttpStatusCode.BadRequest))
+                {
+                    response.EnsureSuccessStatusCode();
+                }
 
-        return await response.Content.ReadFromJsonAsync<OpaqueSyncSnapshotPage>(
-            cancellationToken) ?? throw new InvalidDataException("The encrypted snapshot page is missing.");
+                return await response.Content.ReadFromJsonAsync<OpaqueSyncSnapshotPage>(
+                    cancellationToken) ?? throw new InvalidDataException("The encrypted snapshot page is missing.");
+            }
+            catch (HttpRequestException error) when (
+                error.StatusCode == HttpStatusCode.TooManyRequests && retry < 18)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     private async Task<(Guid, byte[])> Authorize(Guid spaceId, SecurityPermission permission,
