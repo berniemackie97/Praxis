@@ -61,12 +61,18 @@ final class IntelligenceSettingsModel: ObservableObject {
     }
 
     func saveProvider(
-        _ providerId: String, executable: String, model: String, costWeight: Int, dailyLimit: Int, enabled: Bool
+        _ providerId: String, executable: String, endpoint: String, model: String,
+        costWeight: Int, dailyLimit: Int, enabled: Bool
     ) {
         var fields: [String: Any] = [
-            "providerId": providerId, "executable": executable,
+            "providerId": providerId,
             "costWeight": costWeight, "dailyLimit": dailyLimit, "enabled": enabled
         ]
+        if providerId == VerificationProvider.ollama {
+            fields["endpoint"] = endpoint
+        } else {
+            fields["executable"] = executable
+        }
         let trimmed = model.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty { fields["model"] = trimmed }
         channel.send("verificationProviderSave", fields, as: ProviderSavedData.self, failed: report) { [weak self] _ in
