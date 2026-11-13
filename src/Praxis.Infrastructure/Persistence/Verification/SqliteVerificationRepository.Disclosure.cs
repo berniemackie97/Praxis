@@ -187,7 +187,7 @@ public sealed partial class SqliteVerificationRepository
         return database.ExecuteRead(connection =>
         {
             using var query = connection.CreateCommand("""
-                SELECT event_id, request_id, source_id, provider_id, operation, result,
+                SELECT event_id, request_id, source_id, provider_id, actor, operation, result,
                        reason_code, occurred_utc
                 FROM verification_disclosure_audit ORDER BY occurred_utc DESC, event_id DESC LIMIT $limit
                 """);
@@ -200,8 +200,8 @@ public sealed partial class SqliteVerificationRepository
                     reader.IsDBNull(1) ? null : Guid.Parse(reader.GetString(1)),
                     reader.IsDBNull(2) ? null : Guid.Parse(reader.GetString(2)),
                     reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.GetString(4), reader.GetString(5), reader.GetString(6),
-                    CatalogValues.ParseTimestamp(reader.GetString(7))));
+                    reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7),
+                    CatalogValues.ParseTimestamp(reader.GetString(8))));
             }
 
             return events;
