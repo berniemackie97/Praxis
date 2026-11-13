@@ -5,6 +5,9 @@ CREATE TABLE verification_contexts (
     request_id TEXT NOT NULL,
     ordinal INTEGER NOT NULL CHECK (ordinal >= 1),
     proposal_id TEXT NOT NULL REFERENCES enrichment_proposals(proposal_id) ON DELETE RESTRICT,
+    source_id TEXT NOT NULL REFERENCES sources(source_id) ON DELETE RESTRICT,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    source_digest TEXT NOT NULL CHECK (length(source_digest) = 64),
     PRIMARY KEY (request_id, ordinal, proposal_id),
     FOREIGN KEY (request_id, ordinal)
         REFERENCES verification_items(request_id, ordinal) ON DELETE RESTRICT
