@@ -681,7 +681,7 @@ public sealed class VerificationTests : IDisposable
         VerificationDisclosureSource after = Assert.Single(catalog.Verification.DisclosureSources(request));
         Assert.Equal((initial.SourceId, initial.Name, initial.Classification),
             (after.SourceId, after.Name, after.Classification));
-        Assert.Equal(initial.Ordinals, after.Ordinals);
+        Assert.Equal(initial.Ordinals.ToArray(), after.Ordinals.ToArray());
         Assert.False(catalog.Verification.SetSourceRemoteVerification(source.SourceId, true));
     }
 
