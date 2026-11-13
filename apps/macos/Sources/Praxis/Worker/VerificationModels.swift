@@ -110,3 +110,29 @@ struct VerificationData: Decodable { let request: VerificationRequest? }
 struct VerificationCreatedData: Decodable { let verificationId: String? }
 struct VerificationPlannedData: Decodable { let planned: Int }
 struct VerificationDeclinedData: Decodable { let declined: Bool }
+
+struct VerificationDisclosureSource: Decodable, Identifiable {
+    let sourceId: String
+    let name: String
+    let classification: String
+    let ordinals: [Int]
+    var id: String { sourceId }
+    var remoteAllowed: Bool { classification == "remote_verification" }
+}
+
+struct VerificationDisclosureEvent: Decodable, Identifiable {
+    let eventId: String
+    let requestId: String?
+    let sourceId: String?
+    let providerId: String?
+    let operation: String
+    let result: String
+    let reasonCode: String
+    let occurredUtc: String
+    var id: String { eventId }
+}
+
+struct VerificationDisclosureSourcesData: Decodable { let sources: [VerificationDisclosureSource] }
+struct VerificationDisclosurePolicyData: Decodable { let changed: Bool }
+struct VerificationDisclosureRevokedData: Decodable { let revoked: Bool }
+struct VerificationDisclosureAuditData: Decodable { let events: [VerificationDisclosureEvent] }
