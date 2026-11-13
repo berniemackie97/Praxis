@@ -65,7 +65,7 @@ internal static class VerificationEvidence
         }
 
         using var mentions = connection.CreateCommand("""
-            SELECT m.entity_type, m.evidence, p.evidence_offset, p.evidence_length, d.content, s.locator,
+            SELECT DISTINCT m.entity_type, m.evidence, p.evidence_offset, p.evidence_length, d.content, s.locator,
                    p.proposal_id
             FROM visible_entity_mentions m
             JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
