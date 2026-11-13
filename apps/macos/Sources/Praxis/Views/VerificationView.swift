@@ -36,7 +36,7 @@ struct VerificationView: View {
                 }
                 DisclosureGroup("Disclosure audit") {
                     ForEach(model.disclosureAudit.prefix(8)) { event in
-                        Text("\(event.operation) · \(event.result) · \(event.reasonCode)")
+                        Text("\(event.actor) · \(event.operation) · \(event.result) · \(event.reasonCode)")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
