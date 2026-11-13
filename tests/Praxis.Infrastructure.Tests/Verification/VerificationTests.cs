@@ -670,10 +670,9 @@ public sealed class VerificationTests : IDisposable
     public async Task RemoteDisclosureRequiresSeparateConsentAndExplicitSourceClassification()
     {
         using SqliteCatalog catalog = Open();
-        CapturedOriginal source = await Enrich(catalog, "restricted.md", Meeting);
+        CapturedOriginal source = await Enrich(catalog, "restricted.md", Meeting, remoteEligible: false);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, false));
         Assert.Equal("local_only", Assert.Single(catalog.Verification.DisclosureSources(request)).Classification);
 
         Assert.Throws<InvalidOperationException>(() =>
@@ -701,11 +700,12 @@ public sealed class VerificationTests : IDisposable
     public async Task EntityReviewCannotExportAnyUnclassifiedContext()
     {
         using SqliteCatalog catalog = Open();
-        var (first, _, entity) = await ConflictingSources(catalog);
+        var (_, _, entity) = await ConflictingSources(catalog, firstRemoteEligible: false);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
         Assert.Equal(2, catalog.Verification.DisclosureSources(request).Count);
-        Assert.True(catalog.Verification.SetSourceRemoteVerification(first.SourceId, false));
+        Assert.Contains(catalog.Verification.DisclosureSources(request), source =>
+            source.Classification == "local_only");
 
         Assert.Throws<InvalidOperationException>(() =>
             new VerificationApproval(catalog.Verification).Approve(request,
@@ -807,24 +807,24 @@ public sealed class VerificationTests : IDisposable
         Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, false));
 
         using JsonDocument sources = await Send(protocol,
-            $"""{"requestId":"s","action":"verificationDisclosureSources","verificationId":"{{request:D}}"}""");
+            $$"""{"requestId":"s","action":"verificationDisclosureSources","verificationId":"{{request:D}}"}""");
         Assert.Equal("local_only", sources.RootElement.GetProperty("data")
             .GetProperty("sources")[0].GetProperty("classification").GetString());
         using JsonDocument invalid = await Send(protocol,
-            $"""{"requestId":"invalid","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":"yes"}""");
+            $$"""{"requestId":"invalid","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":"yes"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
         using JsonDocument denied = await Send(protocol,
-            $"""{"requestId":"d","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+            $$"""{"requestId":"d","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
 
         using JsonDocument enabled = await Send(protocol,
-            $"""{"requestId":"e","action":"verificationSourceDisclosureSet","sourceId":"{{source.SourceId:D}}","allowRemoteVerification":true}""");
+            $$"""{"requestId":"e","action":"verificationSourceDisclosureSet","sourceId":"{{source.SourceId:D}}","allowRemoteVerification":true}""");
         Assert.True(enabled.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using JsonDocument approved = await Send(protocol,
-            $"""{"requestId":"a","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+            $$"""{"requestId":"a","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
         Assert.True(approved.RootElement.GetProperty("ok").GetBoolean());
         using JsonDocument revoked = await Send(protocol,
-            $"""{"requestId":"r","action":"verificationDisclosureRevoke","verificationId":"{{request:D}}"}""");
+            $$"""{"requestId":"r","action":"verificationDisclosureRevoke","verificationId":"{{request:D}}"}""");
         Assert.True(revoked.RootElement.GetProperty("data").GetProperty("revoked").GetBoolean());
         using JsonDocument audit = await Send(protocol,
             """{"requestId":"audit","action":"verificationDisclosureAudit","limit":20}""");
@@ -915,10 +915,11 @@ public sealed class VerificationTests : IDisposable
     }
 
     private async Task<(CapturedOriginal First, CapturedOriginal Second, Guid EntityId)> ConflictingSources(
-        SqliteCatalog catalog)
+        SqliteCatalog catalog, bool firstRemoteEligible = true)
     {
         CapturedOriginal first = await Enrich(catalog, "type-org.md",
-            "# Company\nOpenConquerClient is described in a company note.");
+            "# Company\nOpenConquerClient is described in a company note.",
+            remoteEligible: firstRemoteEligible);
         types["OpenConquerClient"] = "project";
         CapturedOriginal second = await Enrich(catalog, "type-project.md",
             "# Software\nOpenConquerClient is a software project with a renderer.");
@@ -975,12 +976,16 @@ public sealed class VerificationTests : IDisposable
         return model.Requests[^1].Messages[^1].Content;
     }
 
-    private async Task<CapturedOriginal> Enrich(SqliteCatalog catalog, string name, string text, ScriptedChatModel? model = null)
+    private async Task<CapturedOriginal> Enrich(
+        SqliteCatalog catalog, string name, string text, ScriptedChatModel? model = null, bool remoteEligible = true)
     {
         model ??= LocalModel();
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, name), stream, 200_000, Guid.NewGuid().ToString("N"));
-        catalog.Verification.SetSourceRemoteVerification(captured.SourceId, true);
+        if (remoteEligible)
+        {
+            catalog.Verification.SetSourceRemoteVerification(captured.SourceId, true);
+        }
         ProcessingDriver[] drivers =
         [
             ProcessingDriver.Text(catalog),
