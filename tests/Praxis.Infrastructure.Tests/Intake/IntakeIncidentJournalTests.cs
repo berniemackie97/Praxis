@@ -53,7 +53,7 @@ public sealed class IntakeIncidentJournalTests : IDisposable
         string restored = Path.Combine(workspace, "restored");
         await CatalogSnapshots.RestoreAsync(Path.Combine(workspace, "backup"), restored, 20_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(restored, clock);
-        Assert.Equal(19, reopened.SchemaVersion);
+        Assert.Equal(20, reopened.SchemaVersion);
         Assert.Equal(2, reopened.IntakeIncidents.Recent(20).Count);
         Assert.All(reopened.IntakeIncidents.Recent(20), incident => Assert.NotNull(incident.ResolvedUtc));
     }

@@ -15,6 +15,9 @@ public readonly struct DesktopRequestFields(JsonElement root)
         return value.GetBoolean();
     }
 
+    public bool? OptionalBoolean(string property) =>
+        root.TryGetProperty(property, out _) ? RequireBoolean(property) : null;
+
     public string? OptionalText(string property, int limit, string invalidMessage)
     {
         if (!root.TryGetProperty(property, out JsonElement value))

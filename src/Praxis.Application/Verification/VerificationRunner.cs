@@ -84,6 +84,12 @@ public sealed class VerificationRunner(
             using ModelConnection connection = models.Create(claim.Provider);
             IChatModel model = connection.Model;
             ModelIdentity identity = await model.DescribeAsync(cancellationToken);
+            if (!repository.CanDispatch(claim))
+            {
+                report("Verification dispatch denied because the source disclosure grant or evidence changed.");
+                return true;
+            }
+
             ChatResult result = await model.CompleteAsync(new ChatRequest(
                 messages, VerificationPrompt.Schema, MaximumOutputTokens, ContextTokens), cancellationToken);
             if (claim.Provider.IsLocal &&

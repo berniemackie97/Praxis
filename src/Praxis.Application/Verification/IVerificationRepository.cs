@@ -48,7 +48,20 @@ public interface IVerificationRepository
     /// </summary>
     VerificationRequestView? Approve(
         Guid requestId, string reviewedPayload, string providerId, int providerRevision,
-        string approvedPayload, IReadOnlySet<int> includedOrdinals);
+        string approvedPayload, IReadOnlySet<int> includedOrdinals, bool remoteDisclosureApproved = false);
+
+    /// <summary>Source-level owner classification; absent rows are always local-only.</summary>
+    IReadOnlyList<VerificationDisclosureSource> DisclosureSources(Guid requestId);
+    bool SetSourceRemoteVerification(Guid sourceId, bool allowed);
+
+    /// <summary>Immediately withdraws an external request's disclosure grant.</summary>
+    bool RevokeDisclosure(Guid requestId);
+
+    /// <summary>Rechecks the lease and all authorization immediately before any model payload is sent.</summary>
+    bool CanDispatch(ClaimedVerification claim);
+
+    /// <summary>Bounded content-free authorization decisions for first-party incident review.</summary>
+    IReadOnlyList<VerificationDisclosureEvent> DisclosureAudit(int limit);
 
     bool Decline(Guid requestId);
 
