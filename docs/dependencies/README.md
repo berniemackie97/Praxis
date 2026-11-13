@@ -2,7 +2,7 @@
 
 The checked-in [inventory](nuget-inventory.json) records every external package resolved across the Praxis solution using the exact SDK in `global.json`, the committed NuGet lockfiles and the package manifests installed by NuGet. Direct/transitive versions, SHA-512 content hashes, consuming projects and publisher-declared license metadata are included.
 
-The inventory is a **review aid, not legal approval or an independent license audit**. Package metadata can be inaccurate, legacy license URLs can change, and transitive dependencies need their own review. At the current baseline, 49 packages declare an expression of MIT or Apache-2.0. The remaining `xunit.abstractions` 2.0.3 declares only a URL (`https://raw.githubusercontent.com/xunit/xunit/master/license.txt`); it must be independently reviewed against its released artifact, not silently classified as approved.
+The inventory is a **review aid, not legal approval or an independent license audit**. Package metadata can be inaccurate, legacy license URLs can change, and transitive dependencies need their own review. At the current baseline, 50 packages declare an expression of MIT or Apache-2.0, including PdfPig 0.1.16 (Apache-2.0, no transitive dependencies on .NET 8+), added for PDF statement text extraction (ADR 0043). The remaining `xunit.abstractions` 2.0.3 declares only a URL (`https://raw.githubusercontent.com/xunit/xunit/master/license.txt`); it must be independently reviewed against its released artifact, not silently classified as approved.
 
 CI restores the committed package graph in locked mode and regenerates the report from the actual package cache, failing if names, versions, integrity hashes, project usage or license declarations differ. An intentional package update requires:
 

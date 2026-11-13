@@ -396,6 +396,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Data.Sqlite": "[10.0.14, )",
+          "PdfPig": "[0.1.16, )",
           "Praxis.Application": "[1.0.0, )",
           "Praxis.Notes": "[1.0.0, )"
         }
@@ -450,6 +451,12 @@
           "Microsoft.Extensions.Logging.EventSource": "10.0.14",
           "Microsoft.Extensions.Options": "10.0.14"
         }
+      },
+      "PdfPig": {
+        "type": "CentralTransitive",
+        "requested": "[0.1.16, )",
+        "resolved": "0.1.16",
+        "contentHash": "qQcbsNMYVY+K5ELptax2S8thNMk0+rSQq3H/KdYj3LLcko8yTCz8y5KIvsKxIyAuTN0ZYNnfsZkM+0EvxTwHVA=="
       }
     }
   }

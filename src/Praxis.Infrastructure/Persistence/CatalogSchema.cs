@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 20;
+    internal const int CurrentVersion = 21;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -46,6 +46,19 @@ internal static class CatalogSchema
         (15, "capture_request_context", "request_key, route, authority_basis, scope, recorded_utc"),
         (16, "semantic_vectors", "item_id, revision, ordinal, model_digest, source_digest, dimensions, vector, segment_text, recorded_utc"),
         (17, "intake_incidents", "incident_id, root_path, state, started_utc, resolved_utc"),
+        (21, "financial_documents", "item_id, revision, processor_key, source_digest, outcome, format, parser, reason_code, issues, tier, model_provider, model_name, model_digest, created_utc"),
+        (21, "financial_annotations", "item_id, revision, records_processor, ordinal, merchant, category, tier, provider_id, model_name, created_utc"),
+        (21, "model_tiers", "tier, provider_id, updated_utc"),
+        (21, "disclosure_settings", "singleton, mode, tool_permission, hold_hours, updated_utc"),
+        (21, "disclosure_rules", "rule_id, category, provider_id, purpose, allow, expires_utc, created_utc"),
+        (21, "disclosure_fallbacks", "category, chain, updated_utc"),
+        (21, "policy_changes", "change_id, payload, requested_by, rationale, status, requested_utc, resolved_utc"),
+        (21, "source_categories", "source_id, category, origin, local_only, updated_utc"),
+        (21, "disclosure_holds", "hold_id, item_id, revision, processor_key, category, provider_id, purpose, status, deadline_utc, created_utc, decided_utc"),
+        (21, "model_invocations", "invocation_id, tier, provider_id, remote, purpose, category, decision_reason, item_id, revision, processor_key, model_name, input_tokens, output_tokens, outcome, started_utc"),
+        (21, "financial_accounts", "item_id, revision, processor_key, account_key, kind, mask, institution, currency, display_name"),
+        (21, "financial_statements", "item_id, revision, processor_key, ordinal, account_key, period_start, period_end, opening_minor, closing_minor, currency, verification, verification_note"),
+        (21, "financial_transactions", "item_id, revision, processor_key, ordinal, account_key, statement_ordinal, posted_on, amount_minor, currency, description, status, provider_type, provider_id, check_number, provider_category, balance_minor, locator, origin"),
         (12, "enrichment_runs", "model_provider, model_name, model_digest, input_tokens, output_tokens, duration_ms, segments_examined, segments_total, rejected_count")
     ];
 
@@ -79,6 +92,7 @@ internal static class CatalogSchema
         VerifySearchSchema(database);
         VerifyEnrichmentView(database);
         VerifySemanticSchema(database);
+        VerifyFinanceSchema(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string, "wal", StringComparison.OrdinalIgnoreCase))
         {
             throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
@@ -253,6 +267,25 @@ internal static class CatalogSchema
             if (command.ExecuteScalar() is not string)
             {
                 throw new InvalidDataException("The semantic search schema is incomplete.");
+            }
+        }
+    }
+
+    private static void VerifyFinanceSchema(SqliteConnection database)
+    {
+        foreach ((string kind, string name) in new (string, string)[]
+        {
+            ("view", "eligible_financial_documents"),
+            ("trigger", "financial_records_new_version"),
+            ("trigger", "financial_records_source_revoked")
+        })
+        {
+            using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type=$kind AND name=$name");
+            command.Parameters.AddWithValue("$kind", kind);
+            command.Parameters.AddWithValue("$name", name);
+            if (command.ExecuteScalar() is not string)
+            {
+                throw new InvalidDataException("The financial ledger schema is incomplete.");
             }
         }
     }

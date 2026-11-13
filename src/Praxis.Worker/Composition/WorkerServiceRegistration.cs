@@ -4,6 +4,7 @@ using Praxis.Application.Collections;
 using Praxis.Application.Desktop;
 using Praxis.Application.Desktop.Actions;
 using Praxis.Application.Enrichment;
+using Praxis.Application.Finance;
 using Praxis.Application.Inference;
 using Praxis.Application.Intake;
 using Praxis.Application.Knowledge;
@@ -11,6 +12,7 @@ using Praxis.Application.Library;
 using Praxis.Application.Media;
 using Praxis.Application.Models;
 using Praxis.Application.Originals;
+using Praxis.Application.Policy;
 using Praxis.Application.Processing;
 using Praxis.Application.Search;
 using Praxis.Application.Sources;
@@ -50,6 +52,9 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IVerificationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Verification);
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
+        services.AddSingleton<IFinancialLedgerRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Finance);
+        services.AddSingleton<IPolicyRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Policy);
+        services.AddSingleton<PolicyService>();
 
         services.AddSingleton<IVerifierModelFactory, VerificationModelFactory>();
         services.AddSingleton<IChatModelConnector, OllamaChatModelConnector>();
@@ -59,13 +64,15 @@ internal static class WorkerServiceRegistration
         services.AddSingleton(provider => CatalogProcessing.CreatePipeline(
             provider.GetRequiredService<SqliteCatalog>(),
             status: Report(provider, "Praxis.Processing"),
-            clock: provider.GetRequiredService<TimeProvider>()));
+            clock: provider.GetRequiredService<TimeProvider>(),
+            models: provider.GetRequiredService<IVerifierModelFactory>()));
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
             provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
         services.AddSingleton<MediaEvidence>();
+        services.AddSingleton<FinancialLedger>();
 
         services.AddSingleton(provider => new WatchedFolderIntakeGroup(
             provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>(), options.DataRoot,
@@ -88,6 +95,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();
+        services.AddSingleton<IDesktopActionGroup, FinanceActions>();
+        services.AddSingleton<IDesktopActionGroup, PolicyActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();
 
