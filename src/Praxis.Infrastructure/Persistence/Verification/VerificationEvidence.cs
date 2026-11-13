@@ -12,6 +12,7 @@ namespace Praxis.Infrastructure.Persistence.Verification;
 internal static class VerificationEvidence
 {
     internal const int MaximumEntityContexts = 3;
+    internal readonly record struct ContextReference(string ProposalId, string SourceId, int Revision, string SourceDigest);
 
     internal static JsonObject? ForProposal(
         SqliteConnection connection, SqliteTransaction transaction, int ordinal, string proposalId)
@@ -52,7 +53,7 @@ internal static class VerificationEvidence
         return item;
     }
 
-    internal static (JsonObject Payload, IReadOnlyList<string> ProposalIds)? ForEntityType(
+    internal static (JsonObject Payload, IReadOnlyList<ContextReference> Contexts)? ForEntityType(
         SqliteConnection connection, SqliteTransaction transaction, int ordinal, string entityId)
     {
         using var entity = connection.CreateCommand(
@@ -66,7 +67,7 @@ internal static class VerificationEvidence
 
         using var mentions = connection.CreateCommand("""
             SELECT m.entity_type, m.evidence, p.evidence_offset, p.evidence_length, d.content, s.locator,
-                   p.proposal_id
+                   p.proposal_id, p.source_id, p.revision, p.source_digest
             FROM visible_entity_mentions m
             JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
             JOIN text_derivatives d ON d.item_id = p.item_id AND d.revision = p.revision
@@ -77,19 +78,20 @@ internal static class VerificationEvidence
             """);
         mentions.Transaction = transaction;
         mentions.Parameters.AddWithValue("$entity", entityId);
-        var rows = new List<(string Type, string ProposalId, JsonObject Context)>();
+        var rows = new List<(string Type, ContextReference Reference, JsonObject Context)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         using (var reader = mentions.ExecuteReader())
         {
             while (reader.Read() && rows.Count < 50)
             {
-                string proposalId = reader.GetString(6);
-                if (!seen.Add(proposalId))
+                var reference = new ContextReference(reader.GetString(6), reader.GetString(7),
+                    reader.GetInt32(8), reader.GetString(9));
+                if (!seen.Add(reference.ProposalId))
                 {
                     continue;
                 }
 
-                rows.Add((reader.GetString(0), proposalId, new JsonObject
+                rows.Add((reader.GetString(0), reference, new JsonObject
                 {
                     ["observedType"] = reader.GetString(0),
                     ["quote"] = reader.GetString(1),
@@ -117,6 +119,6 @@ internal static class VerificationEvidence
             ["observedTypes"] = new JsonArray(selected.Select(row => row.Type).Distinct()
                 .Order(StringComparer.Ordinal).Select(type => (JsonNode)type).ToArray()),
             ["contexts"] = new JsonArray(selected.Select(row => (JsonNode)row.Context).ToArray())
-        }, selected.Select(row => row.ProposalId).ToArray());
+        }, selected.Select(row => row.Reference).ToArray());
     }
 }
