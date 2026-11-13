@@ -1,6 +1,6 @@
 # ADR 0043: Model-tiered intake, category disclosure policy and the agent runtime
 
-**Status:** Accepted (owner decisions, November 13, 2026). Schema v21. Implements #184, #362; advances #31, #32, #33, #173, #291–#307. Extends [ADR 0034](0034-subscription-verification-ladder.md) and [ADR 0041](0041-hybrid-local-first-deployment.md); does not relax [ADR 0003](0003-processing-trust-boundaries.md) security spaces.
+**Status:** Accepted (owner decisions, November 13, 2026). Schema v21 (intake/policy), v22 (agent runtime). Implements #184, #362; advances #31, #32, #33, #173, #291–#307. Extends [ADR 0034](0034-subscription-verification-ladder.md) and [ADR 0041](0041-hybrid-local-first-deployment.md); does not relax [ADR 0003](0003-processing-trust-boundaries.md) security spaces.
 
 ## Context
 
@@ -79,6 +79,28 @@ One provider-neutral runtime with two backends:
 - **CLI agent:** Claude Code or Codex runs headless with only Praxis tools allowed (shell, file edit, web and other tools disabled), reaching them through an MCP relay process that connects to the running worker over an owner-private Unix domain socket with a per-session token. The catalog stays single-process.
 
 Tools are generic and read-first: search sources, read source excerpts with locators, list financial documents and accounts, query transactions with filters, grouping and sums (exact integer minor units), read and propose policy. Tool results are disclosures: the runtime filters results by the disclosure policy for the session's provider before they reach the model. Conversations, turns, tool calls and citations are persisted.
+
+## Agent tool surface (PR B)
+
+Design rules: few task-shaped tools, namespaced by prefix (`knowledge_`, `data_`, `compute_`, `artifact_`, `memory_`, `intake_`, `settings_`, `agent_`, `system_`); every result carries numbered evidence; compact by default with paging; withheld items are reported with their reason; no model arithmetic; one registry for every backend.
+
+| Tool | Tier | Purpose |
+| --- | --- | --- |
+| `knowledge_search` | read | Hybrid keyword + semantic search across all sources; kind, category, collection and entity filters |
+| `knowledge_open` | read | Open a citation at its location (char range, PDF page/line, delimited row, export line, phrase) |
+| `knowledge_entity` / `knowledge_related` | read | Entity profile with cited mentions; graph neighbours and shortest connection |
+| `knowledge_timeline` | read | Sources captured/revised and daily money in/out over a period |
+| `data_describe` / `data_query` | read | Structured datasets (transactions, accounts, financial_documents) with coverage and gaps; one exact filter/group/metric/sort/page language |
+| `compute_evaluate` | read | Exact decimal arithmetic with labelled, chained expressions |
+| `agent_delegate` | read | Map an instruction over sources on a cheaper tier; low-trust results with verified quotes |
+| `settings_read` / `settings_propose` | read | Explain policy; request changes (narrowing applies, widening waits for the owner) |
+| `memory_recall` / `memory_remember` | read / propose | Owner preferences; remembered facts are proposed unless edits are allowed; no long digit sequences |
+| `knowledge_propose` / `intake_reprocess` | propose | Knowledge corrections (applied directly only with allow_edits; source categories always owner-reviewed); re-run an intake step |
+| `intake_status` | read | Backlog, holds, failures, unusable financial files |
+| `artifact_create` / `artifact_update` | write | Agent-authored documents captured as revised Markdown sources with evidence links |
+| `system_open_url` / `system_run_command` | system | Described but refused until #297 |
+
+The runtime runs requests in the background (`agentSend` → poll `agentRun`), bounds steps, tool calls and tokens, compacts long transcripts, numbers evidence for `[n]` citations, filters every tool result by the chat disclosure policy for the session's backend, audits each call, and checks the final answer: every substantive figure must appear in a tool result (minor-unit amounts accepted in major units) and available evidence must be cited, with one repair round. Turn-based backends: OpenAI-compatible and Anthropic tool calling (keys from the Keychain). Session backends: Claude Code and Codex headless with built-in tools removed and only the Praxis MCP server, a relay process bridging stdio to a per-session owner-only Unix socket that requires a random token.
 
 ## Relationship to verification disclosure (ADR 0042, #366)
 

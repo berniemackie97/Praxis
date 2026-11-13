@@ -11,20 +11,25 @@ namespace Praxis.Application.Finance;
 /// </summary>
 public sealed class FinancialLedger(IFinancialLedgerRepository repository)
 {
-    public IReadOnlyList<FinancialDocumentSummary> Documents(int limit) =>
-        repository.ReadDocuments(Math.Clamp(limit, 1, FinanceLimits.MaximumQueryResults));
+    public IReadOnlyList<FinancialDocumentSummary> Documents(int limit, Func<Guid, bool>? mayDisclose = null) =>
+        repository.ReadDocuments(Math.Clamp(limit, 1, FinanceLimits.MaximumQueryResults))
+            .Where(document => mayDisclose?.Invoke(document.SourceId) ?? true).ToArray();
 
-    public IReadOnlyList<LedgerTransaction> Transactions(LedgerQuery query, int limit = 200)
+    public IReadOnlyList<LedgerTransaction> Transactions(LedgerQuery query, int limit = 200, Func<Guid, bool>? mayDisclose = null)
     {
         query.Validate();
-        return Build().Where(query.Matches)
+        return Build(mayDisclose).Where(query.Matches)
             .OrderByDescending(transaction => transaction.PostedOn).ThenBy(transaction => transaction.TransactionId, StringComparer.Ordinal)
             .Take(Math.Clamp(limit, 1, FinanceLimits.MaximumQueryResults))
             .ToArray();
     }
 
+    /// <summary>Every reconciled transaction visible to the caller (bounded by the ledger size limit), newest first.</summary>
+    public IReadOnlyList<LedgerTransaction> AllTransactions(Func<Guid, bool>? mayDisclose = null) =>
+        Build(mayDisclose).OrderByDescending(transaction => transaction.PostedOn).ThenBy(transaction => transaction.TransactionId, StringComparer.Ordinal).ToArray();
+
     /// <summary>Exact sums by group and currency. Amounts are never mixed across currencies.</summary>
-    public IReadOnlyList<LedgerAggregate> Aggregate(LedgerQuery query, string groupBy)
+    public IReadOnlyList<LedgerAggregate> Aggregate(LedgerQuery query, string groupBy, Func<Guid, bool>? mayDisclose = null)
     {
         query.Validate();
         if (!LedgerGrouping.All.Contains(groupBy, StringComparer.Ordinal))
@@ -32,7 +37,7 @@ public sealed class FinancialLedger(IFinancialLedgerRepository repository)
             throw new ArgumentException("The grouping is not supported.", nameof(groupBy));
         }
 
-        return Build().Where(query.Matches)
+        return Build(mayDisclose).Where(query.Matches)
             .GroupBy(transaction => (Key: Key(transaction, groupBy), transaction.Amount.Currency))
             .Select(group => new LedgerAggregate(group.Key.Key, group.Key.Currency,
                 group.Aggregate(0L, (sum, item) => checked(sum + item.Amount.Minor)),
@@ -44,11 +49,14 @@ public sealed class FinancialLedger(IFinancialLedgerRepository repository)
             .ToArray();
     }
 
-    public IReadOnlyList<LedgerAccount> Accounts()
+    public IReadOnlyList<LedgerAccount> Accounts(Func<Guid, bool>? mayDisclose = null)
     {
-        IReadOnlyList<LedgerTransaction> transactions = Build();
-        IReadOnlyList<StoredStatement> statements = repository.ReadCountedStatements();
-        return MergedAccounts().Values.Select(account =>
+        IReadOnlyList<LedgerTransaction> transactions = Build(mayDisclose);
+        IReadOnlyList<StoredStatement> statements = repository.ReadCountedStatements()
+            .Where(statement => mayDisclose?.Invoke(statement.Evidence.SourceId) ?? true).ToArray();
+        HashSet<string> visible = transactions.Select(transaction => transaction.AccountKey).Concat(statements.Select(statement => statement.Account.AccountKey))
+            .ToHashSet(StringComparer.Ordinal);
+        return MergedAccounts().Values.Where(account => mayDisclose is null || visible.Contains(account.AccountKey)).Select(account =>
         {
             LedgerTransaction[] own = transactions.Where(transaction => transaction.AccountKey == account.AccountKey).ToArray();
             StoredStatement? latest = statements
@@ -63,8 +71,10 @@ public sealed class FinancialLedger(IFinancialLedgerRepository repository)
         }).OrderBy(account => account.DisplayName, StringComparer.Ordinal).ToArray();
     }
 
-    private IReadOnlyList<LedgerTransaction> Build() =>
-        LedgerReconciler.Reconcile(repository.ReadCountedTransactions()).Select(group =>
+    /// <summary>Reconciled transactions built only from rows whose source may be disclosed to the caller.</summary>
+    private IReadOnlyList<LedgerTransaction> Build(Func<Guid, bool>? mayDisclose = null) =>
+        LedgerReconciler.Reconcile(repository.ReadCountedTransactions()
+            .Where(row => mayDisclose?.Invoke(row.Evidence.SourceId) ?? true).ToArray()).Select(group =>
         {
             StoredTransaction representative = group[0];
             TransactionAnnotation? annotation = group.Select(row => row.Annotation).FirstOrDefault(item => item is not null);

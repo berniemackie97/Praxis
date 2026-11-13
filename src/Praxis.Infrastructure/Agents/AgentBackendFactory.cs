@@ -1,0 +1,35 @@
+using Praxis.Application.Agents;
+using Praxis.Domain.Agents;
+
+namespace Praxis.Infrastructure.Agents;
+
+/// <summary>Creates backends from profiles; API keys are read from the secret store per request and never cached.</summary>
+public sealed class AgentBackendFactory(HttpClient http, ISecretStore secrets, AgentRelayCommand relay, string socketParent) : IAgentBackendFactory
+{
+    public IAgentBackend? CreateTurnBackend(AgentBackendProfile profile)
+    {
+        profile.Validate();
+        string? key = profile.KeyAccount is { } account ? secrets.Read(account) ?? throw new InvalidOperationException(
+            $"No Keychain item for account '{account}' (service Praxis). Add the API key in Praxis settings.") : null;
+        return profile.Kind switch
+        {
+            AgentBackendKinds.OpenAiCompatible => new OpenAiCompatibleAgentBackend(http, Base(profile.Endpoint!), profile.Model, key),
+            AgentBackendKinds.Anthropic => new AnthropicAgentBackend(http, Base(profile.Endpoint!), profile.Model,
+                key ?? throw new InvalidOperationException("The Anthropic backend needs an API key in the Keychain.")),
+            _ => null
+        };
+    }
+
+    public ISessionAgentBackend? CreateSessionBackend(AgentBackendProfile profile)
+    {
+        profile.Validate();
+        return profile.Kind switch
+        {
+            AgentBackendKinds.ClaudeCode => new ClaudeCodeSessionBackend(profile.Executable!, profile.Model, relay, socketParent),
+            AgentBackendKinds.Codex => new CodexSessionBackend(profile.Executable!, profile.Model, relay, socketParent),
+            _ => null
+        };
+    }
+
+    private static Uri Base(string endpoint) => new(endpoint.EndsWith('/') ? endpoint : endpoint + "/");
+}

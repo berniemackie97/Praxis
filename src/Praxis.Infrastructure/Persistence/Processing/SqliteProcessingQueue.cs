@@ -98,6 +98,30 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
         });
     }
 
+    public bool Requeue(Guid itemId, int revision, string processorKey)
+    {
+        ProcessingJobKey.Validate(itemId, revision, processorKey);
+        string now = CatalogValues.Timestamp(clock.GetUtcNow());
+        return database.Execute(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand("""
+                INSERT INTO processing_jobs (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
+                SELECT v.item_id, v.revision, $processor, 'queued', 0, 0, $now, $now
+                FROM item_versions v
+                JOIN items i ON i.item_id = v.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE v.item_id = $item AND v.revision = $revision AND s.status = 'active'
+                  AND v.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = v.item_id)
+                ON CONFLICT(item_id, revision, processor_key) DO UPDATE
+                SET state = 'queued', attempt = 0, lease_key = NULL, lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
+                WHERE processing_jobs.state IN ('completed', 'unsupported', 'failed', 'canceled')
+                """);
+            ProcessingJobParameters.Bind(command, itemId, revision, processorKey);
+            command.Parameters.AddWithValue("$now", now);
+            return command.ExecuteNonQuery() != 0;
+        });
+    }
+
     public ProcessingLease? TryClaim(TimeSpan leaseDuration, int maxAttempts = 3, string? processorKey = null)
     {
         if (leaseDuration < TimeSpan.FromSeconds(1) || leaseDuration > TimeSpan.FromHours(1))
