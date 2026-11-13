@@ -595,6 +595,12 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             $"Data Source={Path.Combine(root, "sync.sqlite")};Pooling=False"))
         {
             old.Open();
+            using (Microsoft.Data.Sqlite.SqliteCommand version = old.CreateCommand())
+            {
+                version.CommandText = "PRAGMA user_version";
+                Assert.Equal(2L, Convert.ToInt64(version.ExecuteScalar()));
+            }
+
             using Microsoft.Data.Sqlite.SqliteCommand downgrade = old.CreateCommand();
             downgrade.CommandText = """
                 DROP TABLE sync_rotation_records;
