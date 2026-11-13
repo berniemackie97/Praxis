@@ -40,6 +40,23 @@ Claude Code with an expired sign-in was classified `model_unauthenticated` and l
 No direct paid-API or local-OpenAI-compatible verifier yet. Plan usage limits are not visible to Praxis beyond the daily request limits it enforces itself. The verifier sees only the excerpt context, so it can call a correct but under-described item `uncertain`.
 
 
+## D0 source disclosure policy (catalog v20, #32)
+
+The narrower catalog v20 enforcement and first-party macOS controls are specified
+in [ADR 0042](0042-verification-source-disclosure.md). Source snapshots in
+v19 prove *what* an owner reviewed; v20 additionally requires independent,
+default-deny per-source classification and a 15-minute per-request grant bound
+to the selected external provider/revision. The owner must explicitly classify
+each source and separately consent to the exact narrowed payload. The
+transactional repository rechecks scope at approval, lease acquisition, the
+last pre-send boundary, and result commit, recording bounded content-free
+decisions. Old unfinished external approvals are invalidated during upgrade.
+
+This is an owner-local **verification-only** permission boundary, not
+authorization for an MCP caller, another OS process, arbitrary agent tools, or
+sources belonging to unrepresented future security spaces. The broader #32
+acceptance and real macOS/CI authorization tests remain open.
+
 ## Implemented #31 boundary: local-first verification and versioned approval
 
 This section records the current implementation, **not** a validated product release
@@ -57,10 +74,9 @@ connectivity or allowance cannot trigger an alternative model. The first-party
 approval shows that external selection sends the narrowed, redacted payload via
 the chosen signed-in CLI. This preserves offline capture, search and local
 processing. Source security-space restrictions still apply independently:
-ADR 0041/0003 forbids remotely sending local-only source data. The present
-owner-reviewed verification payload path does **not** supply complete per-source
-classification/remote-export grants; comprehensive enforcement belongs to #32
-and must be verified before representing cross-security-space egress as permitted.
+ADR 0041/0003 forbids remotely sending local-only source data. At schema v20, owner-local verification adds per-source classification and request-specific
+consent, but it still does not implement independent agent/MCP grants or
+cross-security-space remote-export authorization. #32 remains open.
 
 **Configuration revisions.** A pending approval now names the current provider
 configuration revision. Changing endpoint, executable or model, or disabling
