@@ -363,7 +363,7 @@ public sealed partial class SqliteVerificationRepository
         Audit(connection, transaction, request, null, null, "denial", "denied", reason, now);
     }
 
-    private static void Audit(SqliteConnection connection, SqliteTransaction? transaction,
+    private static void Audit(SqliteConnection connection, SqliteTransaction transaction,
         string? request, string? source, string? provider, string operation, string result,
         string reason, string now)
     {
