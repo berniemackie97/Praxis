@@ -34,6 +34,9 @@ final class WorkbenchModel: ObservableObject {
     let knowledge: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
     let intelligence: IntelligenceSettingsModel
+    let chat: ChatWorkbenchModel
+    let approvals: ApprovalsWorkbenchModel
+    let privacy: PrivacySettingsModel
     private let worker: WorkerSession
     private var watchedInboxes: [URL] = []
     private var approvedRootIdentities: [String: String] = [:]
@@ -47,6 +50,9 @@ final class WorkbenchModel: ObservableObject {
         knowledge = KnowledgeWorkbenchModel(channel: channel)
         verification = VerificationWorkbenchModel(channel: channel)
         intelligence = IntelligenceSettingsModel(channel: channel)
+        chat = ChatWorkbenchModel(channel: channel)
+        approvals = ApprovalsWorkbenchModel(channel: channel)
+        privacy = PrivacySettingsModel(channel: channel)
     }
 
     func start(dataRoot: String, inbox: String, additionalInboxes: String,
@@ -72,6 +78,7 @@ final class WorkbenchModel: ObservableObject {
             running = true
             message = "Praxis started. Checking the approved Inbox; preserved sources remain available if it is offline."
             refresh()
+            privacy.syncSecrets()
         } catch {
             message = "Praxis could not start: \(error.localizedDescription)"
         }

@@ -10,7 +10,8 @@ namespace Praxis.Application.Desktop.Actions;
 /// background; poll <c>agentRun</c> for events and the reply), cancel, and review the agent's
 /// proposals and memories. Reachable only through the owner's private pipe.
 /// </summary>
-public sealed class AgentActions(IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals) : IDesktopActionGroup
+public sealed class AgentActions(IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets)
+    : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
     [
@@ -23,6 +24,13 @@ public sealed class AgentActions(IAgentConversationRepository repository, AgentR
                 fields.OptionalText("executable", 1024, "The executable field is invalid."), fields.RequireBoolean("enabled")));
             return new ChangedResponse(true);
         }),
+        // Keys arrive from the owner's Keychain through the private pipe and stay in worker memory only.
+        DesktopAction.Of("agentSecretSet", fields =>
+        {
+            secrets.Set(fields.RequireString("account", 128), fields.RequireString("secret", 4_096));
+            return new ChangedResponse(true);
+        }),
+        DesktopAction.Of("agentSecretClear", fields => new ChangedResponse(secrets.Remove(fields.RequireString("account", 128)))),
         DesktopAction.Of("agentConversationStart", fields => repository.Create(fields.RequireString("backendId", 64),
             fields.OptionalText("title", 200, "The title field is invalid.") ?? "New conversation")),
         DesktopAction.Of("agentConversations", fields => new AgentConversationsResponse(repository.List(fields.IntegerOrDefault("limit", 50, 1, 500)))),

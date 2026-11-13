@@ -77,7 +77,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<MediaEvidence>();
         services.AddSingleton<FinancialLedger>();
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
-        services.AddSingleton<ISecretStore, KeychainSecretStore>();
+        services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
+        services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
