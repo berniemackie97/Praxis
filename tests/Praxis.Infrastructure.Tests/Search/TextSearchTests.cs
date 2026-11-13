@@ -227,7 +227,7 @@ public sealed class TextSearchTests : IDisposable
 
         await CatalogSnapshots.RestoreAsync(backup, destination, 30_000_000);
         using SqliteCatalog recovered = SqliteCatalog.Open(destination);
-        Assert.Equal(19, recovered.SchemaVersion);
+        Assert.Equal(20, recovered.SchemaVersion);
         Assert.Equal(retained.ItemId, Assert.Single(recovered.Search.Query("violet")).ItemId);
         Assert.Equal(1, recovered.Search.Rebuild());
         Assert.Equal(retained.SourceId, Assert.Single(recovered.Search.Query("violet")).SourceId);
@@ -279,7 +279,7 @@ public sealed class TextSearchTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(dataRoot);
-        Assert.Equal(19, upgraded.SchemaVersion);
+        Assert.Equal(20, upgraded.SchemaVersion);
         SearchHit hit = Assert.Single(upgraded.Search.Query("violet"));
         Assert.Equal("old.txt", hit.Title);
         Assert.Equal(1, upgraded.Search.Rebuild());
