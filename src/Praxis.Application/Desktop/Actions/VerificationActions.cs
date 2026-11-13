@@ -27,6 +27,17 @@ public sealed class VerificationActions(
             verification.RequestForSource(fields.RequireGuid("sourceId")))),
         DesktopAction.Of("verificationRequestEntity", fields => new VerificationCreatedResponse(
             verification.RequestForEntity(fields.RequireGuid("entityId")))),
+        DesktopAction.Of("verificationDisclosureSources", fields => new VerificationDisclosureSourcesResponse(
+            verification.DisclosureSources(fields.RequireGuid("verificationId")))),
+        DesktopAction.Of("verificationSourceDisclosureSet", fields =>
+            new VerificationDisclosurePolicyResponse(verification.SetSourceRemoteVerification(
+                fields.RequireGuid("sourceId"), fields.RequireBoolean("allowRemoteVerification")))),
+        DesktopAction.Of("verificationDisclosureRevoke", fields =>
+            new VerificationDisclosureRevokedResponse(verification.RevokeDisclosure(
+                fields.RequireGuid("verificationId")))),
+        DesktopAction.Of("verificationDisclosureAudit", fields =>
+            new VerificationDisclosureAuditResponse(verification.DisclosureAudit(
+                fields.IntegerOrDefault("limit", 50, 1, 200)))),
         DesktopAction.Of("verificationApprove", Approve),
         DesktopAction.Of("verificationDecline", fields => new VerificationDeclineResponse(
             verification.Decline(fields.RequireGuid("verificationId"))))
@@ -53,7 +64,8 @@ public sealed class VerificationActions(
             fields.RequireGuid("verificationId"),
             fields.OptionalText("providerId", 32, "The provider is invalid."),
             fields.OptionalIntegers("excludedOrdinals", 1, VerificationLimits.MaximumItemsPerRequest, VerificationLimits.MaximumItemsPerRequest),
-            fields.OptionalStrings("redactions", 200, 50));
+            fields.OptionalStrings("redactions", 200, 50),
+            fields.OptionalBoolean("remoteDisclosureApproved") ?? false);
         runner?.Wake();
         return new VerificationRequestResponse(approved);
     }
