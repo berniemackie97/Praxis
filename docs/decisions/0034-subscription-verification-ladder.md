@@ -110,16 +110,37 @@ already transmitted cannot be withdrawn. Caller cancellation releases
 the claim with a delay and an attempt ledger entry; it never switches to an
 unselected provider or treats cancellation as a successful verdict.
 
-**Scope limit:** this checks the current revision of each included proposal
-and requires some currently visible supporting mentions for an entity-type
-request. The latter is not a complete per-context source-revision snapshot:
-in a multi-source entity request, a context whose source was revoked may
-remain in the previously approved text while another mention remains visible.
-Complete per-context source authority, classification and export permission
-must be implemented and tested in #32 before that type of external disclosure
-is considered safe. Provider-side consumption
-limits remain those of the installed runtime and subscription, not a measured
-cross-provider cost contract.
+**Per-context source authority (catalog v19).** Verification now records
+the exact source-proposal identity, source ID, revision and source digest
+used for each entity-type excerpt in a private `verification_contexts` table.
+These identifiers are **not added to the model payload**. At approval,
+before dispatch and before committing a verdict, every included context
+must still be an eligible visible mention of the requested entity and match
+the recorded source revision and digest. Revoking or superseding any one of the reviewed
+source revisions fences the entire request as `source_changed`, even if
+other sources still make the entity visible. Context selection has a stable
+tie-breaker and no more than three excerpts; a type conflict with more
+distinct observations than this cap is **not** a comprehensive judgment.
+Proposal verifications continue to use their own bound proposal identities.
+
+Older pending, approved or running entity reviews cannot be safely
+backfilled from their payload: the original selected context identities
+were not persisted, and the payload may already have been redacted.
+Migration v19 fails those reviews with `source_changed` and closes any
+running invocation without applying its verdict. The owner must create a
+fresh review. Completed historical reviews and proposal-only requests
+are not rewritten.
+
+**Policy boundary still open:** eligibility is not a remote-export grant.
+The current catalog does not encode per-source remote processing
+classification or independently revocable disclosure consent. Approval
+continues to require the owner to inspect the exact destination and
+payload, but that alone must not be represented as permission to export
+a source restricted to local-only processing. #32 must provide scoped
+remote-export grants and classification checks at approval and dispatch
+before cross-security-space entity reviews are considered fully authorized.
+Provider-side consumption limits remain those of the installed runtime
+and subscription, not a measured cross-provider cost contract.
 
 **Acceptance remaining:** exact-head .NET migration and negative tests,
 first-party macOS review, actual installed Ollama runtime behavior on the

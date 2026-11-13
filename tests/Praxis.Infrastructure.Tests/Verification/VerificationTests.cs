@@ -569,6 +569,104 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task RevokedEntityContextFencesApprovalEvenWhenOtherMentionsStayVisible()
+    {
+        using SqliteCatalog catalog = Open();
+        var (first, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        JsonNode item = Assert.Single(Items(catalog.Verification.Get(request)!.Payload));
+        Assert.Equal(2, item["contexts"]!.AsArray().Count);
+        Assert.DoesNotContain("proposalId", catalog.Verification.Get(request)!.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("sourceDigest", catalog.Verification.Get(request)!.Payload, StringComparison.Ordinal);
+        using (Microsoft.Data.Sqlite.SqliteConnection audit = new(
+            $"Data Source={catalog.DatabasePath};Pooling=False"))
+        {
+            audit.Open();
+            using Microsoft.Data.Sqlite.SqliteCommand snapshots = audit.CreateCommand();
+            snapshots.CommandText = """
+                SELECT COUNT(*) FROM verification_contexts c
+                JOIN eligible_enrichment_proposals p ON p.proposal_id = c.proposal_id
+                WHERE c.request_id = $request AND c.source_id = p.source_id
+                  AND c.revision = p.revision AND c.source_digest = p.source_digest
+                """;
+            snapshots.Parameters.AddWithValue("$request", request.ToString("D"));
+            Assert.Equal(2L, Convert.ToInt64(snapshots.ExecuteScalar()));
+        }
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.Equal(1, catalog.Knowledge.ListEntities().Single(candidate =>
+            candidate.EntityId == entity).Sources);
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(request,
+                providerId: VerificationProvider.Codex));
+        Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(request)!.Status,
+            catalog.Verification.Get(request)!.FailureCode));
+        Assert.Null(catalog.Verification.Claim());
+    }
+
+    [Fact]
+    public async Task SupersedingOneApprovedEntityContextPreventsProviderDispatch()
+    {
+        using SqliteCatalog catalog = Open();
+        var (first, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        using MemoryStream replacement = new(Encoding.UTF8.GetBytes("# New revision\nUnrelated evidence."));
+        CapturedOriginal next = await catalog.Originals.CaptureFileAsync(
+            Path.Combine(workspace, "type-org.md"), replacement, 200_000, Guid.NewGuid().ToString("N"));
+        Assert.Equal(first.SourceId, next.SourceId);
+        Assert.Equal(first.Revision + 1, next.Revision);
+        Assert.Equal(1, catalog.Knowledge.ListEntities().Single(candidate =>
+            candidate.EntityId == entity).Sources);
+
+        Assert.False(await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
+            "An obsolete context must not be transmitted to any verifier.")).ProcessNextAsync());
+        Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(request)!.Status,
+            catalog.Verification.Get(request)!.FailureCode));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+    }
+
+    [Fact]
+    public async Task RevokingOneEntityContextDuringInferenceDiscardsTheEntireVerdict()
+    {
+        using SqliteCatalog catalog = Open();
+        var (first, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+        Assert.Single(claim.Ordinals);
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.False(catalog.Verification.Complete(claim, new ScriptedChatModel(_ => "").Identity,
+            new ChatResult(VerdictsFor(catalog.Verification.Get(request)!), 200, 20, TimeSpan.FromSeconds(1)),
+            claim.Ordinals.Select(ordinal => new VerificationVerdict(ordinal, "supported", "project", null)).ToArray()));
+        VerificationRequestView failed = catalog.Verification.Get(request)!;
+        Assert.Equal(("failed", "source_changed"), (failed.Status, failed.FailureCode));
+        Assert.All(failed.Items, item => Assert.Null(item.Verdict));
+        Assert.Equal(1, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+    }
+
+    [Fact]
+    public async Task UnchangedMultiSourceEntityContextCanCompleteWithoutExternalFallback()
+    {
+        using SqliteCatalog catalog = Open();
+        var (_, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
+            VerdictsFor(catalog.Verification.Get(request)!))).ProcessNextAsync());
+        Assert.Equal("completed", catalog.Verification.Get(request)!.Status);
+        Assert.Equal(2, catalog.Knowledge.ListEntities().Single(candidate =>
+            candidate.EntityId == entity).Sources);
+    }
+
+    [Fact]
     public void PayloadCannotExceedItsByteBudgetDuringPlanningOrReview()
     {
         JsonObject item = new()
@@ -648,6 +746,21 @@ public sealed class VerificationTests : IDisposable
             .Single(provider => provider.Provider.ProviderId == VerificationProvider.Codex).StartedToday);
         Assert.False(await runner.ProcessNextAsync());
         await catalog.Originals.VerifyAsync(source.ItemId);
+    }
+
+    private async Task<(CapturedOriginal First, CapturedOriginal Second, Guid EntityId)> ConflictingSources(
+        SqliteCatalog catalog)
+    {
+        CapturedOriginal first = await Enrich(catalog, "type-org.md",
+            "# Company\nOpenConquerClient is described in a company note.");
+        types["OpenConquerClient"] = "project";
+        CapturedOriginal second = await Enrich(catalog, "type-project.md",
+            "# Software\nOpenConquerClient is a software project with a renderer.");
+        EntitySummary entity = catalog.Knowledge.ListEntities().Single(candidate =>
+            candidate.Name == "OpenConquerClient");
+        Assert.True(entity.TypeConflict);
+        Assert.Equal(2, entity.Sources);
+        return (first, second, entity.EntityId);
     }
 
     private SqliteCatalog Open()
