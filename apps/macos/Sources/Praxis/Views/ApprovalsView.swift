@@ -5,92 +5,129 @@ struct ApprovalsView: View {
     @ObservedObject var model: ApprovalsWorkbenchModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Waiting for you").font(.headline)
-                    Spacer()
-                    Button("Refresh") { model.refresh() }
-                }
-                if model.count == 0 {
-                    Text("Nothing needs a decision.").foregroundStyle(.secondary)
-                }
-                if !model.holds.isEmpty {
-                    Section(title: "Send to a stronger model?",
-                            caption: "Intake needs a remote model your policy has not granted. If you do nothing, each item falls back when its deadline passes.") {
-                        ForEach(model.holds) { hold in HoldRow(hold: hold, model: model) }
-                    }
-                }
-                if !model.pending.isEmpty {
-                    Section(title: "Permission changes requested in chat",
-                            caption: "The agent asked to widen what may leave this Mac or what it may change. Only you can confirm.") {
-                        ForEach(model.pending) { change in
-                            DecisionRow(title: PolicyLabels.change(change.change),
-                                        detail: change.rationale.isEmpty ? "Requested by \(change.requestedBy)" : "“\(change.rationale)”",
-                                        accept: "Confirm", reject: "Reject") { model.resolve(change, confirm: $0) }
+        Group {
+            if model.count == 0 {
+                EmptyState(systemImage: "checkmark.seal",
+                           title: "You're all caught up",
+                           message: "Requests to send data to a stronger model, permission changes from chat, and the agent's suggestions appear here.")
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.xl) {
+                        FeedbackLine(error: model.error, notice: model.notice)
+                        if !model.holds.isEmpty {
+                            QueueSection(title: "Send to a stronger model?", systemImage: "arrow.up.forward.app",
+                                         caption: "Intake needs a remote model your policy hasn't granted. If you do nothing, each item continues down its fallback chain when the deadline passes.",
+                                         count: model.holds.count) {
+                                ForEach(model.holds) { hold in HoldCard(hold: hold, model: model) }
+                            }
+                        }
+                        if !model.pending.isEmpty {
+                            QueueSection(title: "Permission changes requested in chat", systemImage: "lock.open",
+                                         caption: "The agent asked to widen what may leave this Mac or what it may change. Only you can confirm.",
+                                         count: model.pending.count) {
+                                ForEach(model.pending) { change in
+                                    DecisionCard(systemImage: "hand.raised", title: PolicyLabels.change(change.change),
+                                                 detail: change.rationale.isEmpty ? "Requested by \(change.requestedBy)" : "“\(change.rationale)”",
+                                                 accept: "Confirm", reject: "Reject") { model.resolve(change, confirm: $0) }
+                                }
+                            }
+                        }
+                        if !model.proposals.isEmpty {
+                            QueueSection(title: "Knowledge suggestions", systemImage: "lightbulb",
+                                         caption: "Corrections the agent proposed from evidence.", count: model.proposals.count) {
+                                ForEach(model.proposals) { proposal in
+                                    DecisionCard(systemImage: "point.3.connected.trianglepath.dotted", title: ProposalText.title(proposal),
+                                                 detail: proposal.rationale, accept: "Apply", reject: "Reject") { model.resolve(proposal, accept: $0) }
+                                }
+                            }
+                        }
+                        if !model.memories.isEmpty {
+                            QueueSection(title: "Things to remember", systemImage: "brain",
+                                         caption: "Preferences the agent heard in conversation.", count: model.memories.count) {
+                                ForEach(model.memories) { memory in
+                                    DecisionCard(systemImage: "text.quote", title: memory.text, detail: nil,
+                                                 accept: "Remember", reject: "Discard") { model.resolve(memory, accept: $0) }
+                                }
+                            }
                         }
                     }
+                    .frame(maxWidth: 820, alignment: .leading)
+                    .padding(Spacing.xl)
+                    .frame(maxWidth: .infinity)
                 }
-                if !model.proposals.isEmpty {
-                    Section(title: "Knowledge suggestions", caption: "Corrections the agent proposed from evidence.") {
-                        ForEach(model.proposals) { proposal in
-                            DecisionRow(title: ProposalText.title(proposal), detail: proposal.rationale,
-                                        accept: "Apply", reject: "Reject") { model.resolve(proposal, accept: $0) }
-                        }
-                    }
-                }
-                if !model.memories.isEmpty {
-                    Section(title: "Things to remember", caption: "Preferences the agent heard in conversation.") {
-                        ForEach(model.memories) { memory in
-                            DecisionRow(title: memory.text, detail: nil, accept: "Remember", reject: "Discard") { model.resolve(memory, accept: $0) }
-                        }
-                    }
-                }
-                FeedbackLine(error: model.error, notice: model.notice)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+            }
         }
         .onAppear { model.refresh() }
     }
 }
 
-private struct Section<Content: View>: View {
+private struct QueueSection<Content: View>: View {
     let title: String
+    let systemImage: String
     let caption: String
+    let count: Int
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.weight(.semibold))
-            Text(caption).font(.caption).foregroundStyle(.secondary)
-            content
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                Label(title, systemImage: systemImage).font(.sectionTitle)
+                Text("\(count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Surface.well, in: Capsule())
+            }
+            Text(caption).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: Spacing.s) { content }
         }
     }
 }
 
-private struct HoldRow: View {
+private struct HoldCard: View {
     let hold: DisclosureHold
     @ObservedObject var model: ApprovalsWorkbenchModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(hold.sourceName) → \(hold.providerId)").fontWeight(.medium)
-            Text("\(PolicyLabels.category(hold.category)) · to \(PolicyLabels.step(hold.processorKey)) · decide by \(DateText.short(hold.deadlineUtc))")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button("Send once") { model.decide(hold, "approve_once") }
-                Button("Always allow \(PolicyLabels.category(hold.category))") { model.decide(hold, "grant_category") }
-                Button("Keep local") { model.decide(hold, "keep_local") }
-                Button("Skip") { model.decide(hold, "skip") }
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            HStack(alignment: .top, spacing: Spacing.m) {
+                Image(systemName: SourceSymbol.of(hold.sourceName))
+                    .font(.system(size: 18)).foregroundStyle(.secondary).frame(width: 24)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(hold.sourceName).font(.rowTitle).textSelection(.enabled)
+                    Text("\(PolicyLabels.category(hold.category)) · to \(hold.providerId) for \(PolicyLabels.step(hold.processorKey))")
+                        .font(.meta).foregroundStyle(.secondary)
+                }
+                Spacer()
+                StatusPill(text: "Falls back \(DateText.relative(hold.deadlineUtc))", tone: .warning, systemImage: "clock")
+                    .help("Decide by \(DateText.short(hold.deadlineUtc))")
             }
-            .controlSize(.small)
+            HStack(spacing: Spacing.s) {
+                Button("Keep Local") { model.decide(hold, "keep_local") }
+                Menu("More") {
+                    Button("Skip This File") { model.decide(hold, "skip") }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                Spacer()
+                Button("Always Allow \(PolicyLabels.category(hold.category))") { model.decide(hold, "grant_category") }
+                    .help("Grants \(PolicyLabels.category(hold.category)) to \(hold.providerId) for intake from now on.")
+                Button("Send Once") { model.decide(hold, "approve_once") }
+                    .buttonStyle(.borderedProminent)
+            }
+            .controlSize(.regular)
         }
-        .padding(10)
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Spacing.l)
+        .background(Surface.card, in: RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).strokeBorder(Surface.stroke.opacity(0.6)))
     }
 }
 
-private struct DecisionRow: View {
+private struct DecisionCard: View {
+    let systemImage: String
     let title: String
     let detail: String?
     let accept: String
@@ -98,18 +135,21 @@ private struct DecisionRow: View {
     let decide: (Bool) -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).fontWeight(.medium).textSelection(.enabled)
-                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+        HStack(alignment: .center, spacing: Spacing.m) {
+            Image(systemName: systemImage).font(.system(size: 16)).foregroundStyle(.secondary).frame(width: 24)
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title).font(.rowTitle).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                if let detail, !detail.isEmpty {
+                    Text(detail).font(.meta).foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer()
+            Spacer(minLength: Spacing.l)
             Button(reject) { decide(false) }
             Button(accept) { decide(true) }.buttonStyle(.borderedProminent)
         }
-        .controlSize(.small)
-        .padding(10)
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .padding(Spacing.l)
+        .background(Surface.card, in: RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).strokeBorder(Surface.stroke.opacity(0.6)))
     }
 }
 
@@ -125,15 +165,5 @@ enum ProposalText {
         case "source_category": return "Mark a source as \(PolicyLabels.category(payload["category"] as? String ?? "?"))"
         default: return proposal.kind
         }
-    }
-}
-
-/// Compact dates for timestamps the worker sends in ISO 8601.
-enum DateText {
-    static func short(_ iso: String) -> String {
-        let parser = ISO8601DateFormatter()
-        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = parser.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return iso }
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }

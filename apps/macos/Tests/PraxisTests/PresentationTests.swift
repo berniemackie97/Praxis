@@ -92,3 +92,35 @@ struct PresentationTests {
         #expect(proposal.instructionLike)
     }
 }
+
+@Suite("Workbench presentation helpers")
+struct WorkbenchPresentationTests {
+    @Test("Search snippets drop the stored path even when matches are marked inside it")
+    func snippetDropsPath() {
+        let locator = "/Users/me/Inbox/Contractor invoice.txt"
+        let snippet = "/Users/me/Inbox/Contractor ⟦invoice⟧.txt\nInvoice 2026-118   from  Ortega"
+        #expect(SnippetText.plain(snippet, locator: locator) == "Invoice 2026-118 from Ortega")
+    }
+
+    @Test("Search snippet highlights become bold runs without markers")
+    func snippetHighlights() {
+        let text = SnippetText.clean("Book flights before the ⟦invoice⟧ deadline", locator: "/x.md")
+        #expect(String(text.characters) == "Book flights before the invoice deadline")
+        let bold = text.runs.filter { $0.inlinePresentationIntent == .stronglyEmphasized }
+        #expect(bold.count == 1)
+    }
+
+    @Test("Fallback chains stay ordered and always end in a terminal step")
+    func fallbackChainTerminal() {
+        #expect(FallbackChain.toggled(["local_if_verified", "hold", "index_only"], step: "index_only", enabled: false)
+            == ["local_if_verified", "hold", "index_only"])
+        #expect(FallbackChain.toggled(["hold", "index_only"], step: "skip", enabled: true) == ["hold", "index_only", "skip"])
+    }
+
+    @Test("Go menu shortcuts number the workspaces in sidebar order")
+    func sectionShortcuts() {
+        #expect(AppSection.chat.shortcut.character == "1")
+        #expect(AppSection.allCases.count <= 9)
+        #expect(Set(AppSection.groups.flatMap(\.sections)) == Set(AppSection.allCases))
+    }
+}

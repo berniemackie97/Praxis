@@ -5,6 +5,7 @@ struct EntityDetailView: View {
     let detail: EntityDetail
     @ObservedObject var model: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
+    @State private var renaming = false
     @State private var newName = ""
     @State private var predicate = KnowledgeVocabulary.predicates[0]
 
@@ -13,114 +14,158 @@ struct EntityDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Spacing.l) {
                 header
-                corrections
-                section("Mentions (\(detail.mentions.count))") {
-                    if detail.mentions.isEmpty {
-                        Text("No visible evidence. It may come from a revoked source, a newer revision, or a rejected mention.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    ForEach(detail.mentions) { mention in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("“\(mention.evidence)”").textSelection(.enabled)
-                            Text([mention.sourceName, "as \(KnowledgeVocabulary.label(mention.mentionType))",
-                                  mention.status, mention.verdict.map { "verifier: \($0)" }]
-                                .compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                if summary.typeConflict {
+                    Banner(text: "The local model typed this inconsistently. Set the type yourself, or ask a stronger model to settle it.",
+                           tone: .warning, systemImage: "exclamationmark.triangle.fill")
                 }
-                section("Relations (\(detail.relations.count))") {
-                    ForEach(detail.relations) { relation in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(relation.outgoing
-                                ? "\(summary.name) \(KnowledgeVocabulary.label(relation.predicate)) \(relation.otherName)"
-                                : "\(relation.otherName) \(KnowledgeVocabulary.label(relation.predicate)) \(summary.name)")
-                            Text(relation.origin == "owner" ? "added by you" : "“\(relation.evidence ?? "")”")
-                                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                        }
-                    }
-                    HStack {
-                        Picker("", selection: $predicate) {
-                            ForEach(KnowledgeVocabulary.predicates, id: \.self) { value in
-                                Text(KnowledgeVocabulary.label(value)).tag(value)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 150)
-                        Menu("Add relation to…") {
-                            ForEach(others) { other in
-                                Button(other.name) { model.relate(predicate, to: other) }
-                            }
-                        }
-                        .disabled(others.isEmpty || summary.status != "active")
-                    }
-                }
+                mentions
+                relations
                 if !detail.related.isEmpty {
-                    section("Mentioned together with") {
-                        Text(detail.related.map { "\($0.name) (\($0.sharedSegments))" }.joined(separator: ", "))
-                            .font(.caption)
+                    Panel(title: "Mentioned together with", systemImage: "link") {
+                        FlowLayout(spacing: Spacing.xs) {
+                            ForEach(detail.related) { related in
+                                Chip(text: "\(related.name)  \(related.sharedSegments)", systemImage: EntitySymbol.of(related.entityType))
+                            }
+                        }
                     }
                 }
             }
+            .padding(Spacing.xl)
+            .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $renaming) {
+            VStack(alignment: .leading, spacing: Spacing.l) {
+                Text("Rename \(summary.name)").font(.headline)
+                TextField("New name", text: $newName).textFieldStyle(.roundedBorder).onSubmit(rename)
+                HStack {
+                    Spacer()
+                    Button("Cancel", role: .cancel) { renaming = false }.keyboardShortcut(.cancelAction)
+                    Button("Rename", action: rename)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newName.count > 120)
+                }
+            }
+            .padding(Spacing.xl)
+            .frame(width: 380)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(summary.name).font(.title2.weight(.semibold)).textSelection(.enabled)
-            Text("\(KnowledgeVocabulary.label(summary.entityType)) · \(TypeOrigin.label(summary.typeOrigin)) · \(summary.status)")
-                .foregroundStyle(.secondary)
-            if summary.typeConflict {
-                Text("The local model typed this inconsistently. Set the type yourself, or ask a stronger model to settle it.")
-                    .font(.caption).foregroundColor(.orange)
+        HStack(alignment: .top, spacing: Spacing.m) {
+            Image(systemName: EntitySymbol.of(summary.entityType))
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 44, height: 44)
+                .background(Color.accentColor.opacity(0.10), in: Circle())
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text(summary.name).font(.pageTitle).textSelection(.enabled)
+                HStack(spacing: Spacing.s) {
+                    StatusPill(text: KnowledgeVocabulary.label(summary.entityType).capitalized, tone: .accent)
+                    Text("\(TypeOrigin.label(summary.typeOrigin)) · \(Count.label(summary.mentions, "mention")) in \(Count.label(summary.sources, "source"))")
+                        .font(.meta).foregroundStyle(.secondary)
+                    if summary.status != "active" { StatusPill(text: summary.status.capitalized, tone: .neutral) }
+                }
+                if detail.aliases.count > 1 {
+                    Text("Also known as \(detail.aliases.filter { $0 != summary.name }.joined(separator: ", "))")
+                        .font(.meta).foregroundStyle(.secondary)
+                }
             }
-            if detail.aliases.count > 1 {
-                Text("Also known as: \(detail.aliases.filter { $0 != summary.name }.joined(separator: ", "))")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var corrections: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Menu("Set type") {
+            Spacer(minLength: Spacing.l)
+            Button("Ask a Stronger Model…") { verification.requestForEntity(summary.entityId) }
+                .help("Creates a verification request for review. Nothing is sent until you approve it.")
+            Menu {
+                Menu("Set Type") {
                     ForEach(KnowledgeVocabulary.entityTypes, id: \.self) { type in
-                        Button(KnowledgeVocabulary.label(type)) { model.setType(type) }
+                        Button(KnowledgeVocabulary.label(type).capitalized) { model.setType(type) }
                     }
                 }
-                Menu("Merge into…") {
+                Button("Rename…") {
+                    newName = summary.name
+                    renaming = true
+                }
+                Menu("Merge Into") {
                     ForEach(others) { other in
                         Button("\(other.name) (\(KnowledgeVocabulary.label(other.entityType)))") { model.merge(into: other) }
                     }
                 }
                 .disabled(others.isEmpty)
+                Divider()
                 if summary.status == "rejected" {
                     Button("Restore") { model.restore() }
                 } else {
-                    Button("Not a real entity") { model.reject() }
+                    Button("Not a Real Entity", role: .destructive) { model.reject() }
                 }
-                Button("Ask a stronger model…") { verification.requestForEntity(summary.entityId) }
-                    .help("Creates a verification request for review. Nothing is sent until you approve it.")
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
-            HStack {
-                TextField("Rename", text: $newName).textFieldStyle(.roundedBorder).frame(maxWidth: 260)
-                Button("Rename") {
-                    model.rename(to: newName)
-                    newName = ""
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Correct entity")
+        }
+    }
+
+    private var mentions: some View {
+        Panel(title: "Mentions", systemImage: "text.quote", caption: Count.label(detail.mentions.count, "mention")) {
+            if detail.mentions.isEmpty {
+                Text("No visible evidence. It may come from a revoked source, a newer revision, or a rejected mention.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                ForEach(detail.mentions) { mention in
+                    HStack(alignment: .top, spacing: Spacing.s) {
+                        RoundedRectangle(cornerRadius: 1).fill(Color.accentColor.opacity(0.5)).frame(width: 2)
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(mention.evidence).font(.callout).textSelection(.enabled)
+                            Text([mention.sourceName, "as \(KnowledgeVocabulary.label(mention.mentionType))",
+                                  mention.status, mention.verdict.map { "verifier: \($0)" }]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption2).foregroundStyle(.tertiary)
+                        }
+                    }
                 }
-                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newName.count > 120)
             }
         }
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            content()
+    private var relations: some View {
+        Panel(title: "Relations", systemImage: "arrow.triangle.branch", caption: Count.label(detail.relations.count, "relation")) {
+            Menu {
+                Picker("Relation", selection: $predicate) {
+                    ForEach(KnowledgeVocabulary.predicates, id: \.self) { Text(KnowledgeVocabulary.label($0)).tag($0) }
+                }
+                Divider()
+                ForEach(others) { other in
+                    Button("\(summary.name) \(KnowledgeVocabulary.label(predicate)) \(other.name)") { model.relate(predicate, to: other) }
+                }
+            } label: {
+                Label("Add", systemImage: "plus")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .disabled(others.isEmpty || summary.status != "active")
+        } content: {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                ForEach(detail.relations) { relation in
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        HStack(spacing: Spacing.xs) {
+                            Text(relation.outgoing ? summary.name : relation.otherName).font(.rowTitle)
+                            Text(KnowledgeVocabulary.label(relation.predicate)).foregroundStyle(.secondary)
+                            Text(relation.outgoing ? relation.otherName : summary.name).font(.rowTitle)
+                        }
+                        Text(relation.origin == "owner" ? "Added by you" : "“\(relation.evidence ?? "")”")
+                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(2)
+                    }
+                }
+            }
         }
+    }
+
+    private func rename() {
+        guard !newName.trimmingCharacters(in: .whitespaces).isEmpty, newName.count <= 120 else { return }
+        model.rename(to: newName)
+        renaming = false
     }
 }

@@ -84,6 +84,10 @@ final class WorkbenchModel: ObservableObject {
         }
     }
 
+    /// True while the worker still owes replies to earlier requests, so background polling
+    /// waits instead of stacking more work behind a busy worker.
+    var workerBacklogged: Bool { worker.outstandingRequests > 4 }
+
     func refresh() {
         guard running, !exportingOriginal else { return }
         var fields: [String: Any] = ["limit": 100, "offset": page * 100]
