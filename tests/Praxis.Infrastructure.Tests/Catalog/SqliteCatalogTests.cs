@@ -38,6 +38,7 @@ public sealed class SqliteCatalogTests : IDisposable
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='capture_request_context'"));
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='semantic_vectors'"));
         Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='intake_incidents'"));
+        Assert.Equal(1L, Scalar(reader, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='verification_contexts'"));
         Assert.Equal("ok", Scalar(reader, "PRAGMA integrity_check"));
         Assert.Equal(0L, Scalar(reader, "SELECT COUNT(*) FROM sources"));
     }
@@ -184,6 +185,53 @@ public sealed class SqliteCatalogTests : IDisposable
         Assert.Equal("legacy", Scalar(verified, "SELECT status FROM verification_invocations"));
         Assert.Equal(21L, Scalar(verified, "SELECT input_tokens FROM verification_invocations"));
         Assert.Equal("old-model-digest", Scalar(verified, "SELECT model_version FROM verification_invocations"));
+        Assert.Null(Scalar(verified, "PRAGMA foreign_key_check"));
+    }
+
+    [Fact]
+    public void VersionEighteenUnboundEntityReviewIsRetiredWithoutRetainingAnActiveLease()
+    {
+        CreateLegacyCatalog(18);
+        Guid entity = Guid.NewGuid();
+        Guid request = Guid.NewGuid();
+        Guid attempt = Guid.NewGuid();
+        using (SqliteConnection old = Connect(Path.Combine(root, "catalog.sqlite")))
+        {
+            using SqliteCommand seed = old.CreateCommand();
+            seed.CommandText = """
+                INSERT INTO knowledge_entities
+                    (entity_id, display_name, entity_type, type_origin, status, created_utc, updated_utc)
+                VALUES ($entity, 'Old entity', 'concept', 'inferred', 'active',
+                        '2026-11-12T00:00:00Z', '2026-11-12T00:00:00Z');
+                INSERT INTO verification_providers
+                    (provider_id, executable, model, cost_weight, daily_limit, enabled, updated_utc)
+                VALUES ('codex', '/usr/local/bin/codex', NULL, 10, 20, 1, '2026-11-12T00:00:00Z');
+                INSERT INTO verification_requests
+                    (request_id, reason, status, provider_id, payload, created_utc,
+                     approved_provider_revision, lease_key, lease_until_utc)
+                VALUES ($request, 'owner_request', 'running', 'codex', '{"items":[{"ordinal":1}]}',
+                        '2026-11-12T00:00:00Z', 1, $attempt, '2026-11-14T00:00:00Z');
+                INSERT INTO verification_items (request_id, ordinal, entity_id, included)
+                VALUES ($request, 1, $entity, 1);
+                INSERT INTO verification_invocations
+                    (attempt_id, request_id, provider_id, provider_revision, started_utc, status)
+                VALUES ($attempt, $request, 'codex', 1, '2026-11-12T00:00:00Z', 'running');
+                """;
+            seed.Parameters.AddWithValue("$entity", entity.ToString("D"));
+            seed.Parameters.AddWithValue("$request", request.ToString("D"));
+            seed.Parameters.AddWithValue("$attempt", attempt.ToString("D"));
+            seed.ExecuteNonQuery();
+        }
+
+        using SqliteCatalog migrated = SqliteCatalog.Open(root);
+        using SqliteConnection verified = Connect(migrated.DatabasePath);
+        Assert.Equal(19L, Scalar(verified, "PRAGMA user_version"));
+        Assert.Equal("failed", Scalar(verified, "SELECT status FROM verification_requests"));
+        Assert.Equal("source_changed", Scalar(verified, "SELECT failure_code FROM verification_requests"));
+        Assert.Null(Scalar(verified, "SELECT lease_key FROM verification_requests"));
+        Assert.Equal("failed", Scalar(verified, "SELECT status FROM verification_invocations"));
+        Assert.Equal("source_changed", Scalar(verified, "SELECT failure_code FROM verification_invocations"));
+        Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM verification_contexts"));
         Assert.Null(Scalar(verified, "PRAGMA foreign_key_check"));
     }
 
@@ -357,7 +405,7 @@ public sealed class SqliteCatalogTests : IDisposable
 
     private void CreateLegacyCatalog(int version)
     {
-        if (version is < 1 or > 17)
+        if (version is < 1 or > 18)
         {
             throw new ArgumentOutOfRangeException(nameof(version));
         }
