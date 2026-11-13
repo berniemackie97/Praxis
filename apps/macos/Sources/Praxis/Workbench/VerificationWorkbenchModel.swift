@@ -95,7 +95,7 @@ final class VerificationWorkbenchModel: ObservableObject {
                      ["sourceId": sourceId, "allowRemoteVerification": allowed],
                      as: VerificationDisclosurePolicyData.self, failed: report) { [weak self] data in
             self?.notice = data.changed ? "Source disclosure classification updated." : "Source classification unchanged."
-            self?.refreshAuthorization()
+            self?.refresh()
         }
     }
 
