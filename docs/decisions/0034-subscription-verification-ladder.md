@@ -111,11 +111,12 @@ the claim with a delay and an attempt ledger entry; it never switches to an
 unselected provider or treats cancellation as a successful verdict.
 
 **Per-context source authority (catalog v19).** Verification now records
-the exact source-proposal identities used for each entity-type excerpt in
-a private `verification_contexts` table. These identities are **not added to
-the model payload**. At approval, before dispatch and before committing a
-verdict, every included context must still be an eligible visible mention
-of the requested entity. Revoking or superseding any one of the reviewed
+the exact source-proposal identity, source ID, revision and source digest
+used for each entity-type excerpt in a private `verification_contexts` table.
+These identifiers are **not added to the model payload**. At approval,
+before dispatch and before committing a verdict, every included context
+must still be an eligible visible mention of the requested entity and match
+the recorded source revision and digest. Revoking or superseding any one of the reviewed
 source revisions fences the entire request as `source_changed`, even if
 other sources still make the entity visible. Context selection has a stable
 tie-breaker and no more than three excerpts; a type conflict with more
