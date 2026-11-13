@@ -96,10 +96,15 @@ private struct VerificationDetailView: View {
     let providers: [VerificationProvider]
     @State private var phrase = ""
     @State private var pendingSource: String?
+    @State private var pendingSourceName = ""
     @State private var confirmRemotePolicy = false
 
     private var remoteSelected: Bool {
         !model.providerChoice.isEmpty && model.providerChoice != VerificationProvider.ollama
+    }
+
+    private var selectedExternalProvider: VerificationProvider? {
+        providers.first { $0.providerId == model.providerChoice && $0.providerId != VerificationProvider.ollama }
     }
 
     private var includedSources: [VerificationDisclosureSource] {
@@ -215,13 +220,22 @@ private struct VerificationDetailView: View {
                         } else {
                             Button("Review classification") {
                                 pendingSource = source.sourceId
+                                pendingSourceName = source.name.isEmpty ? source.sourceId : source.name
                                 confirmRemotePolicy = true
                             }
                             .controlSize(.small)
                         }
                     }
                 }
-                Toggle("I approve sending the selected, redacted excerpts to this external provider",
+                if let provider = selectedExternalProvider {
+                    Text("Destination: \(VerificationProvider.displayName(provider.providerId))")
+                        .font(.caption.weight(.semibold))
+                    Text("CLI: \(provider.executable ?? "not configured") · Model: \(provider.model ?? "provider default") · Configuration revision: \(provider.revision)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                Toggle("I approve sending these redacted excerpts to \(VerificationProvider.displayName(model.providerChoice))",
                        isOn: $model.remoteConsent)
                     .font(.caption)
                 Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while approved or running. Previously transmitted content cannot be recalled.")
@@ -256,14 +270,18 @@ private struct VerificationDetailView: View {
                     .font(.caption).foregroundColor(.orange)
             }
         }
-        .alert("Allow this source to be used for remote verification?", isPresented: $confirmRemotePolicy) {
+        .alert("Allow remote verification for \(pendingSourceName)?", isPresented: $confirmRemotePolicy) {
             Button("Allow remote verification", role: .destructive) {
-                if let pendingSource {
+                if let pendingSource, includedSources.contains(where: { $0.sourceId == pendingSource }) {
                     model.setRemoteVerification(pendingSource, allowed: true)
                 }
                 pendingSource = nil
+                pendingSourceName = ""
             }
-            Button("Cancel", role: .cancel) { pendingSource = nil }
+            Button("Cancel", role: .cancel) {
+                pendingSource = nil
+                pendingSourceName = ""
+            }
         } message: {
             Text("This changes the source from local-only to remote-verification eligible. Separately approve the exact provider and redacted payload before anything is sent. Do not allow sensitive local-only sources.")
         }
