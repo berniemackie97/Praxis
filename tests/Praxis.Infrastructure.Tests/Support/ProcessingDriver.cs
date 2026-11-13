@@ -1,6 +1,8 @@
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
 using Praxis.Domain.Processing;
+using Praxis.Infrastructure.Composition;
+using Praxis.Infrastructure.Documents;
 using Praxis.Infrastructure.Persistence;
 
 namespace Praxis.Infrastructure.Tests.Support;
@@ -14,7 +16,27 @@ internal sealed class ProcessingDriver(SqliteCatalog catalog, IProcessingHandler
     private bool reopenExhausted;
 
     internal static ProcessingDriver Text(SqliteCatalog catalog) =>
-        new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing));
+        new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, CatalogProcessing.Readers(new VisionOcrEngine())));
+
+    /// <summary>Runs read, triage and understanding to quiescence, interleaved as the pipeline would.</summary>
+    internal static async Task RunIntakeAsync(SqliteCatalog catalog, IReadOnlyList<IProcessingHandler> handlers)
+    {
+        ProcessingDriver[] drivers = new[] { ProcessorKeys.SourceText, ProcessorKeys.IntakeTriage, ProcessorKeys.IntakeUnderstand }
+            .Select(key => new ProcessingDriver(catalog, handlers.Single(handler => handler.ProcessorKey == key))).ToArray();
+        for (int step = 0; step < 200; step++)
+        {
+            bool progressed = false;
+            foreach (ProcessingDriver driver in drivers)
+            {
+                progressed |= await driver.ProcessNextAsync();
+            }
+
+            if (!progressed)
+            {
+                return;
+            }
+        }
+    }
 
     internal static ProcessingDriver Topics(SqliteCatalog catalog) =>
         new(catalog, TestHandlers.HeadingProposals(catalog));

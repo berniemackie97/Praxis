@@ -339,11 +339,11 @@
       "lexicalExpected": []
     },
     {
-      "name": "unsupported-finance",
+      "name": "readable-finance",
       "domain": "finance",
       "query": "salary",
-      "relevant": [],
-      "lexicalExpected": []
+      "relevant": ["finance"],
+      "lexicalExpected": ["finance"]
     },
     {
       "name": "unsupported-pdf",

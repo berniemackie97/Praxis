@@ -1,4 +1,5 @@
 using System.Text;
+using Praxis.Application.Documents.Pdf;
 using Praxis.Application.Finance;
 using Praxis.Application.Finance.Statements;
 using Praxis.Domain.Finance;

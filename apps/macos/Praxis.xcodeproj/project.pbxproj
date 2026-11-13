@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
+		00000000000000000000D016 /* UnderstandingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D015 /* UnderstandingModels.swift */; };
 		00000000000000000000D00C /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D00B /* ScreenshotTests.swift */; };
 		00000000000000000000D004 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D003 /* SettingsView.swift */; };
 		00000000000000000000D002 /* AppSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D001 /* AppSection.swift */; };
@@ -73,6 +75,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
+		00000000000000000000D015 /* UnderstandingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnderstandingModels.swift; sourceTree = "<group>"; };
 		00000000000000000000D00B /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D003 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		00000000000000000000D001 /* AppSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSection.swift; sourceTree = "<group>"; };
@@ -220,6 +224,7 @@
 				00000000000000000000C011 /* ApprovalsView.swift */,
 				00000000000000000000C013 /* PrivacySettingsView.swift */,
 				00000000000000000000D003 /* SettingsView.swift */,
+				00000000000000000000D017 /* IntakePanel.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -261,6 +266,7 @@
 				00000000000000000000C003 /* PolicyModels.swift */,
 				00000000000000000000C005 /* PolicyLabels.swift */,
 				00000000000000000000C007 /* KeychainStore.swift */,
+				00000000000000000000D015 /* UnderstandingModels.swift */,
 			);
 			path = Worker;
 			sourceTree = "<group>";
@@ -275,7 +281,7 @@
 				00000000000000000000A009 /* Sources */,
 				00000000000000000000A00A /* Frameworks */,
 				00000000000000000000A00B /* Resources */,
-				00000000000000000000A00C /* Publish .NET Worker */,
+				00000000000000000000A00C /* Publish .NET Worker and Helpers */,
 			);
 			buildRules = (
 			);
@@ -361,7 +367,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		00000000000000000000A00C /* Publish .NET Worker */ = {
+		00000000000000000000A00C /* Publish .NET Worker and Helpers */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -371,14 +377,14 @@
 			);
 			inputPaths = (
 			);
-			name = "Publish .NET Worker";
+			name = "Publish .NET Worker and Helpers";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "\"$SRCROOT/../../scripts/macos/publish-worker.sh\"\n";
+			shellScript = "\"$SRCROOT/../../scripts/macos/publish-worker.sh\"\n\"$SRCROOT/../../scripts/macos/build-vision-helper.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -403,6 +409,8 @@
 				00000000000000000000A038 /* SetupView.swift in Sources */,
 				00000000000000000000A03A /* SourceDetailView.swift in Sources */,
 				00000000000000000000A03C /* VerificationView.swift in Sources */,
+				00000000000000000000D018 /* IntakePanel.swift in Sources */,
+				00000000000000000000D016 /* UnderstandingModels.swift in Sources */,
 				00000000000000000000D004 /* SettingsView.swift in Sources */,
 				00000000000000000000D002 /* AppSection.swift in Sources */,
 				00000000000000000000C014 /* PrivacySettingsView.swift in Sources */,

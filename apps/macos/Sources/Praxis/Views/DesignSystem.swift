@@ -349,7 +349,10 @@ enum SourceSymbol {
     static func of(_ locator: String) -> String {
         switch (locator as NSString).pathExtension.lowercased() {
         case "md", "markdown", "txt": "doc.text"
-        case "pdf": "doc.richtext"
+        case "pdf", "docx", "docm", "rtf": "doc.richtext"
+        case "xlsx", "xlsm": "tablecells"
+        case "eml", "emlx": "envelope"
+        case "html", "htm": "globe"
         case "csv", "tsv": "tablecells"
         case "ofx", "qfx", "qbo", "qif": "banknote"
         case "png", "jpg", "jpeg", "heic", "gif": "photo"

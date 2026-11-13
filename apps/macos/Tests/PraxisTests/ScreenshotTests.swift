@@ -119,6 +119,7 @@ struct ScreenshotTests {
         ("Reading list.md", "# Reading list\n\n- Thinking in Systems\n- The Design of Everyday Things\n- How to Take Smart Notes\n"),
         ("Meeting notes - Praxis.md", "# Praxis sync\n\nDecided to ship the macOS redesign before the agent tools. Alex owns the intake ladder; Priya reviews the privacy settings.\n"),
         ("Groceries.csv", "Date,Description,Amount\n2026-10-02,Market Fresh,-84.12\n2026-10-09,Market Fresh,-61.40\n2026-10-15,Corner Bakery,-12.75\n"),
+        ("Lisbon flights.eml", "From: Priya <priya@example.com>\r\nTo: owner@example.com\r\nSubject: Lisbon flights booked\r\nDate: Thu, 12 Nov 2026 09:30:00 -0800\r\n\r\nFlights are booked for March 3, 2026. Total EUR 412.50.\r\n"),
         ("Trip ideas.md", "# Trip ideas\n\nLisbon in spring. Ask Priya about the tram museum. Book flights before February for the invoice deadline.\n")
     ]
 }

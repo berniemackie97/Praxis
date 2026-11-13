@@ -1,5 +1,6 @@
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
+using Praxis.Domain.Understanding;
 
 namespace Praxis.Application.Text;
 
@@ -25,8 +26,11 @@ public interface ITextDerivativeRepository
     /// </summary>
     LeasedText? ReadLeasedInput(ProcessingLease lease);
 
-    /// <summary>Stores extracted text or an unsupported reason and finishes the leased job in one transaction.</summary>
-    bool CommitResult(ProcessingLease lease, string? content, string? reasonCode);
+    /// <summary>
+    /// Stores extracted text or an unsupported reason and finishes the leased job in one transaction;
+    /// with text, also records how the document was read for the intake stages.
+    /// </summary>
+    bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null);
 
     /// <summary>
     /// Reopens one active, current source previously classified unsupported only because its

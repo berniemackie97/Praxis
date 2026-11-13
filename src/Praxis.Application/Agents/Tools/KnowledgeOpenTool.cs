@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Documents;
+using Praxis.Application.Documents.Pdf;
 using Praxis.Application.Finance;
-using Praxis.Application.Finance.Statements;
 using Praxis.Application.Originals;
 using Praxis.Application.Sources;
 using Praxis.Application.Text;
@@ -102,7 +103,7 @@ public sealed class KnowledgeOpenTool(ITextDerivativeRepository text, ISourceRep
             return (builder.ToString(), "pdf_lines");
         }
 
-        return (FinancialTextDecoder.Decode(bytes) ?? throw new InvalidOperationException("This source is binary and has no readable text."), "lines");
+        return (TextDecoder.Decode(bytes) ?? throw new InvalidOperationException("This source is binary and has no readable text."), "lines");
     }
 
     /// <summary>Where a citation locator points inside the opened body, if it can be resolved.</summary>

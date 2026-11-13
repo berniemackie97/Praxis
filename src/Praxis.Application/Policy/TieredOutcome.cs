@@ -7,7 +7,9 @@ namespace Praxis.Application.Policy;
 /// The result of asking a tier: a completed answer, or why not — the tier is unconfigured or out
 /// of allowance, disclosure is not allowed (with the decision), or the provider failed.
 /// </summary>
-public sealed record TieredOutcome(string Status, string? Content, ModelIdentity? Identity, string? ProviderId, DisclosureDecision? Decision, string? FailureCode)
+public sealed record TieredOutcome(
+    string Status, string? Content, ModelIdentity? Identity, string? ProviderId, DisclosureDecision? Decision, string? FailureCode,
+    int InputTokens = 0, int OutputTokens = 0)
 {
     public const string Completed = "completed";
     public const string NotConfigured = "not_configured";

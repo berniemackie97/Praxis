@@ -17,8 +17,10 @@ public sealed class ProcessingCodesTests
     [Fact]
     public void SchedulesDependentStagesAfterTheirInputs()
     {
-        Assert.Equal([ProcessorKeys.MarkdownHeadings, ProcessorKeys.TextSegments], ProcessorKeys.DependentsOf(ProcessorKeys.SourceText));
+        Assert.Equal([ProcessorKeys.MarkdownHeadings, ProcessorKeys.TextSegments, ProcessorKeys.IntakeTriage], ProcessorKeys.DependentsOf(ProcessorKeys.SourceText));
         Assert.Equal([ProcessorKeys.SemanticExtraction], ProcessorKeys.DependentsOf(ProcessorKeys.TextSegments));
+        Assert.Equal([ProcessorKeys.IntakeUnderstand], ProcessorKeys.DependentsOf(ProcessorKeys.IntakeTriage));
         Assert.Empty(ProcessorKeys.DependentsOf(ProcessorKeys.SemanticExtraction));
+        Assert.Empty(ProcessorKeys.DependentsOf(ProcessorKeys.IntakeUnderstand));
     }
 }

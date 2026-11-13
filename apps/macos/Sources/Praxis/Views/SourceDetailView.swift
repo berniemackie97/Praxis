@@ -11,6 +11,7 @@ struct SourceDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.l) {
                     header(item)
+                    IntakePanel(understanding: model.understanding)
                     details(item)
                     collections(item)
                     ProposalReviewView()

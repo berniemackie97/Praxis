@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 22;
+    internal const int CurrentVersion = 23;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -99,7 +99,7 @@ internal static class CatalogSchema
         VerifySearchSchema(database);
         VerifyEnrichmentView(database);
         VerifySemanticSchema(database);
-        VerifyFinanceSchema(database);
+        VerifyIntakeSchema(database);
         if (!string.Equals(Scalar(database, "PRAGMA journal_mode = WAL") as string, "wal", StringComparison.OrdinalIgnoreCase))
         {
             throw new NotSupportedException("The data filesystem cannot use SQLite WAL.");
@@ -278,13 +278,16 @@ internal static class CatalogSchema
         }
     }
 
-    private static void VerifyFinanceSchema(SqliteConnection database)
+    private static void VerifyIntakeSchema(SqliteConnection database)
     {
         foreach ((string kind, string name) in new (string, string)[]
         {
             ("view", "eligible_financial_documents"),
-            ("trigger", "financial_records_new_version"),
-            ("trigger", "financial_records_source_revoked")
+            ("trigger", "financial_records_source_revoked"),
+            ("table", "intake_documents"),
+            ("table", "intake_records"),
+            ("table", "intake_layouts"),
+            ("trigger", "intake_source_revoked")
         })
         {
             using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type=$kind AND name=$name");
@@ -292,7 +295,7 @@ internal static class CatalogSchema
             command.Parameters.AddWithValue("$name", name);
             if (command.ExecuteScalar() is not string)
             {
-                throw new InvalidDataException("The financial ledger schema is incomplete.");
+                throw new InvalidDataException("The intake and ledger schema is incomplete.");
             }
         }
     }

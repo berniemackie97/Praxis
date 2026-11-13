@@ -46,7 +46,7 @@
     {
       "id": "finance",
       "path": "structured/transactions.csv",
-      "searchable": false,
+      "searchable": true,
       "content": "record_id,date,currency,amount,status\nsalary,2026-11-01,USD,2000.00,posted\nbill,2026-11-02,USD,-100.00,pending\n"
     },
     {
@@ -125,10 +125,10 @@
       "expected": []
     },
     {
-      "name": "unavailable-financial-csv",
+      "name": "readable-financial-csv",
       "domain": "finance",
       "query": "salary",
-      "expected": []
+      "expected": ["finance"]
     },
     {
       "name": "unavailable-pdf",

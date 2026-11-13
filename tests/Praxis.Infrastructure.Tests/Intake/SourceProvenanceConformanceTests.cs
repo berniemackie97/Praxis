@@ -134,12 +134,14 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         string unsupportedPath = Path.Combine(manualRoot, "asset.unknown");
         string invalidPath = Path.Combine(manualRoot, "malformed.md");
         File.WriteAllBytes(unsupportedPath, [0, 255, 1, 2]);
-        File.WriteAllBytes(invalidPath, [0xc3, 0x28]);
+        File.WriteAllText(invalidPath, "intact");
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
         CapturedOriginal unsupported = await intake.ImportFileAsync(unsupportedPath, 4, "unknown-file");
-        CapturedOriginal malformed = await intake.ImportFileAsync(invalidPath, 2, "invalid-utf8");
+        CapturedOriginal malformed = await intake.ImportFileAsync(invalidPath, 6, "damaged-object");
+        // The stored object is damaged after capture, so reading it fails verification and stays retryable.
+        File.WriteAllText(Path.Combine(dataRoot, "objects", malformed.Sha256[..2], malformed.Sha256[2..4], malformed.Sha256), "broken");
         Assert.Equal("queued", catalog.Sources.ReadProvenance(unsupported.SourceId)!.ProcessingState);
         Assert.Equal("queued", catalog.Sources.ReadProvenance(malformed.SourceId)!.ProcessingState);
 
@@ -154,7 +156,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Equal("unsupported_format", unknown.ExtractionReasonCode);
         Assert.Null(unknown.FailureCode);
         Assert.Equal("failed", invalid.ProcessingState);
-        Assert.Equal("invalid_utf8", invalid.FailureCode);
+        Assert.Equal("corrupt_original", invalid.FailureCode);
         Assert.Null(invalid.ExtractionOutcome);
         Assert.True(invalid.RetryEligible);
         Assert.False(unknown.RetryEligible);
@@ -162,7 +164,7 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
             invalid.SourceId), job => job.ProcessorKey == ProcessorKeys.SourceText);
         Assert.Equal("failed", failed.State);
         Assert.True(failed.RetryEligible);
-        Assert.Equal("invalid_utf8", failed.FailureCode);
+        Assert.Equal("corrupt_original", failed.FailureCode);
         SourceProcessingState unsupportedJob = Assert.Single(catalog.Sources.ListProcessing(
             unsupported.SourceId), job => job.ProcessorKey == ProcessorKeys.SourceText);
         Assert.Equal("unsupported", unsupportedJob.State);
@@ -170,7 +172,6 @@ public sealed class SourceProvenanceConformanceTests : IDisposable
         Assert.Empty(catalog.Search.Query("asset"));
         Assert.Empty(catalog.Search.Query("malformed"));
         await catalog.Originals.VerifyAsync(unsupported.ItemId);
-        await catalog.Originals.VerifyAsync(malformed.ItemId);
     }
 
     [Fact]
