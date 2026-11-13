@@ -6,6 +6,7 @@ public sealed partial class OpaqueSyncStore
 {
     private static void Prepare(SqliteConnection connection)
     {
+        int version;
         using (SqliteCommand pragma = connection.CreateCommand())
         {
             pragma.CommandText = "PRAGMA foreign_keys=ON";
@@ -19,7 +20,7 @@ public sealed partial class OpaqueSyncStore
             }
 
             pragma.CommandText = "PRAGMA user_version";
-            int version = Convert.ToInt32(pragma.ExecuteScalar());
+            version = Convert.ToInt32(pragma.ExecuteScalar());
             if (version is not (0 or 1 or 2))
             {
                 throw new NotSupportedException("The sync database schema is unsupported.");
