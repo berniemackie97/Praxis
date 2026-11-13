@@ -34,6 +34,12 @@ struct VerificationView: View {
                     .buttonStyle(.plain)
                     .listRowBackground(model.selectedId == request.requestId ? Color.accentColor.opacity(0.15) : Color.clear)
                 }
+                DisclosureGroup("Disclosure audit") {
+                    ForEach(model.disclosureAudit.prefix(8)) { event in
+                        Text("\(event.operation) · \(event.result) · \(event.reasonCode)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 FeedbackLine(error: model.error, notice: model.notice)
             }
             .frame(width: 320)
@@ -77,6 +83,8 @@ enum FailureCode {
         case "model_context_exceeded": "reviewed context exceeds the model budget; narrow the request"
         case "model_canceled": "model request canceled; a fresh attempt remains subject to daily limits"
         case "source_changed": "source evidence changed or was revoked; create a new request"
+        case "disclosure_denied": "remote disclosure consent, classification or expiry is no longer valid"
+        case "disclosure_revoked": "remote disclosure was revoked; create a new request"
         default: code
         }
     }
@@ -87,6 +95,22 @@ private struct VerificationDetailView: View {
     @ObservedObject var model: VerificationWorkbenchModel
     let providers: [VerificationProvider]
     @State private var phrase = ""
+    @State private var pendingSource: String?
+    @State private var confirmRemotePolicy = false
+
+    private var remoteSelected: Bool {
+        !model.providerChoice.isEmpty && model.providerChoice != VerificationProvider.ollama
+    }
+
+    private var includedSources: [VerificationDisclosureSource] {
+        model.disclosureSources.filter { source in
+            source.ordinals.contains { !model.excluded.contains($0) }
+        }
+    }
+
+    private var remoteReady: Bool {
+        !includedSources.isEmpty && includedSources.allSatisfy(\.remoteAllowed)
+    }
 
     private var items: [PayloadItem] { PayloadItem.parse(request.payload) }
 
@@ -98,7 +122,12 @@ private struct VerificationDetailView: View {
                 ForEach(items) { item in itemCard(item) }
                 if request.awaitingApproval {
                     approval
-                } else if let tokens = request.inputTokens {
+                } else if request.providerId != nil && request.providerId != VerificationProvider.ollama &&
+                            (request.status == "approved" || request.status == "running") {
+                    Button("Revoke external disclosure") { model.revokeDisclosure() }
+                        .foregroundStyle(.red)
+                }
+                if let tokens = request.inputTokens {
                     Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens, counted against the selected provider's daily request allowance.")
 
                         .font(.caption).foregroundStyle(.secondary)
@@ -167,6 +196,37 @@ private struct VerificationDetailView: View {
                     }
                 }
             }
+            if remoteSelected {
+                Text("Sources permitted for external verification")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(includedSources) { source in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.name.isEmpty ? source.sourceId : source.name)
+                            Text(source.remoteAllowed ? "Remote verification permitted" : "Local-only source")
+                                .font(.caption).foregroundStyle(source.remoteAllowed ? .secondary : .orange)
+                        }
+                        Spacer()
+                        if source.remoteAllowed {
+                            Button("Return to local-only") {
+                                model.setRemoteVerification(source.sourceId, allowed: false)
+                            }
+                            .controlSize(.small)
+                        } else {
+                            Button("Review classification") {
+                                pendingSource = source.sourceId
+                                confirmRemotePolicy = true
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                Toggle("I approve sending the selected, redacted excerpts to this external provider",
+                       isOn: $model.remoteConsent)
+                    .font(.caption)
+                Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while pending or running. Previously transmitted content cannot be recalled.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Picker("Send to", selection: $model.providerChoice) {
                     Text("Local Ollama (if enabled)").tag("")
@@ -181,19 +241,31 @@ private struct VerificationDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(providers.isEmpty || model.excluded.count >= items.count ||
                         (model.providerChoice.isEmpty &&
-                         !providers.contains(where: { $0.providerId == VerificationProvider.ollama })))
+                         !providers.contains(where: { $0.providerId == VerificationProvider.ollama })) ||
+                        (remoteSelected && (!model.remoteConsent || !remoteReady)))
             }
             if model.providerChoice == "" {
                 Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
                     .font(.caption).foregroundStyle(.secondary)
             } else if model.providerChoice != VerificationProvider.ollama {
-                Text("External disclosure: approval sends exactly the reviewed and redacted payload through the selected signed-in CLI. Subscription limits apply.")
+                Text("External disclosure requires every included source to be independently classified for remote verification and this request's explicit consent. No other provider is selected automatically.")
                     .font(.caption).foregroundColor(.orange)
             }
             if providers.isEmpty {
                 Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
                     .font(.caption).foregroundColor(.orange)
             }
+        }
+        .alert("Allow this source to be used for remote verification?", isPresented: $confirmRemotePolicy) {
+            Button("Allow remote verification", role: .destructive) {
+                if let pendingSource {
+                    model.setRemoteVerification(pendingSource, allowed: true)
+                }
+                pendingSource = nil
+            }
+            Button("Cancel", role: .cancel) { pendingSource = nil }
+        } message: {
+            Text("This changes the source from local-only to remote-verification eligible. Separately approve the exact provider and redacted payload before anything is sent. Do not allow sensitive local-only sources.")
         }
     }
 
