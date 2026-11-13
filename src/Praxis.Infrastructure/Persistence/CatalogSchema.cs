@@ -42,7 +42,7 @@ internal static class CatalogSchema
         (20, "source_verification_policy", "source_id, classification, revision, changed_utc"),
         (20, "verification_disclosure_grants", "request_id, provider_id, provider_revision, granted_utc, expires_utc, revoked_utc"),
         (20, "verification_disclosure_sources", "request_id, source_id, policy_revision"),
-        (20, "verification_disclosure_audit", "event_id, request_id, source_id, provider_id, operation, result, reason_code, occurred_utc"),
+        (20, "verification_disclosure_audit", "event_id, request_id, source_id, provider_id, actor, operation, result, reason_code, occurred_utc"),
         (15, "capture_request_context", "request_key, route, authority_basis, scope, recorded_utc"),
         (16, "semantic_vectors", "item_id, revision, ordinal, model_digest, source_digest, dimensions, vector, segment_text, recorded_utc"),
         (17, "intake_incidents", "incident_id, root_path, state, started_utc, resolved_utc"),
