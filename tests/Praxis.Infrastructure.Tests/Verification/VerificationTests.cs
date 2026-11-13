@@ -667,6 +667,172 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task RemoteDisclosureRequiresSeparateConsentAndExplicitSourceClassification()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "restricted.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, false));
+        Assert.Equal("local_only", Assert.Single(catalog.Verification.DisclosureSources(request)).Classification);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(request,
+                providerId: VerificationProvider.Codex, remoteDisclosureApproved: true));
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(request,
+                providerId: VerificationProvider.Codex));
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+        Assert.Null(catalog.Verification.Claim());
+        Assert.Equal(2, catalog.Verification.DisclosureAudit(100).Count(entry =>
+            entry.Operation == "denial" && entry.ReasonCode == "disclosure_denied"));
+        Assert.DoesNotContain("Alex Rivera", JsonSerializer.Serialize(catalog.Verification.DisclosureAudit(100)));
+
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, true));
+        VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
+            request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
+        Assert.Equal("approved", approved.Status);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+        Assert.True(catalog.Verification.CanDispatch(claim));
+        Assert.True(catalog.Verification.Fail(claim, "model_invalid_response"));
+    }
+
+    [Fact]
+    public async Task EntityReviewCannotExportAnyUnclassifiedContext()
+    {
+        using SqliteCatalog catalog = Open();
+        var (first, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        Assert.Equal(2, catalog.Verification.DisclosureSources(request).Count);
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(first.SourceId, false));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new VerificationApproval(catalog.Verification).Approve(request,
+                providerId: VerificationProvider.Codex, remoteDisclosureApproved: true));
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
+        Assert.Null(catalog.Verification.Claim());
+
+        catalog.Verification.SaveProvider(new VerificationProvider(VerificationProvider.Ollama, null,
+            "qwen:9b", 0, 20, true, "http://127.0.0.1:11434"));
+        VerificationRequestView local = new VerificationApproval(catalog.Verification).Approve(request);
+        Assert.Equal(VerificationProvider.Ollama, local.ProviderId);
+        Assert.True(catalog.Verification.CanDispatch(catalog.Verification.Claim()!));
+    }
+
+    [Fact]
+    public async Task RemoteGrantExpiryPreventsClaimWithoutAnyProviderInvocation()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "expiry.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
+
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source={catalog.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using Microsoft.Data.Sqlite.SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                UPDATE verification_disclosure_grants SET expires_utc = '2000-01-01T00:00:00.0000000Z'
+                WHERE request_id = $request
+                """;
+            command.Parameters.AddWithValue("$request", request.ToString("D"));
+            Assert.Equal(1, command.ExecuteNonQuery());
+        }
+
+        Assert.Null(catalog.Verification.Claim());
+        Assert.Equal(("failed", "disclosure_denied"), (catalog.Verification.Get(request)!.Status,
+            catalog.Verification.Get(request)!.FailureCode));
+        Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
+    }
+
+    [Fact]
+    public async Task SourceRevocationAndReclassificationCannotResurrectAnOldConsent()
+    {
+        using SqliteCatalog catalog = Open();
+        var (first, _, entity) = await ConflictingSources(catalog);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+        Assert.True(catalog.Verification.CanDispatch(claim));
+
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(first.SourceId, false));
+        Assert.False(catalog.Verification.CanDispatch(claim));
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(first.SourceId, true));
+        Assert.Null(catalog.Verification.Claim());
+        Assert.Equal(("failed", "disclosure_revoked"), (catalog.Verification.Get(request)!.Status,
+            catalog.Verification.Get(request)!.FailureCode));
+        Assert.False(catalog.Verification.Complete(claim, new ScriptedChatModel(_ => "").Identity,
+            new ChatResult(VerdictsFor(catalog.Verification.Get(request)!), 2, 2, TimeSpan.Zero),
+            [new VerificationVerdict(1, "supported", "project", null)]));
+        Assert.Contains(catalog.Verification.DisclosureAudit(100), entry =>
+            entry.Operation == "classification" && entry.ReasonCode == "local_only");
+    }
+
+    [Fact]
+    public async Task ExplicitGrantRevocationInvalidatesRunningLeaseAndIsAudited()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "owner-revoke.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        new VerificationApproval(catalog.Verification).Approve(request,
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
+        ClaimedVerification claim = catalog.Verification.Claim()!;
+
+        Assert.True(catalog.Verification.RevokeDisclosure(request));
+        Assert.False(catalog.Verification.RevokeDisclosure(request));
+        Assert.False(catalog.Verification.CanDispatch(claim));
+        Assert.Equal(("failed", "disclosure_revoked"), (catalog.Verification.Get(request)!.Status,
+            catalog.Verification.Get(request)!.FailureCode));
+        Assert.Contains(catalog.Verification.DisclosureAudit(100), entry =>
+            entry.RequestId == request && entry.Operation == "revocation" &&
+            entry.ReasonCode == "owner_revoked");
+        Assert.All(catalog.Verification.Get(request)!.Items, item => Assert.Null(item.Verdict));
+    }
+
+    [Fact]
+    public async Task DesktopDisclosureOperationsRejectMissingConsentAndProvideContentFreeReceipts()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "desktop-remote.md", Meeting);
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
+        Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, false));
+
+        using JsonDocument sources = await Send(protocol,
+            $"""{"requestId":"s","action":"verificationDisclosureSources","verificationId":"{{request:D}}"}""");
+        Assert.Equal("local_only", sources.RootElement.GetProperty("data")
+            .GetProperty("sources")[0].GetProperty("classification").GetString());
+        using JsonDocument invalid = await Send(protocol,
+            $"""{"requestId":"invalid","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":"yes"}""");
+        Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
+        using JsonDocument denied = await Send(protocol,
+            $"""{"requestId":"d","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+        Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
+
+        using JsonDocument enabled = await Send(protocol,
+            $"""{"requestId":"e","action":"verificationSourceDisclosureSet","sourceId":"{{source.SourceId:D}}","allowRemoteVerification":true}""");
+        Assert.True(enabled.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
+        using JsonDocument approved = await Send(protocol,
+            $"""{"requestId":"a","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+        Assert.True(approved.RootElement.GetProperty("ok").GetBoolean());
+        using JsonDocument revoked = await Send(protocol,
+            $"""{"requestId":"r","action":"verificationDisclosureRevoke","verificationId":"{{request:D}}"}""");
+        Assert.True(revoked.RootElement.GetProperty("data").GetProperty("revoked").GetBoolean());
+        using JsonDocument audit = await Send(protocol,
+            """{"requestId":"audit","action":"verificationDisclosureAudit","limit":20}""");
+        Assert.True(audit.RootElement.GetProperty("data").GetProperty("events").GetArrayLength() >= 3);
+        Assert.DoesNotContain("Alex Rivera", audit.RootElement.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PayloadCannotExceedItsByteBudgetDuringPlanningOrReview()
     {
         JsonObject item = new()
