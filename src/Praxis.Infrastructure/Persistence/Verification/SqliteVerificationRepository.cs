@@ -15,7 +15,7 @@ namespace Praxis.Infrastructure.Persistence.Verification;
 /// the machine layer: they can hide or release proposals and set verified entity types, but
 /// never override owner review.
 /// </summary>
-public sealed class SqliteVerificationRepository : IVerificationRepository
+public sealed partial class SqliteVerificationRepository : IVerificationRepository
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
     private readonly CatalogDatabase database;
@@ -247,7 +247,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
 
     public VerificationRequestView? Approve(
         Guid requestId, string reviewedPayload, string providerId, int providerRevision,
-        string approvedPayload, IReadOnlySet<int> includedOrdinals)
+        string approvedPayload, IReadOnlySet<int> includedOrdinals, bool remoteDisclosureApproved = false)
     {
         RequireId(requestId);
         ArgumentException.ThrowIfNullOrEmpty(reviewedPayload);
@@ -292,6 +292,32 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 RejectStale(connection, transaction, id, now);
                 transaction.Commit();
                 return null;
+            }
+
+            if (providerId != VerificationProvider.Ollama &&
+                (!remoteDisclosureApproved || !GrantRemoteDisclosure(connection, transaction, id,
+                    providerId, providerRevision, now)))
+            {
+                transaction.Rollback();
+                using var denied = connection.BeginTransaction();
+                Audit(connection, denied, id, null, providerId, "denial", "denied",
+                    "disclosure_denied", now);
+                denied.Commit();
+                throw new InvalidOperationException(
+                    "External verification requires separate consent and remote verification classification for every included source.");
+            }
+
+            if (providerId == VerificationProvider.Ollama)
+            {
+                connection.Run(transaction, """
+                    UPDATE verification_disclosure_grants SET revoked_utc = $now
+                    WHERE request_id = $request AND revoked_utc IS NULL
+                    """, ("$now", now), ("$request", id));
+            }
+            else
+            {
+                Audit(connection, transaction, id, null, providerId, "approval", "allowed",
+                    "owner_approved", now);
             }
 
             transaction.Commit();
@@ -352,6 +378,13 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
             if (!EvidenceIsCurrent(connection, transaction, candidate.Id))
             {
                 RejectStale(connection, transaction, candidate.Id, time);
+                continue;
+            }
+
+            if (!candidate.Provider.IsLocal && !RemoteScopeValid(connection, transaction,
+                    candidate.Id, candidate.Provider.ProviderId, candidate.Provider.Revision, time))
+            {
+                DenyDisclosure(connection, transaction, candidate.Id, time, "disclosure_denied");
                 continue;
             }
 
@@ -420,6 +453,14 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 return false;
             }
 
+            if (!claim.Provider.IsLocal && !RemoteScopeValid(connection, transaction,
+                    id, claim.Provider.ProviderId, claim.Provider.Revision, now))
+            {
+                DenyDisclosure(connection, transaction, id, now, "disclosure_denied");
+                transaction.Commit();
+                return false;
+            }
+
             var affected = new List<string>();
             foreach (var verdict in verdicts)
             {
@@ -462,6 +503,12 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 ("$duration", (long)result.Duration.TotalMilliseconds),
                 ("$attempt", claim.LeaseKey.ToString("D")));
             KnowledgeLinker.RecomputeInferredTypes(connection, transaction, affected, now);
+            if (!claim.Provider.IsLocal)
+            {
+                Audit(connection, transaction, id, null, claim.Provider.ProviderId,
+                    "completion", "allowed", "verified", now);
+            }
+
             transaction.Commit();
             return true;
         });
