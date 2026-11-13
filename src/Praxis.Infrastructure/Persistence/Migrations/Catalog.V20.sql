@@ -28,6 +28,7 @@ CREATE TABLE verification_disclosure_audit (
     request_id TEXT REFERENCES verification_requests(request_id) ON DELETE RESTRICT,
     source_id TEXT REFERENCES sources(source_id) ON DELETE RESTRICT,
     provider_id TEXT,
+    actor TEXT NOT NULL CHECK (actor = 'owner-local'),
     operation TEXT NOT NULL CHECK (operation IN
         ('classification', 'approval', 'dispatch', 'completion', 'revocation', 'denial')),
     result TEXT NOT NULL CHECK (result IN ('allowed', 'denied')),
