@@ -469,6 +469,9 @@ public sealed class OpaqueSyncStoreTests : IDisposable
             Assert.Equal(OpaqueSyncStatus.ResetRequired, resumed.Pull(
                 Scope(device, space, SecurityPermission.Read),
                 new OpaqueSyncPull(1, space, epoch, device, 1, 0, 100)).Status);
+            Assert.Equal(OpaqueSyncStatus.ResetRequired, resumed.Pull(
+                Scope(device, space, SecurityPermission.Read),
+                new OpaqueSyncPull(1, space, epoch, device, 1, 2, 100)).Status);
             Assert.Equal(OpaqueSyncStatus.ResetRequired,
                 resumed.Submit(Scope(device, space, SecurityPermission.Write), first).Status);
             OpaqueSyncMutation afterRotation = Request(space, epoch, device,
@@ -506,7 +509,7 @@ public sealed class OpaqueSyncStoreTests : IDisposable
         OpaqueSyncMutation added = Request(space, epoch, device,
             Guid.NewGuid(), Guid.NewGuid(), 0, OpaqueSyncAction.Upsert);
         Assert.Equal(2, store.Submit(oldWriter, added).Sequence);
-        Assert.Equal(OpaqueSyncStatus.InvalidRequest, store.CommitRotation(newWriter,
+        Assert.Equal(OpaqueSyncStatus.InvalidCursor, store.CommitRotation(newWriter,
             new OpaqueSyncRotationCommit(1, space, epoch, device,
                 rotation, 1, 1, 2)).Status);
         Assert.Equal(2, store.Pull(Scope(device, space, SecurityPermission.Read),
