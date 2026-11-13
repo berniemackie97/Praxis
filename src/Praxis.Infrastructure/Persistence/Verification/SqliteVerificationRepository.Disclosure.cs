@@ -369,10 +369,16 @@ public sealed partial class SqliteVerificationRepository
     {
         connection.Run(transaction, """
             INSERT INTO verification_disclosure_audit
-                (event_id, request_id, source_id, provider_id, operation, result, reason_code, occurred_utc)
-            VALUES ($event, $request, $source, $provider, $operation, $result, $reason, $now)
+                (event_id, request_id, source_id, provider_id, actor, operation, result, reason_code, occurred_utc)
+            VALUES ($event, $request, $source, $provider, 'owner-local', $operation, $result, $reason, $now)
             """, ("$event", Guid.NewGuid().ToString("D")), ("$request", request),
             ("$source", source), ("$provider", provider), ("$operation", operation),
             ("$result", result), ("$reason", reason), ("$now", now));
+        connection.Run(transaction, """
+            DELETE FROM verification_disclosure_audit
+            WHERE event_id NOT IN (
+                SELECT event_id FROM verification_disclosure_audit
+                ORDER BY occurred_utc DESC, event_id DESC LIMIT 10000)
+            """);
     }
 }
