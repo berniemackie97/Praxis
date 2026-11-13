@@ -578,6 +578,21 @@ public sealed class VerificationTests : IDisposable
         JsonNode item = Assert.Single(Items(catalog.Verification.Get(request)!.Payload));
         Assert.Equal(2, item["contexts"]!.AsArray().Count);
         Assert.DoesNotContain("proposalId", catalog.Verification.Get(request)!.Payload, StringComparison.Ordinal);
+        Assert.DoesNotContain("sourceDigest", catalog.Verification.Get(request)!.Payload, StringComparison.Ordinal);
+        using (Microsoft.Data.Sqlite.SqliteConnection audit = new(
+            $"Data Source={catalog.DatabasePath};Pooling=False"))
+        {
+            audit.Open();
+            using Microsoft.Data.Sqlite.SqliteCommand snapshots = audit.CreateCommand();
+            snapshots.CommandText = """
+                SELECT COUNT(*) FROM verification_contexts c
+                JOIN eligible_enrichment_proposals p ON p.proposal_id = c.proposal_id
+                WHERE c.request_id = $request AND c.source_id = p.source_id
+                  AND c.revision = p.revision AND c.source_digest = p.source_digest
+                """;
+            snapshots.Parameters.AddWithValue("$request", request.ToString("D"));
+            Assert.Equal(2L, Convert.ToInt64(snapshots.ExecuteScalar()));
+        }
 
         Assert.True(catalog.Sources.Revoke(first.SourceId));
         Assert.Equal(1, catalog.Knowledge.ListEntities().Single(candidate =>
