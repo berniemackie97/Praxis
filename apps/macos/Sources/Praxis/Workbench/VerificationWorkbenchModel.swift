@@ -11,7 +11,10 @@ final class VerificationWorkbenchModel: ObservableObject {
     @Published private(set) var selectedId: String?
     @Published var excluded: Set<Int> = []
     @Published var redactions: [String] = []
-    @Published var providerChoice = ""
+    @Published var providerChoice = "" { didSet { if providerChoice != oldValue { remoteConsent = false } } }
+    @Published var remoteConsent = false
+    @Published private(set) var disclosureSources: [VerificationDisclosureSource] = []
+    @Published private(set) var disclosureAudit: [VerificationDisclosureEvent] = []
     /// The latest failure or confirmation; setting one clears the other.
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
     @Published private(set) var notice: String? { didSet { if notice != nil { error = nil } } }
@@ -34,6 +37,7 @@ final class VerificationWorkbenchModel: ObservableObject {
     func refresh() {
         channel.send("verifications", ["limit": 100], as: VerificationListData.self, failed: report) { [weak self] data in
             self?.requests = data.requests
+            self?.refreshAuthorization()
         }
     }
 
@@ -43,6 +47,9 @@ final class VerificationWorkbenchModel: ObservableObject {
         excluded = []
         redactions = []
         providerChoice = ""
+        remoteConsent = false
+        disclosureSources = []
+        refreshAuthorization()
         notice = nil
     }
 
@@ -75,10 +82,43 @@ final class VerificationWorkbenchModel: ObservableObject {
             "redactions": redactions
         ]
         if !providerChoice.isEmpty { fields["providerId"] = providerChoice }
+        fields["remoteDisclosureApproved"] = remoteConsent
         channel.send("verificationApprove", fields, as: VerificationData.self, failed: report) { [weak self] data in
             let provider = data.request?.providerId.map(VerificationProvider.displayName) ?? "a verifier"
             self?.notice = "Approved for \(provider)."
             self?.refresh()
+        }
+    }
+
+    func setRemoteVerification(_ sourceId: String, allowed: Bool) {
+        channel.send("verificationSourceDisclosureSet",
+                     ["sourceId": sourceId, "allowRemoteVerification": allowed],
+                     as: VerificationDisclosurePolicyData.self, failed: report) { [weak self] data in
+            self?.notice = data.changed ? "Source disclosure classification updated." : "Source classification unchanged."
+            self?.refreshAuthorization()
+        }
+    }
+
+    func revokeDisclosure() {
+        guard let selected else { return }
+        channel.send("verificationDisclosureRevoke", ["verificationId": selected.requestId],
+                     as: VerificationDisclosureRevokedData.self, failed: report) { [weak self] data in
+            self?.notice = data.revoked ? "External verification grant revoked." : "No active grant to revoke."
+            self?.refresh()
+        }
+    }
+
+    private func refreshAuthorization() {
+        if let selectedId {
+            channel.send("verificationDisclosureSources", ["verificationId": selectedId],
+                         as: VerificationDisclosureSourcesData.self, failed: report) { [weak self] data in
+                guard self?.selectedId == selectedId else { return }
+                self?.disclosureSources = data.sources
+            }
+        }
+        channel.send("verificationDisclosureAudit", ["limit": 30],
+                     as: VerificationDisclosureAuditData.self, failed: report) { [weak self] data in
+            self?.disclosureAudit = data.events
         }
     }
 
