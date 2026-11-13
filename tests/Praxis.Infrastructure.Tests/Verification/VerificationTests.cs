@@ -807,24 +807,24 @@ public sealed class VerificationTests : IDisposable
         Assert.True(catalog.Verification.SetSourceRemoteVerification(source.SourceId, false));
 
         using JsonDocument sources = await Send(protocol,
-            $"""{"requestId":"s","action":"verificationDisclosureSources","verificationId":"{{request:D}}"}""");
+            $$"""{"requestId":"s","action":"verificationDisclosureSources","verificationId":"{{request:D}}"}""");
         Assert.Equal("local_only", sources.RootElement.GetProperty("data")
             .GetProperty("sources")[0].GetProperty("classification").GetString());
         using JsonDocument invalid = await Send(protocol,
-            $"""{"requestId":"invalid","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":"yes"}""");
+            $$"""{"requestId":"invalid","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":"yes"}""");
         Assert.False(invalid.RootElement.GetProperty("ok").GetBoolean());
         using JsonDocument denied = await Send(protocol,
-            $"""{"requestId":"d","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+            $$"""{"requestId":"d","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
         Assert.False(denied.RootElement.GetProperty("ok").GetBoolean());
 
         using JsonDocument enabled = await Send(protocol,
-            $"""{"requestId":"e","action":"verificationSourceDisclosureSet","sourceId":"{{source.SourceId:D}}","allowRemoteVerification":true}""");
+            $$"""{"requestId":"e","action":"verificationSourceDisclosureSet","sourceId":"{{source.SourceId:D}}","allowRemoteVerification":true}""");
         Assert.True(enabled.RootElement.GetProperty("data").GetProperty("changed").GetBoolean());
         using JsonDocument approved = await Send(protocol,
-            $"""{"requestId":"a","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
+            $$"""{"requestId":"a","action":"verificationApprove","verificationId":"{{request:D}}","providerId":"codex","remoteDisclosureApproved":true}""");
         Assert.True(approved.RootElement.GetProperty("ok").GetBoolean());
         using JsonDocument revoked = await Send(protocol,
-            $"""{"requestId":"r","action":"verificationDisclosureRevoke","verificationId":"{{request:D}}"}""");
+            $$"""{"requestId":"r","action":"verificationDisclosureRevoke","verificationId":"{{request:D}}"}""");
         Assert.True(revoked.RootElement.GetProperty("data").GetProperty("revoked").GetBoolean());
         using JsonDocument audit = await Send(protocol,
             """{"requestId":"audit","action":"verificationDisclosureAudit","limit":20}""");
