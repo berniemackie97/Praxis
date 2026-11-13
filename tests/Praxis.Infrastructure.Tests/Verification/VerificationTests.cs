@@ -91,7 +91,7 @@ public sealed class VerificationTests : IDisposable
         // Excluding an item removes it; a name in another item's context needs a redaction.
         VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
             request, providerId: VerificationProvider.Codex,
-            excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"]);
+            excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"], remoteDisclosureApproved: true);
 
         Assert.Equal(VerificationProvider.Codex, approved.ProviderId);
         var verifier = new ScriptedChatModel(_ => Verdicts((hacker, "unsupported", "none")));
@@ -126,7 +126,7 @@ public sealed class VerificationTests : IDisposable
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
         new VerificationApproval(catalog.Verification).Approve(request,
-            providerId: VerificationProvider.Codex);
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "supported", "person")))).ProcessNextAsync());
 
@@ -143,7 +143,7 @@ public sealed class VerificationTests : IDisposable
         Assert.True(catalog.Knowledge.SetType(hackerEntity.EntityId, "organization"));
         Guid second = catalog.Verification.RequestForEntity(hackerEntity.EntityId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(second,
-            providerId: VerificationProvider.Codex);
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts((1, "supported", "person")))).ProcessNextAsync());
         EntitySummary owned = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("organization", "owner"), (owned.EntityType, owned.TypeOrigin));
@@ -164,12 +164,12 @@ public sealed class VerificationTests : IDisposable
 
         Guid a = catalog.Verification.RequestForSource(first.SourceId)!.Value;
         Assert.Equal(VerificationProvider.Codex, new VerificationApproval(catalog.Verification).Approve(a,
-            providerId: VerificationProvider.Codex).ProviderId);
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true).ProviderId);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => VerdictsFor(catalog.Verification.Get(a)!))).ProcessNextAsync());
 
         Guid b = catalog.Verification.RequestForSource(second.SourceId)!.Value;
         Assert.Equal(VerificationProvider.ClaudeCode, new VerificationApproval(catalog.Verification).Approve(b,
-            providerId: VerificationProvider.ClaudeCode).ProviderId);
+            providerId: VerificationProvider.ClaudeCode, remoteDisclosureApproved: true).ProviderId);
 
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 50, dailyLimit: 5, enabled: false);
         Guid c = catalog.Verification.RequestForSource(third.SourceId)!.Value;
@@ -191,7 +191,7 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request,
-            providerId: VerificationProvider.Codex);
+            providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         var reports = new List<string>();
         var runner = new VerificationRunner(catalog.Verification,
             new DelegatingVerifierModelFactory(_ => new ScriptedChatModel(_ => throw new InferenceException(failure, "provider text with secrets"))),
@@ -224,7 +224,7 @@ public sealed class VerificationTests : IDisposable
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
         new VerificationApproval(catalog.Verification).Approve(request,
-            providerId: VerificationProvider.Codex, excludedOrdinals: [alex]);
+            providerId: VerificationProvider.Codex, excludedOrdinals: [alex], remoteDisclosureApproved: true);
 
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "none"), (hacker, "uncertain", "none"), (99, "unsupported", "none")))).ProcessNextAsync());
@@ -266,7 +266,7 @@ public sealed class VerificationTests : IDisposable
         string request = created.RootElement.GetProperty("data").GetProperty("verificationId").GetString()!;
 
         using JsonDocument approved = await Send(protocol,
-            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","redactions":["Rivera"]}""");
+            $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","remoteDisclosureApproved":true,"redactions":["Rivera"]}""");
         JsonElement view = approved.RootElement.GetProperty("data").GetProperty("request");
         Assert.Equal("approved", view.GetProperty("status").GetString());
         Assert.DoesNotContain("Rivera", view.GetProperty("payload").GetString(), StringComparison.Ordinal);
@@ -344,7 +344,7 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "changed.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         ClaimedVerification old = catalog.Verification.Claim()!;
         Assert.Equal(1, old.Provider.Revision);
@@ -359,7 +359,7 @@ public sealed class VerificationTests : IDisposable
         Assert.Null(catalog.Verification.Claim());
 
         VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(
-            request, providerId: VerificationProvider.Codex);
+            request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         Assert.Equal("approved", approved.Status);
         ClaimedVerification fresh = catalog.Verification.Claim()!;
         Assert.Equal(2, fresh.Provider.Revision);
@@ -378,7 +378,7 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request,
-            providerId: VerificationProvider.ClaudeCode);
+            providerId: VerificationProvider.ClaudeCode, remoteDisclosureApproved: true);
 
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 10, enabled: false);
         Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
@@ -389,7 +389,7 @@ public sealed class VerificationTests : IDisposable
         Assert.Equal("awaiting_approval", catalog.Verification.Get(request)!.Status);
 
         new VerificationApproval(catalog.Verification).Approve(request,
-            providerId: VerificationProvider.ClaudeCode);
+            providerId: VerificationProvider.ClaudeCode, remoteDisclosureApproved: true);
         Assert.NotNull(catalog.Verification.Claim());
     }
 
@@ -418,7 +418,7 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1, dailyLimit: 1);
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 20);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         List<string> invoked = [];
         VerificationRunner runner = Runner(catalog, provider =>
@@ -454,7 +454,7 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         string answer = reply switch
         {
@@ -482,7 +482,7 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "incomplete-direct.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         ClaimedVerification claim = catalog.Verification.Claim()!;
         int first = claim.Ordinals.Min();
 
@@ -505,7 +505,7 @@ public sealed class VerificationTests : IDisposable
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
         int alex = Ordinal(catalog, request, "Alex Rivera");
         int hacker = Ordinal(catalog, request, "Hacker Inc");
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             Verdicts((alex, "unsupported", "organization"), (hacker, "uncertain", "none")))).ProcessNextAsync());
@@ -527,14 +527,14 @@ public sealed class VerificationTests : IDisposable
         Assert.True(catalog.Sources.Revoke(original.SourceId));
         Assert.Throws<InvalidOperationException>(() =>
             new VerificationApproval(catalog.Verification).Approve(awaiting,
-                providerId: VerificationProvider.Codex));
+                providerId: VerificationProvider.Codex, remoteDisclosureApproved: true));
         Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(awaiting)!.Status,
             catalog.Verification.Get(awaiting)!.FailureCode));
         Assert.Equal(0, catalog.Verification.ListEnabledProviderAllowances().Single().StartedToday);
 
         CapturedOriginal second = await Enrich(catalog, "revoked-later.md", Meeting);
         Guid approved = catalog.Verification.RequestForSource(second.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(approved, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(approved, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         Assert.True(catalog.Sources.Revoke(second.SourceId));
         Assert.False(await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
             "A revoked source must never invoke a provider.")).ProcessNextAsync());
@@ -552,7 +552,7 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "superseded.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         using MemoryStream next = new(Encoding.UTF8.GetBytes("# Edited\nThis is a different revision."));
         CapturedOriginal newer = await catalog.Originals.CaptureFileAsync(
@@ -599,7 +599,7 @@ public sealed class VerificationTests : IDisposable
             candidate.EntityId == entity).Sources);
         Assert.Throws<InvalidOperationException>(() =>
             new VerificationApproval(catalog.Verification).Approve(request,
-                providerId: VerificationProvider.Codex));
+                providerId: VerificationProvider.Codex, remoteDisclosureApproved: true));
         Assert.Equal(("failed", "source_changed"), (catalog.Verification.Get(request)!.Status,
             catalog.Verification.Get(request)!.FailureCode));
         Assert.Null(catalog.Verification.Claim());
@@ -612,7 +612,7 @@ public sealed class VerificationTests : IDisposable
         var (first, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         using MemoryStream replacement = new(Encoding.UTF8.GetBytes("# New revision\nUnrelated evidence."));
         CapturedOriginal next = await catalog.Originals.CaptureFileAsync(
@@ -636,7 +636,7 @@ public sealed class VerificationTests : IDisposable
         var (first, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         ClaimedVerification claim = catalog.Verification.Claim()!;
         Assert.Single(claim.Ordinals);
 
@@ -657,7 +657,7 @@ public sealed class VerificationTests : IDisposable
         var (_, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             VerdictsFor(catalog.Verification.Get(request)!))).ProcessNextAsync());
@@ -693,7 +693,7 @@ public sealed class VerificationTests : IDisposable
         CapturedOriginal source = await Enrich(catalog, "revoked-running.md", Meeting);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         ClaimedVerification claim = catalog.Verification.Claim()!;
         Assert.True(catalog.Sources.Revoke(source.SourceId));
 
@@ -716,7 +716,7 @@ public sealed class VerificationTests : IDisposable
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1, dailyLimit: 1);
         SaveProvider(catalog, VerificationProvider.ClaudeCode, weight: 2);
         Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
-        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
+        new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         using CancellationTokenSource alreadyCanceled = new();
         alreadyCanceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
@@ -814,6 +814,7 @@ public sealed class VerificationTests : IDisposable
         model ??= LocalModel();
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, name), stream, 200_000, Guid.NewGuid().ToString("N"));
+        catalog.Verification.SetSourceRemoteVerification(captured.SourceId, true);
         ProcessingDriver[] drivers =
         [
             ProcessingDriver.Text(catalog),
