@@ -65,7 +65,7 @@ internal static class VerificationEvidence
         }
 
         using var mentions = connection.CreateCommand("""
-            SELECT DISTINCT m.entity_type, m.evidence, p.evidence_offset, p.evidence_length, d.content, s.locator,
+            SELECT m.entity_type, m.evidence, p.evidence_offset, p.evidence_length, d.content, s.locator,
                    p.proposal_id
             FROM visible_entity_mentions m
             JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
@@ -78,11 +78,18 @@ internal static class VerificationEvidence
         mentions.Transaction = transaction;
         mentions.Parameters.AddWithValue("$entity", entityId);
         var rows = new List<(string Type, string ProposalId, JsonObject Context)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         using (var reader = mentions.ExecuteReader())
         {
             while (reader.Read() && rows.Count < 50)
             {
-                rows.Add((reader.GetString(0), reader.GetString(6), new JsonObject
+                string proposalId = reader.GetString(6);
+                if (!seen.Add(proposalId))
+                {
+                    continue;
+                }
+
+                rows.Add((reader.GetString(0), proposalId, new JsonObject
                 {
                     ["observedType"] = reader.GetString(0),
                     ["quote"] = reader.GetString(1),
