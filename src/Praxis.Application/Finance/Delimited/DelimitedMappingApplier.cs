@@ -1,3 +1,4 @@
+using Praxis.Application.Documents.Tables;
 using Praxis.Domain.Finance;
 
 namespace Praxis.Application.Finance.Delimited;

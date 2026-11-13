@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Praxis.Application.Processing;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Search;
@@ -75,7 +76,7 @@ public sealed class TextExtractionTests : IDisposable
     public async Task UnsupportedFileKindsAndMismatchedSignaturesRemainVisible()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
-        CapturedOriginal binary = await Capture(catalog, "image.png", [137, 80, 78, 71], "image");
+        CapturedOriginal binary = await Capture(catalog, "archive.zip", [0x50, 0x4b, 0x03, 0x04, 0x00], "archive");
         CapturedOriginal pdf = await Capture(catalog, "article.pdf", Encoding.ASCII.GetBytes("%PDF-1.7"), "pdf");
         CapturedOriginal disguised = await Capture(catalog, "disguised.txt",
             Encoding.ASCII.GetBytes("%PDF-1.7"), "disguised");
@@ -88,8 +89,9 @@ public sealed class TextExtractionTests : IDisposable
 
         Assert.False(await processor.ProcessNextAsync());
         Assert.Equal("unsupported_format", catalog.Text.Read(binary.ItemId, 1)?.ReasonCode);
-        Assert.Equal("pdf_not_supported", catalog.Text.Read(pdf.ItemId, 1)?.ReasonCode);
-        Assert.Equal("signature_mismatch", catalog.Text.Read(disguised.ItemId, 1)?.ReasonCode);
+        // Files are read by their content signature, so a PDF named .txt is (attempted as) a PDF.
+        Assert.StartsWith("pdf_", catalog.Text.Read(pdf.ItemId, 1)?.ReasonCode);
+        Assert.StartsWith("pdf_", catalog.Text.Read(disguised.ItemId, 1)?.ReasonCode);
         Assert.Equal("binary_content", catalog.Text.Read(nul.ItemId, 1)?.ReasonCode);
         Assert.All(catalog.Processing.List().Where(job => job.ProcessorKey == ProcessorKeys.SourceText), job => Assert.Equal("unsupported", job.State));
         await catalog.Originals.VerifyAsync(binary.ItemId);
@@ -109,24 +111,25 @@ public sealed class TextExtractionTests : IDisposable
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
         Assert.True(await processor.ProcessNextAsync());
-        IReadOnlyList<ProcessingJob> states = catalog.Processing.List();
-        Assert.Equal("invalid_utf8",
-            states.Single(job => job.ItemId == malformed.ItemId).FailureCode);
+        IReadOnlyList<ProcessingJob> states = catalog.Processing.List().Where(job => job.ProcessorKey == ProcessorKeys.SourceText).ToArray();
+
+        // Undecodable bytes are not text: closed with their reason, never guessed.
+        Assert.Equal("binary_content", catalog.Text.Read(malformed.ItemId, 1)?.ReasonCode);
+        Assert.Equal("unsupported", states.Single(job => job.ItemId == malformed.ItemId).State);
         Assert.Equal("corrupt_original",
             states.Single(job => job.ItemId == corrupt.ItemId).FailureCode);
         Assert.Equal("corrupt_original",
             states.Single(job => job.ItemId == truncated.ItemId).FailureCode);
-        Assert.All(states, job => Assert.Equal("failed", job.State));
-        Assert.Null(catalog.Text.Read(malformed.ItemId, 1));
+        Assert.All(states.Where(job => job.ItemId != malformed.ItemId), job => Assert.Equal("failed", job.State));
         Assert.Null(catalog.Text.Read(corrupt.ItemId, 1));
         Assert.Null(catalog.Text.Read(truncated.ItemId, 1));
-        Assert.True(catalog.Processing.Retry(malformed.ItemId, 1,
+        Assert.True(catalog.Processing.Retry(corrupt.ItemId, 1,
             ProcessorKeys.SourceText));
         Assert.True(await processor.ProcessNextAsync());
-        ProcessingJob retry = catalog.Processing.List().Single(job => job.ItemId == malformed.ItemId);
+        ProcessingJob retry = catalog.Processing.List().Single(job => job.ItemId == corrupt.ItemId && job.ProcessorKey == ProcessorKeys.SourceText);
         Assert.Equal(2, retry.TotalAttempts);
-        Assert.Equal("invalid_utf8", retry.FailureCode);
-        Assert.Null(catalog.Text.Read(malformed.ItemId, 1));
+        Assert.Equal("corrupt_original", retry.FailureCode);
+        Assert.Null(catalog.Text.Read(corrupt.ItemId, 1));
     }
 
     [Fact]
@@ -182,15 +185,15 @@ public sealed class TextExtractionTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal large = await Capture(catalog, "large.txt",
-            new byte[TextLimits.MaximumTextBytes + 1], "large");
+            Encoding.ASCII.GetBytes(new string('a', TextLimits.MaximumTextBytes + 10)), "large");
         Assert.True(catalog.Processing.Queue(large.ItemId, 1, "media-v1"));
         ProcessingDriver processor = ProcessingDriver.Text(catalog);
         Assert.True(await processor.ProcessNextAsync());
         Assert.False(await processor.ProcessNextAsync());
         TextDerivative text = Assert.IsType<TextDerivative>(catalog.Text.Read(large.ItemId, 1));
-        Assert.Equal("unsupported", text.Outcome);
-        Assert.Equal("text_too_large", text.ReasonCode);
-        Assert.Null(text.Content);
+        // Long text is kept up to the stored bound rather than rejected; intake records that it was truncated.
+        Assert.Equal("completed", text.Outcome);
+        Assert.Equal(TextLimits.MaximumTextBytes, text.Content!.Length);
         Assert.Equal("queued",
             catalog.Processing.List().Single(job => job.ProcessorKey == "media-v1").State);
     }
@@ -367,16 +370,16 @@ public sealed class TextExtractionTests : IDisposable
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         CapturedOriginal source = await Capture(catalog, name, bytes, "hostile");
-        Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-        TextDerivative? derivative = catalog.Text.Read(source.ItemId, 1);
-        if (name == "broken.cpp")
+        if (name == "picture.cs")
         {
-            Assert.Null(derivative);
-            Assert.Equal("invalid_utf8", Assert.Single(catalog.Processing.List()).FailureCode);
+            // An image is read by what it is: with no OCR engine the read waits instead of decoding pixels as text.
+            await Assert.ThrowsAsync<ProcessorUnavailableException>(() => ProcessingDriver.Text(catalog).ProcessNextAsync());
+            Assert.Null(catalog.Text.Read(source.ItemId, 1));
         }
         else
         {
-            Assert.Equal("signature_mismatch", derivative?.ReasonCode);
+            Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
+            Assert.Equal(name == "broken.cpp" ? "binary_content" : "content_unrecognized", catalog.Text.Read(source.ItemId, 1)?.ReasonCode);
         }
 
         Assert.Empty(catalog.Search.Query("hostile"));

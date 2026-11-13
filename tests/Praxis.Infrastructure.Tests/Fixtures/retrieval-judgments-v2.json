@@ -12,7 +12,7 @@
     { "name": "orbit-concept", "domain": "technical", "query": "orbital physics", "relevant": ["conflict"], "lexicalExpected": [] },
     { "name": "quoted-instructions", "domain": "safety", "query": "ignore previous", "relevant": ["injection"], "lexicalExpected": ["injection"] },
     { "name": "missing-answer", "domain": "safety", "query": "nonexistentidentifier", "relevant": [], "lexicalExpected": [] },
-    { "name": "unsupported-finance", "domain": "finance", "query": "salary", "relevant": [], "lexicalExpected": [] },
+    { "name": "readable-finance", "domain": "finance", "query": "salary", "relevant": ["finance"], "lexicalExpected": ["finance"] },
     { "name": "unsupported-pdf", "domain": "unsupported", "query": "pdf", "relevant": [], "lexicalExpected": [] },
     { "name": "cross-source-evidence", "domain": "technical", "query": "vertex terrain", "relevant": ["captions", "terrain"], "lexicalExpected": [] },
     { "name": "unanswerable-plan", "domain": "finance", "query": "savings proposal", "relevant": [], "lexicalExpected": [] }

@@ -173,7 +173,7 @@
       "id": "finance",
       "path": "structured/transactions.csv",
       "content": "record_id,date,currency,amount,status\nsalary,2026-11-01,USD,2100.00,posted\nrent,2026-11-02,USD,-800.00,pending",
-      "searchable": false
+      "searchable": true
     },
     {
       "id": "pdf",

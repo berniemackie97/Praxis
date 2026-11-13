@@ -1,34 +1,25 @@
-using System.Text;
+using Praxis.Application.Documents;
 using Praxis.Application.Originals;
 using Praxis.Application.Processing;
 using Praxis.Domain.Processing;
-using Praxis.Domain.Text;
+using Praxis.Domain.Understanding;
 
 namespace Praxis.Application.Text;
 
 /// <summary>
-/// Extracts strictly decoded UTF-8 text from verified originals with a supported text
-/// extension. Other inputs receive an explicit unsupported or failed outcome, never guessed text.
+/// The read stage for every captured file: the reader registry turns the verified original into
+/// normalized text (and records how it was read) for search, segments, citations and the intake
+/// stages. Only files no reader recognizes close as unsupported, and they are reopened as soon as
+/// a reader for their extension exists.
 /// </summary>
 public sealed class TextExtractionHandler(
-    ITextDerivativeRepository derivatives, IOriginalStore originals, IProcessingQueue processing) : IProcessingHandler
+    ITextDerivativeRepository derivatives, IOriginalStore originals, IProcessingQueue processing, DocumentReaders readers) : IProcessingHandler
 {
-    // An extension establishes a supported text decoding policy, not the file's semantics.
-    public static readonly IReadOnlyList<string> SupportedExtensions =
-    [
-        ".txt", ".md", ".markdown", ".vtt", ".srt",
-        ".cs", ".csx", ".fs", ".fsx",
-        ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx",
-        ".asm", ".s", ".lst"
-    ];
-
-    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-
     public string ProcessorKey => ProcessorKeys.SourceText;
-    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(5);
+    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(10);
     public int MaxConcurrency => 2;
 
-    public bool TryReopenWork() => derivatives.RequeueNewlySupported(SupportedExtensions);
+    public bool TryReopenWork() => derivatives.RequeueNewlySupported(readers.Extensions);
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
@@ -39,52 +30,37 @@ public sealed class TextExtractionHandler(
             return;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
         if (source.SourceKind != "file")
         {
             derivatives.CommitResult(lease, null, "unsupported_source");
             return;
         }
 
-        string extension = Path.GetExtension(source.Locator).ToLowerInvariant();
-        if (!SupportedExtensions.Contains(extension, StringComparer.Ordinal))
+        if (source.Original.Length > DocumentLimits.MaximumOriginalBytes)
         {
-            derivatives.CommitResult(lease, null, extension == ".pdf" ? "pdf_not_supported" : "unsupported_format");
-            return;
-        }
-
-        if (source.Original.Length > TextLimits.MaximumTextBytes)
-        {
-            derivatives.CommitResult(lease, null, "text_too_large");
+            derivatives.CommitResult(lease, null, "document_too_large");
             return;
         }
 
         try
         {
-            byte[] original = await originals.ReadVerifiedBytesAsync(source.Original, TextLimits.MaximumTextBytes, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (HasNonTextSignature(original))
+            byte[] original = await originals.ReadVerifiedBytesAsync(source.Original, DocumentLimits.MaximumOriginalBytes, cancellationToken);
+            ReadOutcome outcome = await readers.ReadAsync(new DocumentInput(Path.GetFileName(source.Locator), original, "src"), cancellationToken);
+            if (processing.Renew(lease, LeaseDuration) is null)
             {
-                derivatives.CommitResult(lease, null, "signature_mismatch");
                 return;
             }
 
-            int offset = original.AsSpan().StartsWith(Encoding.UTF8.Preamble)
-                ? Encoding.UTF8.Preamble.Length
-                : 0;
-            string text = StrictUtf8.GetString(original, offset, original.Length - offset);
-            if (text.Any(c => (c < 0x20 && c is not ('\n' or '\r' or '\t')) ||
-                c == 0x7f))
+            if (outcome.Document is not { } document)
             {
-                derivatives.CommitResult(lease, null, "binary_content");
+                derivatives.CommitResult(lease, null, outcome.ReasonCode ?? "unsupported_format");
                 return;
             }
 
-            derivatives.CommitResult(lease, text, null);
-        }
-        catch (DecoderFallbackException)
-        {
-            processing.Finish(lease, ProcessingCompletion.Failed, "invalid_utf8");
+            string? title = document.Title is { Length: > 0 } value
+                ? value.Length <= DocumentFacts.MaximumTitleLength ? value : value[..DocumentFacts.MaximumTitleLength]
+                : null;
+            derivatives.CommitResult(lease, document.Text, null, new DocumentFacts(document.Format, document.Pages, title, document.Truncated));
         }
         catch (InvalidDataException)
         {
@@ -102,19 +78,5 @@ public sealed class TextExtractionHandler(
         {
             processing.Finish(lease, ProcessingCompletion.Failed, "source_access");
         }
-    }
-
-    private static bool HasNonTextSignature(ReadOnlySpan<byte> input)
-    {
-        ReadOnlySpan<byte> png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-        ReadOnlySpan<byte> zip = [0x50, 0x4b, 0x03, 0x04];
-        ReadOnlySpan<byte> elf = [0x7f, 0x45, 0x4c, 0x46];
-        ReadOnlySpan<byte> gzip = [0x1f, 0x8b];
-        ReadOnlySpan<byte> machLittleEndian = [0xcf, 0xfa, 0xed, 0xfe];
-        ReadOnlySpan<byte> machBigEndian = [0xfe, 0xed, 0xfa, 0xcf];
-        ReadOnlySpan<byte> machUniversal = [0xca, 0xfe, 0xba, 0xbe];
-
-        return input.StartsWith("%PDF-"u8) || input.StartsWith(png) || input.StartsWith(zip) || input.StartsWith(elf) || input.StartsWith(gzip)
-               || input.StartsWith(machLittleEndian) || input.StartsWith(machBigEndian) || input.StartsWith(machUniversal);
     }
 }

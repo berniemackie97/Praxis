@@ -195,13 +195,15 @@ public sealed class CaptureRequestContractTests : IDisposable
     public async Task FailedExtractionIsRetryableUntilSupersededOrRevoked()
     {
         string path = Path.Combine(selectedRoot, "malformed.md");
-        File.WriteAllBytes(path, [0xc3, 0x28]);
+        File.WriteAllText(path, "intact original");
         using SqliteCatalog catalog = SqliteCatalog.Open(catalogRoot);
         FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
         CapturedOriginal first = await intake.ImportFileAsync(path, 100, "malformed-one");
+        // The stored object is damaged after capture, so reading it fails verification.
+        File.WriteAllText(Path.Combine(catalogRoot, "objects", first.Sha256[..2], first.Sha256[2..4], first.Sha256), "damaged bytes!!");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         Assert.Equal("failed", catalog.Sources.ReadProvenance(first.SourceId)!.ProcessingState);
-        Assert.Equal("invalid_utf8", catalog.Sources.ReadProvenance(first.SourceId)!.FailureCode);
+        Assert.Equal("corrupt_original", catalog.Sources.ReadProvenance(first.SourceId)!.FailureCode);
         Assert.True(catalog.Sources.ReadProvenance(first.SourceId)!.RetryEligible);
 
         File.WriteAllText(path, "recovered amber evidence");
@@ -216,7 +218,6 @@ public sealed class CaptureRequestContractTests : IDisposable
         Assert.True(catalog.Sources.Revoke(first.SourceId));
         Assert.False(catalog.Sources.ReadProvenance(first.SourceId)!.RetryEligible);
         Assert.Empty(catalog.Search.Query("amber"));
-        await catalog.Originals.VerifyAsync(first.ItemId);
     }
 
     [Fact]

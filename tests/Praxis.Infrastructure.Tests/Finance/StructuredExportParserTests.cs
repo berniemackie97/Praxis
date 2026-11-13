@@ -1,3 +1,4 @@
+using Praxis.Application.Documents.Tables;
 using Praxis.Application.Finance;
 using Praxis.Application.Finance.Delimited;
 using Praxis.Application.Finance.Ofx;

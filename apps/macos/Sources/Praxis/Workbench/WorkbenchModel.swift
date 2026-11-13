@@ -18,6 +18,7 @@ final class WorkbenchModel: ObservableObject {
     @Published var selectedMembershipId = ""
 
     @Published private(set) var mediaInspection: MediaInspection?
+    @Published private(set) var understanding: SourceUnderstanding?
     @Published private(set) var selected: LibraryItem?
     @Published private(set) var libraryPreview = ""
     @Published private(set) var message = "Select a private catalog and watched Inbox."
@@ -38,6 +39,7 @@ final class WorkbenchModel: ObservableObject {
     let approvals: ApprovalsWorkbenchModel
     let privacy: PrivacySettingsModel
     private let worker: WorkerSession
+    private let channel: WorkerChannel
     private var watchedInboxes: [URL] = []
     private var approvedRootIdentities: [String: String] = [:]
     private var workerDiagnostic: String?
@@ -47,6 +49,7 @@ final class WorkbenchModel: ObservableObject {
         self.worker = worker
         search = SearchWorkbenchModel(worker: worker)
         let channel = WorkerChannel(worker: worker)
+        self.channel = channel
         knowledge = KnowledgeWorkbenchModel(channel: channel)
         verification = VerificationWorkbenchModel(channel: channel)
         intelligence = IntelligenceSettingsModel(channel: channel)
@@ -98,6 +101,7 @@ final class WorkbenchModel: ObservableObject {
         send(.library, fields, scope: .library(selectedCollectionId, page))
         send(.collections, ["limit": 100])
         if let selected {
+            refreshUnderstanding(for: selected)
             refreshTopics(for: selected)
             send(.sourceMoves, ["sourceId": selected.sourceId], scope: .source(selected.sourceId))
         }
@@ -199,6 +203,16 @@ final class WorkbenchModel: ObservableObject {
         refreshMembership(for: item)
         send(.sourceMoves, ["sourceId": item.sourceId], scope: .source(item.sourceId))
         refreshTopics(for: item)
+        channel.reset("understanding")
+        refreshUnderstanding(for: item)
+    }
+
+    private func refreshUnderstanding(for item: LibraryItem) {
+        channel.send("sourceUnderstanding", ["sourceId": item.sourceId], as: SourceUnderstandingData.self,
+                     scope: "understanding", failed: { _ in }) { [weak self] data in
+            guard self?.selected?.sourceId == item.sourceId else { return }
+            self?.understanding = data.understanding
+        }
     }
 
     private func loadPreview(_ version: ItemRevision) {
@@ -226,6 +240,7 @@ final class WorkbenchModel: ObservableObject {
         topicOutcome = "pending"
         semanticOutcome = "pending"
         mediaInspection = nil
+        understanding = nil
     }
 
     func exportOriginal(_ item: LibraryItem, destination: URL) {

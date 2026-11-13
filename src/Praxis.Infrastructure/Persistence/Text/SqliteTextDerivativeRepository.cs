@@ -4,7 +4,9 @@ using Praxis.Application.Text;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
+using Praxis.Domain.Understanding;
 using Praxis.Infrastructure.Persistence.Processing;
+using Praxis.Infrastructure.Persistence.Understanding;
 
 namespace Praxis.Infrastructure.Persistence.Text;
 
@@ -144,7 +146,7 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
         });
     }
 
-    public bool CommitResult(ProcessingLease lease, string? content, string? reasonCode)
+    public bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         if ((content is null) == (reasonCode is null))
@@ -202,6 +204,12 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
             insert.Parameters.AddWithValue("$reason", (object?)reasonCode ?? DBNull.Value);
             insert.Parameters.AddWithValue("$now", now);
             insert.ExecuteNonQuery();
+
+            if (content is not null)
+            {
+                IntakeDocumentRows.UpsertRead(connection, transaction, lease.ItemId, lease.Revision, sourceDigest,
+                    facts ?? new DocumentFacts("text", null, null, false), now);
+            }
 
             using SqliteCommand finish = connection.CreateCommand("""
                                                                   UPDATE processing_jobs

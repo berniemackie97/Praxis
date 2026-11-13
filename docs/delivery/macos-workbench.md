@@ -219,3 +219,9 @@ List-and-detail workspaces use one resizable split: the list starts at its ideal
 Background refresh (every 5 s) skips a tick while the worker still owes more than four replies, so a busy worker is never buried under polling.
 
 `scripts/macos/capture-screenshots.sh` renders every workspace (light and dark), each settings tab, the setup screen and a narrow window against a real worker and a fixture library into `.artifacts/screenshots` for visual review. It captures only Praxis's own windows and needs no screen-recording permission.
+
+## Generic intake (ADR 0044)
+
+Every captured file goes through one cascade, whatever it is: code reads it (text, Markdown, code, PDF with on-device OCR for scans, Word, Excel, CSV/TSV, bank exports, email, HTML, images), the local model triages it (category, type, language, record kinds), the strong model understands it (summary, topics, entities, relations, events, deadlines, contacts, transactions), code verifies every item against the document, and the strongest model corrects answers that fail. Disclosure policy governs every remote call; holds appear in Approvals.
+
+Each source's detail pane shows an **Intake** panel: its summary, how it was read, its category and type, which tier understood it, how many items were verified or dropped, the records and transactions it yielded, token use, and — when intake is waiting or limited — the reason in plain language. The app bundles `praxis-vision` (Apple Vision and PDFKit, built from `apps/macos/Helpers/PraxisVision` by the app's build phase) for OCR; nothing it reads leaves the Mac.

@@ -7,7 +7,6 @@ using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Processing;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Policy;
-using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference.Ollama;
@@ -296,13 +295,7 @@ public sealed class AgentRuntimeTests : IDisposable
         await Capture(catalog, "download.qfx", Encoding.UTF8.GetBytes(StructuredExportParserTests.SgmlOfx));
         await Capture(catalog, "lease.md", Encoding.UTF8.GetBytes("# Lease\nMonthly rent is paid by check to the landlord."));
         IReadOnlyList<IProcessingHandler> handlers = CatalogProcessing.CreateHandlers(catalog, new ScriptedModelFactory(), clock);
-        foreach (string key in new[] { ProcessorKeys.FinancialRecords, ProcessorKeys.SourceText })
-        {
-            ProcessingDriver driver = new(catalog, handlers.Single(handler => handler.ProcessorKey == key));
-            while (await driver.ProcessNextAsync())
-            {
-            }
-        }
+        await ProcessingDriver.RunIntakeAsync(catalog, handlers);
 
         foreach (Guid id in catalog.Library.List(10, 0, null).Where(item => item.SourceLocator.EndsWith(".qfx", StringComparison.Ordinal)).Select(item => item.SourceId))
         {

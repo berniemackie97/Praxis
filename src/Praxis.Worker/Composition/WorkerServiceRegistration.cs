@@ -19,6 +19,7 @@ using Praxis.Application.Processing;
 using Praxis.Application.Search;
 using Praxis.Application.Sources;
 using Praxis.Application.Text;
+using Praxis.Application.Understanding;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
@@ -56,6 +57,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
         services.AddSingleton<IFinancialLedgerRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Finance);
+        services.AddSingleton<IUnderstandingRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Understanding);
         services.AddSingleton<IPolicyRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Policy);
         services.AddSingleton<PolicyService>();
 
@@ -112,6 +114,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();
         services.AddSingleton<IDesktopActionGroup, FinanceActions>();
+        services.AddSingleton<IDesktopActionGroup, UnderstandingActions>();
         services.AddSingleton<IDesktopActionGroup, PolicyActions>();
         services.AddSingleton<IDesktopActionGroup, AgentActions>();
         services.AddSingleton<DesktopProtocol>();

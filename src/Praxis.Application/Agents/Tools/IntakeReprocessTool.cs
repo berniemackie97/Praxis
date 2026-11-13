@@ -9,7 +9,7 @@ namespace Praxis.Application.Agents.Tools;
 public sealed class IntakeReprocessTool(IProcessingQueue processing) : IAgentTool
 {
     private static readonly IReadOnlyList<string> Steps =
-        [ProcessorKeys.FinancialRecords, ProcessorKeys.FinancialCategories, ProcessorKeys.SemanticExtraction, ProcessorKeys.SourceText];
+        [ProcessorKeys.IntakeUnderstand, ProcessorKeys.IntakeTriage, ProcessorKeys.SemanticExtraction, ProcessorKeys.SourceText];
 
     public AgentToolDefinition Definition { get; } = new("intake_reprocess",
         $"Queue an intake step to run again for one item (itemId and revision from intake_status or search). step: {string.Join(" | ", Steps)}. The owner's disclosure policy still governs where it runs.",
@@ -19,7 +19,7 @@ public sealed class IntakeReprocessTool(IProcessingQueue processing) : IAgentToo
     public Task<AgentToolOutput> InvokeAsync(JsonElement arguments, AgentToolContext context, CancellationToken cancellationToken)
     {
         ToolArguments args = new(arguments);
-        bool queued = processing.Requeue(args.RequireGuid("itemId"), args.Integer("revision", 1, 1, int.MaxValue), args.Choice("step", Steps, ProcessorKeys.FinancialRecords));
+        bool queued = processing.Requeue(args.RequireGuid("itemId"), args.Integer("revision", 1, 1, int.MaxValue), args.Choice("step", Steps, ProcessorKeys.IntakeUnderstand));
         return Task.FromResult(AgentToolOutput.Of(new { queued, note = queued ? null : "Nothing to requeue: the step is already queued or running, or the item is not current." }));
     }
 }

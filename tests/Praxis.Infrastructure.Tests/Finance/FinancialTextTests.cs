@@ -1,4 +1,5 @@
 using System.Text;
+using Praxis.Application.Documents;
 using Praxis.Application.Finance;
 using Praxis.Domain.Finance;
 using Xunit;
@@ -88,10 +89,10 @@ public sealed class FinancialTextTests
     [Fact]
     public void ExportsDecodeAsUtf8OrWindows1252AndBinaryIsRefused()
     {
-        Assert.Equal("Café", FinancialTextDecoder.Decode([.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes("Café")]));
-        Assert.Equal("Café", FinancialTextDecoder.Decode([0x43, 0x61, 0x66, 0xE9]));
-        Assert.Equal("Caf€", FinancialTextDecoder.Decode([0x43, 0x61, 0x66, 0x80]));
-        Assert.Null(FinancialTextDecoder.Decode([0x41, 0x00, 0x42]));
+        Assert.Equal("Café", TextDecoder.Decode([.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes("Café")]));
+        Assert.Equal("Café", TextDecoder.Decode([0x43, 0x61, 0x66, 0xE9]));
+        Assert.Equal("Caf€", TextDecoder.Decode([0x43, 0x61, 0x66, 0x80]));
+        Assert.Null(TextDecoder.Decode([0x41, 0x00, 0x42]));
     }
 
     [Theory]

@@ -43,69 +43,80 @@ public sealed class SqliteProposalRepository : IProposalRepository
                 return false;
             }
 
-            using SqliteCommand run = connection.CreateCommand("""
-                                                               INSERT INTO enrichment_runs
-                                                                   (item_id, revision, processor_key, source_digest, outcome, created_utc,
-                                                                    model_provider, model_name, model_digest, input_tokens, output_tokens,
-                                                                    duration_ms, segments_examined, segments_total, rejected_count, segments_reused)
-                                                               VALUES ($item, $revision, $processor, $digest, $outcome, $now,
-                                                                       $provider, $model, $modelDigest, $input, $output,
-                                                                       $duration, $examined, $total, $rejected, $reused)
-                                                               """);
-            run.Transaction = transaction;
-            ProcessingJobParameters.Bind(run, lease.ItemId, lease.Revision, lease.ProcessorKey);
-            run.Parameters.AddWithValue("$digest", input.Digest);
-            run.Parameters.AddWithValue("$outcome", candidates.Count == 0 ? "abstained" : "generated");
-            run.Parameters.AddWithValue("$now", now);
-            run.Parameters.AddWithValue("$provider", (object?)model?.Model.Provider ?? DBNull.Value);
-            run.Parameters.AddWithValue("$model", (object?)model?.Model.Model ?? DBNull.Value);
-            run.Parameters.AddWithValue("$modelDigest", (object?)model?.Model.Digest ?? DBNull.Value);
-            run.Parameters.AddWithValue("$input", (object?)model?.InputTokens ?? DBNull.Value);
-            run.Parameters.AddWithValue("$output", (object?)model?.OutputTokens ?? DBNull.Value);
-            run.Parameters.AddWithValue("$duration",
-                model is null ? DBNull.Value : (long)model.Duration.TotalMilliseconds);
-            run.Parameters.AddWithValue("$examined", (object?)model?.SegmentsExamined ?? DBNull.Value);
-            run.Parameters.AddWithValue("$total", (object?)model?.SegmentsTotal ?? DBNull.Value);
-            run.Parameters.AddWithValue("$rejected", (object?)model?.Rejected ?? DBNull.Value);
-            run.Parameters.AddWithValue("$reused", (object?)model?.SegmentsReused ?? DBNull.Value);
-            run.ExecuteNonQuery();
-
-            List<(string ProposalId, ProposalCandidate Candidate)> recorded = new List<(string ProposalId, ProposalCandidate Candidate)>(candidates.Count);
-            foreach (ProposalCandidate candidate in candidates)
-            {
-                string proposalId = Guid.NewGuid().ToString("D");
-                using SqliteCommand proposal = connection.CreateCommand("""
-                                                                        INSERT INTO enrichment_proposals
-                                                                            (proposal_id, item_id, revision, processor_key, source_digest, kind,
-                                                                             entity_type, relation_subject, relation_object, value, evidence,
-                                                                             evidence_offset, evidence_length, flags, status, created_utc)
-                                                                        VALUES ($id, $item, $revision, $processor, $digest, $kind,
-                                                                                $entityType, $subject, $object, $value, $evidence,
-                                                                                $offset, $length, $flags, 'pending', $now)
-                                                                        """);
-                proposal.Transaction = transaction;
-                proposal.Parameters.AddWithValue("$id", proposalId);
-                ProcessingJobParameters.Bind(proposal, lease.ItemId, lease.Revision, lease.ProcessorKey);
-                proposal.Parameters.AddWithValue("$digest", input.Digest);
-                proposal.Parameters.AddWithValue("$kind", candidate.Kind);
-                proposal.Parameters.AddWithValue("$entityType", (object?)candidate.EntityType ?? DBNull.Value);
-                proposal.Parameters.AddWithValue("$subject", (object?)candidate.RelationSubject ?? DBNull.Value);
-                proposal.Parameters.AddWithValue("$object", (object?)candidate.RelationObject ?? DBNull.Value);
-                proposal.Parameters.AddWithValue("$value", candidate.Value);
-                proposal.Parameters.AddWithValue("$evidence",
-                    input.Content.Substring(candidate.EvidenceOffset, candidate.EvidenceLength));
-                proposal.Parameters.AddWithValue("$offset", candidate.EvidenceOffset);
-                proposal.Parameters.AddWithValue("$length", candidate.EvidenceLength);
-                proposal.Parameters.AddWithValue("$flags", (object?)candidate.Flags ?? DBNull.Value);
-                proposal.Parameters.AddWithValue("$now", now);
-                proposal.ExecuteNonQuery();
-                recorded.Add((proposalId, candidate));
-            }
-
-            KnowledgeLinker.Link(connection, transaction, recorded, now);
+            Write(connection, transaction, lease, input, candidates, model, now);
             transaction.Commit();
             return true;
         });
+    }
+
+    /// <summary>
+    /// Writes a producer run and its proposals inside the caller's transaction (after the caller
+    /// has completed the leased job) and links entity mentions into the knowledge graph.
+    /// </summary>
+    internal static void Write(SqliteConnection connection, SqliteTransaction transaction, ProcessingLease lease, LeasedText input,
+        IReadOnlyList<ProposalCandidate> candidates, ModelRunRecord? model, string now)
+    {
+        ProposalRules.ValidateCandidates(input.Content, candidates);
+        using SqliteCommand run = connection.CreateCommand("""
+                                                           INSERT INTO enrichment_runs
+                                                               (item_id, revision, processor_key, source_digest, outcome, created_utc,
+                                                                model_provider, model_name, model_digest, input_tokens, output_tokens,
+                                                                duration_ms, segments_examined, segments_total, rejected_count, segments_reused)
+                                                           VALUES ($item, $revision, $processor, $digest, $outcome, $now,
+                                                                   $provider, $model, $modelDigest, $input, $output,
+                                                                   $duration, $examined, $total, $rejected, $reused)
+                                                           """);
+        run.Transaction = transaction;
+        ProcessingJobParameters.Bind(run, lease.ItemId, lease.Revision, lease.ProcessorKey);
+        run.Parameters.AddWithValue("$digest", input.Digest);
+        run.Parameters.AddWithValue("$outcome", candidates.Count == 0 ? "abstained" : "generated");
+        run.Parameters.AddWithValue("$now", now);
+        run.Parameters.AddWithValue("$provider", (object?)model?.Model.Provider ?? DBNull.Value);
+        run.Parameters.AddWithValue("$model", (object?)model?.Model.Model ?? DBNull.Value);
+        run.Parameters.AddWithValue("$modelDigest", (object?)model?.Model.Digest ?? DBNull.Value);
+        run.Parameters.AddWithValue("$input", (object?)model?.InputTokens ?? DBNull.Value);
+        run.Parameters.AddWithValue("$output", (object?)model?.OutputTokens ?? DBNull.Value);
+        run.Parameters.AddWithValue("$duration",
+            model is null ? DBNull.Value : (long)model.Duration.TotalMilliseconds);
+        run.Parameters.AddWithValue("$examined", (object?)model?.SegmentsExamined ?? DBNull.Value);
+        run.Parameters.AddWithValue("$total", (object?)model?.SegmentsTotal ?? DBNull.Value);
+        run.Parameters.AddWithValue("$rejected", (object?)model?.Rejected ?? DBNull.Value);
+        run.Parameters.AddWithValue("$reused", (object?)model?.SegmentsReused ?? DBNull.Value);
+        run.ExecuteNonQuery();
+
+        List<(string ProposalId, ProposalCandidate Candidate)> recorded = new List<(string ProposalId, ProposalCandidate Candidate)>(candidates.Count);
+        foreach (ProposalCandidate candidate in candidates)
+        {
+            string proposalId = Guid.NewGuid().ToString("D");
+            using SqliteCommand proposal = connection.CreateCommand("""
+                                                                    INSERT INTO enrichment_proposals
+                                                                        (proposal_id, item_id, revision, processor_key, source_digest, kind,
+                                                                         entity_type, relation_subject, relation_object, value, evidence,
+                                                                         evidence_offset, evidence_length, flags, status, created_utc)
+                                                                    VALUES ($id, $item, $revision, $processor, $digest, $kind,
+                                                                            $entityType, $subject, $object, $value, $evidence,
+                                                                            $offset, $length, $flags, 'pending', $now)
+                                                                    """);
+            proposal.Transaction = transaction;
+            proposal.Parameters.AddWithValue("$id", proposalId);
+            ProcessingJobParameters.Bind(proposal, lease.ItemId, lease.Revision, lease.ProcessorKey);
+            proposal.Parameters.AddWithValue("$digest", input.Digest);
+            proposal.Parameters.AddWithValue("$kind", candidate.Kind);
+            proposal.Parameters.AddWithValue("$entityType", (object?)candidate.EntityType ?? DBNull.Value);
+            proposal.Parameters.AddWithValue("$subject", (object?)candidate.RelationSubject ?? DBNull.Value);
+            proposal.Parameters.AddWithValue("$object", (object?)candidate.RelationObject ?? DBNull.Value);
+            proposal.Parameters.AddWithValue("$value", candidate.Value);
+            proposal.Parameters.AddWithValue("$evidence",
+                input.Content.Substring(candidate.EvidenceOffset, candidate.EvidenceLength));
+            proposal.Parameters.AddWithValue("$offset", candidate.EvidenceOffset);
+            proposal.Parameters.AddWithValue("$length", candidate.EvidenceLength);
+            proposal.Parameters.AddWithValue("$flags", (object?)candidate.Flags ?? DBNull.Value);
+            proposal.Parameters.AddWithValue("$now", now);
+            proposal.ExecuteNonQuery();
+            recorded.Add((proposalId, candidate));
+        }
+
+        KnowledgeLinker.Link(connection, transaction, recorded, now);
     }
 
     /// <summary>

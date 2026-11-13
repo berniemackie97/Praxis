@@ -3,7 +3,6 @@ using Microsoft.Data.Sqlite;
 using Praxis.Application.Finance;
 using Praxis.Domain.Finance;
 using Praxis.Domain.Models;
-using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence.Processing;
 
@@ -17,7 +16,7 @@ namespace Praxis.Infrastructure.Persistence.Finance;
 /// </summary>
 public sealed class SqliteFinancialLedgerRepository : IFinancialLedgerRepository
 {
-    private const string Processor = ProcessorKeys.FinancialRecords;
+    private const string Processor = ProcessorKeys.IntakeUnderstand;
 
     private readonly CatalogDatabase database;
     private readonly TimeProvider clock;
@@ -26,95 +25,6 @@ public sealed class SqliteFinancialLedgerRepository : IFinancialLedgerRepository
     {
         this.database = database;
         this.clock = clock;
-    }
-
-    public LeasedFinancialSource? ReadLeasedSource(ProcessingLease lease)
-    {
-        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        return database.Execute(connection =>
-        {
-            using SqliteCommand command = connection.CreateCommand("""
-                SELECT s.source_id, s.source_kind, s.locator, v.digest, o.byte_length
-                FROM processing_jobs j
-                JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
-                JOIN original_objects o ON o.digest = v.digest
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
-            ProcessingJobParameters.BindLease(command, lease);
-            command.Parameters.AddWithValue("$now", CatalogValues.Timestamp(clock.GetUtcNow()));
-            using SqliteDataReader reader = command.ExecuteReader();
-            return reader.Read()
-                ? new LeasedFinancialSource(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-                    new OriginalObject(reader.GetString(3), reader.GetInt64(4)))
-                : null;
-        });
-    }
-
-    public bool Commit(ProcessingLease lease, FinancialDocument document, ModelIdentity? model, string? tier)
-    {
-        Validate(document);
-        return Store(lease, "completed", (connection, transaction) =>
-        {
-            using SqliteCommand account = connection.CreateCommand("""
-                INSERT INTO financial_accounts
-                    (item_id, revision, processor_key, account_key, kind, mask, institution, currency, display_name)
-                VALUES ($item, $revision, $processor, $key, $kind, $mask, $institution, $currency, $name)
-                """);
-            foreach (FinancialAccount value in document.Accounts)
-            {
-                Bind(account, transaction, lease, ("$key", value.AccountKey), ("$kind", value.Kind), ("$mask", value.Mask),
-                    ("$institution", Truncate(value.Institution, 128)), ("$currency", value.Currency), ("$name", Truncate(value.DisplayName, 128)));
-                account.ExecuteNonQuery();
-            }
-
-            using SqliteCommand statement = connection.CreateCommand("""
-                INSERT INTO financial_statements
-                    (item_id, revision, processor_key, ordinal, account_key, period_start, period_end,
-                     opening_minor, closing_minor, currency, verification, verification_note)
-                VALUES ($item, $revision, $processor, $ordinal, $key, $start, $end, $opening, $closing, $currency, $verification, $note)
-                """);
-            foreach (ParsedStatement value in document.Statements)
-            {
-                string currency = value.ClosingBalance?.Currency ?? value.OpeningBalance?.Currency ??
-                                  document.Accounts.First(candidate => candidate.AccountKey == value.AccountKey).Currency;
-                Bind(statement, transaction, lease, ("$ordinal", value.Ordinal), ("$key", value.AccountKey), ("$start", Day(value.PeriodStart)),
-                    ("$end", Day(value.PeriodEnd)), ("$opening", value.OpeningBalance?.Minor), ("$closing", value.ClosingBalance?.Minor),
-                    ("$currency", currency), ("$verification", value.Verification), ("$note", value.VerificationNote));
-                statement.ExecuteNonQuery();
-            }
-
-            using SqliteCommand row = connection.CreateCommand("""
-                INSERT INTO financial_transactions
-                    (item_id, revision, processor_key, ordinal, account_key, statement_ordinal, posted_on, amount_minor, currency,
-                     description, status, provider_type, provider_id, check_number, provider_category, balance_minor, locator, origin)
-                VALUES ($item, $revision, $processor, $ordinal, $key, $statement, $posted, $amount, $currency,
-                        $description, $status, $type, $provider, $check, $category, $balance, $locator, $origin)
-                """);
-            foreach (ParsedTransaction value in document.Transactions)
-            {
-                Bind(row, transaction, lease, ("$ordinal", value.Ordinal), ("$key", value.AccountKey), ("$statement", value.StatementOrdinal),
-                    ("$posted", Day(value.PostedOn)), ("$amount", value.Amount.Minor), ("$currency", value.Amount.Currency),
-                    ("$description", value.Description), ("$status", value.Status), ("$type", value.ProviderType),
-                    ("$provider", value.ProviderId), ("$check", value.CheckNumber), ("$category", value.ProviderCategory),
-                    ("$balance", value.BalanceAfter?.Minor), ("$locator", value.Locator), ("$origin", value.Origin));
-                row.ExecuteNonQuery();
-            }
-        }, document.Format, document.Parser, null, string.Join(',', document.Issues.Take(32)), model, tier);
-    }
-
-    public bool CommitUnsupported(ProcessingLease lease, string reasonCode)
-    {
-        if (!ProcessingCodes.IsValid(reasonCode))
-        {
-            throw new ArgumentException("Use a bounded reason code.", nameof(reasonCode));
-        }
-
-        return Store(lease, "unsupported", (_, _) => { }, null, null, reasonCode, "", null, null);
     }
 
     public IReadOnlyList<StoredTransaction> ReadCountedTransactions() => database.ExecuteRead(connection =>
@@ -255,186 +165,89 @@ public sealed class SqliteFinancialLedgerRepository : IFinancialLedgerRepository
         });
     }
 
-    public LeasedFinancialRows? ReadLeasedTransactions(ProcessingLease lease)
+    /// <summary>
+    /// Writes a recognized document, its accounts, statements and rows, and the model annotations
+    /// of those rows inside the caller's transaction, after the caller completed the leased job.
+    /// <paramref name="model"/> and <paramref name="tier"/> identify the model whose verified output
+    /// produced the rows, or are null when code read a published format.
+    /// </summary>
+    internal static void Write(SqliteConnection connection, SqliteTransaction transaction, ProcessingLease lease, string digest,
+        FinancialDocument document, IReadOnlyList<TransactionAnnotation> annotations, ModelIdentity? model, string? tier, string now)
     {
-        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        string now = CatalogValues.Timestamp(clock.GetUtcNow());
-        return database.Execute(connection =>
-        {
-            using SqliteCommand held = connection.CreateCommand("""
-                SELECT e.source_id
-                FROM processing_jobs j
-                JOIN eligible_financial_documents e ON e.item_id = j.item_id AND e.revision = j.revision AND e.processor_key = $records
-                WHERE j.item_id = $item AND j.revision = $revision AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                """);
-            ProcessingJobParameters.BindLease(held, lease);
-            held.Parameters.AddWithValue("$records", Processor);
-            held.Parameters.AddWithValue("$now", now);
-            if (held.ExecuteScalar() is not string sourceId)
-            {
-                return null;
-            }
-
-            using SqliteCommand rows = connection.CreateCommand("""
-                SELECT t.ordinal, t.account_key, t.statement_ordinal, t.posted_on, t.amount_minor, t.currency, t.description, t.status
-                FROM financial_transactions t
-                LEFT JOIN financial_statements st ON st.item_id = t.item_id AND st.revision = t.revision
-                    AND st.processor_key = t.processor_key AND st.ordinal = t.statement_ordinal
-                WHERE t.item_id = $item AND t.revision = $revision AND t.processor_key = $records
-                  AND (st.verification IS NULL OR st.verification <> 'unverified')
-                ORDER BY t.ordinal
-                """);
-            rows.Parameters.AddWithValue("$item", lease.ItemId.ToString("D"));
-            rows.Parameters.AddWithValue("$revision", lease.Revision);
-            rows.Parameters.AddWithValue("$records", Processor);
-            using SqliteDataReader reader = rows.ExecuteReader();
-            List<ParsedTransaction> result = [];
-            while (reader.Read())
-            {
-                result.Add(new ParsedTransaction(reader.GetInt32(0), reader.GetString(1), NullableInt(reader, 2), ParseDay(reader.GetString(3)),
-                    new MonetaryAmount(reader.GetInt64(4), reader.GetString(5)), reader.GetString(6), reader.GetString(7),
-                    null, null, null, null, null, $"ordinal:{reader.GetInt32(0)}", TransactionOrigins.Parser));
-            }
-
-            return new LeasedFinancialRows(Guid.Parse(sourceId), result);
-        });
-    }
-
-    public bool CommitAnnotations(ProcessingLease lease, IReadOnlyList<TransactionAnnotation> annotations)
-    {
-        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
+        Validate(document);
         if (annotations.Any(item => item.Merchant.Length is < 1 or > 128 || !SpendingCategories.All.Contains(item.Category, StringComparer.Ordinal) ||
-                                    !ModelTiers.All.Contains(item.Tier, StringComparer.Ordinal) || item.ProviderId.Length is < 1 or > 64))
+                                    item.ProviderId.Length is < 1 or > 64))
         {
             throw new ArgumentException("An annotation is invalid.", nameof(annotations));
         }
 
-        string now = CatalogValues.Timestamp(clock.GetUtcNow());
-        return database.Execute(connection =>
+        connection.Run(transaction, """
+            INSERT INTO financial_documents
+                (item_id, revision, processor_key, source_digest, outcome, format, parser, reason_code, issues,
+                 tier, model_provider, model_name, model_digest, created_utc)
+            VALUES ($item, $revision, $processor, $digest, 'completed', $format, $parser, NULL, $issues,
+                    $tier, $provider, $model, $modelDigest, $now)
+            """, ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision), ("$processor", lease.ProcessorKey),
+            ("$digest", digest), ("$format", document.Format), ("$parser", document.Parser),
+            ("$issues", Truncate(string.Join(',', document.Issues.Take(32)), 1024)), ("$tier", tier),
+            ("$provider", model?.Provider), ("$model", Truncate(model?.Model, 200)), ("$modelDigest", Truncate(model?.Digest, 256)), ("$now", now));
+
+        using SqliteCommand account = connection.CreateCommand("""
+            INSERT INTO financial_accounts
+                (item_id, revision, processor_key, account_key, kind, mask, institution, currency, display_name)
+            VALUES ($item, $revision, $processor, $key, $kind, $mask, $institution, $currency, $name)
+            """);
+        foreach (FinancialAccount value in document.Accounts)
         {
-            using SqliteTransaction transaction = connection.BeginTransaction();
-            int finished = connection.Run(transaction, """
-                UPDATE processing_jobs
-                SET state = 'completed', lease_key = NULL, lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
-                  AND EXISTS (SELECT 1 FROM eligible_financial_documents e
-                              WHERE e.item_id = $item AND e.revision = $revision AND e.processor_key = $records)
-                """, ("$now", now), ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision),
-                ("$processor", lease.ProcessorKey), ("$lease", lease.LeaseKey.ToString("D")), ("$records", Processor));
-            if (finished != 1)
-            {
-                return false;
-            }
+            Bind(account, transaction, lease, ("$key", value.AccountKey), ("$kind", value.Kind), ("$mask", value.Mask),
+                ("$institution", Truncate(value.Institution, 128)), ("$currency", value.Currency), ("$name", Truncate(value.DisplayName, 128)));
+            account.ExecuteNonQuery();
+        }
 
-            connection.Run(transaction, "DELETE FROM financial_annotations WHERE item_id = $item AND revision = $revision",
-                ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision));
-            using SqliteCommand insert = connection.CreateCommand("""
-                INSERT OR IGNORE INTO financial_annotations
-                    (item_id, revision, records_processor, ordinal, merchant, category, tier, provider_id, model_name, created_utc)
-                SELECT $item, $revision, $records, $ordinal, $merchant, $category, $tier, $provider, $model, $now
-                WHERE EXISTS (SELECT 1 FROM financial_transactions t
-                              WHERE t.item_id = $item AND t.revision = $revision AND t.processor_key = $records AND t.ordinal = $ordinal)
-                """);
-            insert.Transaction = transaction;
-            foreach (TransactionAnnotation item in annotations)
-            {
-                insert.Parameters.Clear();
-                insert.Parameters.AddWithValue("$item", lease.ItemId.ToString("D"));
-                insert.Parameters.AddWithValue("$revision", lease.Revision);
-                insert.Parameters.AddWithValue("$records", Processor);
-                insert.Parameters.AddWithValue("$ordinal", item.Ordinal);
-                insert.Parameters.AddWithValue("$merchant", item.Merchant);
-                insert.Parameters.AddWithValue("$category", item.Category);
-                insert.Parameters.AddWithValue("$tier", item.Tier);
-                insert.Parameters.AddWithValue("$provider", item.ProviderId);
-                insert.Parameters.AddWithValue("$model", (object?)Truncate(item.ModelName, 200) ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$now", now);
-                insert.ExecuteNonQuery();
-            }
-
-            transaction.Commit();
-            return true;
-        });
-    }
-
-    /// <summary>
-    /// Replaces the job's result and closes the job in one transaction, only while the lease is
-    /// held and the source is active. Returns false, writing nothing, when the lease was lost.
-    /// </summary>
-    private bool Store(ProcessingLease lease, string outcome, Action<SqliteConnection, SqliteTransaction> writeRows, string? format, string? parser,
-        string? reasonCode, string issues, ModelIdentity? model, string? tier)
-    {
-        ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
-        string now = CatalogValues.Timestamp(clock.GetUtcNow());
-        return database.Execute(connection =>
+        using SqliteCommand statement = connection.CreateCommand("""
+            INSERT INTO financial_statements
+                (item_id, revision, processor_key, ordinal, account_key, period_start, period_end,
+                 opening_minor, closing_minor, currency, verification, verification_note)
+            VALUES ($item, $revision, $processor, $ordinal, $key, $start, $end, $opening, $closing, $currency, $verification, $note)
+            """);
+        foreach (ParsedStatement value in document.Statements)
         {
-            using SqliteTransaction transaction = connection.BeginTransaction();
-            using SqliteCommand source = connection.CreateCommand("""
-                SELECT v.digest
-                FROM processing_jobs j
-                JOIN item_versions v ON v.item_id = j.item_id AND v.revision = j.revision
-                JOIN items i ON i.item_id = j.item_id
-                JOIN sources s ON s.source_id = i.source_id
-                WHERE j.item_id = $item AND j.revision = $revision
-                  AND j.processor_key = $processor AND j.state = 'running'
-                  AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
-                """);
-            source.Transaction = transaction;
-            ProcessingJobParameters.BindLease(source, lease);
-            source.Parameters.AddWithValue("$now", now);
-            if (source.ExecuteScalar() is not string digest)
-            {
-                return false;
-            }
+            string currency = value.ClosingBalance?.Currency ?? value.OpeningBalance?.Currency ??
+                              document.Accounts.First(candidate => candidate.AccountKey == value.AccountKey).Currency;
+            Bind(statement, transaction, lease, ("$ordinal", value.Ordinal), ("$key", value.AccountKey), ("$start", Day(value.PeriodStart)),
+                ("$end", Day(value.PeriodEnd)), ("$opening", value.OpeningBalance?.Minor), ("$closing", value.ClosingBalance?.Minor),
+                ("$currency", currency), ("$verification", value.Verification), ("$note", value.VerificationNote));
+            statement.ExecuteNonQuery();
+        }
 
-            connection.Run(transaction, """
-                DELETE FROM financial_documents WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                """, ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision), ("$processor", lease.ProcessorKey));
-            connection.Run(transaction, """
-                INSERT INTO financial_documents
-                    (item_id, revision, processor_key, source_digest, outcome, format, parser, reason_code, issues,
-                     tier, model_provider, model_name, model_digest, created_utc)
-                VALUES ($item, $revision, $processor, $digest, $outcome, $format, $parser, $reason, $issues,
-                        $attempted, $provider, $model, $modelDigest, $now)
-                """, ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision), ("$processor", lease.ProcessorKey),
-                ("$digest", digest), ("$outcome", outcome), ("$format", format), ("$parser", parser), ("$reason", reasonCode),
-                ("$issues", issues.Length > 1024 ? issues[..1024] : issues), ("$attempted", tier),
-                ("$provider", model?.Provider), ("$model", Truncate(model?.Model, 200)), ("$modelDigest", Truncate(model?.Digest, 256)),
-                ("$now", now));
+        using SqliteCommand row = connection.CreateCommand("""
+            INSERT INTO financial_transactions
+                (item_id, revision, processor_key, ordinal, account_key, statement_ordinal, posted_on, amount_minor, currency,
+                 description, status, provider_type, provider_id, check_number, provider_category, balance_minor, locator, origin)
+            VALUES ($item, $revision, $processor, $ordinal, $key, $statement, $posted, $amount, $currency,
+                    $description, $status, $type, $provider, $check, $category, $balance, $locator, $origin)
+            """);
+        foreach (ParsedTransaction value in document.Transactions)
+        {
+            Bind(row, transaction, lease, ("$ordinal", value.Ordinal), ("$key", value.AccountKey), ("$statement", value.StatementOrdinal),
+                ("$posted", Day(value.PostedOn)), ("$amount", value.Amount.Minor), ("$currency", value.Amount.Currency),
+                ("$description", value.Description), ("$status", value.Status), ("$type", value.ProviderType),
+                ("$provider", value.ProviderId), ("$check", value.CheckNumber), ("$category", value.ProviderCategory),
+                ("$balance", value.BalanceAfter?.Minor), ("$locator", value.Locator), ("$origin", value.Origin));
+            row.ExecuteNonQuery();
+        }
 
-            writeRows(connection, transaction);
-
-            int finished = connection.Run(transaction, """
-                UPDATE processing_jobs
-                SET state = $outcome, lease_key = NULL, lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
-                WHERE item_id = $item AND revision = $revision AND processor_key = $processor
-                  AND state = 'running' AND lease_key = $lease AND lease_until_utc > $now
-                """, ("$outcome", outcome), ("$now", now), ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision),
-                ("$processor", lease.ProcessorKey), ("$lease", lease.LeaseKey.ToString("D")));
-            if (finished != 1)
-            {
-                throw new InvalidOperationException("The financial result lost its lease.");
-            }
-
-            if (outcome == "completed")
-            {
-                // (Re)schedule understanding of the rows just recorded; a rerun replaces older annotations.
-                connection.Run(transaction, """
-                    INSERT INTO processing_jobs (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
-                    VALUES ($item, $revision, $annotations, 'queued', 0, 0, $now, $now)
-                    ON CONFLICT(item_id, revision, processor_key) DO UPDATE
-                    SET state = 'queued', attempt = 0, lease_key = NULL, lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
-                    WHERE state IN ('completed', 'unsupported', 'failed', 'canceled')
-                    """, ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision),
-                    ("$annotations", ProcessorKeys.FinancialCategories), ("$now", now));
-            }
-
-            transaction.Commit();
-            return true;
-        });
+        using SqliteCommand note = connection.CreateCommand("""
+            INSERT OR IGNORE INTO financial_annotations
+                (item_id, revision, records_processor, ordinal, merchant, category, tier, provider_id, model_name, created_utc)
+            VALUES ($item, $revision, $processor, $ordinal, $merchant, $category, $tier, $provider, $model, $now)
+            """);
+        foreach (TransactionAnnotation item in annotations.Where(item => document.Transactions.Any(row => row.Ordinal == item.Ordinal)))
+        {
+            Bind(note, transaction, lease, ("$ordinal", item.Ordinal), ("$merchant", item.Merchant), ("$category", item.Category),
+                ("$tier", item.Tier), ("$provider", item.ProviderId), ("$model", Truncate(item.ModelName, 200)), ("$now", now));
+            note.ExecuteNonQuery();
+        }
     }
 
     private static void Bind(SqliteCommand command, SqliteTransaction transaction, ProcessingLease lease, params (string Name, object? Value)[] values)

@@ -1,4 +1,4 @@
-using Praxis.Application.Finance.Statements;
+using Praxis.Application.Documents.Pdf;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Core;

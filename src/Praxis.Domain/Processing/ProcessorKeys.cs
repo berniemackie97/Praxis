@@ -14,23 +14,24 @@ public static class ProcessorKeys
     public const string TimedCaption = "timed-caption-v1";
 
     /// <summary>
-    /// Recognizes bank and card documents (OFX/QFX/QBO, QIF, delimited exports, PDF statements)
-    /// directly from verified originals. Scheduled at capture for candidate file extensions only.
+    /// The local tier's quick, low-trust triage of every readable source: category, document type,
+    /// language, gist and expected record kinds. Chooses policy and schemas, never final facts.
     /// </summary>
-    public const string FinancialRecords = "financial-records-v1";
+    public const string IntakeTriage = "intake-triage-v1";
 
     /// <summary>
-    /// Local-model categories for merchants the deterministic rules leave uncategorized. Runs
-    /// after <see cref="FinancialRecords"/> completes and is deferred while no model is enabled.
+    /// The heavy understanding of every source: summary, knowledge and typed records from the strong
+    /// tier, verified in code, corrected by the strongest tier when verification fails, and projected
+    /// into typed datasets such as the financial ledger.
     /// </summary>
-    public const string FinancialCategories = "financial-categories-v1";
+    public const string IntakeUnderstand = "intake-understand-v1";
 
     private static readonly IReadOnlyDictionary<string, string[]> Dependents =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            [SourceText] = [MarkdownHeadings, TextSegments],
+            [SourceText] = [MarkdownHeadings, TextSegments, IntakeTriage],
             [TextSegments] = [SemanticExtraction],
-            [FinancialRecords] = [FinancialCategories]
+            [IntakeTriage] = [IntakeUnderstand]
         };
 
     /// <summary>Processors that consume the completed output of <paramref name="processorKey"/>.</summary>

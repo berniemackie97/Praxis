@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Praxis.Application.Documents.Tables;
 using Praxis.Application.Inference;
 using Praxis.Domain.Finance;
 
