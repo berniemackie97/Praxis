@@ -512,10 +512,24 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                         SELECT 1 FROM eligible_enrichment_proposals p
                         WHERE p.proposal_id = i.proposal_id
                     ))
-                    OR (i.entity_id IS NOT NULL AND NOT EXISTS (
-                        SELECT 1 FROM knowledge_entities e
-                        JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
-                        WHERE e.entity_id = i.entity_id AND e.status = 'active'
+                    OR (i.entity_id IS NOT NULL AND (
+                        NOT EXISTS (
+                            SELECT 1 FROM knowledge_entities e
+                            JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
+                            WHERE e.entity_id = i.entity_id AND e.status = 'active'
+                        )
+                        OR NOT EXISTS (
+                            SELECT 1 FROM verification_contexts c
+                            WHERE c.request_id = i.request_id AND c.ordinal = i.ordinal
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM verification_contexts c
+                            WHERE c.request_id = i.request_id AND c.ordinal = i.ordinal
+                              AND NOT EXISTS (
+                                SELECT 1 FROM visible_entity_mentions m
+                                WHERE m.entity_id = i.entity_id AND m.proposal_id = c.proposal_id
+                              )
+                        )
                     ))
                 )
             )
@@ -550,20 +564,20 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         IReadOnlyList<string> proposals, IReadOnlyList<string> entities, string now, out Guid requestId)
     {
         requestId = Guid.NewGuid();
-        var items = new List<(JsonObject Item, string? Proposal, string? Entity)>();
+        var items = new List<(JsonObject Item, string? Proposal, string? Entity, IReadOnlyList<string> Contexts)>();
         foreach (var proposal in proposals.Take(VerificationLimits.MaximumItemsPerRequest))
         {
             if (VerificationEvidence.ForProposal(connection, transaction, items.Count + 1, proposal) is { } item)
             {
-                items.Add((item, proposal, null));
+                items.Add((item, proposal, null, []));
             }
         }
 
         foreach (var entity in entities.Take(VerificationLimits.MaximumItemsPerRequest - items.Count))
         {
-            if (VerificationEvidence.ForEntityType(connection, transaction, items.Count + 1, entity) is { } item)
+            if (VerificationEvidence.ForEntityType(connection, transaction, items.Count + 1, entity) is { } evidence)
             {
-                items.Add((item, null, entity));
+                items.Add((evidence.Payload, null, entity, evidence.ProposalIds));
             }
         }
 
@@ -585,6 +599,13 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 VALUES ($id, $ordinal, $proposal, $entity, 1)
                 """, ("$id", id), ("$ordinal", index + 1), ("$proposal", items[index].Proposal),
                 ("$entity", items[index].Entity));
+            foreach (string proposal in items[index].Contexts)
+            {
+                connection.Run(transaction, """
+                    INSERT INTO verification_contexts (request_id, ordinal, proposal_id)
+                    VALUES ($request, $ordinal, $proposal)
+                    """, ("$request", id), ("$ordinal", index + 1), ("$proposal", proposal));
+            }
         }
 
         return true;
