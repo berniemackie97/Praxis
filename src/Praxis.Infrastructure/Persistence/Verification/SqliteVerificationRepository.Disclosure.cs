@@ -16,7 +16,8 @@ public sealed partial class SqliteVerificationRepository
                 SELECT evidence.source_id, s.locator, COALESCE(p.classification, 'local_only'), evidence.ordinal
                 FROM (
                     SELECT i.ordinal, source.source_id FROM verification_items i
-                    JOIN enrichment_proposals source ON source.proposal_id = i.proposal_id
+                    JOIN enrichment_proposals proposal ON proposal.proposal_id = i.proposal_id
+                    JOIN items source ON source.item_id = proposal.item_id
                     WHERE i.request_id = $request
                     UNION
                     SELECT c.ordinal, c.source_id FROM verification_contexts c
