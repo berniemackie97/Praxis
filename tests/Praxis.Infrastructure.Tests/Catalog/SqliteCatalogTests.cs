@@ -228,7 +228,7 @@ public sealed class SqliteCatalogTests : IDisposable
         Assert.Equal(19L, Scalar(verified, "PRAGMA user_version"));
         Assert.Equal("failed", Scalar(verified, "SELECT status FROM verification_requests"));
         Assert.Equal("source_changed", Scalar(verified, "SELECT failure_code FROM verification_requests"));
-        Assert.Null(Scalar(verified, "SELECT lease_key FROM verification_requests"));
+        Assert.Equal(1L, Scalar(verified, "SELECT lease_key IS NULL AND lease_until_utc IS NULL FROM verification_requests"));
         Assert.Equal("failed", Scalar(verified, "SELECT status FROM verification_invocations"));
         Assert.Equal("source_changed", Scalar(verified, "SELECT failure_code FROM verification_invocations"));
         Assert.Equal(0L, Scalar(verified, "SELECT COUNT(*) FROM verification_contexts"));
