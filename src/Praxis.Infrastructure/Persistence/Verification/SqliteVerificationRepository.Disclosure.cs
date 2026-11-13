@@ -354,13 +354,16 @@ public sealed partial class SqliteVerificationRepository
             UPDATE verification_invocations SET status = 'failed', finished_utc = $now, failure_code = $reason
             WHERE request_id = $request AND status = 'running'
             """, ("$request", request), ("$now", now), ("$reason", reason));
-        connection.Run(transaction, """
+        int denied = connection.Run(transaction, """
             UPDATE verification_requests
             SET status = 'failed', completed_utc = $now, failure_code = $reason,
                 lease_key = NULL, lease_until_utc = NULL, retry_after_utc = NULL
             WHERE request_id = $request AND status IN ('approved', 'running')
             """, ("$request", request), ("$now", now), ("$reason", reason));
-        Audit(connection, transaction, request, null, null, "denial", "denied", reason, now);
+        if (denied != 0)
+        {
+            Audit(connection, transaction, request, null, null, "denial", "denied", reason, now);
+        }
     }
 
     private static void Audit(SqliteConnection connection, SqliteTransaction transaction,
