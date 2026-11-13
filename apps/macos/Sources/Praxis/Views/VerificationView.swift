@@ -204,7 +204,7 @@ private struct VerificationDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(source.name.isEmpty ? source.sourceId : source.name)
                             Text(source.remoteAllowed ? "Remote verification permitted" : "Local-only source")
-                                .font(.caption).foregroundStyle(source.remoteAllowed ? .secondary : .orange)
+                                .font(.caption).foregroundColor(source.remoteAllowed ? .secondary : .orange)
                         }
                         Spacer()
                         if source.remoteAllowed {
@@ -224,7 +224,7 @@ private struct VerificationDetailView: View {
                 Toggle("I approve sending the selected, redacted excerpts to this external provider",
                        isOn: $model.remoteConsent)
                     .font(.caption)
-                Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while pending or running. Previously transmitted content cannot be recalled.")
+                Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while approved or running. Previously transmitted content cannot be recalled.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
