@@ -6,67 +6,76 @@ struct KnowledgeView: View {
     let verification: VerificationWorkbenchModel
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    TextField("Search names", text: $model.search)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { model.refresh() }
-                    Button("Refresh") { model.refresh() }
-                }
-                Picker("Type", selection: Binding(
-                    get: { model.typeFilter },
-                    set: { model.setTypeFilter($0) }
-                )) {
-                    Text("All types").tag("")
-                    ForEach(KnowledgeVocabulary.entityTypes, id: \.self) { type in
-                        Text(KnowledgeVocabulary.label(type)).tag(type)
+        MasterDetail(listWidth: (260, 320, 440)) {
+            List(selection: Binding<String?>(
+                get: { model.selected?.summary.entityId },
+                set: { id in if let entity = model.entities.first(where: { $0.entityId == id }) { model.select(entity) } })) {
+                ForEach(model.entities) { entity in
+                    ItemRow(systemImage: EntitySymbol.of(entity.entityType), title: entity.name,
+                            subtitle: "\(KnowledgeVocabulary.label(entity.entityType).capitalized) · \(Count.label(entity.sources, "source"))",
+                            tint: entity.status == "rejected" ? .secondary : .accentColor) {
+                        if entity.typeConflict {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                .help("Conflicting types").accessibilityLabel("Conflicting types")
+                        }
+                        Text("\(entity.mentions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .help(Count.label(entity.mentions, "mention"))
                     }
+                    .tag(entity.entityId)
                 }
-                if model.entities.isEmpty {
-                    Text("No entities yet. They appear once the local model has enriched captured text.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                List(model.entities) { entity in
-                    Button { model.select(entity) } label: {
-                        EntityRow(entity: entity)
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(model.selected?.summary.entityId == entity.entityId
-                        ? Color.accentColor.opacity(0.15) : Color.clear)
-                }
-                FeedbackLine(error: model.error, notice: model.notice)
             }
-            .frame(width: 320)
-            Divider()
+            .overlay {
+                if model.entities.isEmpty {
+                    EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No entities yet",
+                               message: model.search.isEmpty && model.typeFilter.isEmpty
+                                   ? "People, projects and ideas appear once the local model has read your captured text."
+                                   : "Nothing matches this filter.")
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if model.error != nil || model.notice != nil {
+                    FeedbackLine(error: model.error, notice: model.notice).padding(Spacing.s)
+                }
+            }
+        } detail: {
             if let detail = model.selected {
                 EntityDetailView(detail: detail, model: model, verification: verification)
             } else {
-                Text("Select an entity to see where it is mentioned, how it relates to others, and to correct it.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                EmptyState(systemImage: "person.crop.rectangle.stack", title: "Select an entity",
+                           message: "See where it's mentioned, how it relates to others, and correct it.")
+            }
+        }
+        .searchable(text: $model.search, placement: .toolbar, prompt: "Filter names")
+        .onSubmit(of: .search) { model.refresh() }
+        .onChange(of: model.search) { value in if value.isEmpty { model.refresh() } }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                FilterMenu(help: "Show one entity type",
+                           options: [FilterOption(value: "", title: "All Types", systemImage: "square.grid.2x2")] +
+                               KnowledgeVocabulary.entityTypes.map {
+                                   FilterOption(value: $0, title: KnowledgeVocabulary.label($0).capitalized, systemImage: EntitySymbol.of($0))
+                               },
+                           selection: Binding(get: { model.typeFilter }, set: { model.setTypeFilter($0) }))
+                Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }
         .onAppear { model.refresh() }
     }
 }
 
-private struct EntityRow: View {
-    let entity: EntitySummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(entity.name).fontWeight(.medium)
-                if entity.typeConflict {
-                    Text("conflicting types").font(.caption2).foregroundColor(.orange)
-                }
-            }
-            Text("\(KnowledgeVocabulary.label(entity.entityType)) · \(TypeOrigin.label(entity.typeOrigin)) · \(Count.label(entity.mentions, "mention")) · \(Count.label(entity.sources, "source"))")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+enum EntitySymbol {
+    static func of(_ type: String?) -> String {
+        switch type {
+        case "person": "person"
+        case "organization": "building.2"
+        case "project": "hammer"
+        case "technology": "cpu"
+        case "concept": "lightbulb"
+        case "place": "mappin.and.ellipse"
+        case "document": "doc.text"
+        case "event": "calendar"
+        default: "circle.dashed"
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
     }
 }
 

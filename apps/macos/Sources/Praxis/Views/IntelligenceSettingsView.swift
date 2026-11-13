@@ -1,33 +1,62 @@
 import Combine
 import SwiftUI
 
-/// Owner-selected local and explicit subscription models for knowledge verification.
+/// The local models Praxis runs on this Mac and the providers that can fill intake tiers or verify.
 struct IntelligenceSettingsView: View {
     @ObservedObject var model: IntelligenceSettingsModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                LocalModelSettings(model: model)
-                Divider()
-                LocalEmbeddingSettings(model: model)
-                Divider()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Stronger-model verification").font(.headline)
-                    Text("Local Ollama runs only on this Mac. Codex and Claude CLIs can send the reviewed payload online only when explicitly selected during approval. No API keys are used. Daily limits count every attempted invocation, including retries.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                ProviderSettings(model: model, providerId: VerificationProvider.ollama, defaultWeight: 0,
-                                 modelHint: "Installed local chat model")
-                ProviderSettings(model: model, providerId: VerificationProvider.codex, defaultWeight: 10,
-                                 modelHint: "Leave empty for the plan default")
-                ProviderSettings(model: model, providerId: VerificationProvider.claudeCode, defaultWeight: 50,
-                                 modelHint: "sonnet, haiku or opus")
-                FeedbackLine(error: model.error, notice: model.notice)
+        Form {
+            if let message = model.error ?? model.notice {
+                Banner(text: message, tone: model.error == nil ? .accent : .warning,
+                       systemImage: model.error == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            LocalModelSettings(model: model)
+            LocalEmbeddingSettings(model: model)
+            ProviderSettings(model: model, providerId: VerificationProvider.ollama, defaultWeight: 0,
+                             modelHint: "Installed local chat model")
+            ProviderSettings(model: model, providerId: VerificationProvider.codex, defaultWeight: 10,
+                             modelHint: "Leave empty for the plan default")
+            ProviderSettings(model: model, providerId: VerificationProvider.claudeCode, defaultWeight: 50,
+                             modelHint: "sonnet, haiku or opus")
         }
+        .formStyle(.grouped)
         .onAppear { model.refresh() }
+    }
+}
+
+/// An Ollama address with a button that lists its installed models.
+private struct OllamaAddress: View {
+    @ObservedObject var model: IntelligenceSettingsModel
+    @Binding var endpoint: String
+
+    var body: some View {
+        LabeledContent("Ollama address") {
+            HStack {
+                TextField("Ollama address", text: $endpoint).labelsHidden()
+                Button("Find Models") { model.listModels(endpoint: endpoint) }
+            }
+        }
+    }
+}
+
+private struct InstalledModelPicker: View {
+    let title: String
+    @ObservedObject var model: IntelligenceSettingsModel
+    @Binding var selection: String
+    var showSizes = true
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            if selection.isEmpty { Text("Choose a model").tag("") }
+            if !selection.isEmpty && !model.installedModels.contains(where: { $0.name == selection }) {
+                Text(selection).tag(selection)
+            }
+            ForEach(model.installedModels) { installed in
+                Text(showSizes ? "\(installed.name)  (\(ByteCountFormatter.string(fromByteCount: installed.sizeBytes, countStyle: .file)))" : installed.name)
+                    .tag(installed.name)
+            }
+        }
     }
 }
 
@@ -39,41 +68,26 @@ private struct LocalModelSettings: View {
     @State private var enabled = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Local enrichment model").font(.headline)
-            Text("Runs on this Mac through Ollama. It suggests topics, entities and relations for every captured text; nothing leaves the Mac.")
-                .font(.caption).foregroundStyle(.secondary)
+        Section {
+            OllamaAddress(model: model, endpoint: $endpoint)
+            InstalledModelPicker(title: "Model", model: model, selection: $modelName)
+            Stepper("Context: \(contextTokens.formatted()) tokens", value: $contextTokens, in: 2_048...32_768, step: 2_048)
+            Toggle("Enrich new and existing text", isOn: $enabled)
             HStack {
-                TextField("Ollama address", text: $endpoint).textFieldStyle(.roundedBorder).frame(width: 240)
-                Button("List installed models") { model.listModels(endpoint: endpoint) }
-            }
-            HStack {
-                Picker("Model", selection: $modelName) {
-                    if modelName.isEmpty { Text("Choose a model").tag("") }
-                    if !modelName.isEmpty && !model.installedModels.contains(where: { $0.name == modelName }) {
-                        Text(modelName).tag(modelName)
-                    }
-                    ForEach(model.installedModels) { installed in
-                        Text("\(installed.name) (\(ByteCountFormatter.string(fromByteCount: installed.sizeBytes, countStyle: .file)))")
-                            .tag(installed.name)
-                    }
-                }
-                .frame(maxWidth: 420)
-                Stepper("Context \(contextTokens) tokens", value: $contextTokens, in: 2_048...32_768, step: 2_048)
-            }
-            HStack {
-                Toggle("Enrich new and existing text", isOn: $enabled)
                 Spacer()
-                Button("Save local model") {
+                Button("Save") {
                     model.saveProfile(endpoint: endpoint, model: modelName, contextTokens: contextTokens, enabled: enabled)
                 }
                 .disabled(modelName.isEmpty)
             }
+        } header: {
+            Text("Local enrichment model")
+        } footer: {
+            Text("Runs on this Mac through Ollama. It suggests topics, entities and relations for captured text; nothing leaves the Mac.")
+                .font(.meta).foregroundStyle(.secondary)
         }
         .onAppear { load(model.profile) }
-        .onReceive(model.$profile.removeDuplicates().dropFirst()) { profile in
-            load(profile)
-        }
+        .onReceive(model.$profile.removeDuplicates().dropFirst()) { load($0) }
     }
 
     private func load(_ profile: ModelProfile?) {
@@ -92,37 +106,23 @@ private struct LocalEmbeddingSettings: View {
     @State private var enabled = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Local semantic retrieval").font(.headline)
-            Text("Optional, offline embeddings via a model installed in your own Ollama runtime. No remote API or automatic model download. Select an embedding-capable model, then update the index in Search.")
-                .font(.caption).foregroundStyle(.secondary)
+        Section {
+            OllamaAddress(model: model, endpoint: $endpoint)
+            InstalledModelPicker(title: "Embedding model", model: model, selection: $modelName, showSizes: false)
+            Toggle("Enable hybrid search", isOn: $enabled)
             HStack {
-                TextField("Ollama address", text: $endpoint).textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
-                Button("List installed models") { model.listModels(endpoint: endpoint) }
+                Spacer()
+                Button("Save") { model.saveEmbeddingProfile(endpoint: endpoint, model: modelName, enabled: enabled) }
+                    .disabled(modelName.isEmpty)
             }
-            HStack {
-                Picker("Embedding model", selection: $modelName) {
-                    if modelName.isEmpty { Text("Choose a model").tag("") }
-                    if !modelName.isEmpty && !model.installedModels.contains(where: { $0.name == modelName }) {
-                        Text(modelName).tag(modelName)
-                    }
-                    ForEach(model.installedModels) { installed in
-                        Text(installed.name).tag(installed.name)
-                    }
-                }
-                .frame(maxWidth: 420)
-                Toggle("Enable hybrid search", isOn: $enabled)
-                Button("Save") {
-                    model.saveEmbeddingProfile(endpoint: endpoint, model: modelName, enabled: enabled)
-                }
-                .disabled(modelName.isEmpty)
-            }
+        } header: {
+            Text("Semantic retrieval")
+        } footer: {
+            Text("Optional offline embeddings from a model in your own Ollama. No remote API or automatic download. Update the index from Search.")
+                .font(.meta).foregroundStyle(.secondary)
         }
         .onAppear { load(model.embeddingProfile) }
-        .onReceive(model.$embeddingProfile.removeDuplicates().dropFirst()) { profile in
-            load(profile)
-        }
+        .onReceive(model.$embeddingProfile.removeDuplicates().dropFirst()) { load($0) }
     }
 
     private func load(_ profile: ModelProfile?) {
@@ -150,38 +150,37 @@ private struct ProviderSettings: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Toggle(VerificationProvider.displayName(providerId), isOn: $enabled).fontWeight(.medium)
-                Spacer()
-                Text(saved.map { $0.enabled ? "enabled" : "disabled" } ?? "not set up")
-                    .font(.caption).foregroundStyle(.secondary)
-                if let allowance = model.allowances.first(where: { $0.provider.providerId == providerId }) {
-                    Text("\(allowance.startedToday)/\(allowance.provider.dailyLimit) attempts today")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            HStack {
-                if providerId == VerificationProvider.ollama {
-                    TextField("Loopback Ollama endpoint", text: $endpoint).textFieldStyle(.roundedBorder)
-                    if let profile = model.profile {
-                        Button("Use enrichment model") {
-                            endpoint = profile.endpoint
-                            modelName = profile.model
+        Section {
+            Toggle("Enabled", isOn: $enabled)
+            if providerId == VerificationProvider.ollama {
+                LabeledContent("Endpoint") {
+                    HStack {
+                        TextField("Loopback Ollama endpoint", text: $endpoint).labelsHidden()
+                        if let profile = model.profile {
+                            Button("Use Enrichment Model") {
+                                endpoint = profile.endpoint
+                                modelName = profile.model
+                            }
                         }
                     }
-                } else {
-                    TextField("Path to the CLI", text: $executable).textFieldStyle(.roundedBorder)
-                    if let found = model.discovered[providerId], found != executable {
-                        Button("Use \(URL(fileURLWithPath: found).lastPathComponent) found on PATH") { executable = found }
-                            .help(found)
+                }
+            } else {
+                LabeledContent("Command-line tool") {
+                    HStack {
+                        TextField("Path to the CLI", text: $executable).labelsHidden()
+                        if let found = model.discovered[providerId], found != executable {
+                            Button("Use Found") { executable = found }.help(found)
+                        }
                     }
                 }
             }
+            TextField("Model", text: $modelName, prompt: Text(modelHint))
+            Stepper("Cost weight: \(costWeight)", value: $costWeight, in: 0...1000, step: 5)
+            Stepper("Daily limit: \(dailyLimit) attempts", value: $dailyLimit, in: 1...500)
             HStack {
-                TextField(modelHint, text: $modelName).textFieldStyle(.roundedBorder).frame(width: 220)
-                Stepper("Cost weight \(costWeight)", value: $costWeight, in: 0...1000, step: 5)
-                Stepper("\(dailyLimit) per day", value: $dailyLimit, in: 1...500)
+                if let allowance = model.allowances.first(where: { $0.provider.providerId == providerId }) {
+                    Text("\(allowance.startedToday) of \(allowance.provider.dailyLimit) used today").font(.meta).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Save") {
                     model.saveProvider(providerId, executable: executable, endpoint: endpoint,
@@ -191,13 +190,23 @@ private struct ProviderSettings: View {
                 .disabled(providerId == VerificationProvider.ollama
                     ? (endpoint.isEmpty || modelName.isEmpty) : executable.isEmpty)
             }
+        } header: {
+            HStack {
+                Text(VerificationProvider.displayName(providerId))
+                Spacer()
+                StatusPill(text: saved.map { $0.enabled ? "Enabled" : "Disabled" } ?? "Not set up",
+                           tone: saved?.enabled == true ? .positive : .neutral)
+            }
+        } footer: {
+            if providerId == VerificationProvider.ollama {
+                Text("Runs only on this Mac.").font(.meta).foregroundStyle(.secondary)
+            } else {
+                Text("Uses your plan, never API keys. Sends content online only for items you approve or categories you grant. Daily limits count every attempt, including retries.")
+                    .font(.meta).foregroundStyle(.secondary)
+            }
         }
-        .padding(10)
-        .background(Color.secondary.opacity(0.05))
         .onAppear { load(model.providers) }
-        .onReceive(model.$providers.removeDuplicates().dropFirst()) { providers in
-            load(providers)
-        }
+        .onReceive(model.$providers.removeDuplicates().dropFirst()) { load($0) }
     }
 
     private func load(_ providers: [VerificationProvider]) {

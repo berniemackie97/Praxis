@@ -1,69 +1,109 @@
 import SwiftUI
 
-/// What may leave this Mac, what the agent may change, which models fill each tier, and which
-/// chat models are available — with the record of recent model calls.
+/// What may leave this Mac and what the agent may change.
 struct PrivacySettingsView: View {
     @ObservedObject var model: PrivacySettingsModel
     @ObservedObject var intelligence: IntelligenceSettingsModel
+    @State private var addingRule = false
+    @State private var fallbackCategory = "financial"
 
-    private var providers: [VerificationProvider] { intelligence.providers }
+    private var providerIds: [String] {
+        Array(Set(intelligence.providers.map(\.providerId) + model.backends.map(\.backendId))).sorted()
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let policy = model.policy {
-                    ModeSettings(model: model, policy: policy)
-                    Divider()
-                    RuleSettings(model: model, policy: policy, providerIds: providerIds)
-                    Divider()
-                    FallbackSettings(model: model, policy: policy)
-                    Divider()
-                }
-                TierSettings(model: model, providers: providers)
-                Divider()
-                BackendSettings(model: model)
-                Divider()
-                InvocationAudit(invocations: model.invocations)
-                FeedbackLine(error: model.error, notice: model.notice)
+        Form {
+            if let error = model.error ?? model.notice {
+                Banner(text: error, tone: model.error == nil ? .accent : .warning,
+                       systemImage: model.error == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if model.policy == nil && model.error == nil {
+                Section {
+                    HStack(spacing: Spacing.s) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading your disclosure policy…").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let policy = model.policy {
+                Section {
+                    Picker("Remote processing", selection: Binding(get: { policy.mode }, set: { model.setMode($0) })) {
+                        ForEach(DisclosurePolicy.modes, id: \.self) { Text(PolicyLabels.mode($0)).tag($0) }
+                    }
+                    .pickerStyle(.radioGroup)
+                    Picker("The agent may", selection: Binding(get: { policy.toolPermission }, set: { model.setToolPermission($0) })) {
+                        ForEach(DisclosurePolicy.toolPermissions, id: \.self) { Text(PolicyLabels.toolPermission($0)).tag($0) }
+                    }
+                } header: {
+                    Text("What may leave this Mac")
+                } footer: {
+                    Text("Files you pin as local-only never leave, whatever the mode. Changes requested in chat that widen any of this always wait for you in Approvals.")
+                        .font(.meta).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    if policy.rules.isEmpty {
+                        Text("No grants or denials yet.").foregroundStyle(.secondary)
+                    }
+                    ForEach(policy.rules) { rule in
+                        HStack(spacing: Spacing.s) {
+                            Image(systemName: rule.allow ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                                .foregroundStyle(rule.allow ? Color.green : Color.red)
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("\(rule.allow ? "Allow" : "Deny") \(PolicyLabels.category(rule.category)) → \(rule.providerId)")
+                                Text("for \(rule.purpose)" + (rule.expiresUtc.map { " · until \(DateText.short($0))" } ?? ""))
+                                    .font(.meta).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button { model.removeRule(rule) } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.borderless)
+                                .help("Remove rule")
+                                .accessibilityLabel("Remove rule")
+                        }
+                    }
+                    Button("Add Rule…") { addingRule = true }
+                } header: {
+                    Text("Grants and denials")
+                } footer: {
+                    Text("A denial always wins. Grants apply in Standing grants mode.").font(.meta).foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Picker("Category", selection: $fallbackCategory) {
+                        ForEach(DisclosurePolicy.categories, id: \.self) { Text(PolicyLabels.category($0)).tag($0) }
+                    }
+                    let chain = policy.fallbacks(for: fallbackCategory)
+                    ForEach(DisclosurePolicy.fallbackSteps, id: \.self) { step in
+                        Toggle(PolicyLabels.fallback(step), isOn: Binding(get: { chain.contains(step) }, set: { enabled in
+                            model.setFallbacks(category: fallbackCategory, chain: FallbackChain.toggled(chain, step: step, enabled: enabled))
+                        }))
+                    }
+                } header: {
+                    Text("When a remote model isn't allowed")
+                } footer: {
+                    Text("Steps run in this order. Held items continue down the chain when their deadline passes, so nothing waits forever.")
+                        .font(.meta).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(isPresented: $addingRule) {
+            RuleEditor(providerIds: providerIds) { category, provider, purpose, allow, days in
+                model.addRule(category: category, providerId: provider, purpose: purpose, allow: allow, expiresInDays: days)
+                addingRule = false
+            } cancel: { addingRule = false }
         }
         .onAppear {
             model.refresh()
             intelligence.refresh()
         }
     }
-
-    private var providerIds: [String] {
-        Array(Set(providers.map(\.providerId) + model.backends.map(\.backendId))).sorted()
-    }
 }
 
-private struct ModeSettings: View {
-    @ObservedObject var model: PrivacySettingsModel
-    let policy: DisclosurePolicy
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("What may leave this Mac").font(.headline)
-            Picker("Mode", selection: Binding(get: { policy.mode }, set: { model.setMode($0) })) {
-                ForEach(DisclosurePolicy.modes, id: \.self) { Text(PolicyLabels.mode($0)).tag($0) }
-            }
-            .pickerStyle(.radioGroup)
-            Picker("Agent may", selection: Binding(get: { policy.toolPermission }, set: { model.setToolPermission($0) })) {
-                ForEach(DisclosurePolicy.toolPermissions, id: \.self) { Text(PolicyLabels.toolPermission($0)).tag($0) }
-            }
-            .frame(maxWidth: 360)
-            Text("Files you pin as local-only never leave, whatever the mode. Chat changes that widen any of this always need your confirmation in Approvals.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct RuleSettings: View {
-    @ObservedObject var model: PrivacySettingsModel
-    let policy: DisclosurePolicy
+private struct RuleEditor: View {
     let providerIds: [String]
+    let save: (String, String, String, Bool, Int) -> Void
+    let cancel: () -> Void
     @State private var category = "financial"
     @State private var provider = ""
     @State private var purpose = "intake"
@@ -71,82 +111,141 @@ private struct RuleSettings: View {
     @State private var days = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Grants and denials").font(.headline)
-            Text("A denial always wins. Grants matter in Standing grants mode.").font(.caption).foregroundStyle(.secondary)
-            ForEach(policy.rules) { rule in
-                HStack {
-                    Image(systemName: rule.allow ? "checkmark.circle" : "xmark.octagon").foregroundColor(rule.allow ? .green : .red)
-                    Text("\(PolicyLabels.category(rule.category)) → \(rule.providerId) for \(rule.purpose)")
-                    if let expires = rule.expiresUtc { Text("until \(DateText.short(expires))").font(.caption).foregroundStyle(.secondary) }
-                    Spacer()
-                    Button("Remove") { model.removeRule(rule) }.controlSize(.small)
+        VStack(spacing: 0) {
+            Form {
+                Picker("Rule", selection: $allow) {
+                    Text("Allow").tag(true)
+                    Text("Deny").tag(false)
                 }
-            }
-            HStack {
-                Picker("", selection: $allow) { Text("Allow").tag(true); Text("Deny").tag(false) }.frame(width: 90)
-                Picker("", selection: $category) {
+                .pickerStyle(.segmented)
+                Picker("Category", selection: $category) {
                     ForEach(DisclosurePolicy.categories, id: \.self) { Text(PolicyLabels.category($0)).tag($0) }
-                }.frame(width: 150)
-                Text("→")
-                Picker("", selection: $provider) {
-                    Text("Provider").tag("")
+                }
+                Picker("Provider", selection: $provider) {
+                    Text("Choose…").tag("")
                     ForEach(providerIds, id: \.self) { Text($0).tag($0) }
-                }.frame(width: 160)
-                Picker("", selection: $purpose) { Text("Intake").tag("intake"); Text("Chat").tag("chat") }.frame(width: 90)
-                Stepper(days == 0 ? "No expiry" : "\(days) days", value: $days, in: 0...365, step: 7).frame(width: 140)
-                Button("Add") { model.addRule(category: category, providerId: provider, purpose: purpose, allow: allow, expiresInDays: days) }
+                }
+                Picker("Used for", selection: $purpose) {
+                    Text("Intake").tag("intake")
+                    Text("Chat").tag("chat")
+                }
+                .pickerStyle(.segmented)
+                Stepper(days == 0 ? "Never expires" : "Expires in \(days) days", value: $days, in: 0...365, step: 7)
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
+                Button("Add Rule") { save(category, provider, purpose, allow, days) }
+                    .keyboardShortcut(.defaultAction)
                     .disabled(provider.isEmpty)
             }
+            .padding(Spacing.l)
         }
+        .frame(width: 440)
     }
 }
 
-private struct FallbackSettings: View {
+/// Intake model tiers, chat models and the record of recent model calls.
+struct AgentSettingsView: View {
     @ObservedObject var model: PrivacySettingsModel
-    let policy: DisclosurePolicy
-    @State private var category = "financial"
+    @ObservedObject var intelligence: IntelligenceSettingsModel
+    @State private var editing: BackendDraft?
 
     var body: some View {
-        let chain = policy.fallbacks(for: category)
-        VStack(alignment: .leading, spacing: 8) {
-            Text("When a remote model isn't allowed").font(.headline)
-            Picker("Category", selection: $category) {
-                ForEach(DisclosurePolicy.categories, id: \.self) { Text(PolicyLabels.category($0)).tag($0) }
+        Form {
+            if let error = model.error ?? model.notice {
+                Banner(text: error, tone: model.error == nil ? .accent : .warning,
+                       systemImage: model.error == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
             }
-            .frame(maxWidth: 260)
-            ForEach(DisclosurePolicy.fallbackSteps, id: \.self) { step in
-                Toggle(PolicyLabels.fallback(step), isOn: Binding(get: { chain.contains(step) }, set: { enabled in
-                    model.setFallbacks(category: category, chain: FallbackChain.toggled(chain, step: step, enabled: enabled))
-                }))
-            }
-            Text("Steps run in this order. Held items continue down the chain when their deadline passes.").font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct TierSettings: View {
-    @ObservedObject var model: PrivacySettingsModel
-    let providers: [VerificationProvider]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Intake model tiers").font(.headline)
-            Text("Local triages only. Strong does the heavy reading. Strongest is asked only when a result fails verification. Providers are configured under Models.")
-                .font(.caption).foregroundStyle(.secondary)
-            ForEach(PrivacySettingsModel.tiers, id: \.self) { tier in
-                Picker(tier.capitalized, selection: Binding(get: { model.provider(for: tier) }, set: { model.setTier(tier, providerId: $0) })) {
-                    Text("Off").tag("")
-                    ForEach(providers.filter(\.enabled)) { Text(VerificationProvider.displayName($0.providerId)).tag($0.providerId) }
+            Section {
+                if model.backends.isEmpty {
+                    Text("No chat models yet. Add a local model, an API, or your Claude Code or Codex plan.")
+                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: 360)
+                ForEach(model.backends) { backend in
+                    HStack(spacing: Spacing.m) {
+                        Image(systemName: backend.isLocal ? "desktopcomputer" : backend.kind == "claude_code" || backend.kind == "codex" ? "terminal" : "cloud")
+                            .foregroundStyle(.secondary).frame(width: 20)
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(backend.backendId).font(.rowTitle)
+                            Text("\(backend.kindLabel) · \(backend.model)").font(.meta).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if !backend.enabled { StatusPill(text: "Off", tone: .neutral) }
+                        if let account = backend.keyAccount {
+                            StatusPill(text: model.storedKeys.contains(account) ? "Key stored" : "No key",
+                                       tone: model.storedKeys.contains(account) ? .positive : .warning)
+                        }
+                        Button("Edit…") { editing = BackendDraft(backend) }.controlSize(.small)
+                    }
+                }
+                Button("Add Chat Model…") { editing = BackendDraft(nil) }
+            } header: {
+                Text("Chat models")
+            } footer: {
+                Text("API keys go to your login Keychain (service “Praxis”), never to the catalog.").font(.meta).foregroundStyle(.secondary)
             }
+
+            Section {
+                ForEach(PrivacySettingsModel.tiers, id: \.self) { tier in
+                    Picker(tier.capitalized, selection: Binding(get: { model.provider(for: tier) }, set: { model.setTier(tier, providerId: $0) })) {
+                        Text("Off").tag("")
+                        ForEach(intelligence.providers.filter(\.enabled)) { Text(VerificationProvider.displayName($0.providerId)).tag($0.providerId) }
+                    }
+                }
+            } header: {
+                Text("Intake model tiers")
+            } footer: {
+                Text("Local triages only. Strong does the heavy reading. Strongest is asked only when a result fails verification. Providers are set up under Models.")
+                    .font(.meta).foregroundStyle(.secondary)
+            }
+
+            Section {
+                if model.invocations.isEmpty {
+                    Text("No model calls recorded yet.").foregroundStyle(.secondary)
+                }
+                ForEach(model.invocations.prefix(25)) { call in
+                    HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                        Image(systemName: call.remote ? "cloud" : "desktopcomputer").foregroundStyle(.secondary).frame(width: 16)
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text("\(call.providerId) · \(call.tier) · \(call.purpose)").font(.callout)
+                            Text("\(PolicyLabels.category(call.category)) · \(call.outcome) · \(DateText.relative(call.startedUtc))")
+                                .font(.meta).foregroundStyle(.secondary)
+                        }
+                    }
+                    .textSelection(.enabled)
+                }
+            } header: {
+                Text("Recent model calls")
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(item: $editing) { draft in
+            BackendEditor(draft: draft, storedKeys: model.storedKeys, removeKey: { model.removeKey(account: $0) }) { profile, key in
+                model.saveBackend(profile, apiKey: key)
+                editing = nil
+            } cancel: { editing = nil }
+        }
+        .onAppear {
+            model.refresh()
+            intelligence.refresh()
         }
     }
 }
 
-private struct BackendSettings: View {
-    @ObservedObject var model: PrivacySettingsModel
+private struct BackendDraft: Identifiable {
+    let existing: AgentBackendProfile?
+    var id: String { existing?.backendId ?? "new" }
+    init(_ existing: AgentBackendProfile?) { self.existing = existing }
+}
+
+private struct BackendEditor: View {
+    let draft: BackendDraft
+    let storedKeys: Set<String>
+    let removeKey: (String) -> Void
+    let save: (AgentBackendProfile, String) -> Void
+    let cancel: () -> Void
     @State private var backendId = ""
     @State private var kind = "openai_compatible"
     @State private var endpoint = "http://127.0.0.1:11434/v1"
@@ -156,77 +255,73 @@ private struct BackendSettings: View {
     @State private var apiKey = ""
     @State private var enabled = true
 
+    private var usesEndpoint: Bool { ["openai_compatible", "anthropic"].contains(kind) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Chat models").font(.headline)
-            ForEach(model.backends) { backend in
-                HStack {
-                    Text(backend.backendId).fontWeight(.medium)
-                    Text("\(backend.kindLabel) · \(backend.model)\(backend.enabled ? "" : " · off")").foregroundStyle(.secondary)
-                    if let account = backend.keyAccount {
-                        Text(model.storedKeys.contains(account) ? "key stored" : "no key").font(.caption)
-                            .foregroundColor(model.storedKeys.contains(account) ? .green : .orange)
-                    }
-                    Spacer()
-                    Button("Edit") { load(backend) }.controlSize(.small)
-                }
-            }
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
-                GridRow {
-                    Text("Name")
-                    TextField("e.g. claude-api", text: $backendId)
-                }
-                GridRow {
-                    Text("Kind")
-                    Picker("", selection: $kind) {
-                        Text("OpenAI-compatible (OpenAI, DeepSeek, OpenRouter, Ollama, LM Studio)").tag("openai_compatible")
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    TextField("Name", text: $backendId, prompt: Text("e.g. claude-api"))
+                        .disabled(draft.existing != nil)
+                    Picker("Kind", selection: $kind) {
+                        Text("OpenAI-compatible").tag("openai_compatible")
                         Text("Anthropic API").tag("anthropic")
                         Text("Claude Code (your plan)").tag("claude_code")
                         Text("Codex (your plan)").tag("codex")
                     }
-                }
-                if ["openai_compatible", "anthropic"].contains(kind) {
-                    GridRow {
-                        Text("Endpoint")
-                        TextField(kind == "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1", text: $endpoint)
+                    TextField("Model", text: $modelName, prompt: Text("Model identifier"))
+                    Toggle("Enabled", isOn: $enabled)
+                } footer: {
+                    if kind == "openai_compatible" {
+                        Text("OpenAI, DeepSeek, OpenRouter, Gemini's compatible endpoint, or a local Ollama / LM Studio server.")
+                            .font(.meta).foregroundStyle(.secondary)
                     }
-                    GridRow {
-                        Text("API key")
-                        HStack {
-                            TextField("Keychain account, e.g. anthropic", text: $keyAccount).frame(width: 220)
-                            SecureField("Paste key to store in Keychain", text: $apiKey)
-                            if model.storedKeys.contains(keyAccount) { Button("Remove key") { model.removeKey(account: keyAccount) } }
+                }
+                if usesEndpoint {
+                    Section {
+                        TextField("Endpoint", text: $endpoint,
+                                  prompt: Text(kind == "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"))
+                        TextField("Keychain account", text: $keyAccount, prompt: Text("e.g. anthropic"))
+                        SecureField("API key", text: $apiKey, prompt: Text(storedKeys.contains(keyAccount) ? "Stored — paste to replace" : "Paste key"))
+                        if storedKeys.contains(keyAccount) {
+                            Button("Remove Stored Key", role: .destructive) { removeKey(keyAccount) }
                         }
+                    } header: {
+                        Text("Connection")
                     }
                 } else {
-                    GridRow {
-                        Text("Executable")
-                        TextField("/opt/homebrew/bin/claude", text: $executable)
+                    Section {
+                        TextField("Executable", text: $executable, prompt: Text(kind == "codex" ? "/opt/homebrew/bin/codex" : "/opt/homebrew/bin/claude"))
+                    } header: {
+                        Text("Command-line tool")
+                    } footer: {
+                        Text("Runs headless with its own tools disabled; it reaches your sources only through Praxis.")
+                            .font(.meta).foregroundStyle(.secondary)
                     }
                 }
-                GridRow {
-                    Text("Model")
-                    TextField("Model identifier", text: $modelName)
-                }
-                GridRow {
-                    Text("")
-                    Toggle("Enabled", isOn: $enabled)
-                }
             }
+            .formStyle(.grouped)
             HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    model.saveBackend(AgentBackendProfile(backendId: backendId, kind: kind,
-                        endpoint: ["openai_compatible", "anthropic"].contains(kind) ? endpoint : nil, model: modelName,
-                        keyAccount: keyAccount.isEmpty ? nil : keyAccount, executable: executable.isEmpty ? nil : executable, enabled: enabled), apiKey: apiKey)
+                    save(AgentBackendProfile(backendId: backendId, kind: kind,
+                                             endpoint: usesEndpoint ? endpoint : nil, model: modelName,
+                                             keyAccount: keyAccount.isEmpty ? nil : keyAccount,
+                                             executable: executable.isEmpty ? nil : executable, enabled: enabled), apiKey)
                     apiKey = ""
                 }
+                .keyboardShortcut(.defaultAction)
                 .disabled(backendId.isEmpty || modelName.isEmpty)
-                Text("Keys go to your login Keychain (service “Praxis”), never to the catalog.").font(.caption).foregroundStyle(.secondary)
             }
+            .padding(Spacing.l)
         }
+        .frame(width: 480, height: 520)
+        .onAppear(perform: load)
     }
 
-    private func load(_ backend: AgentBackendProfile) {
+    private func load() {
+        guard let backend = draft.existing else { return }
         backendId = backend.backendId
         kind = backend.kind
         endpoint = backend.endpoint ?? ""
@@ -234,20 +329,6 @@ private struct BackendSettings: View {
         keyAccount = backend.keyAccount ?? ""
         executable = backend.executable ?? ""
         enabled = backend.enabled
-        apiKey = ""
-    }
-}
-
-private struct InvocationAudit: View {
-    let invocations: [ModelInvocation]
-
-    var body: some View {
-        DisclosureGroup("Recent model calls (\(invocations.count))") {
-            ForEach(invocations) { call in
-                Text("\(DateText.short(call.startedUtc)) · \(call.tier) · \(call.providerId)\(call.remote ? " (remote)" : "") · \(PolicyLabels.category(call.category)) · \(call.purpose) · \(call.outcome)")
-                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            }
-        }
     }
 }
 

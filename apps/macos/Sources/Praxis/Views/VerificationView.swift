@@ -7,49 +7,58 @@ struct VerificationView: View {
     let providers: [VerificationProvider]
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Requests").font(.headline)
-                    Spacer()
-                    Button("Check for new") { model.plan() }
-                        .help("Looks for flagged evidence and type conflicts. Creates requests for review only.")
-                    Button("Refresh") { model.refresh() }
-                }
-                if model.requests.isEmpty {
-                    Text("No verification requests. Praxis suggests them when the local model's evidence reads like an instruction or its entity types disagree.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                List(model.requests) { request in
-                    Button { model.select(request) } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(request.reasonLabel).fontWeight(.medium)
-                            Text("\(RequestStatus.label(request)) · \(request.items.count) item(s)")
-                                .font(.caption)
-                                .foregroundColor(request.awaitingApproval ? .accentColor : .secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+        MasterDetail(listWidth: (260, 320, 440)) {
+            List(selection: Binding<String?>(
+                get: { model.selectedId },
+                set: { id in if let request = model.requests.first(where: { $0.requestId == id }) { model.select(request) } })) {
+                ForEach(model.requests) { request in
+                    ItemRow(systemImage: request.awaitingApproval ? "hand.raised" : "checkmark.shield",
+                            title: request.reasonLabel,
+                            subtitle: "\(RequestStatus.label(request)) · \(Count.label(request.items.count, "item"))",
+                            tint: request.awaitingApproval ? .accentColor : .secondary) {
+                        if request.awaitingApproval { Circle().fill(Color.accentColor).frame(width: 7, height: 7) }
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(model.selectedId == request.requestId ? Color.accentColor.opacity(0.15) : Color.clear)
+                    .tag(request.requestId)
                 }
-                DisclosureGroup("Disclosure audit") {
-                    ForEach(model.disclosureAudit.prefix(8)) { event in
-                        Text("\(event.actor) · \(event.operation) · \(event.result) · \(event.reasonCode)")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                FeedbackLine(error: model.error, notice: model.notice)
             }
-            .frame(width: 320)
-            Divider()
+            .overlay {
+                if model.requests.isEmpty {
+                    EmptyState(systemImage: "checkmark.shield", title: "No verification requests",
+                               message: "Praxis suggests one when the local model's evidence reads like an instruction or its entity types disagree.",
+                               actionTitle: "Check for New", action: model.plan)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    FeedbackLine(error: model.error, notice: model.notice)
+                    if !model.disclosureAudit.isEmpty {
+                        DisclosureGroup("Disclosure audit") {
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                ForEach(model.disclosureAudit.prefix(8)) { event in
+                                    Text("\(event.actor) · \(event.operation) · \(event.result) · \(event.reasonCode)")
+                                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                        }
+                        .font(.meta)
+                    }
+                }
+                .padding(Spacing.m)
+                .background(.bar)
+            }
+        } detail: {
             if let request = model.selected {
                 VerificationDetailView(request: request, model: model, providers: providers.filter(\.enabled))
             } else {
-                Text("Select a request to review exactly what would be sent.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                EmptyState(systemImage: "doc.text.magnifyingglass", title: "Select a request",
+                           message: "Review exactly what would be sent, remove items, and redact phrases before approving.")
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { model.plan() } label: { Label("Check for New", systemImage: "sparkle.magnifyingglass") }
+                    .help("Looks for flagged evidence and type conflicts. Creates requests for review only.")
+                Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }
         .onAppear { model.refresh() }
@@ -121,30 +130,38 @@ private struct VerificationDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(request.reasonLabel).font(.title3.weight(.semibold))
-                Text(RequestStatus.label(request)).foregroundStyle(.secondary)
-                ForEach(items) { item in itemCard(item) }
+            VStack(alignment: .leading, spacing: Spacing.l) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text(request.reasonLabel).font(.pageTitle)
+                    StatusPill(text: RequestStatus.label(request), tone: request.awaitingApproval ? .accent : request.status == "completed" ? .positive : .neutral)
+                }
+                Panel(title: "Items", systemImage: "list.bullet.rectangle",
+                      caption: request.awaitingApproval ? "Uncheck an item to leave it out of the request." : nil) {
+                    VStack(alignment: .leading, spacing: Spacing.s) {
+                        ForEach(items) { item in itemCard(item) }
+                    }
+                }
                 if request.awaitingApproval {
                     approval
                 } else if request.providerId != nil && request.providerId != VerificationProvider.ollama &&
                             (request.status == "approved" || request.status == "running") {
-                    Button("Revoke external disclosure") { model.revokeDisclosure() }
-                        .foregroundStyle(.red)
+                    Button("Revoke External Disclosure", role: .destructive) { model.revokeDisclosure() }
                 }
                 if let tokens = request.inputTokens {
                     Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens, counted against the selected provider's daily request allowance.")
-
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.meta).foregroundStyle(.secondary)
                 }
-                Text(request.awaitingApproval ? "What approval will send" : "What was sent").font(.headline)
-                Text(model.preview)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.08))
+                Panel(title: request.awaitingApproval ? "What approval will send" : "What was sent", systemImage: "eye") {
+                    Text(model.preview)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(Spacing.m)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Surface.well, in: RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
+                }
             }
+            .padding(Spacing.xl)
+            .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -152,7 +169,7 @@ private struct VerificationDetailView: View {
     private func itemCard(_ item: PayloadItem) -> some View {
         let verdict = request.items.first { $0.ordinal == item.ordinal }
         let included = !model.excluded.contains(item.ordinal) && (verdict?.included ?? true)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack {
                 if request.awaitingApproval {
                     Toggle(isOn: Binding(get: { !model.excluded.contains(item.ordinal) },
@@ -172,102 +189,102 @@ private struct VerificationDetailView: View {
                 }
             }
             ForEach(Array(item.quotes.enumerated()), id: \.offset) { _, quote in
-                Text("“\(shown(quote.quote))” — \(quote.source)").font(.caption).textSelection(.enabled)
+                Text("“\(shown(quote.quote))” — \(quote.source)").font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if let note = verdict?.note {
                 Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .padding(8)
-        .background(Color.secondary.opacity(0.05))
+        .padding(Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Surface.well, in: RoundedRectangle(cornerRadius: Radius.m, style: .continuous))
     }
 
     private var approval: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Before approving").font(.headline)
-            Text("Unchecked items are removed. A name can still appear in another item's quote; redact it to remove it everywhere.")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                TextField("Phrase to redact", text: $phrase).textFieldStyle(.roundedBorder)
-                    .onSubmit(addPhrase)
-                Button("Redact", action: addPhrase)
-                    .disabled(phrase.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if !model.redactions.isEmpty {
+        Panel(title: "Before approving", systemImage: "hand.raised",
+              caption: "Unchecked items are removed. A name can still appear in another item's quote; redact it to remove it everywhere.") {
+            VStack(alignment: .leading, spacing: Spacing.m) {
                 HStack {
-                    ForEach(model.redactions, id: \.self) { redaction in
-                        Button("\(redaction) ✕") { model.removeRedaction(redaction) }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    }
+                    TextField("Phrase to redact", text: $phrase).textFieldStyle(.roundedBorder)
+                        .onSubmit(addPhrase)
+                    Button("Redact", action: addPhrase)
+                        .disabled(phrase.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-            }
-            if remoteSelected {
-                Text("Sources permitted for external verification")
-                    .font(.subheadline.weight(.semibold))
-                ForEach(includedSources) { source in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(source.name.isEmpty ? source.sourceId : source.name)
-                            Text(source.remoteAllowed ? "Remote verification permitted" : "Local-only source")
-                                .font(.caption).foregroundColor(source.remoteAllowed ? .secondary : .orange)
-                        }
-                        Spacer()
-                        if source.remoteAllowed {
-                            Button("Return to local-only") {
-                                model.setRemoteVerification(source.sourceId, allowed: false)
-                            }
-                            .controlSize(.small)
-                        } else {
-                            Button("Review classification") {
-                                pendingSource = source.sourceId
-                                pendingSourceName = source.name.isEmpty ? source.sourceId : source.name
-                                confirmRemotePolicy = true
-                            }
-                            .controlSize(.small)
+                if !model.redactions.isEmpty {
+                    FlowLayout(spacing: Spacing.xs) {
+                        ForEach(model.redactions, id: \.self) { redaction in
+                            Chip(text: redaction, systemImage: "eye.slash") { model.removeRedaction(redaction) }
                         }
                     }
                 }
-                if let provider = selectedExternalProvider {
-                    Text("Destination: \(VerificationProvider.displayName(provider.providerId))")
-                        .font(.caption.weight(.semibold))
-                    Text("CLI: \(provider.executable ?? "not configured") · Model: \(provider.model ?? "provider default") · Configuration revision: \(provider.revision)")
+                if remoteSelected {
+                    Text("Sources permitted for external verification")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(includedSources) { source in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.name.isEmpty ? source.sourceId : source.name)
+                                Text(source.remoteAllowed ? "Remote verification permitted" : "Local-only source")
+                                    .font(.caption).foregroundColor(source.remoteAllowed ? .secondary : .orange)
+                            }
+                            Spacer()
+                            if source.remoteAllowed {
+                                Button("Return to local-only") {
+                                    model.setRemoteVerification(source.sourceId, allowed: false)
+                                }
+                                .controlSize(.small)
+                            } else {
+                                Button("Review classification") {
+                                    pendingSource = source.sourceId
+                                    pendingSourceName = source.name.isEmpty ? source.sourceId : source.name
+                                    confirmRemotePolicy = true
+                                }
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                    if let provider = selectedExternalProvider {
+                        Text("Destination: \(VerificationProvider.displayName(provider.providerId))")
+                            .font(.caption.weight(.semibold))
+                        Text("CLI: \(provider.executable ?? "not configured") · Model: \(provider.model ?? "provider default") · Configuration revision: \(provider.revision)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    Toggle("I approve sending these redacted excerpts to \(VerificationProvider.displayName(model.providerChoice))",
+                           isOn: $model.remoteConsent)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                    Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while approved or running. Previously transmitted content cannot be recalled.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle("I approve sending these redacted excerpts to \(VerificationProvider.displayName(model.providerChoice))",
-                       isOn: $model.remoteConsent)
-                    .font(.caption)
-                Text("Source classification and this request's consent are separate. Consent expires after 15 minutes, and you can revoke it while approved or running. Previously transmitted content cannot be recalled.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            HStack {
-                Picker("Send to", selection: $model.providerChoice) {
-                    Text("Local Ollama (if enabled)").tag("")
-                    ForEach(providers) { provider in
-                        Text(VerificationProvider.displayName(provider.providerId)).tag(provider.providerId)
+                HStack {
+                    Picker("Send to", selection: $model.providerChoice) {
+                        Text("Local Ollama (if enabled)").tag("")
+                        ForEach(providers) { provider in
+                            Text(VerificationProvider.displayName(provider.providerId)).tag(provider.providerId)
+                        }
                     }
+                    .frame(maxWidth: 320)
+                    Spacer()
+                    Button("Decline") { model.decline() }
+                    Button("Approve and Send") { model.approve() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(providers.isEmpty || model.excluded.count >= items.count ||
+                            (model.providerChoice.isEmpty &&
+                             !providers.contains(where: { $0.providerId == VerificationProvider.ollama })) ||
+                            (remoteSelected && (!model.remoteConsent || !remoteReady)))
                 }
-                .frame(maxWidth: 320)
-                Spacer()
-                Button("Decline") { model.decline() }
-                Button("Approve and send") { model.approve() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(providers.isEmpty || model.excluded.count >= items.count ||
-                        (model.providerChoice.isEmpty &&
-                         !providers.contains(where: { $0.providerId == VerificationProvider.ollama })) ||
-                        (remoteSelected && (!model.remoteConsent || !remoteReady)))
-            }
-            if model.providerChoice == "" {
-                Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
-                    .font(.caption).foregroundStyle(.secondary)
-            } else if model.providerChoice != VerificationProvider.ollama {
-                Text("External disclosure requires every included source to be independently classified for remote verification and this request's explicit consent. No other provider is selected automatically.")
-                    .font(.caption).foregroundColor(.orange)
-            }
-            if providers.isEmpty {
-                Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
-                    .font(.caption).foregroundColor(.orange)
+                if model.providerChoice == "" {
+                    Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if model.providerChoice != VerificationProvider.ollama {
+                    Text("External disclosure requires every included source to be independently classified for remote verification and this request's explicit consent. No other provider is selected automatically.")
+                        .font(.caption).foregroundColor(.orange)
+                }
+                if providers.isEmpty {
+                    Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
+                        .font(.caption).foregroundColor(.orange)
+                }
             }
         }
         .alert("Allow remote verification for \(pendingSourceName)?", isPresented: $confirmRemotePolicy) {

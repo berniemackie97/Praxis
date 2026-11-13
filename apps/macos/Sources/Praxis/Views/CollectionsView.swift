@@ -2,67 +2,90 @@ import SwiftUI
 
 struct CollectionsView: View {
     @EnvironmentObject private var model: WorkbenchModel
-    @State private var confirmArchive = false
-    @State private var newCollectionName = ""
-    @State private var editingCollectionId = ""
-    @State private var renameCollectionName = ""
+    let showInLibrary: (String) -> Void
+    @State private var editing: CollectionEdit?
+    @State private var archiving: SourceCollection?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Your collections").font(.title2.weight(.semibold))
-            Text("Collections are your decisions. Importing or updating files never changes the original bytes or silently categorizes them.")
-                .foregroundStyle(.secondary)
-            HStack {
-                TextField("New collection name", text: $newCollectionName)
-                    .textFieldStyle(.roundedBorder)
-                Button("Create") {
-                    model.createCollection(newCollectionName)
+        Group {
+            if model.collections.isEmpty {
+                EmptyState(systemImage: "folder.badge.plus", title: "No collections yet",
+                           message: "Collections are your own groupings. Importing or updating files never changes originals or sorts them for you.",
+                           actionTitle: "New Collection") { editing = CollectionEdit(collection: nil) }
+            } else {
+                List {
+                    ForEach(model.collections) { collection in
+                        ItemRow(systemImage: "folder", title: collection.name,
+                                subtitle: Count.label(collection.activeSourceCount, "source"), tint: .accentColor) {
+                            Button("Show in Library") { showInLibrary(collection.collectionId) }
+                                .controlSize(.small)
+                        }
+                        .contextMenu {
+                            Button("Show in Library") { showInLibrary(collection.collectionId) }
+                            Button("Rename…") { editing = CollectionEdit(collection: collection) }
+                            Divider()
+                            Button("Archive…", role: .destructive) { archiving = collection }
+                        }
+                        .onTapGesture(count: 2) { showInLibrary(collection.collectionId) }
+                    }
                 }
-                .disabled(newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .listStyle(.inset(alternatesRowBackgrounds: false))
             }
-            List(model.collections) { collection in
-                HStack {
-                    Text(collection.name)
-                    Spacer()
-                    Text("\(collection.activeSourceCount) active sources")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Picker("Edit collection", selection: Binding(
-                get: { editingCollectionId },
-                set: { selectCollection($0) }
-            )) {
-                Text("Choose…").tag("")
-                ForEach(model.collections) { collection in
-                    Text(collection.name).tag(collection.collectionId)
-                }
-            }
-            HStack {
-                TextField("Collection name", text: $renameCollectionName)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(editingCollectionId.isEmpty)
-                Button("Rename") {
-                    model.renameCollection(editingCollectionId, name: renameCollectionName)
-                }
-                .disabled(editingCollectionId.isEmpty ||
-                    renameCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button("Archive…", role: .destructive) { confirmArchive = true }
-                    .disabled(editingCollectionId.isEmpty)
-            }
-            Spacer()
         }
-        .confirmationDialog("Archive this collection?", isPresented: $confirmArchive) {
-            Button("Archive collection", role: .destructive) {
-                model.archiveCollection(editingCollectionId)
-                selectCollection("")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { editing = CollectionEdit(collection: nil) } label: { Label("New Collection", systemImage: "folder.badge.plus") }
+            }
+        }
+        .sheet(item: $editing) { edit in
+            CollectionNameSheet(edit: edit) { name in
+                if let collection = edit.collection {
+                    model.renameCollection(collection.collectionId, name: name)
+                } else {
+                    model.createCollection(name)
+                }
+                editing = nil
+            } cancel: { editing = nil }
+        }
+        .confirmationDialog("Archive “\(archiving?.name ?? "")”?", isPresented: Binding(
+            get: { archiving != nil }, set: { if !$0 { archiving = nil } })) {
+            Button("Archive Collection", role: .destructive) {
+                if let archiving { model.archiveCollection(archiving.collectionId) }
+                archiving = nil
             }
         } message: {
             Text("This hides the collection. Its sources and original files remain preserved.")
         }
     }
+}
 
-    private func selectCollection(_ id: String) {
-        editingCollectionId = id
-        renameCollectionName = model.collections.first { $0.collectionId == id }?.name ?? ""
+private struct CollectionEdit: Identifiable {
+    let collection: SourceCollection?
+    var id: String { collection?.collectionId ?? "new" }
+}
+
+private struct CollectionNameSheet: View {
+    let edit: CollectionEdit
+    let save: (String) -> Void
+    let cancel: () -> Void
+    @State private var name = ""
+
+    private var trimmed: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.l) {
+            Text(edit.collection == nil ? "New collection" : "Rename collection").font(.headline)
+            TextField("Name", text: $name).textFieldStyle(.roundedBorder).onSubmit { if !trimmed.isEmpty { save(trimmed) } }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
+                Button(edit.collection == nil ? "Create" : "Rename") { save(trimmed) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmed.isEmpty)
+            }
+        }
+        .padding(Spacing.xl)
+        .frame(width: 380)
+        .onAppear { name = edit.collection?.name ?? "" }
     }
 }

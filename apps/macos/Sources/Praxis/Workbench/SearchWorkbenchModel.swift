@@ -21,6 +21,8 @@ final class SearchWorkbenchModel: ObservableObject {
     @Published private(set) var notice: String?
     @Published private(set) var indexing = false
     @Published private(set) var error: String?
+    /// The query whose results are shown; empty before the first search.
+    @Published private(set) var submittedQuery = ""
 
     init(worker: WorkerSession) {
         self.worker = worker
@@ -41,6 +43,7 @@ final class SearchWorkbenchModel: ObservableObject {
     func submit() {
         clearResults()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        submittedQuery = term
         guard !term.isEmpty else { return }
 
         var fields: [String: Any] = ["query": term]
@@ -118,6 +121,7 @@ final class SearchWorkbenchModel: ObservableObject {
         preview = ""
         notice = nil
         error = nil
+        submittedQuery = ""
     }
 
     @discardableResult

@@ -18,6 +18,9 @@ final class WorkerSession {
     private var onDiagnostic: ((String) -> Void)?
     private var onExit: ((String?) -> Void)?
 
+    /// Requests sent and not yet answered; periodic refreshes back off while this is high.
+    var outstandingRequests: Int { pending.count }
+
     func start(
         executable: URL,
         arguments: [String],
