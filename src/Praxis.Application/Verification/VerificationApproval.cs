@@ -25,11 +25,6 @@ public sealed class VerificationApproval(IVerificationRepository repository)
             ?? throw new InvalidOperationException(providerId is null
                 ? "Enable a local Ollama verifier or explicitly select an external provider."
                 : "The selected verifier is disabled or has reached its daily limit.");
-        if (!provider.IsLocal && !remoteDisclosureApproved)
-        {
-            throw new InvalidOperationException("Explicit consent to disclose this payload to the selected provider is required.");
-        }
-
         (string narrowed, IReadOnlySet<int> kept) = VerificationPayload.Narrow(payload, excludedOrdinals ?? [], redactions ?? []);
         return repository.Approve(requestId, payload, provider.ProviderId, provider.Revision, narrowed, kept, remoteDisclosureApproved)
             ?? throw new InvalidOperationException(NotAwaitingApproval);
