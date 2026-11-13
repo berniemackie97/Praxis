@@ -116,7 +116,7 @@ public sealed class CollectionRepositoryTests : IDisposable
 
         await CatalogSnapshots.RestoreAsync(backup, destination, 8_000_000);
         using SqliteCatalog reopened = SqliteCatalog.Open(destination);
-        Assert.Equal(18, reopened.SchemaVersion);
+        Assert.Equal(19, reopened.SchemaVersion);
         Assert.Equal(collectionId, Assert.Single(reopened.Collections.List()).CollectionId);
         Assert.Equal(itemId,
             Assert.Single(reopened.Library.List(collectionId: collectionId)).ItemId);
@@ -153,7 +153,7 @@ public sealed class CollectionRepositoryTests : IDisposable
         }
 
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
-        Assert.Equal(18, catalog.SchemaVersion);
+        Assert.Equal(19, catalog.SchemaVersion);
         Assert.Empty(catalog.Collections.List());
         Assert.Equal("Migrated", catalog.Collections.Create("Migrated").Name);
         Assert.Empty(catalog.Search.Query("missing"));

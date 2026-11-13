@@ -171,7 +171,7 @@ public sealed class TextExtractionTests : IDisposable
         Assert.Equal(1, (await CatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
         await CatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(destination);
-        Assert.Equal(18, restored.SchemaVersion);
+        Assert.Equal(19, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(restored).ProcessNextAsync());
         await restored.Originals.VerifyAsync(accepted.ItemId);
@@ -257,7 +257,7 @@ public sealed class TextExtractionTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
-        Assert.Equal(18, upgraded.SchemaVersion);
+        Assert.Equal(19, upgraded.SchemaVersion);
         using SqliteConnection check = new(new SqliteConnectionStringBuilder
         {
             DataSource = upgraded.DatabasePath,
