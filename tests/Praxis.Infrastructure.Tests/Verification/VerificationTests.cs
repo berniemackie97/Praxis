@@ -667,6 +667,25 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task DisclosureReviewKeepsSourceIdentityAfterRevocation()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "revoked-disclosure.md", Meeting, remoteEligible: false);
+        Guid request = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        VerificationDisclosureSource initial = Assert.Single(catalog.Verification.DisclosureSources(request));
+        Assert.Equal((source.SourceId, "local_only"), (initial.SourceId, initial.Classification));
+        Assert.Contains("revoked-disclosure.md", initial.Name, StringComparison.Ordinal);
+        Assert.NotEmpty(initial.Ordinals);
+
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+        VerificationDisclosureSource after = Assert.Single(catalog.Verification.DisclosureSources(request));
+        Assert.Equal((initial.SourceId, initial.Name, initial.Classification),
+            (after.SourceId, after.Name, after.Classification));
+        Assert.Equal(initial.Ordinals, after.Ordinals);
+        Assert.False(catalog.Verification.SetSourceRemoteVerification(source.SourceId, true));
+    }
+
+    [Fact]
     public async Task RemoteDisclosureRequiresSeparateConsentAndExplicitSourceClassification()
     {
         using SqliteCatalog catalog = Open();
