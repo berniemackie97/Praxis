@@ -30,7 +30,7 @@ struct SearchView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: model.selectedCollectionId) { _, _ in model.submit() }
+                .onChange(of: model.selectedCollectionId) { _ in model.submit() }
                 Button("Refresh collections") { model.loadCollections() }
             }
             Text(model.mode).font(.caption).foregroundStyle(.secondary)
