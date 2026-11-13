@@ -572,7 +572,7 @@ public sealed class VerificationTests : IDisposable
     public async Task RevokedEntityContextFencesApprovalEvenWhenOtherMentionsStayVisible()
     {
         using SqliteCatalog catalog = Open();
-        (CapturedOriginal first, _, Guid entity) = await ConflictingSources(catalog);
+        var (first, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
         JsonNode item = Assert.Single(Items(catalog.Verification.Get(request)!.Payload));
@@ -594,7 +594,7 @@ public sealed class VerificationTests : IDisposable
     public async Task SupersedingOneApprovedEntityContextPreventsProviderDispatch()
     {
         using SqliteCatalog catalog = Open();
-        (CapturedOriginal first, _, Guid entity) = await ConflictingSources(catalog);
+        var (first, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
@@ -618,7 +618,7 @@ public sealed class VerificationTests : IDisposable
     public async Task RevokingOneEntityContextDuringInferenceDiscardsTheEntireVerdict()
     {
         using SqliteCatalog catalog = Open();
-        (CapturedOriginal first, _, Guid entity) = await ConflictingSources(catalog);
+        var (first, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
@@ -639,7 +639,7 @@ public sealed class VerificationTests : IDisposable
     public async Task UnchangedMultiSourceEntityContextCanCompleteWithoutExternalFallback()
     {
         using SqliteCatalog catalog = Open();
-        (_, _, Guid entity) = await ConflictingSources(catalog);
+        var (_, _, entity) = await ConflictingSources(catalog);
         SaveProvider(catalog, VerificationProvider.Codex, weight: 1);
         Guid request = catalog.Verification.RequestForEntity(entity)!.Value;
         new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex);
