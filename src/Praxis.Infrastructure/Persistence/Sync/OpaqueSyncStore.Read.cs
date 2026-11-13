@@ -47,11 +47,6 @@ public sealed partial class OpaqueSyncStore
             return Reject(OpaqueSyncStatus.InvalidCursor);
         }
 
-        if (request.AfterSequence < floor)
-        {
-            return Reject(OpaqueSyncStatus.CursorExpired);
-        }
-
         using (SqliteCommand epochCheck = Command(transaction, """
             SELECT 1 FROM (
                 SELECT key_epoch FROM sync_records WHERE space_id=$space
@@ -63,6 +58,11 @@ public sealed partial class OpaqueSyncStore
             {
                 return Reject(OpaqueSyncStatus.ResetRequired);
             }
+        }
+
+        if (request.AfterSequence < floor)
+        {
+            return Reject(OpaqueSyncStatus.CursorExpired);
         }
 
         List<OpaqueSyncEvent> changes = [];
