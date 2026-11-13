@@ -125,6 +125,7 @@ struct VerificationDisclosureEvent: Decodable, Identifiable {
     let requestId: String?
     let sourceId: String?
     let providerId: String?
+    let actor: String
     let operation: String
     let result: String
     let reasonCode: String
