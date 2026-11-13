@@ -13,11 +13,24 @@ public static class ProcessorKeys
     public const string MediaHeader = "media-header-v1";
     public const string TimedCaption = "timed-caption-v1";
 
+    /// <summary>
+    /// Recognizes bank and card documents (OFX/QFX/QBO, QIF, delimited exports, PDF statements)
+    /// directly from verified originals. Scheduled at capture for candidate file extensions only.
+    /// </summary>
+    public const string FinancialRecords = "financial-records-v1";
+
+    /// <summary>
+    /// Local-model categories for merchants the deterministic rules leave uncategorized. Runs
+    /// after <see cref="FinancialRecords"/> completes and is deferred while no model is enabled.
+    /// </summary>
+    public const string FinancialCategories = "financial-categories-v1";
+
     private static readonly IReadOnlyDictionary<string, string[]> Dependents =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             [SourceText] = [MarkdownHeadings, TextSegments],
-            [TextSegments] = [SemanticExtraction]
+            [TextSegments] = [SemanticExtraction],
+            [FinancialRecords] = [FinancialCategories]
         };
 
     /// <summary>Processors that consume the completed output of <paramref name="processorKey"/>.</summary>

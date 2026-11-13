@@ -91,7 +91,7 @@ public sealed class TextExtractionTests : IDisposable
         Assert.Equal("pdf_not_supported", catalog.Text.Read(pdf.ItemId, 1)?.ReasonCode);
         Assert.Equal("signature_mismatch", catalog.Text.Read(disguised.ItemId, 1)?.ReasonCode);
         Assert.Equal("binary_content", catalog.Text.Read(nul.ItemId, 1)?.ReasonCode);
-        Assert.All(catalog.Processing.List(), job => Assert.Equal("unsupported", job.State));
+        Assert.All(catalog.Processing.List().Where(job => job.ProcessorKey == ProcessorKeys.SourceText), job => Assert.Equal("unsupported", job.State));
         await catalog.Originals.VerifyAsync(binary.ItemId);
         await catalog.Originals.VerifyAsync(pdf.ItemId);
     }
@@ -171,7 +171,7 @@ public sealed class TextExtractionTests : IDisposable
         Assert.Equal(1, (await CatalogSnapshots.VerifyAsync(backup, 20_000_000)).ObjectCount);
         await CatalogSnapshots.RestoreAsync(backup, destination, 20_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(destination);
-        Assert.Equal(20, restored.SchemaVersion);
+        Assert.Equal(CatalogSchema.CurrentVersion, restored.SchemaVersion);
         Assert.Equal("saved", restored.Text.Read(accepted.ItemId, 1)?.Content);
         Assert.False(await ProcessingDriver.Text(restored).ProcessNextAsync());
         await restored.Originals.VerifyAsync(accepted.ItemId);
@@ -257,7 +257,7 @@ public sealed class TextExtractionTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(root);
-        Assert.Equal(20, upgraded.SchemaVersion);
+        Assert.Equal(CatalogSchema.CurrentVersion, upgraded.SchemaVersion);
         using SqliteConnection check = new(new SqliteConnectionStringBuilder
         {
             DataSource = upgraded.DatabasePath,

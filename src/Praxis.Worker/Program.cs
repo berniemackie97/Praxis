@@ -7,6 +7,12 @@ using Praxis.Worker.Composition;
 using Praxis.Worker.Hosting;
 using Praxis.Worker.Recovery;
 
+if (args is ["mcp-relay", string socketPath, string token])
+{
+    // A CLI agent's MCP server: forwards stdio to this session's private worker socket. No catalog access.
+    return await Praxis.Infrastructure.Agents.McpRelay.RunAsync(socketPath, token, Console.OpenStandardInput(), Console.OpenStandardOutput(), CancellationToken.None);
+}
+
 bool recovery = args is ["recovery", ..];
 try
 {

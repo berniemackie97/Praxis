@@ -464,7 +464,7 @@ public sealed class ObservedRenameTests : IDisposable
 
         await CatalogSnapshots.RestoreAsync(backup, restoredRoot, 8_000_000);
         using SqliteCatalog restored = SqliteCatalog.Open(restoredRoot);
-        Assert.Equal(20, restored.SchemaVersion);
+        Assert.Equal(CatalogSchema.CurrentVersion, restored.SchemaVersion);
         LibraryItem recovered = Assert.Single(restored.Library.List());
         Assert.Equal(sourceId, recovered.SourceId);
         Assert.Equal(itemId, recovered.ItemId);
@@ -498,7 +498,7 @@ public sealed class ObservedRenameTests : IDisposable
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(dataRoot);
-        Assert.Equal(20, upgraded.SchemaVersion);
+        Assert.Equal(CatalogSchema.CurrentVersion, upgraded.SchemaVersion);
         Assert.Equal(0L, Count("source_locator_moves"));
     }
 

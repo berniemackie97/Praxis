@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="PdfPig" />
     <InternalsVisibleTo Include="Praxis.Infrastructure.Tests" />
     <InternalsVisibleTo Include="Praxis.SyncHost.Tests" />
     <ProjectReference Include="../Praxis.Application/Praxis.Application.csproj" />

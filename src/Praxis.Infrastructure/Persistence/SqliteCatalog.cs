@@ -1,12 +1,15 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence.Agents;
 using Praxis.Infrastructure.Persistence.Collections;
 using Praxis.Infrastructure.Persistence.Enrichment;
+using Praxis.Infrastructure.Persistence.Finance;
 using Praxis.Infrastructure.Persistence.Intake;
 using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Library;
 using Praxis.Infrastructure.Persistence.Models;
 using Praxis.Infrastructure.Persistence.Originals;
+using Praxis.Infrastructure.Persistence.Policy;
 using Praxis.Infrastructure.Persistence.Processing;
 using Praxis.Infrastructure.Persistence.Recovery;
 using Praxis.Infrastructure.Persistence.Search;
@@ -44,6 +47,9 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteCollectionRepository Collections { get; }
     public CatalogRecovery Recovery { get; }
     public SqliteModelProfileRepository Models { get; }
+    public SqliteFinancialLedgerRepository Finance { get; }
+    public SqlitePolicyRepository Policy { get; }
+    public SqliteAgentRepository Agents { get; }
 
     private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, SqliteConnection? reader, TimeProvider clock)
     {
@@ -68,6 +74,9 @@ public sealed class SqliteCatalog : IDisposable
         Collections = new SqliteCollectionRepository(database, clock);
         Recovery = new CatalogRecovery(database, objects, dataDirectory);
         Models = new SqliteModelProfileRepository(database, clock);
+        Finance = new SqliteFinancialLedgerRepository(database, clock);
+        Policy = new SqlitePolicyRepository(database, clock);
+        Agents = new SqliteAgentRepository(database, clock);
     }
 
     public static SqliteCatalog Open(string dataDirectory, TimeProvider? clock = null) =>

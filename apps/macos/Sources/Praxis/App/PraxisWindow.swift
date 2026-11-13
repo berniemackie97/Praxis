@@ -9,7 +9,8 @@ struct PraxisWindow: View {
     @AppStorage("rootApprovals") private var rootApprovals = "{}"
     @AppStorage("configured") private var configured = false
     @AppStorage("dotnetExecutable") private var dotnetExecutable = ""
-    @State private var section = Section.library
+    @State private var section = Section.chat
+    @State private var approvalCount = 0
     private let refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -29,7 +30,7 @@ struct PraxisWindow: View {
             if model.running {
                 Picker("Workspace", selection: $section) {
                     ForEach(Section.allCases, id: \.self) { section in
-                        Text(section.rawValue).tag(section)
+                        Text(section == .approvals && approvalCount > 0 ? "\(section.rawValue) (\(approvalCount))" : section.rawValue).tag(section)
                     }
                 }.pickerStyle(.segmented)
                 workspace
@@ -55,16 +56,23 @@ struct PraxisWindow: View {
             }
         }
         .onDisappear { model.stop() }
+        .onReceive(model.approvals.$holds.combineLatest(model.approvals.$pending, model.approvals.$proposals, model.approvals.$memories)) { holds, pending, proposals, memories in
+            approvalCount = holds.count + pending.count + proposals.count + memories.count
+        }
         .onReceive(refreshTimer) { _ in
             guard model.running else { return }
             model.refresh()
             if section == .verification { model.verification.refresh() }
+            model.approvals.refresh()
         }
     }
 
     @ViewBuilder
     private var workspace: some View {
         switch section {
+        case .chat: ChatView(model: model.chat) { section = .privacy }
+        case .approvals: ApprovalsView(model: model.approvals)
+        case .privacy: PrivacySettingsView(model: model.privacy, intelligence: model.intelligence)
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
@@ -77,6 +85,8 @@ struct PraxisWindow: View {
     }
 
     private enum Section: String, CaseIterable {
+        case chat = "Chat"
+        case approvals = "Approvals"
         case library = "Inbox & Library"
         case quickNote = "Quick note"
         case search = "Search"
@@ -84,6 +94,7 @@ struct PraxisWindow: View {
         case verification = "Verification"
         case collections = "Collections"
         case models = "Models"
+        case privacy = "Privacy & Agents"
         case configuration = "Configuration"
     }
 }

@@ -1,0 +1,52 @@
+using Praxis.Application.Agents;
+using Praxis.Application.Agents.Data;
+using Praxis.Application.Agents.Runtime;
+using Praxis.Application.Agents.Tools;
+using Praxis.Application.Finance;
+using Praxis.Application.Inference;
+using Praxis.Application.Policy;
+using Praxis.Application.Verification;
+using Praxis.Infrastructure.Documents;
+using Praxis.Infrastructure.Persistence;
+
+namespace Praxis.Infrastructure.Composition;
+
+/// <summary>Composes the agent tool surface, registry and runtime over an open catalog.</summary>
+public static class AgentComposition
+{
+    public static IReadOnlyList<IAgentTool> Tools(
+        SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock)
+    {
+        FinancialLedger ledger = new(catalog.Finance);
+        PolicyService policy = new(catalog.Policy);
+        IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger)];
+        TieredModels tiers = new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock);
+        PdfPigTextReader pdf = new();
+        return
+        [
+            new KnowledgeSearchTool(catalog.Search, catalog.Embeddings, catalog.Models, embeddings, catalog.Knowledge, catalog.Policy),
+            new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf),
+            new KnowledgeEntityTool(catalog.Knowledge),
+            new KnowledgeRelatedTool(catalog.Knowledge),
+            new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger),
+            new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
+            new DataDescribeTool(datasets),
+            new DataQueryTool(datasets),
+            new ComputeEvaluateTool(),
+            new ArtifactCreateTool(artifacts, catalog.Agents, clock),
+            new ArtifactUpdateTool(artifacts, catalog.Agents, clock),
+            new MemoryRecallTool(catalog.Agents),
+            new MemoryRememberTool(catalog.Agents),
+            new IntakeStatusTool(catalog.Processing, catalog.Policy, ledger),
+            new IntakeReprocessTool(catalog.Processing),
+            new SettingsReadTool(policy, catalog.Policy),
+            new SettingsProposeTool(policy, clock),
+            new AgentDelegateTool(tiers, catalog.Text, catalog.Sources),
+            .. SystemActionTools.All
+        ];
+    }
+
+    public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock) =>
+        new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
+            new DisclosureGate(catalog.Policy, clock), clock);
+}

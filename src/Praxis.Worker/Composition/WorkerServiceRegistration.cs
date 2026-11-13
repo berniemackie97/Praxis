@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Praxis.Application.Agents;
+using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Collections;
 using Praxis.Application.Desktop;
 using Praxis.Application.Desktop.Actions;
 using Praxis.Application.Enrichment;
+using Praxis.Application.Finance;
 using Praxis.Application.Inference;
 using Praxis.Application.Intake;
 using Praxis.Application.Knowledge;
@@ -11,11 +14,13 @@ using Praxis.Application.Library;
 using Praxis.Application.Media;
 using Praxis.Application.Models;
 using Praxis.Application.Originals;
+using Praxis.Application.Policy;
 using Praxis.Application.Processing;
 using Praxis.Application.Search;
 using Praxis.Application.Sources;
 using Praxis.Application.Text;
 using Praxis.Application.Verification;
+using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Inference.Ollama;
@@ -50,6 +55,9 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IVerificationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Verification);
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
+        services.AddSingleton<IFinancialLedgerRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Finance);
+        services.AddSingleton<IPolicyRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Policy);
+        services.AddSingleton<PolicyService>();
 
         services.AddSingleton<IVerifierModelFactory, VerificationModelFactory>();
         services.AddSingleton<IChatModelConnector, OllamaChatModelConnector>();
@@ -59,13 +67,28 @@ internal static class WorkerServiceRegistration
         services.AddSingleton(provider => CatalogProcessing.CreatePipeline(
             provider.GetRequiredService<SqliteCatalog>(),
             status: Report(provider, "Praxis.Processing"),
-            clock: provider.GetRequiredService<TimeProvider>()));
+            clock: provider.GetRequiredService<TimeProvider>(),
+            models: provider.GetRequiredService<IVerifierModelFactory>()));
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
             provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
         services.AddSingleton<MediaEvidence>();
+        services.AddSingleton<FinancialLedger>();
+        services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
+        services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
+        services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
+        services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
+        services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
+        services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
+            provider.GetRequiredService<ISecretStore>(), RelayCommand(), Path.GetTempPath()));
+        services.AddSingleton(provider => AgentComposition.Runtime(provider.GetRequiredService<SqliteCatalog>(),
+            AgentComposition.Tools(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IEmbeddingModelConnector>(),
+                provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>()),
+            provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<AgentRunCoordinator>();
+        services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>()));
 
         services.AddSingleton(provider => new WatchedFolderIntakeGroup(
             provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>(), options.DataRoot,
@@ -88,11 +111,24 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();
+        services.AddSingleton<IDesktopActionGroup, FinanceActions>();
+        services.AddSingleton<IDesktopActionGroup, PolicyActions>();
+        services.AddSingleton<IDesktopActionGroup, AgentActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();
 
         services.AddHostedService<WorkerSupervisor>();
         return services;
+    }
+
+    /// <summary>How CLI agents launch this worker as their Praxis MCP relay (apphost, or dotnet plus the worker assembly).</summary>
+    private static AgentRelayCommand RelayCommand()
+    {
+        string process = Environment.ProcessPath ?? throw new InvalidOperationException("The worker path is unknown.");
+        string assembly = System.Reflection.Assembly.GetEntryAssembly()?.Location ?? "";
+        return Path.GetFileNameWithoutExtension(process).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+            ? new AgentRelayCommand(process, [assembly])
+            : new AgentRelayCommand(process, []);
     }
 
     /// <summary>Routes a component's fixed operational status messages to a named log category.</summary>

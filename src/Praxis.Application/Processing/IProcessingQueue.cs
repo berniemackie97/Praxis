@@ -16,6 +16,13 @@ public interface IProcessingQueue
     /// <summary>Queues a processor for the current revision of an active source; false when it already exists or is not current.</summary>
     bool Queue(Guid itemId, int revision, string processorKey);
 
+    /// <summary>
+    /// Queues a step again for the item's current revision of an active source: a finished job is
+    /// reset, a missing one created. Returns false when the job is already queued or running, or
+    /// the revision is not current.
+    /// </summary>
+    bool Requeue(Guid itemId, int revision, string processorKey);
+
     /// <summary>Leases the highest-priority claimable job, optionally for one processor; expired leases are reclaimable.</summary>
     ProcessingLease? TryClaim(TimeSpan leaseDuration, int maxAttempts, string? processorKey);
 

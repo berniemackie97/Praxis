@@ -35,7 +35,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -48,9 +49,11 @@
       "contentHash": "muyroan6rKrf0omZL8UF7Kw5uOGp/yBg1L/XWvkFN3WhKaNtK2IWqRZw93nIwVqjhTVDO0l4CEGhHIh+mb+sKg==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -64,9 +67,11 @@
       "contentHash": "1p9rO3Q2X/L/9YrYog3vaDzi8u+WZfJCOkDYoHqmofqYP0DLPLPyZcS2Rnh/79JXAodgbs1AgsaNwLpIvC3Xew==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -473,7 +478,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -489,7 +495,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -505,7 +512,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -521,11 +529,30 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
         "value": "MIT"
+      }
+    },
+    {
+      "package": "PdfPig",
+      "version": "0.1.16",
+      "contentHash": "qQcbsNMYVY+K5ELptax2S8thNMk0+rSQq3H/KdYj3LLcko8yTCz8y5KIvsKxIyAuTN0ZYNnfsZkM+0EvxTwHVA==",
+      "projects": [
+        "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
+        "src/Praxis.Worker",
+        "tests/Praxis.Architecture.Tests",
+        "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
+        "tools/Praxis.RecoveryCheck"
+      ],
+      "declaredLicense": {
+        "kind": "expression",
+        "value": "Apache-2.0"
       }
     },
     {
@@ -534,9 +561,11 @@
       "contentHash": "NlDixlC7uHmo+ojXRgkNvN0tQtVGpLDZ3x2OpgNj+G07VHh5cXSszFDrAiC4BpUiPwkcaeuQkMV9WQ123xVtmQ==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -550,9 +579,11 @@
       "contentHash": "2joofoinuHBFs0nMX3nKuXgxpXryRkCOdM2Ua6HBqQLLy6IW+5f28ZI+HAvMyF8vG7XfNz/lwfBfE6V4juru8Q==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -566,9 +597,11 @@
       "contentHash": "D2UAuiGxFYBqeRXjjjGgvJ5UQifzn6wefmSqeKU7XcNGKLbJRP6X7kcPZ6opOBJGdCIlgbSxTvDpBbLvsN594A==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -582,9 +615,11 @@
       "contentHash": "ZU60dSqoSNRe49KcQDUmOVgdRtjITOssVXFtiISs+zJXDI4D2Sndwpn2NOtzDQNPu0ZAvpoLPQ+GLKv6iEZn8Q==",
       "projects": [
         "src/Praxis.Infrastructure",
+        "src/Praxis.SyncHost",
         "src/Praxis.Worker",
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Infrastructure.Tests",
+        "tests/Praxis.SyncHost.Tests",
         "tools/Praxis.RecoveryCheck"
       ],
       "declaredLicense": {
@@ -615,7 +650,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -631,7 +667,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "url",
@@ -647,7 +684,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -663,7 +701,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -679,7 +718,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -695,7 +735,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -711,7 +752,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
@@ -727,7 +769,8 @@
         "tests/Praxis.Architecture.Tests",
         "tests/Praxis.Domain.Tests",
         "tests/Praxis.Infrastructure.Tests",
-        "tests/Praxis.Notes.Tests"
+        "tests/Praxis.Notes.Tests",
+        "tests/Praxis.SyncHost.Tests"
       ],
       "declaredLicense": {
         "kind": "expression",
