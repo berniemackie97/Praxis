@@ -527,7 +527,10 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                             WHERE c.request_id = i.request_id AND c.ordinal = i.ordinal
                               AND NOT EXISTS (
                                 SELECT 1 FROM visible_entity_mentions m
+                                JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                                 WHERE m.entity_id = i.entity_id AND m.proposal_id = c.proposal_id
+                                  AND p.source_id = c.source_id AND p.revision = c.revision
+                                  AND p.source_digest = c.source_digest
                               )
                         )
                     ))
@@ -564,7 +567,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         IReadOnlyList<string> proposals, IReadOnlyList<string> entities, string now, out Guid requestId)
     {
         requestId = Guid.NewGuid();
-        var items = new List<(JsonObject Item, string? Proposal, string? Entity, IReadOnlyList<string> Contexts)>();
+        var items = new List<(JsonObject Item, string? Proposal, string? Entity, IReadOnlyList<VerificationEvidence.ContextReference> Contexts)>();
         foreach (var proposal in proposals.Take(VerificationLimits.MaximumItemsPerRequest))
         {
             if (VerificationEvidence.ForProposal(connection, transaction, items.Count + 1, proposal) is { } item)
@@ -577,7 +580,7 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
         {
             if (VerificationEvidence.ForEntityType(connection, transaction, items.Count + 1, entity) is { } evidence)
             {
-                items.Add((evidence.Payload, null, entity, evidence.ProposalIds));
+                items.Add((evidence.Payload, null, entity, evidence.Contexts));
             }
         }
 
@@ -599,12 +602,15 @@ public sealed class SqliteVerificationRepository : IVerificationRepository
                 VALUES ($id, $ordinal, $proposal, $entity, 1)
                 """, ("$id", id), ("$ordinal", index + 1), ("$proposal", items[index].Proposal),
                 ("$entity", items[index].Entity));
-            foreach (string proposal in items[index].Contexts)
+            foreach (VerificationEvidence.ContextReference context in items[index].Contexts)
             {
                 connection.Run(transaction, """
-                    INSERT INTO verification_contexts (request_id, ordinal, proposal_id)
-                    VALUES ($request, $ordinal, $proposal)
-                    """, ("$request", id), ("$ordinal", index + 1), ("$proposal", proposal));
+                    INSERT INTO verification_contexts
+                        (request_id, ordinal, proposal_id, source_id, revision, source_digest)
+                    VALUES ($request, $ordinal, $proposal, $source, $revision, $digest)
+                    """, ("$request", id), ("$ordinal", index + 1),
+                    ("$proposal", context.ProposalId), ("$source", context.SourceId),
+                    ("$revision", context.Revision), ("$digest", context.SourceDigest));
             }
         }
 
