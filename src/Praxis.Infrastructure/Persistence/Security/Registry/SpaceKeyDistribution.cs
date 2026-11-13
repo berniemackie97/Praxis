@@ -68,6 +68,21 @@ public sealed class SpaceKeyDistribution(SecurityRegistry registry)
                 }
             }
 
+            using (SqliteCommand previous = SecurityRegistry.Command(connection, transaction,
+                """
+                SELECT 1 FROM space_key_epochs
+                WHERE space_id=$space AND commitment=$commit LIMIT 1
+                """,
+                ("$space", SecurityRegistry.Id(signed.SpaceId)),
+                ("$commit", signed.KeyCommitment)))
+            {
+                if (previous.ExecuteScalar() is not null)
+                {
+                    throw new InvalidOperationException(
+                        "A content key cannot be reused across security-space epochs.");
+                }
+            }
+
             using (SqliteCommand save = SecurityRegistry.Command(connection, transaction, """
                 INSERT INTO space_key_epochs
                     (space_id, epoch, commitment, signer_device_id, recovery_nonce,

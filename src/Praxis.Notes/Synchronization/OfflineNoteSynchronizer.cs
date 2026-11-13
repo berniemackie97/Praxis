@@ -50,6 +50,28 @@ public sealed partial class OfflineNoteSynchronizer(
         }
     }
 
+    public async Task<NoteSyncProgress> RecoverKeyEpochAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await cycle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Guid epoch = journal.CollectionEpoch;
+            Guid deviceId = journal.DeviceId;
+            int conflictsBefore = journal.Conflicts.Count + journal.IncomingCollisions.Count;
+            await ApplySnapshotAsync(epoch, deviceId, journal.Cursor, cancellationToken)
+                .ConfigureAwait(false);
+            NoteSyncState state = journal.Conflicts.Count + journal.IncomingCollisions.Count > 0
+                ? NoteSyncState.ConflictsPending
+                : journal.Outbound().Count > 0 ? NoteSyncState.MoreWork : NoteSyncState.UpToDate;
+            return Progress(state, 0, 0, true, conflictsBefore);
+        }
+        finally
+        {
+            cycle.Release();
+        }
+    }
+
     private NoteSyncProgress Progress(NoteSyncState state, int accepted,
         int applied, bool snapshot, int conflictsBefore) =>
         new(state, accepted,

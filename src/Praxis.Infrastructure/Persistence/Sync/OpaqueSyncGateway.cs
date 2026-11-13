@@ -19,6 +19,34 @@ public sealed class OpaqueSyncGateway(SecurityRegistry registry, OpaqueSyncStore
             mutation.ContentEpoch, scope => store.Submit(scope, mutation));
     }
 
+    public OpaqueSyncRotationReceipt StageRotation(VerifiedCertificateIdentity session,
+        VerifiedDeviceProof proof, OpaqueSyncRotationStage request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(proof);
+        if (proof.DeviceId != request.DeviceId || proof.SpaceId != request.SpaceId)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        return registry.ProtectedData.ExecuteSpace(session, proof, SecurityPermission.Write,
+            request.ContentEpoch, scope => store.StageRotation(scope, request), requireOwner: true);
+    }
+
+    public OpaqueSyncRotationReceipt CommitRotation(VerifiedCertificateIdentity session,
+        VerifiedDeviceProof proof, OpaqueSyncRotationCommit request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(proof);
+        if (proof.DeviceId != request.DeviceId || proof.SpaceId != request.SpaceId)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        return registry.ProtectedData.ExecuteSpace(session, proof, SecurityPermission.Write,
+            request.ContentEpoch, scope => store.CommitRotation(scope, request), requireOwner: true);
+    }
+
     public OpaqueSyncSnapshotPage Snapshot(VerifiedCertificateIdentity session,
         VerifiedDeviceProof proof, OpaqueSyncSnapshotPull request)
     {

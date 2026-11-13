@@ -149,6 +149,38 @@ public sealed partial class OpaqueSyncStore : IDisposable
         }
     }
 
+    internal OpaqueSyncRotationReceipt StageRotation(AuthorizedSpaceScope scope, OpaqueSyncRotationStage request)
+    {
+        if (scope.Permission != SecurityPermission.Write ||
+            scope.SpaceId != request.SpaceId || scope.DeviceId != request.DeviceId ||
+            scope.ContentEpoch != request.ContentEpoch)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        lock (gate)
+        {
+            EnsureOpen();
+            return WriteRotationStage(scope, request);
+        }
+    }
+
+    internal OpaqueSyncRotationReceipt CommitRotation(AuthorizedSpaceScope scope, OpaqueSyncRotationCommit request)
+    {
+        if (scope.Permission != SecurityPermission.Write ||
+            scope.SpaceId != request.SpaceId || scope.DeviceId != request.DeviceId ||
+            scope.ContentEpoch != request.ContentEpoch)
+        {
+            throw new UnauthorizedAccessException("The requested private resource is not authorized.");
+        }
+
+        lock (gate)
+        {
+            EnsureOpen();
+            return WriteRotationCommit(scope, request);
+        }
+    }
+
     internal OpaqueSyncSnapshotPage Snapshot(AuthorizedSpaceScope scope, OpaqueSyncSnapshotPull request)
     {
         if (scope.Permission != SecurityPermission.Read ||

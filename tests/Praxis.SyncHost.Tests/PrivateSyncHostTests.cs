@@ -567,7 +567,7 @@ public sealed class PrivateSyncHostTests
         host.PruneThrough(19);
 
         host.CorruptSnapshotRecord(changed);
-        await Assert.ThrowsAsync<CryptographicException>(() => secondSync.ReconcileAsync());
+        await Assert.ThrowsAnyAsync<CryptographicException>(() => secondSync.ReconcileAsync());
         Assert.Equal(18, second.Cursor);
         Assert.Equal(18, second.Records.Count);
         Assert.DoesNotContain(second.Records, note => note.Markdown == "changed value");
@@ -595,7 +595,155 @@ public sealed class PrivateSyncHostTests
 
         Assert.True(host.Registry.Operator.RevokeDevice(host.SecondDevice));
         await Assert.ThrowsAsync<HttpRequestException>(() => reader.SnapshotAsync(query));
-        Assert.Equal(1, (await writer.PullAsync(host.Pull(host.FirstDevice, 0, 100))).HeadSequence);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            writer.PullAsync(host.Pull(host.FirstDevice, 0, 100)));
+    }
+
+    [Fact]
+    public async Task OwnerRotatesRevokedSpaceWithoutExposingOldCiphertextOrDroppingJournal()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient ownerClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient revokedClient = host.ConnectSecond();
+        using OfflineNoteJournal owner = OfflineNoteJournal.Open(
+            host.NewClientDirectory("rotate-owner"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal other = OfflineNoteJournal.Open(
+            host.NewClientDirectory("rotate-other"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange ownerExchange =
+            host.Exchange(owner, ownerClient, "rotate-outbox-owner");
+        using AuthenticatedNoteExchange otherExchange =
+            host.Exchange(other, revokedClient, "rotate-outbox-other");
+        OfflineNoteSynchronizer ownerSync = new(owner, host.Space, ownerExchange);
+        OfflineNoteSynchronizer otherSync = new(other, host.Space, otherExchange);
+        Guid noteId = Guid.NewGuid();
+        owner.Queue(noteId, LocalNoteAction.Upsert, "shared.md", "private text");
+        await ownerSync.ReconcileAsync();
+        await otherSync.ReconcileAsync();
+        Assert.Equal(owner.Records.ToArray(), other.Records.ToArray());
+
+        Assert.True(host.Registry.Operator.RevokeDevice(host.SecondDevice));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            ownerClient.PullAsync(host.Pull(host.FirstDevice, 0, 100)));
+        byte[] newKey = host.PublishNextKeyEpoch();
+        Assert.Equal(OpaqueSyncStatus.ResetRequired,
+            (await ownerClient.PullAsync(new OpaqueSyncPull(
+                1, host.Space, host.CollectionEpoch, host.FirstDevice, 2, 0, 100))).Status);
+
+        await Assert.ThrowsAsync<CryptographicException>(() =>
+            OwnerNoteKeyRotation.RotateAsync(owner, host.Space, 1, 2,
+                newKey, new byte[32], ownerClient));
+
+        OpaqueSyncRotationReceipt rotated = await OwnerNoteKeyRotation.RotateAsync(
+            owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), ownerClient);
+        Assert.Equal(OpaqueSyncStatus.Applied, rotated.Status);
+        Assert.Equal(1, rotated.HeadSequence);
+        Assert.Equal(1, owner.Cursor);
+        Assert.Equal("private text", Assert.Single(owner.Records).Markdown);
+
+        OpaqueSyncSnapshotPage page = await ownerClient.SnapshotAsync(
+            new OpaqueSyncSnapshotPull(1, host.Space, host.CollectionEpoch,
+                host.FirstDevice, 2, 0, Guid.Empty, 16));
+        OpaqueSyncSnapshotRecord encrypted = Assert.Single(page.Records);
+        Assert.Equal(2, encrypted.ContentEpoch);
+        Assert.Equal(new OpaqueNoteContent("shared.md", "private text"),
+            ClientOpaqueNoteCipher.Decrypt(newKey, host.Space, host.CollectionEpoch,
+                noteId, 1, OpaqueSyncAction.Upsert, 2, encrypted.Ciphertext));
+
+        using AuthenticatedNoteExchange updated =
+            new(owner, host.Space, 2, newKey, ownerClient, host.NewClientDirectory("new-key-outbox"));
+        OfflineNoteSynchronizer updatedSync = new(owner, host.Space, updated);
+        NoteSyncProgress recovered = await updatedSync.RecoverKeyEpochAsync();
+        Assert.True(recovered.SnapshotApplied);
+        Assert.Equal(NoteSyncState.UpToDate, recovered.State);
+        Assert.Equal(1, owner.Cursor);
+        Assert.Equal("private text", Assert.Single(owner.Records).Markdown);
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            revokedClient.SnapshotAsync(new OpaqueSyncSnapshotPull(
+                1, host.Space, host.CollectionEpoch, host.SecondDevice,
+                2, 0, Guid.Empty, 16)));
+        Assert.Equal(OpaqueSyncStatus.Applied,
+            (await OwnerNoteKeyRotation.RotateAsync(
+                owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), ownerClient)).Status);
+    }
+
+    [Fact]
+    public async Task OwnerCannotRekeyFromAnUnreconciledLocalOutbox()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient client = host.ConnectFirst();
+        using OfflineNoteJournal owner = OfflineNoteJournal.Open(
+            host.NewClientDirectory("stale-owner"), host.CollectionEpoch, host.FirstDevice);
+        using AuthenticatedNoteExchange exchange =
+            host.Exchange(owner, client, "stale-owner-outbox");
+        OfflineNoteSynchronizer sync = new(owner, host.Space, exchange);
+        owner.Queue(Guid.NewGuid(), LocalNoteAction.Upsert, "base.md", "original");
+        await sync.ReconcileAsync();
+        PendingNoteEdit pending = owner.Queue(Guid.NewGuid(),
+            LocalNoteAction.Upsert, "offline.md", "unsent");
+        byte[] newKey = host.PublishNextKeyEpoch();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            OwnerNoteKeyRotation.RotateAsync(owner, host.Space, 1, 2, newKey, SHA256.HashData(newKey), client));
+        Assert.Equal(pending, Assert.Single(owner.Pending));
+        Assert.Equal(1, owner.Cursor);
+        Assert.Equal(OpaqueSyncStatus.ResetRequired,
+            (await client.SnapshotAsync(new OpaqueSyncSnapshotPull(
+                1, host.Space, host.CollectionEpoch, host.FirstDevice,
+                2, 0, Guid.Empty, 16))).Status);
+    }
+
+    [Fact]
+    public async Task OfflineEditOnSecondAuthorizedDeviceSurvivesKeyEpochMigration()
+    {
+        await using TestHost host = new();
+        await host.StartAsync();
+        using OpaqueSyncTransportClient firstClient = host.ConnectFirst();
+        using OpaqueSyncTransportClient secondClient = host.ConnectSecond();
+        using OfflineNoteJournal first = OfflineNoteJournal.Open(
+            host.NewClientDirectory("epoch-first"), host.CollectionEpoch, host.FirstDevice);
+        using OfflineNoteJournal second = OfflineNoteJournal.Open(
+            host.NewClientDirectory("epoch-second"), host.CollectionEpoch, host.SecondDevice);
+        using AuthenticatedNoteExchange firstOld =
+            host.Exchange(first, firstClient, "epoch-outbox-first");
+        using AuthenticatedNoteExchange secondOld =
+            host.Exchange(second, secondClient, "epoch-outbox-second");
+        OfflineNoteSynchronizer firstSync = new(first, host.Space, firstOld);
+        OfflineNoteSynchronizer secondSync = new(second, host.Space, secondOld);
+        Guid note = Guid.NewGuid();
+        first.Queue(note, LocalNoteAction.Upsert, "team.md", "original");
+        await firstSync.ReconcileAsync();
+        await secondSync.ReconcileAsync();
+        PendingNoteEdit offline = second.Queue(note, LocalNoteAction.Upsert,
+            "team.md", "offline contribution");
+
+        byte[] nextKey = host.PublishNextKeyEpoch();
+        OpaqueSyncRotationReceipt rotation = await OwnerNoteKeyRotation.RotateAsync(
+            first, host.Space, 1, 2, nextKey, SHA256.HashData(nextKey), firstClient);
+        Assert.Equal(OpaqueSyncStatus.Applied, rotation.Status);
+
+        using AuthenticatedNoteExchange secondNew = new(
+            second, host.Space, 2, nextKey, secondClient,
+            host.NewClientDirectory("epoch2-second-outbox"));
+        OfflineNoteSynchronizer secondUpdated = new(second, host.Space, secondNew);
+        NoteSyncProgress restored = await secondUpdated.RecoverKeyEpochAsync();
+        Assert.True(restored.SnapshotApplied);
+        Assert.Equal(offline.OperationId, Assert.Single(second.Pending).OperationId);
+        Assert.Equal("original", Assert.Single(second.Records).Markdown);
+        Assert.Equal(NoteSyncState.MoreWork, restored.State);
+        Assert.Equal(NoteSyncState.UpToDate, (await secondUpdated.ReconcileAsync()).State);
+        Assert.Empty(second.Pending);
+        Assert.Empty(second.Conflicts);
+
+        using AuthenticatedNoteExchange firstNew = new(
+            first, host.Space, 2, nextKey, firstClient,
+            host.NewClientDirectory("epoch2-first-outbox"));
+        OfflineNoteSynchronizer firstUpdated = new(first, host.Space, firstNew);
+        Assert.True((await firstUpdated.RecoverKeyEpochAsync()).SnapshotApplied);
+        Assert.Equal(first.Records.ToArray(), second.Records.ToArray());
+        Assert.Equal("offline contribution", Assert.Single(first.Records).Markdown);
+        Assert.Equal(2, first.Cursor);
+        Assert.Equal(2, second.Cursor);
     }
 
     private sealed class TestHost : IAsyncDisposable
@@ -667,6 +815,23 @@ public sealed class PrivateSyncHostTests
         public AuthenticatedNoteExchange Exchange(OfflineNoteJournal journal,
             OpaqueSyncTransportClient client, string outboxName) =>
             new(journal, Space, 1, contentKey, client, NewClientDirectory(outboxName));
+
+        public byte[] PublishNextKeyEpoch()
+        {
+            VerifiedDeviceProof proof = Prove(firstSigner, FirstDevice, SecurityPermission.Write);
+            IReadOnlyDictionary<Guid, byte[]> pinned = new Dictionary<Guid, byte[]>
+            {
+                [FirstDevice] = firstSigner.ExportSubjectPublicKeyInfo(),
+                [SecondDevice] = secondSigner.ExportSubjectPublicKeyInfo()
+            };
+            byte[] next = ClientSpaceKeys.GenerateContentKey();
+            SpaceKeyPublication publication = ClientSpaceKeys.Protect(
+                Registry.InstallationId, Space, 2, FirstDevice, firstSigner,
+                Registry.SpaceKeys.Recipients(proof), pinned, next,
+                ClientSpaceKeys.GenerateRecoverySecret());
+            Registry.SpaceKeys.Publish(proof, publication);
+            return next;
+        }
 
         public SslProtocols ExpectedProtocol =>
             OperatingSystem.IsMacOS() ? SslProtocols.Tls12 : SslProtocols.Tls13;

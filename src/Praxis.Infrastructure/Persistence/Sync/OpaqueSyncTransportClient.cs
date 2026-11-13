@@ -165,6 +165,52 @@ public sealed class OpaqueSyncTransportClient : IDisposable
         }
     }
 
+    public async Task<OpaqueSyncRotationReceipt> StageRotationAsync(
+        OpaqueSyncRotationStage request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.DeviceId != deviceId)
+        {
+            throw new ArgumentException("The rotation stage is for a different device.", nameof(request));
+        }
+
+        (Guid challengeId, byte[] signature) = await Authorize(
+            request.SpaceId, SecurityPermission.Write, cancellationToken);
+        using HttpResponseMessage response = await http.PostAsJsonAsync("v1/sync/rotation/stage",
+            new SyncRotationStageRequest(challengeId, signature, request), cancellationToken);
+        if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Conflict or
+            HttpStatusCode.BadRequest or HttpStatusCode.InsufficientStorage))
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        return await response.Content.ReadFromJsonAsync<OpaqueSyncRotationReceipt>(
+            cancellationToken) ?? throw new InvalidDataException("The encrypted rotation receipt is missing.");
+    }
+
+    public async Task<OpaqueSyncRotationReceipt> CommitRotationAsync(
+        OpaqueSyncRotationCommit request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.DeviceId != deviceId)
+        {
+            throw new ArgumentException("The rotation commit is for a different device.", nameof(request));
+        }
+
+        (Guid challengeId, byte[] signature) = await Authorize(
+            request.SpaceId, SecurityPermission.Write, cancellationToken);
+        using HttpResponseMessage response = await http.PostAsJsonAsync("v1/sync/rotation/commit",
+            new SyncRotationCommitRequest(challengeId, signature, request), cancellationToken);
+        if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.Conflict or
+            HttpStatusCode.BadRequest or HttpStatusCode.InsufficientStorage))
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        return await response.Content.ReadFromJsonAsync<OpaqueSyncRotationReceipt>(
+            cancellationToken) ?? throw new InvalidDataException("The encrypted rotation receipt is missing.");
+    }
+
     private async Task<(Guid, byte[])> Authorize(Guid spaceId, SecurityPermission permission,
         CancellationToken cancellationToken)
     {

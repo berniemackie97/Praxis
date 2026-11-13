@@ -301,7 +301,94 @@ public static class PrivateSyncHost
             }
         });
 
+        app.MapPost("/v1/sync/rotation/stage", async (HttpContext context) =>
+        {
+            SyncRotationStageRequest? request = await Read<SyncRotationStageRequest>(context);
+            if (request?.Stage is not { } stage || request.Signature is not { Length: 64 })
+            {
+                return Results.BadRequest();
+            }
+
+            VerifiedCertificateIdentity? identity =
+                Identify(context, registry, trustedDeviceRoot, stage.DeviceId);
+            if (identity is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            VerifiedDeviceProof? proof =
+                registry.DeviceProofs.Authenticate(request.ChallengeId, request.Signature);
+            if (proof is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            try
+            {
+                OpaqueSyncRotationReceipt receipt = gateway.StageRotation(identity, proof, stage);
+                return RotationResult(receipt);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
+        });
+
+        app.MapPost("/v1/sync/rotation/commit", async (HttpContext context) =>
+        {
+            SyncRotationCommitRequest? request = await Read<SyncRotationCommitRequest>(context);
+            if (request?.Commit is not { } commit || request.Signature is not { Length: 64 })
+            {
+                return Results.BadRequest();
+            }
+
+            VerifiedCertificateIdentity? identity =
+                Identify(context, registry, trustedDeviceRoot, commit.DeviceId);
+            if (identity is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            VerifiedDeviceProof? proof =
+                registry.DeviceProofs.Authenticate(request.ChallengeId, request.Signature);
+            if (proof is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            try
+            {
+                OpaqueSyncRotationReceipt receipt = gateway.CommitRotation(identity, proof, commit);
+                return RotationResult(receipt);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
+        });
+
         return app;
+    }
+
+    private static IResult RotationResult(OpaqueSyncRotationReceipt receipt)
+    {
+        int status = receipt.Status switch
+        {
+            OpaqueSyncStatus.Ok or OpaqueSyncStatus.Applied => StatusCodes.Status200OK,
+            OpaqueSyncStatus.WrongCollectionEpoch or OpaqueSyncStatus.ResetRequired or
+                OpaqueSyncStatus.OperationKeyReused => StatusCodes.Status409Conflict,
+            OpaqueSyncStatus.QuotaExceeded => StatusCodes.Status507InsufficientStorage,
+            _ => StatusCodes.Status400BadRequest
+        };
+        return Results.Json(receipt, statusCode: status);
     }
 
     private static VerifiedCertificateIdentity? Identify(HttpContext context,

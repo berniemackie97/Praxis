@@ -419,6 +419,44 @@ public sealed class SpaceKeyDistributionTests : IDisposable
         params (Guid DeviceId, ECDsa Signer)[] devices) =>
         devices.ToDictionary(x => x.DeviceId, x => x.Signer.ExportSubjectPublicKeyInfo());
 
+    [Fact]
+    public void OwnerCannotPublishThePreviousContentKeyUnderANewEpoch()
+    {
+        using SecurityRegistry registry = SecurityRegistry.Open(root);
+        Guid owner = registry.Operator.CreatePrincipal();
+        using ECDsa signer = NewSigner();
+        using RSA recipient = NewRecipient();
+        Guid device = Enroll(registry, owner, signer, recipient);
+        Guid space = registry.Operator.CreateSpace(owner, SecurityProcessingClass.ClientHeld);
+        VerifiedDeviceProof proof = Prove(registry, signer, device, space, SecurityPermission.Write);
+        IReadOnlyList<RecipientWrappingKey> recipients = registry.SpaceKeys.Recipients(proof);
+        IReadOnlyDictionary<Guid, byte[]> pins = Trusted((device, signer));
+        byte[] contentKey = ClientSpaceKeys.GenerateContentKey();
+        SpaceKeyPublication first = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 1, device, signer,
+            recipients, pins, contentKey, ClientSpaceKeys.GenerateRecoverySecret());
+        registry.SpaceKeys.Publish(proof, first);
+
+        SpaceKeyPublication repeated = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 2, device, signer,
+            recipients, pins, contentKey, ClientSpaceKeys.GenerateRecoverySecret());
+        Assert.Throws<InvalidOperationException>(() =>
+            registry.SpaceKeys.Publish(proof, repeated));
+
+        SpaceKeyPublication fresh = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 2, device, signer,
+            recipients, pins, ClientSpaceKeys.GenerateContentKey(),
+            ClientSpaceKeys.GenerateRecoverySecret());
+        registry.SpaceKeys.Publish(proof, fresh);
+        SpaceKeyPublication older = ClientSpaceKeys.Protect(
+            registry.InstallationId, space, 3, device, signer,
+            recipients, pins, contentKey, ClientSpaceKeys.GenerateRecoverySecret());
+        Assert.Throws<InvalidOperationException>(() =>
+            registry.SpaceKeys.Publish(proof, older));
+        Assert.Equal(2, registry.SpaceKeys.Download(
+            Prove(registry, signer, device, space, SecurityPermission.Read))!.Epoch);
+    }
+
     private static ECDsa NewSigner() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
     private static RSA NewRecipient()
