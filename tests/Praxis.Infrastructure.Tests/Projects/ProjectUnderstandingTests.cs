@@ -279,7 +279,7 @@ public sealed class ProjectUnderstandingTests : IDisposable
         ProjectSource original = Assert.Single(catalog.Projects.ReadActiveSources(100));
         Assert.Equal(original, Assert.Single(catalog.Projects.ReadCurrentMembers([original])));
 
-        await Capture(catalog, "current/package.json", """{"name":"changed"}""");
+        await Capture(catalog, "current/package.json", """{"name":"changed"}""", "current/package.json-revision-2");
         Assert.Empty(catalog.Projects.ReadCurrentMembers([original]));
         ProjectSource latest = Assert.Single(catalog.Projects.ReadActiveSources(100));
         Assert.NotEqual(original.Revision, latest.Revision);
@@ -370,11 +370,11 @@ public sealed class ProjectUnderstandingTests : IDisposable
         new PolicyService(catalog.Policy).Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), category, provider,
             DisclosurePurposes.Intake, true, null)), PolicyActors.Owner);
 
-    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string text)
+    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string text, string? requestKey = null)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(text);
         using MemoryStream input = new(bytes);
-        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", name), input, bytes.Length, name);
+        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", name), input, bytes.Length, requestKey ?? name);
     }
 
     public void Dispose()
