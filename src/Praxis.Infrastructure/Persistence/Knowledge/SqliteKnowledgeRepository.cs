@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Knowledge;
+using Praxis.Application.Understanding;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
 
@@ -98,7 +99,9 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
             }
 
             return new EntityDetail(found, Aliases(connection, entityId), Mentions(connection, entityId),
-                Relations(connection, entityId), Related(connection, entityId));
+                Relations(connection, entityId), Related(connection, entityId),
+                TechnicalEvidence.IsClassName(found.Name) ? Members(connection, entityId, found.Name) : [],
+                TechnicalEvidence.OwningClass(found.Name) is { } owner ? Owner(connection, owner) : null);
         });
     }
 
@@ -403,6 +406,48 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         }
 
         return related;
+    }
+
+    /// <summary>Visible entities named as members of a class (<c>CRadar_*</c> for <c>CRadar</c>).</summary>
+    private static List<RelatedEntity> Members(SqliteConnection connection, Guid entityId, string className)
+    {
+        // GLOB is case-sensitive and treats '_' literally; class names are letters and digits only.
+        using SqliteCommand query = connection.CreateCommand("""
+            SELECT e.entity_id, e.display_name, e.entity_type
+            FROM knowledge_entities e
+            WHERE e.status = 'active' AND e.entity_id <> $entity AND e.display_name GLOB $pattern
+              AND EXISTS (SELECT 1 FROM visible_entity_mentions m WHERE m.entity_id = e.entity_id)
+            ORDER BY e.display_name LIMIT 200
+            """);
+        query.Parameters.AddWithValue("$entity", entityId.ToString("D"));
+        query.Parameters.AddWithValue("$pattern", className + "_?*");
+        return ReadNamed(query);
+    }
+
+    /// <summary>The visible class entity a member name belongs to, if Praxis knows it.</summary>
+    private static RelatedEntity? Owner(SqliteConnection connection, string className)
+    {
+        using SqliteCommand query = connection.CreateCommand("""
+            SELECT e.entity_id, e.display_name, e.entity_type
+            FROM knowledge_entities e
+            WHERE e.status = 'active' AND e.display_name = $name
+              AND EXISTS (SELECT 1 FROM visible_entity_mentions m WHERE m.entity_id = e.entity_id)
+            ORDER BY e.entity_id LIMIT 1
+            """);
+        query.Parameters.AddWithValue("$name", className);
+        return ReadNamed(query).FirstOrDefault();
+    }
+
+    private static List<RelatedEntity> ReadNamed(SqliteCommand query)
+    {
+        using SqliteDataReader reader = query.ExecuteReader();
+        List<RelatedEntity> entities = [];
+        while (reader.Read())
+        {
+            entities.Add(new RelatedEntity(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), 0));
+        }
+
+        return entities;
     }
 
     private static void RequireId(Guid id)

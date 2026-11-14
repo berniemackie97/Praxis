@@ -64,6 +64,13 @@ public static partial class TechnicalEvidence
                         Add("relation", null, "calls", call, name, target, assembly.Offset);
                         Add("entity", "function", name, call, offset: assembly.Offset);
                         Add("entity", "function", target, call, offset: assembly.Offset);
+                        // MFC-style names carry their class: CRadar_Show is a member of CRadar. The call
+                        // line quotes the full name, so it is the evidence for the membership too.
+                        if (OwningClass(target) is { } owner)
+                        {
+                            Add("relation", null, "part_of", call, target, owner, assembly.Offset);
+                            Add("entity", "class", owner, call, offset: assembly.Offset);
+                        }
                     }
                 }
             }
@@ -101,8 +108,7 @@ public static partial class TechnicalEvidence
         var retained = new List<ProposalCandidate>();
         foreach (ProposalCandidate relation in unique.Where(candidate => candidate.Kind == "relation"))
         {
-            string type = relation.Value == "calls" ? "function" : "class";
-            var needed = unique.Where(candidate => candidate.Kind == "entity" && candidate.EntityType == type &&
+            var needed = unique.Where(candidate => candidate.Kind == "entity" && candidate.EntityType is ("function" or "class") &&
                 (candidate.Value == relation.RelationSubject || candidate.Value == relation.RelationObject) && !retained.Contains(candidate)).ToArray();
             if (retained.Count + needed.Length + 1 > ProposalLimits.MaximumPerRun)
             {
@@ -124,6 +130,16 @@ public static partial class TechnicalEvidence
                 result.Add(new ProposalCandidate(kind, type, value, offset + span.Index, span.Length, subject, target));
             }
         }
+    }
+
+    /// <summary>True for an MFC-style class name such as <c>CRadar</c>.</summary>
+    public static bool IsClassName(string name) => ClassName().IsMatch(name);
+
+    /// <summary>The class an MFC-style member name belongs to (<c>CRadar_Show</c> → <c>CRadar</c>), or null.</summary>
+    public static string? OwningClass(string function)
+    {
+        int split = function.IndexOf('_', StringComparison.Ordinal);
+        return split > 0 && split < function.Length - 1 && ClassName().IsMatch(function[..split]) ? function[..split] : null;
     }
 
     private static (string Raw, int Offset)? ReadAssembly(string source)
@@ -180,6 +196,9 @@ public static partial class TechnicalEvidence
 
     [GeneratedRegex("""[A-Za-z_][A-Za-z_0-9]*""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
     private static partial Regex Symbol();
+
+    [GeneratedRegex("""^C[A-Z][A-Za-z0-9]{1,60}$""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
+    private static partial Regex ClassName();
 
     [GeneratedRegex("""^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z_0-9]+)+$""", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 250)]
     private static partial Regex FunctionLabel();

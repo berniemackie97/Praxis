@@ -10,10 +10,13 @@ struct EntityDetailView: View {
     @State private var showAllMentions = false
     @State private var newName = ""
     @State private var predicate = KnowledgeVocabulary.predicates[0]
+    @State private var expandedSections: Set<String> = []
+    @State private var showAllMembers = false
 
     private var summary: EntitySummary { detail.summary }
     private var others: [EntitySummary] { model.entities.filter { $0.entityId != summary.entityId } }
     private var relationGroups: [EntityRelationGroup] { EntityRelationGroup.group(detail.relations) }
+    private var relationSections: [EntityRelationSection] { EntityRelationSection.sections(relationGroups) }
 
     var body: some View {
         ScrollView {
@@ -23,7 +26,19 @@ struct EntityDetailView: View {
                     Banner(text: "The local model typed this inconsistently. Set the type yourself, or ask a stronger model to settle it.",
                            tone: .warning, systemImage: "exclamationmark.triangle.fill")
                 }
+                if let owner = detail.memberOf {
+                    HStack(spacing: Spacing.s) {
+                        Text("Member of").foregroundStyle(.secondary)
+                        Button { model.selectEntityId(owner.entityId) } label: {
+                            Chip(text: owner.name, systemImage: EntitySymbol.of(owner.entityType))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open \(owner.name)")
+                    }
+                    .font(.callout)
+                }
                 mentions
+                if let members = detail.members, !members.isEmpty { membersPanel(members) }
                 relations
                 if !detail.related.isEmpty {
                     Panel(title: "Mentioned together with", systemImage: "link") {
@@ -39,7 +54,11 @@ struct EntityDetailView: View {
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .onChange(of: summary.entityId) { _ in showAllMentions = false }
+        .onChange(of: summary.entityId) { _ in
+            showAllMentions = false
+            showAllMembers = false
+            expandedSections = []
+        }
         .sheet(isPresented: $renaming) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 Text("Rename \(summary.name)").font(.headline)
@@ -162,33 +181,71 @@ struct EntityDetailView: View {
             .fixedSize()
             .disabled(others.isEmpty || summary.status != "active")
         } content: {
-            VStack(alignment: .leading, spacing: Spacing.s) {
-                ForEach(relationGroups) { group in
-                    VStack(alignment: .leading, spacing: Spacing.s) {
-                        HStack(spacing: Spacing.xs) {
-                            Text(group.outgoing ? summary.name : group.otherName).font(.rowTitle)
-                            Text(KnowledgeVocabulary.label(group.predicate)).foregroundStyle(.secondary)
-                            Text(group.outgoing ? group.otherName : summary.name).font(.rowTitle)
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                ForEach(relationSections) { section in
+                    let expanded = expandedSections.contains(section.id) || section.groups.count <= EntityRelationSection.collapsedRows
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text("\(section.title) · \(section.groups.count)").font(.meta.weight(.semibold)).foregroundStyle(.secondary)
+                        ForEach(expanded ? section.groups : Array(section.groups.prefix(EntityRelationSection.collapsedRows))) { group in
+                            relationGroup(group)
                         }
-                        if group.observations.count == 1, let observation = group.observations.first {
-                            relationObservation(observation)
-                        } else {
-                            DisclosureGroup("\(group.observations.count) separate observations") {
-                                VStack(alignment: .leading, spacing: Spacing.s) {
-                                    ForEach(group.observations) { observation in
-                                        relationObservation(observation)
-                                    }
-                                }
-                                .padding(.top, Spacing.xs)
+                        if section.groups.count > EntityRelationSection.collapsedRows {
+                            Button(expanded ? "Show fewer" : "Show all \(section.groups.count)") {
+                                if expanded { expandedSections.remove(section.id) } else { expandedSections.insert(section.id) }
                             }
+                            .buttonStyle(.link)
                             .font(.caption)
                         }
                     }
-                    .padding(.vertical, Spacing.xs)
                 }
                 if detail.relations.count == 200 {
                     Text("Showing the first 200 relation observations. Additional evidence may exist.")
                         .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private func relationGroup(_ group: EntityRelationGroup) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.xs) {
+                Text(group.outgoing ? summary.name : group.otherName).font(.rowTitle)
+                Text(KnowledgeVocabulary.label(group.predicate)).foregroundStyle(.secondary)
+                Text(group.outgoing ? group.otherName : summary.name).font(.rowTitle)
+            }
+            if group.observations.count == 1, let observation = group.observations.first {
+                relationObservation(observation)
+            } else {
+                DisclosureGroup("\(group.observations.count) separate observations") {
+                    VStack(alignment: .leading, spacing: Spacing.s) {
+                        ForEach(group.observations) { observation in
+                            relationObservation(observation)
+                        }
+                    }
+                    .padding(.top, Spacing.xs)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.vertical, Spacing.xxs)
+    }
+
+    private func membersPanel(_ members: [RelatedEntity]) -> some View {
+        Panel(title: "Members", systemImage: "square.stack.3d.up",
+              caption: "\(members.count) functions named \(summary.name)_…, by the naming convention of the evidence.") {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                FlowLayout(spacing: Spacing.xs) {
+                    ForEach(showAllMembers ? members : Array(members.prefix(24))) { member in
+                        Button { model.selectEntityId(member.entityId) } label: {
+                            Chip(text: String(member.name.dropFirst(summary.name.count + 1)), systemImage: EntitySymbol.of(member.entityType))
+                        }
+                        .buttonStyle(.plain)
+                        .help(member.name)
+                    }
+                }
+                if members.count > 24 {
+                    Button(showAllMembers ? "Show fewer" : "Show all \(members.count)") { showAllMembers.toggle() }
+                        .buttonStyle(.link).font(.caption)
                 }
             }
         }
