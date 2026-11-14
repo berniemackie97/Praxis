@@ -6,10 +6,7 @@ final class GraphScene: SKScene {
     var didSelectNode: ((String?) -> Void)?
     var didSelectEdge: ((String?) -> Void)?
     var reduceMotion = false {
-        didSet {
-            guard reduceMotion != oldValue else { return }
-            for effect in hubEffects { effect.isPaused = reduceMotion }
-        }
+        didSet { atlasArtwork.reduceMotion = reduceMotion }
     }
 
     private var graphNodes: [GraphNode] = []
@@ -24,8 +21,7 @@ final class GraphScene: SKScene {
     private var hoveredNodeId: String?
     private var hoveredEdgeId: String?
     private var nodeShapes: [String: SKShapeNode] = [:]
-    private var atlasShapes: [SKShapeNode] = []
-    private var hubEffects: [SKShapeNode] = []
+    private let atlasArtwork = GraphAtlasArtwork()
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let nodeHighlights = SKShapeNode()
     private let edgeLines = SKShapeNode()
@@ -85,12 +81,9 @@ final class GraphScene: SKScene {
         }
 
         for shape in nodeShapes.values { shape.removeFromParent() }
-        for shape in atlasShapes { shape.removeFromParent() }
-        for effect in hubEffects { effect.removeFromParent() }
+        atlasArtwork.clear()
         for label in nodeLabels.values { label.removeFromParent() }
         nodeShapes.removeAll(keepingCapacity: true)
-        atlasShapes.removeAll(keepingCapacity: true)
-        hubEffects.removeAll(keepingCapacity: true)
         nodeLabels.removeAll(keepingCapacity: true)
 
         let degree = edges.reduce(into: [String: Int]()) { counts, edge in
@@ -103,7 +96,8 @@ final class GraphScene: SKScene {
                 : node.entityId == focus ? 15 : 11)
         })
         if focus == nil {
-            buildAtlas(degree: degree)
+            atlasArtwork.draw(nodes: nodes, positions: layout.positions, radii: nodeRadii,
+                              degree: degree, in: self)
             fitAtlas()
         } else {
             for node in nodes {
@@ -122,50 +116,6 @@ final class GraphScene: SKScene {
         updateAppearance(dark: dark, highContrast: highContrast, force: true)
         updatePaths()
         updateVisibility()
-    }
-
-    private func buildAtlas(degree: [String: Int]) {
-        var grouped: [String: CGMutablePath] = [:]
-        for node in graphNodes {
-            guard let location = layout.positions[node.entityId],
-                  let radius = nodeRadii[node.entityId] else { continue }
-            let key = node.status == "suggested" ? "suggested" : (node.entityType ?? "other")
-            if grouped[key] == nil { grouped[key] = CGMutablePath() }
-            grouped[key]?.addEllipse(in: CGRect(x: location.x - radius, y: location.y - radius,
-                                                width: radius * 2, height: radius * 2))
-        }
-        for key in grouped.keys.sorted() {
-            guard let path = grouped[key] else { continue }
-            let shape = SKShapeNode(path: path)
-            shape.zPosition = 2
-            shape.fillColor = Self.color(for: key, suggested: key == "suggested")
-            shape.strokeColor = .clear
-            shape.lineWidth = 0
-            addChild(shape)
-            atlasShapes.append(shape)
-        }
-        for node in graphNodes.sorted(by: {
-            let a = degree[$0.entityId, default: 0]
-            let b = degree[$1.entityId, default: 0]
-            return a == b ? $0.entityId < $1.entityId : a > b
-        }).prefix(8) where degree[node.entityId, default: 0] >= 3 {
-            guard let point = layout.positions[node.entityId],
-                  let radius = nodeRadii[node.entityId] else { continue }
-            let effect = SKShapeNode(circleOfRadius: radius * 1.8)
-            effect.position = point
-            effect.zPosition = 1
-            effect.fillColor = .clear
-            effect.strokeColor = Self.color(for: node.entityType, suggested: false)
-            effect.lineWidth = 1.4
-            effect.alpha = 0.2
-            effect.run(.repeatForever(.sequence([
-                .fadeAlpha(to: 0.4, duration: 2),
-                .fadeAlpha(to: 0.12, duration: 2)
-            ])))
-            effect.isPaused = reduceMotion
-            addChild(effect)
-            hubEffects.append(effect)
-        }
     }
 
     private func makeLabel(for node: GraphNode) -> SKLabelNode {
@@ -294,7 +244,7 @@ final class GraphScene: SKScene {
         guard let id, let node = nodesById[id], let shape = nodeShapes[id] else { return }
         let selected = id == selectedNodeId || id == focusId ||
             id == hoveredNodeId || highlightedNodeIds.contains(id)
-        shape.fillColor = Self.color(for: node.entityType, suggested: node.status == "suggested")
+        shape.fillColor = GraphPalette.color(for: node.entityType, suggested: node.status == "suggested")
         shape.strokeColor = selected ? .controlAccentColor :
             (highContrast ? .labelColor : .separatorColor)
         shape.lineWidth = selected ? 3 : 1.5
@@ -325,21 +275,6 @@ final class GraphScene: SKScene {
         edgeArrows.lineWidth = max(0.7, scale * (highContrast ? 1.3 : 0.85))
         highlightedEdge.lineWidth = max(2, scale * (highContrast ? 2.8 : 2))
         updateHighlightPaths()
-    }
-
-    private static func color(for type: String?, suggested: Bool) -> NSColor {
-        if suggested { return .systemGray }
-        switch type {
-        case "person": return .systemOrange
-        case "organization": return .systemPurple
-        case "project": return .systemTeal
-        case "technology": return .systemBlue
-        case "concept": return .systemYellow
-        case "document": return .systemGreen
-        case "event": return .systemPink
-        case "place": return .systemIndigo
-        default: return .secondaryLabelColor
-        }
     }
 
     private func updateVisibility() {
