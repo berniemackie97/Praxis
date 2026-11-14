@@ -72,7 +72,8 @@ struct WorkbenchSplitView: View {
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
-        case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification)
+        case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification,
+                                           collections: model.collections, sources: model.items)
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
