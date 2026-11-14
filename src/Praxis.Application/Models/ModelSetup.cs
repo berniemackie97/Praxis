@@ -13,8 +13,54 @@ namespace Praxis.Application.Models;
 /// a role then chooses the connection plus the model and reasoning effort for that job.
 /// </summary>
 public sealed class ModelSetup(
-    IVerificationRepository verification, VerificationProviderConfiguration providers, IAgentConversationRepository agents, IPolicyRepository policy)
+    IVerificationRepository verification, VerificationProviderConfiguration providers, IAgentConversationRepository agents, IPolicyRepository policy,
+    IModelProfileRepository? profiles = null, ISettingsStore? settings = null)
 {
+    private const string DefaultOllama = "http://127.0.0.1:11434";
+
+    /// <summary>
+    /// Makes <paramref name="model"/> the one local model for every local job — triage, drafts,
+    /// private chat and (if on) background enrichment — so a single model stays loaded.
+    /// </summary>
+    public void UseLocalModel(string model, string? endpoint = null)
+    {
+        VerificationProvider? current = verification.ListProviders().FirstOrDefault(provider => provider.ProviderId == VerificationProvider.Ollama);
+        string address = endpoint ?? current?.Endpoint ?? profiles?.Get(ModelProfile.LocalEnrichment)?.Endpoint ?? DefaultOllama;
+        ConnectOllama(address, model, enabled: true, current?.DailyLimit ?? VerificationProvider.Unlimited);
+        policy.SaveTier(ModelTiers.Local, VerificationProvider.Ollama);
+        if (profiles?.Get(ModelProfile.LocalEnrichment) is { } enrichment)
+        {
+            profiles.Save(enrichment with { Model = model, Endpoint = address });
+        }
+    }
+
+    /// <summary>Applies a machine plan: the local model, semantic search, draft limits and background enrichment.</summary>
+    public void Apply(MachinePlan plan, string? endpoint = null)
+    {
+        string address = endpoint ?? verification.ListProviders().FirstOrDefault(provider => provider.ProviderId == VerificationProvider.Ollama)?.Endpoint
+                         ?? DefaultOllama;
+        if (plan.LocalModel is { } local)
+        {
+            UseLocalModel(local, address);
+        }
+
+        if (profiles is not null)
+        {
+            if (plan.EmbeddingModel is { } embedding)
+            {
+                profiles.Save(new ModelProfile(ModelProfile.LocalEmbedding, ModelProfile.OllamaProvider, address, embedding, 2_048, true));
+            }
+
+            if (profiles.Get(ModelProfile.LocalEnrichment) is { } enrichment)
+            {
+                profiles.Save(enrichment with { Enabled = plan.Enrichment, Model = plan.LocalModel ?? enrichment.Model });
+            }
+        }
+
+        settings?.Write(LocalDraftPolicy.ModeKey, plan.DraftMode);
+        settings?.Write(LocalDraftPolicy.BudgetKey, plan.DraftBudgetSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     private const string OllamaChatEndpoint = "/v1";
 
     /// <summary>Connects (or updates) a plan CLI: the intake/verification provider and the chat backend with the same name.</summary>

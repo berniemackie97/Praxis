@@ -16,11 +16,11 @@ namespace Praxis.Application.Understanding;
 /// when needed. Spans are merged in code; a long document's span summaries are combined in one
 /// small call. Each tier's contribution is recorded as the document's cascade.
 /// </summary>
-public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles profiles)
+public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles profiles, LocalDraftPolicy? draftPolicy = null, LocalPace? pace = null)
 {
     /// <summary>Spans up to this size get a local draft; longer ones are read by the strong tier directly.</summary>
     public const int LocalDraftCharacters = 6_000;
-    private const int LocalContextTokens = 16_384;
+    private const int LocalContextTokens = 8_192;
     private const int LocalOutputTokens = 2_048;
 
     public async Task<UnderstandingOutcome> UnderstandAsync(
@@ -43,7 +43,7 @@ public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles pro
             // 1. Local draft, when the span is small enough to read quickly on this Mac.
             UnderstandingDraft? baseline = null;
             LadderResult<UnderstandingDraft>? localResult = null;
-            if (chunk.Length <= LocalDraftCharacters)
+            if (draftPolicy?.ShouldDraft(chunk.Length) ?? chunk.Length <= LocalDraftCharacters)
             {
                 (LadderCheck<UnderstandingDraft>? local, TieredOutcome localOutcome) = await ladder.DraftAsync(
                     Request(lease, source, reading with { ContextTokens = LocalContextTokens, MaxOutputTokens = LocalOutputTokens }),
@@ -52,6 +52,16 @@ public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles pro
                         : null, cancellationToken);
                 input += localOutcome.InputTokens;
                 output += localOutcome.OutputTokens;
+                // Learn this machine's pace so later drafts are asked for only when they pay off.
+                if (localOutcome.IsCompleted)
+                {
+                    pace?.Observe(chunk.Length, localOutcome.Duration);
+                }
+                else if (localOutcome.FailureCode == "model_timeout")
+                {
+                    pace?.ObserveTimeout(chunk.Length, draftPolicy?.Budget ?? TimeSpan.FromSeconds(LocalDraftPolicy.DefaultBudgetSeconds));
+                }
+
                 if (local?.Value is { Verified: > 0 } verified)
                 {
                     baseline = verified with { Records = verified.Records.Select(record => record with { ProviderId = localOutcome.ProviderId }).ToArray() };

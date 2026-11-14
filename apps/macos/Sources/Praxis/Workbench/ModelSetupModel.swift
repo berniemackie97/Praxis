@@ -7,7 +7,8 @@ import Foundation
 @MainActor
 final class ModelSetupModel: ObservableObject {
     /// Roles in the order the page shows them; the intake tiers keep their worker names.
-    static let roles = ["chat", "local", "strong", "strongest"]
+    /// Roles in the order the page shows them. Triage uses the local model chosen under On this Mac.
+    static let roles = ["chat", "strong", "strongest"]
 
     private let channel: WorkerChannel
 
@@ -17,6 +18,7 @@ final class ModelSetupModel: ObservableObject {
     @Published private(set) var backends: [AgentBackendProfile] = []
     @Published private(set) var tiers: [TierAssignment] = []
     @Published private(set) var detecting = false
+    @Published private(set) var machine: MachineData?
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
     @Published private(set) var notice: String? { didSet { if notice != nil { error = nil } } }
 
@@ -71,6 +73,33 @@ final class ModelSetupModel: ObservableObject {
         return (tier.providerId, tier.model ?? provider?.model ?? "default", tier.effort ?? provider?.effort ?? "")
     }
 
+    func refreshMachine() {
+        channel.send("modelMachine", as: MachineData.self, failed: report) { [weak self] data in
+            self?.machine = data
+        }
+    }
+
+    /// Applies the recommended local setup for this Mac.
+    func optimizeForThisMac() {
+        channel.send("modelMachineApply", as: MachineData.self, failed: report) { [weak self] data in
+            guard let self else { return }
+            machine = data
+            notice = "Optimized for this Mac: one local model stays loaded, drafts run only when they pay off, background suggestions are off."
+            refresh()
+        }
+    }
+
+    /// Makes one model the local model for triage, drafts, private chat and suggestions.
+    func setLocalModel(_ name: String) {
+        send("localModelSet", ["model": name], success: "\(name) is now the one local model.")
+    }
+
+    func setDraftMode(_ mode: String) {
+        channel.send("localDraftSet", ["mode": mode], as: IgnoredData.self, failed: report) { [weak self] _ in
+            self?.refreshMachine()
+        }
+    }
+
     func refresh() {
         detecting = true
         channel.send("modelSetup", as: ModelSetupData.self, failed: { [weak self] message in
@@ -85,6 +114,7 @@ final class ModelSetupModel: ObservableObject {
             backends = data.backends
             tiers = data.tiers
         }
+        refreshMachine()
     }
 
     /// Connects (or updates) Claude Code or Codex at a path; it becomes available for chat and intake.

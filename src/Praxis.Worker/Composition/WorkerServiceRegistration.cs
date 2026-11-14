@@ -79,6 +79,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
         services.AddSingleton<IModelToolDetector, ModelToolDetector>();
+        services.AddSingleton<ISettingsStore>(provider => provider.GetRequiredService<SqliteCatalog>().Settings);
+        services.AddSingleton(_ => CatalogProcessing.Pace);
         services.AddSingleton<ModelSetup>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),

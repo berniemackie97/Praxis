@@ -82,6 +82,11 @@ struct ScreenshotTests {
             try await render(SettingsView().environmentObject(model), size: CGSize(width: 760, height: 680),
                        name: "settings-\(tab.rawValue)", wait: 1.5, to: outputURL)
         }
+        // The whole Models page, unclipped, for reviewing every section.
+        await settle(model)
+        try await render(ModelsSettingsView(setup: model.modelSetup, intelligence: model.intelligence, privacy: model.privacy)
+                            .environmentObject(model),
+                         size: CGSize(width: 760, height: 1_900), name: "settings-models-full", wait: 3, to: outputURL)
         try await render(SectionHost(section: .library).environmentObject(model), size: CGSize(width: 780, height: 560),
                    name: "library-narrow", to: outputURL)
     }

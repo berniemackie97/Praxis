@@ -438,8 +438,13 @@ public sealed class GraphProjectionTests : IDisposable
                         excerpt.IndexOf(relation.Object, StringComparison.Ordinal));
                     int end = Math.Max(excerpt.IndexOf(relation.Subject, StringComparison.Ordinal) + relation.Subject.Length,
                         excerpt.IndexOf(relation.Object, StringComparison.Ordinal) + relation.Object.Length);
-                    return new { subject = relation.Subject, predicate = relation.Predicate,
-                        @object = relation.Object, quote = excerpt[start..end] };
+                    return new
+                    {
+                        subject = relation.Subject,
+                        predicate = relation.Predicate,
+                        @object = relation.Object,
+                        quote = excerpt[start..end]
+                    };
                 }).ToArray();
             return JsonSerializer.Serialize(new { topics = Array.Empty<object>(), entities, relations = links });
         });

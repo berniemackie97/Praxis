@@ -47,7 +47,8 @@ public sealed class OllamaRuntimeTests
         Assert.False(root.GetProperty("think").GetBoolean());
         Assert.Equal(Schema.GetRawText(), root.GetProperty("format").GetRawText());
         JsonElement options = root.GetProperty("options");
-        Assert.Equal(4096, options.GetProperty("num_ctx").GetInt32());
+        // Every local call shares one context size so Ollama never restarts the model between them.
+        Assert.Equal(8192, options.GetProperty("num_ctx").GetInt32());
         Assert.Equal(256, options.GetProperty("num_predict").GetInt32());
         Assert.Equal(0, options.GetProperty("temperature").GetDouble());
         Assert.True(options.TryGetProperty("seed", out _));

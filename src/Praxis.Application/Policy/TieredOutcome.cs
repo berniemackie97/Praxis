@@ -9,7 +9,7 @@ namespace Praxis.Application.Policy;
 /// </summary>
 public sealed record TieredOutcome(
     string Status, string? Content, ModelIdentity? Identity, string? ProviderId, DisclosureDecision? Decision, string? FailureCode,
-    int InputTokens = 0, int OutputTokens = 0)
+    int InputTokens = 0, int OutputTokens = 0, TimeSpan Duration = default)
 {
     public const string Completed = "completed";
     public const string NotConfigured = "not_configured";

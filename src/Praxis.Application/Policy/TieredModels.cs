@@ -43,7 +43,8 @@ public sealed class TieredModels(
             ModelIdentity identity = await connection.Model.DescribeAsync(cancellationToken);
             ChatResult result = await connection.Model.CompleteAsync(request.Request, cancellationToken);
             Record(tier, provider, request, category, decision, identity.Model, result.InputTokens, result.OutputTokens, "completed", started);
-            return new TieredOutcome(TieredOutcome.Completed, result.Content, identity, provider.ProviderId, decision, null, result.InputTokens, result.OutputTokens);
+            return new TieredOutcome(TieredOutcome.Completed, result.Content, identity, provider.ProviderId, decision, null, result.InputTokens, result.OutputTokens,
+                result.Duration);
         }
         catch (InferenceException exception)
         {
