@@ -1,6 +1,7 @@
 import SpriteKit
 import SwiftUI
 
+@MainActor
 struct SpriteGraphView: NSViewRepresentable {
     let fixture: GraphFixture
     let animated: Bool
@@ -22,6 +23,7 @@ struct SpriteGraphView: NSViewRepresentable {
         view.isPaused = !animated
     }
 
+    @MainActor
     final class Coordinator {
         let scene: GraphScene
 
