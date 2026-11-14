@@ -14,6 +14,14 @@ struct GraphEvidence: Decodable, Equatable {
     let verdict: String?
 }
 
+extension GraphEvidence {
+    func matchesCurrent(_ item: LibraryItem) -> Bool {
+        item.sourceId == sourceId && item.itemId == itemId &&
+            item.revision == revision && item.sha256 == sourceDigest &&
+            item.sourceStatus == "active"
+    }
+}
+
 struct GraphNode: Decodable, Identifiable, Equatable {
     let entityId: String
     let label: String
