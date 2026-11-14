@@ -7,9 +7,15 @@ using Praxis.Domain.Knowledge;
 namespace Praxis.Infrastructure.Persistence.Knowledge;
 
 /// <summary>Bounded graph projection over the existing owner-local catalog.</summary>
-public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
+public sealed class SqliteGraphReader : IGraphReader
 {
+    private readonly CatalogDatabase database;
     private readonly string session = Guid.NewGuid().ToString("N");
+
+    internal SqliteGraphReader(CatalogDatabase database)
+    {
+        this.database = database;
+    }
 
     private const string RelationStatus = """
         CASE WHEN r.origin = 'owner' THEN 'owner'
