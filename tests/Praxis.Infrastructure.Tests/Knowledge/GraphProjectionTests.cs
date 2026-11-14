@@ -518,6 +518,10 @@ public sealed class GraphProjectionTests : IDisposable
             }
         }
 
+        GraphOverview overview = catalog.Graph.Overview(new GraphQuery());
+        Assert.Equal(121, overview.EntityCount);
+        Assert.Equal(121, overview.Types.Sum(type => type.Count));
+
         GraphPage first = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 100));
         Assert.Equal(100, first.Edges.Count);
         Assert.Equal(101, first.Nodes.Count);
