@@ -11,6 +11,7 @@ struct KnowledgeGraphView: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var scheme
     @State private var zoom: CGFloat = 1
+    @State private var zoomRevision = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +32,7 @@ struct KnowledgeGraphView: View {
                         GraphSceneView(nodes: graph.nodes, edges: graph.edges, focusId: graph.focusId,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
                                        reduceMotion: reduceMotion, highContrast: contrast == .increased,
-                                       colorScheme: scheme, zoom: zoom)
+                                       colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
                                 Text("\(graph.nodes.count) nodes  ·  \(graph.edges.count) source-backed or owner relations")
@@ -96,11 +97,11 @@ struct KnowledgeGraphView: View {
             }
             .toggleStyle(.button)
             .help("Show unconfirmed model suggestions separately from confirmed knowledge")
-            Button { zoom = min(2.5, zoom * 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
+            Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
                 .accessibilityLabel("Zoom out")
-            Button { zoom = max(0.35, zoom / 1.2) } label: { Image(systemName: "plus.magnifyingglass") }
+            Button { zoom = max(0.35, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
                 .accessibilityLabel("Zoom in")
-            Button { zoom = 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
+            Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
                 .accessibilityLabel("Reset zoom")
             Button { graph.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
         }
