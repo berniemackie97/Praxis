@@ -135,7 +135,10 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func inspectSelectedRelation() {
-        guard let id = selectedEdgeId else { return }
+        guard let id = selectedEdgeId else {
+            if selectedNodeId == nil { clearInspection() }
+            return
+        }
         guard let edge = edges.first(where: { $0.relationId == id }) else {
             clearInspection()
             return
@@ -144,7 +147,10 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func inspectSelectedNode() {
-        guard let id = selectedNodeId else { return }
+        guard let id = selectedNodeId else {
+            if selectedEdgeId == nil { clearInspection() }
+            return
+        }
         guard active, nodes.contains(where: { $0.entityId == id }) else { return }
         channel.reset(nodeScope)
         channel.reset(nodeWatchScope)
@@ -253,7 +259,7 @@ final class GraphWorkbenchModel: ObservableObject {
         guard let edge = inspectedEdge else { return }
         validate(edge) { [weak self] current in
             guard let self else { return }
-            guard current.evidenceStatus != "suggested" else {
+            guard ["owner", "accepted", "verified", "documented"].contains(current.evidenceStatus) else {
                 inspectionMessage = "Unconfirmed suggestions require owner review before agent investigation."
                 return
             }
