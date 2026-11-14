@@ -221,8 +221,9 @@ final class GraphScene: SKScene {
             let distance = max(1, hypot(dx, dy))
             let ux = dx / distance
             let uy = dy / distance
-            let start = CGPoint(x: a.x + ux * 15, y: a.y + uy * 15)
-            let end = CGPoint(x: b.x - ux * 15, y: b.y - uy * 15)
+            let endpointInset: CGFloat = focusId == nil ? min(4, distance * 0.2) : min(15, distance * 0.2)
+            let start = CGPoint(x: a.x + ux * endpointInset, y: a.y + uy * endpointInset)
+            let end = CGPoint(x: b.x - ux * endpointInset, y: b.y - uy * endpointInset)
             let path = edge.relationId == selectedEdgeId || edge.relationId == hoveredEdgeId
                 ? selection : lines
             path.move(to: start)
