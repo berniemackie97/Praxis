@@ -46,7 +46,7 @@ struct KnowledgeGraphView: View {
                                     Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
                                         .font(.caption).foregroundStyle(.secondary)
                                     if graph.focusId == nil {
-                                        Text("\(graph.overview?.entityCount ?? 0) current entities in scope · \(graph.atlasTruncated ? "bounded sample" : "available relationships loaded")")
+                                        Text("\(graph.overview?.entityCount ?? 0) current entities in scope · rendered relationship sample")
                                             .font(.caption2).foregroundStyle(.tertiary)
                                     }
                                 }
