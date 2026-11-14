@@ -85,7 +85,7 @@ public sealed class UnderstandHandler(
             outcome, reason, knowledge.Summary ?? profile.Gist, knowledge.DocumentType ?? profile.DocumentType,
             knowledge.Tier ?? money.Tier, knowledge.ProviderId ?? money.ProviderId, knowledge.Identity ?? money.Identity,
             knowledge.Candidates, knowledge.Records, money.Document, money.Annotations, money.Tier, money.Identity,
-            knowledge.Verified + (money.Document?.Transactions.Count ?? 0), knowledge.Rejected, inputTokens, outputTokens));
+            knowledge.Verified + (money.Document?.Transactions.Count ?? 0), knowledge.Rejected, inputTokens, outputTokens, knowledge.Cascade));
     }
 
     private static string Closed(string ladderStatus) => ladderStatus switch

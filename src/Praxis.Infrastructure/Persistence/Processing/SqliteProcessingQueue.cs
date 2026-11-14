@@ -24,9 +24,10 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
     {
         using SqliteCommand command = connection.CreateCommand("""
                                                                 SELECT
-                                                                    COALESCE(SUM(CASE WHEN j.state = 'queued' THEN 1 ELSE 0 END), 0),
-                                                                    COALESCE(SUM(CASE WHEN j.state = 'running' THEN 1 ELSE 0 END), 0),
-                                                                    COALESCE(SUM(CASE WHEN j.state = 'failed' THEN 1 ELSE 0 END), 0)
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'queued' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'running' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
+                                                                    COALESCE(SUM(CASE WHEN j.state = 'failed' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
+                                                                    COALESCE(SUM(CASE WHEN j.state IN ('queued', 'running') AND j.processor_key = $enrichment THEN 1 ELSE 0 END), 0)
                                                                 FROM processing_jobs j
                                                                 JOIN items i ON i.item_id = j.item_id
                                                                 JOIN sources s ON s.source_id = i.source_id
@@ -36,9 +37,11 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
                                                                       SELECT MAX(v.revision)
                                                                       FROM item_versions v WHERE v.item_id = j.item_id)
                                                                 """);
+        // Optional local enrichment is reported apart from intake, which it never blocks.
+        command.Parameters.AddWithValue("$enrichment", ProcessorKeys.SemanticExtraction);
         using SqliteDataReader reader = command.ExecuteReader();
         reader.Read();
-        return new ProcessingBacklog(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
+        return new ProcessingBacklog(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
     });
 
     public IReadOnlyList<ProcessingJob> List(int limit = 100)

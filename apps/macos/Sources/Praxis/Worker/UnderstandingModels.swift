@@ -24,6 +24,8 @@ struct SourceUnderstanding: Decodable, Equatable {
     let transactions: Int
     let inputTokens: Int
     let outputTokens: Int
+    /// How the tiers handed the document along, e.g. "local drafted 12 → strong kept 9, removed 3, added 4 → 13 verified".
+    let cascade: String?
 }
 
 struct SourceUnderstandingData: Decodable { let understanding: SourceUnderstanding? }

@@ -40,6 +40,10 @@ struct IntakePanel: View {
                         Banner(text: reason, tone: understanding.status == "held" ? .warning : .accent,
                                systemImage: understanding.status == "held" ? "hand.raised.fill" : "info.circle.fill")
                     }
+                    if let cascade = understanding.cascade, !cascade.isEmpty {
+                        Label(cascade, systemImage: "arrow.triangle.branch")
+                            .font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
                     if understanding.inputTokens + understanding.outputTokens > 0 {
                         Text("\((understanding.inputTokens + understanding.outputTokens).formatted()) model tokens")
                             .font(.caption2).foregroundStyle(.tertiary)
