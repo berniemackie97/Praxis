@@ -52,9 +52,16 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
                 SELECT e.entity_id
                 FROM knowledge_entities e
                 WHERE {NodeVisible("e")}
-                  AND ($type IS NULL OR e.entity_type = $type)
+                  AND ($type IS NULL OR ${EffectiveType("e")} = $type)
                   AND ($search IS NULL OR EXISTS (
-                      SELECT 1 FROM entity_aliases a WHERE a.entity_id = e.entity_id
+                      SELECT 1 FROM confirmed_entity_mentions m
+                      JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
+                      WHERE m.entity_id = e.entity_id ${ScopeFilter("m")}
+                        AND (instr(upper(p.value), $search) > 0 OR
+                             (p.correction IS NOT NULL AND instr(upper(p.correction), $search) > 0))
+                  ) OR EXISTS (
+                      SELECT 1 FROM entity_aliases a
+                      WHERE a.entity_id = e.entity_id AND a.origin = 'owner'
                         AND instr(a.alias_key, $search) > 0))
                   AND e.entity_id > $after
                 ORDER BY e.entity_id
@@ -125,7 +132,7 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
                   AND ($predicate IS NULL OR r.predicate = $predicate)
                   AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
                   AND ($type IS NULL OR
-                      (CASE WHEN r.subject_id = $focus THEN object.entity_type ELSE subject.entity_type END) = $type)
+                      (CASE WHEN r.subject_id = $focus THEN ${EffectiveType("object")} ELSE ${EffectiveType("subject")} END) = $type)
                   AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
                   AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
                       SELECT 1 FROM source_collection_memberships cm
@@ -193,18 +200,36 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
         """;
 
     private static string NodeVisible(string alias) => $"""
-        {alias}.status = 'active' AND (
-            ($source IS NULL AND $collection IS NULL AND {alias}.type_origin = 'owner') OR EXISTS (
-                SELECT 1 FROM confirmed_entity_mentions scoped
-                WHERE scoped.entity_id = {alias}.entity_id
-                  {ScopeFilter("scoped")}
-            ))
+        {alias}.status = 'active' AND EXISTS (
+            SELECT 1 FROM confirmed_entity_mentions scoped
+            WHERE scoped.entity_id = {alias}.entity_id
+              {ScopeFilter("scoped")}
+        )
+        """;
+
+    private static string EffectiveType(string alias) => $"""
+        CASE WHEN {alias}.type_origin = 'inferred' THEN (
+            SELECT m.entity_type FROM confirmed_entity_mentions m
+            WHERE m.entity_id = {alias}.entity_id AND m.entity_type IS NOT NULL
+              {ScopeFilter("m")}
+            GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1)
+        ELSE {alias}.entity_type END
         """;
 
     private static GraphNode? ReadNode(SqliteConnection connection, Guid id, GraphQuery query)
     {
         using SqliteCommand command = connection.CreateCommand($"""
-            SELECT e.display_name, e.entity_type, e.type_origin,
+            SELECT CASE WHEN EXISTS (
+                       SELECT 1 FROM entity_decisions d
+                       WHERE d.entity_id = e.entity_id AND d.action = 'rename')
+                   THEN e.display_name ELSE COALESCE((
+                       SELECT CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END
+                       FROM confirmed_entity_mentions m
+                       JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
+                       WHERE m.entity_id = e.entity_id ${ScopeFilter("m")}
+                       ORDER BY m.source_id, m.proposal_id LIMIT 1
+                   ), e.display_name) END,
+                   ${EffectiveType("e")}, e.type_origin,
                    (SELECT COUNT(*) FROM confirmed_entity_mentions m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.source_id) FROM confirmed_entity_mentions m
