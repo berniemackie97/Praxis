@@ -53,7 +53,7 @@ public static class VerificationPrompt
         For "relation" items, judge whether the context states that relation between the two names.
         Types: person, organization (company, institution, team), project (software project, codebase, repository,
         product, game, initiative), technology (language, library, format, protocol, tool, model, device),
-        concept, place, document, event, other.
+        concept, place, document, event, other, class, function, binary_module, data_asset.
         Copy each ordinal exactly. Give the one-based evidenceIndex of the quote that directly supports the
         verdict (1 for a single quote). Use 0 for uncertain. For supported or unsupported, note MUST be an exact
         contiguous excerpt of that quote, under 200 characters. Do not write an explanation or use another item's quote.

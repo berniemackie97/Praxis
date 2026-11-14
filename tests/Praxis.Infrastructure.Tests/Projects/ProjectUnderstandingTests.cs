@@ -11,6 +11,7 @@ using Praxis.Domain.Projects;
 using Praxis.Domain.Understanding;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Composition;
+using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Agents;
 using Praxis.Infrastructure.Tests.Support;
@@ -92,6 +93,38 @@ public sealed class ProjectUnderstandingTests : IDisposable
         Assert.Equal("src/App/Program.cs", project.Relative(project.Members.Single(member => member.Locator.EndsWith(".cs", StringComparison.Ordinal))));
         string before = ProjectDetector.Fingerprint(project);
         Assert.NotEqual(before, ProjectDetector.Fingerprint(project with { Members = [.. project.Members.SkipLast(1)] }));
+    }
+
+    [Fact]
+    public void GitRepositoryMarkersGroupCapturedNotesWithoutImportingGitMetadata()
+    {
+        string root = Path.Combine(workspace, "notes-repository");
+        Directory.CreateDirectory(Path.Combine(root, ".git"));
+        Directory.CreateDirectory(Path.Combine(root, "evidence"));
+        ProjectSource note = Source(Path.Combine(root, "evidence", "investigation.md"));
+        ProjectSource unrelated = Source(Path.Combine(workspace, "elsewhere", "todo.md"));
+
+        IReadOnlyCollection<string> roots = GitProjectRoots.Find([note, unrelated], [workspace]);
+        Assert.Equal(root, Assert.Single(roots));
+        ProjectCandidate project = Assert.Single(ProjectDetector.Detect([note, unrelated], roots));
+        Assert.Equal(root, project.Root);
+        Assert.Equal(note.Locator, Assert.Single(project.Members).Locator);
+    }
+
+    [Fact]
+    public async Task GitOnlyNotesProjectRemainsLocalWithoutABuildMarker()
+    {
+        using SqliteCatalog catalog = Open();
+        await Capture(catalog, "notes-repository/investigation.md", "# Research notes");
+        ScriptedModelFactory models = new();
+        string root = Path.Combine(workspace, "incoming", "notes-repository");
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock),
+            catalog.Policy, clock, _ => [root]);
+
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding project = Assert.Single(catalog.Projects.List());
+        Assert.Equal((ProjectUnderstanding.MapOnly, "local_repository_map"), (project.Status, project.Reason));
+        Assert.Empty(catalog.Policy.ReadInvocations(10));
     }
 
     [Fact]
