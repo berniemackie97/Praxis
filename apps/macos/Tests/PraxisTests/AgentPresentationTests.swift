@@ -76,6 +76,19 @@ struct AgentPresentationTests {
         #expect(FallbackChain.toggled(chain, step: step, enabled: enabled) == expected)
     }
 
+    @MainActor
+    @Test func graphInvestigationPreservesUnsentChatAndDoesNotStartAModel() {
+        let chat = ChatWorkbenchModel(channel: WorkerChannel(worker: WorkerSession()))
+        chat.draft = "Unsent owner notes"
+        #expect(!chat.prepareDraft("Explain the graph"))
+        #expect(chat.draft == "Unsent owner notes")
+        chat.draft = ""
+        #expect(chat.prepareDraft("Explain the graph"))
+        #expect(chat.draft == "Explain the graph")
+        #expect(!chat.running)
+        #expect(!chat.canSend)
+    }
+
     @Test func backendLocalityMirrorsTheWorker() {
         func profile(_ kind: String, _ endpoint: String?) -> AgentBackendProfile {
             AgentBackendProfile(backendId: "b", kind: kind, endpoint: endpoint, model: "m", keyAccount: nil, executable: nil, enabled: true)
