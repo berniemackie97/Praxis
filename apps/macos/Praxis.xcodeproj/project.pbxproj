@@ -11,6 +11,7 @@
 		00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E003 /* GraphWorkbenchModel.swift */; };
 		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
 		00000000000000000000E008 /* GraphSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E007 /* GraphSceneView.swift */; };
+		00000000000000000000E00E /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00D /* GraphScene.swift */; };
 		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
 		00000000000000000000E00C /* GraphPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00B /* GraphPresentationTests.swift */; };
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
@@ -90,6 +91,7 @@
 		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E007 /* GraphSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSceneView.swift; sourceTree = "<group>"; };
+		00000000000000000000E00D /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
 		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
 		00000000000000000000E00B /* GraphPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 				00000000000000000000A02D /* KnowledgeView.swift */,
 				00000000000000000000E005 /* GraphLayout.swift */,
 				00000000000000000000E007 /* GraphSceneView.swift */,
+		00000000000000000000E00D /* GraphScene.swift */,
 				00000000000000000000E009 /* KnowledgeGraphView.swift */,
 				00000000000000000000A02F /* LibraryView.swift */,
 				00000000000000000000A031 /* ProposalReviewView.swift */,
@@ -436,6 +439,7 @@
 				00000000000000000000A02E /* KnowledgeView.swift in Sources */,
 				00000000000000000000E006 /* GraphLayout.swift in Sources */,
 				00000000000000000000E008 /* GraphSceneView.swift in Sources */,
+		00000000000000000000E00E /* GraphScene.swift in Sources */,
 				00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */,
 				00000000000000000000A030 /* LibraryView.swift in Sources */,
 				00000000000000000000A032 /* ProposalReviewView.swift in Sources */,
