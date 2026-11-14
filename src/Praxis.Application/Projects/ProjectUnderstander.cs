@@ -77,13 +77,13 @@ public sealed class ProjectUnderstander(
         TieredRequest? RequestForTier(string tier)
         {
             string? providerId = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == tier)?.ProviderId;
-            if (providerId is null)
+            if (providerId is null && tier != ModelTiers.Local)
             {
                 return null;
             }
 
             ProjectSource[] current = CurrentMembers();
-            ProjectSource[] allowed = providerId == VerificationProvider.Ollama ? current :
+            ProjectSource[] allowed = tier == ModelTiers.Local || providerId == VerificationProvider.Ollama ? current :
                 current.Where(member =>
                 {
                     SourceCategory? category = policy.ReadCategory(member.SourceId);

@@ -71,7 +71,8 @@ public sealed class TieredModels(
     {
         (DisclosureDecision decision, string category) = gate.Decide(request.SourceId, provider.ProviderId, provider.IsLocal,
             request.Purpose, request.KnownCategory);
-        if (!decision.Allowed || request.DisclosureSources is not { Count: > 0 } sources)
+        IReadOnlyList<Guid>? sources = request.DisclosureSources;
+        if (!decision.Allowed || sources is null || sources.Count == 0)
         {
             return (decision, category);
         }
