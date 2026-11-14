@@ -14,5 +14,6 @@ public sealed record DisclosureDecision(bool Allowed, bool RequiresApproval, str
     public const string ModeLocalOnly = "mode_local_only";
     public const string ModeAskEachTime = "mode_ask_each_time";
     public const string NoGrant = "no_grant";
+    public const string SourceChanged = "source_changed";
     public const string ModeAllowAll = "mode_allow_all";
 }

@@ -31,8 +31,8 @@ public sealed class TieredModels(
             return new TieredOutcome(TieredOutcome.NotConfigured, null, null, null, null, "tier_unavailable");
         }
 
-        (DisclosureDecision decision, string category) = gate.Decide(request.SourceId, provider.ProviderId, provider.IsLocal, request.Purpose, request.KnownCategory);
-        if (!decision.Allowed && !ApprovedOnce(request, provider))
+        (DisclosureDecision decision, string category) = ScopeDecision(request, provider);
+        if (!decision.Allowed && (request.DisclosureSources is { Count: > 0 } || !ApprovedOnce(request, provider)))
         {
             return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, decision, decision.Reason);
         }
@@ -43,6 +43,18 @@ public sealed class TieredModels(
         {
             using ModelConnection connection = factory.Create(provider);
             ModelIdentity identity = await connection.Model.DescribeAsync(cancellationToken);
+            (decision, category) = ScopeDecision(request, provider);
+            if (!decision.Allowed && (request.DisclosureSources is { Count: > 0 } || !ApprovedOnce(request, provider)))
+            {
+                return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, decision, decision.Reason);
+            }
+
+            if (request.SourceScopeCurrent is { } current && !current())
+            {
+                DisclosureDecision stale = new(false, false, DisclosureDecision.SourceChanged, null);
+                return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, stale, stale.Reason);
+            }
+
             ChatResult result = await connection.Model.CompleteAsync(request.Request, cancellationToken);
             Record(tier, provider, request, category, decision, identity.Model, result.InputTokens, result.OutputTokens, "completed", started);
             return new TieredOutcome(TieredOutcome.Completed, result.Content, identity, provider.ProviderId, decision, null, result.InputTokens, result.OutputTokens,
@@ -53,6 +65,27 @@ public sealed class TieredModels(
             Record(tier, provider, request, category, decision, provider.Model, 0, 0, exception.Code, started);
             return new TieredOutcome(TieredOutcome.Failed, null, null, provider.ProviderId, decision, exception.Code);
         }
+    }
+
+    private (DisclosureDecision Decision, string Category) ScopeDecision(TieredRequest request, VerificationProvider provider)
+    {
+        (DisclosureDecision decision, string category) = gate.Decide(request.SourceId, provider.ProviderId, provider.IsLocal,
+            request.Purpose, request.KnownCategory);
+        if (!decision.Allowed || request.DisclosureSources is not { Count: > 0 } sources)
+        {
+            return (decision, category);
+        }
+
+        foreach (Guid source in sources)
+        {
+            (DisclosureDecision member, string memberCategory) = gate.Decide(source, provider.ProviderId, provider.IsLocal, request.Purpose);
+            if (!member.Allowed)
+            {
+                return (member, memberCategory);
+            }
+        }
+
+        return (decision, category);
     }
 
     private VerificationProvider? Resolve(string tier)
