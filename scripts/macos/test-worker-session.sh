@@ -20,6 +20,8 @@ if [[ -z "$dotnet" || ! -x "$dotnet" ]]; then
   exit 1
 fi
 
+results="$(mktemp -d "$root/.artifacts/native-tests.XXXXXXXX")"
+bundle="$results/Praxis.xcresult"
 PRAXIS_WORKER_DLL="$worker" PRAXIS_DOTNET="$dotnet" \
   xcodebuild -quiet \
     -project "$PRAXIS_XCODE_PROJECT" \
@@ -27,5 +29,15 @@ PRAXIS_WORKER_DLL="$worker" PRAXIS_DOTNET="$dotnet" \
     -configuration Debug \
     -destination 'platform=macOS' \
     -derivedDataPath "$derived" \
+    -resultBundlePath "$bundle" \
     CODE_SIGNING_ALLOWED=NO \
     test
+
+summary="$(xcrun xcresulttool get test-results summary --path "$bundle")"
+printf '%s\n' "$summary"
+count="$(printf '%s\n' "$summary" | sed -n 's/.*"totalTestCount"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)"
+if [[ -z "$count" || "$count" -eq 0 ]]; then
+  echo "Xcode reported no executed tests. Inspect $bundle before treating this as a passing test gate." >&2
+  exit 1
+fi
+echo "Verified $count native tests. Result bundle: $bundle"
