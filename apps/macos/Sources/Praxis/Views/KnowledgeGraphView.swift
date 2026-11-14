@@ -71,6 +71,7 @@ struct KnowledgeGraphView: View {
         .onChange(of: graph.predicate) { _ in graph.refresh() }
         .onChange(of: graph.evidenceStatus) { _ in graph.refresh() }
         .onChange(of: graph.collectionId) { _ in graph.refresh() }
+        .onChange(of: graph.sourceId) { _ in graph.refresh() }
         .onChange(of: graph.includeSuggestions) { allowed in
             if !allowed && graph.evidenceStatus == "suggested" {
                 graph.evidenceStatus = ""
@@ -117,6 +118,12 @@ struct KnowledgeGraphView: View {
             Picker("Collection", selection: $graph.collectionId) {
                 Text("All collections").tag("")
                 ForEach(collections) { collection in Text(collection.name).tag(collection.collectionId) }
+            }
+            Picker("Source", selection: $graph.sourceId) {
+                Text("Any source").tag("")
+                ForEach(sources.filter { $0.sourceStatus == "active" }) { source in
+                    Text(source.title).tag(source.sourceId)
+                }
             }
             Picker("Entity type", selection: $graph.entityType) {
                 Text("All types").tag("")
