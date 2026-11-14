@@ -467,7 +467,8 @@ public sealed class GraphProjectionTests : IDisposable
     }
 
     private static EntitySummary Single(SqliteCatalog catalog, string name) =>
-        catalog.Knowledge.ListEntities(includeSuggestions: true).Single(entity => entity.Name == name);
+        catalog.Knowledge.ListEntities(search: name, includeSuggestions: true)
+            .Single(entity => entity.Name == name);
 
     public void Dispose()
     {
