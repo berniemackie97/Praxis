@@ -162,7 +162,12 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Single(catalog.Graph.Atlas(new GraphQuery(IncludeSuggestions: true)).Edges);
         await Accept(catalog, captured);
         DesktopProtocol desktop = TestDesktop.Protocol(catalog);
-        string request = JsonSerializer.Serialize(new { requestId = "atlas", action = "graphAtlas", limit = 10 });
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "atlas",
+            action = "graphAtlas",
+            limit = 10
+        });
         using JsonDocument ready = JsonDocument.Parse(await desktop.HandleAsync(request));
         Assert.True(ready.RootElement.GetProperty("ok").GetBoolean());
         Assert.Single(ready.RootElement.GetProperty("data").GetProperty("edges").EnumerateArray());
