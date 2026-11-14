@@ -110,7 +110,21 @@ public sealed class SqliteGraphReader : IGraphReader
         });
     }
 
-    public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default)
+    public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default) =>
+        ReadNeighborhood(focusId, null, query, cancellationToken);
+
+    public GraphPage Relation(Guid focusId, Guid relationId, GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        if (relationId == Guid.Empty || query.Cursor is not null)
+        {
+            throw new ArgumentException("A valid relationship and no cursor are required.");
+        }
+
+        return ReadNeighborhood(focusId, relationId, query with { Limit = 1 }, cancellationToken);
+    }
+
+    private GraphPage ReadNeighborhood(Guid focusId, Guid? relationId, GraphQuery query,
+        CancellationToken cancellationToken)
     {
         if (focusId == Guid.Empty)
         {
@@ -121,7 +135,8 @@ public sealed class SqliteGraphReader : IGraphReader
         {
             cancellationToken.ThrowIfCancellationRequested();
             long version = Version(connection);
-            string signature = Signature("neighbors", focusId, null, query);
+            string signature = Signature(relationId is null ? "neighbors" : "relation", focusId,
+                relationId?.ToString("D"), query);
             string after = ReadCursor(query.Cursor, version, signature);
             GraphNode? root = ReadNode(connection, focusId, query);
             if (root is null)
@@ -146,6 +161,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
                 LEFT JOIN sources s ON s.source_id = p.source_id
                 WHERE (r.subject_id = $focus OR r.object_id = $focus)
+                  AND ($relationId IS NULL OR r.relation_id = $relationId)
                   AND r.relation_id > $after
                   AND ({ConfirmedRelation} OR ($suggestions = 1
                       AND r.origin = 'model' AND p.proposal_id IS NOT NULL
@@ -169,6 +185,7 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 Scope(command, query);
                 command.Parameters.AddWithValue("$focus", focusId.ToString("D"));
+                command.Parameters.AddWithValue("$relationId", (object?)relationId?.ToString("D") ?? DBNull.Value);
                 command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
                 command.Parameters.AddWithValue("$after", after);
                 command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
@@ -213,7 +230,8 @@ public sealed class SqliteGraphReader : IGraphReader
                     row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
             }
 
-            return new GraphPage("ready", focusId, nodes, edges,
+            return new GraphPage(relationId is not null && edges.Count == 0 ? "unavailable" : "ready", focusId,
+                relationId is not null && edges.Count == 0 ? [] : nodes, edges,
                 more ? WriteCursor(version, signature, rows[^1].RelationId) : null);
         });
     }
