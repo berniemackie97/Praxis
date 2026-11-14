@@ -165,6 +165,27 @@ final class GraphWorkbenchModel: ObservableObject {
         }
     }
 
+    func prepareExplanation(_ deliver: @escaping (String) -> Void) {
+        guard let edge = inspectedEdge else { return }
+        validate(edge) { [weak self] current in
+            guard let self else { return }
+            guard current.evidenceStatus != "suggested" else {
+                inspectionMessage = "Unconfirmed suggestions require owner review before agent investigation."
+                return
+            }
+            let prompt = """
+                Explain this currently authorized Praxis relationship using only evidence you can verify now.
+                Subject entity ID: \(current.subjectId)
+                Predicate: \(current.predicate)
+                Object entity ID: \(current.objectId)
+                Relation ID: \(current.relationId)
+                Origin: \(current.origin); status: \(current.evidenceStatus).
+                Do not claim a source citation for an owner-only assertion. Recheck all source permissions,                 revisions and disclosures through the available tools; abstain if evidence is unavailable.                 Do not create or approve any proposed relation. State uncertainties and contradictions.
+                """
+            deliver(prompt)
+        }
+    }
+
     func reviewSelectedRelation(_ decision: String) {
         guard decision == "accepted" || decision == "rejected",
               let edge = inspectedEdge, edge.evidence != nil, !reviewingRelation else { return }
