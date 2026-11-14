@@ -35,7 +35,12 @@ public sealed class TriageHandler(
         SourceCategory? owner = policy.ReadCategory(source.SourceId) is { Origin: SourceCategory.OwnerOrigin } chosen ? chosen : null;
         DocumentProfile profile;
         string tier;
-        if (FormatHints.For(source.Facts) is { } hint)
+        if (TechnicalEvidence.IsArtifact(source.Locator, input.Content))
+        {
+            // A generated artifact is handled locally. Its format does not grant disclosure.
+            (profile, tier) = (new DocumentProfile(DataCategories.Unclassified, "technical evidence", null, null, []), "hint");
+        }
+        else if (FormatHints.For(source.Facts) is { } hint)
         {
             (profile, tier) = (hint, "hint");
         }

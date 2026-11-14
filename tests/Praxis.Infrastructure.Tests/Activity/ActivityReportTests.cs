@@ -69,7 +69,12 @@ public sealed class ActivityReportTests : IDisposable
         Assert.Equal((2, 2, 1, "model_invalid_response"), (claude.DailyLimit, claude.CallsToday, claude.FailuresLastHour, claude.LastOutcome));
         Assert.Equal([ModelTiers.Strong], claude.Roles);
         Assert.Contains(report.Notices, notice => notice.Text.Contains("used all 2 of today's calls", StringComparison.Ordinal));
-        Assert.Contains(report.Notices, notice => notice is { Tone: "critical" } && notice.Text.Contains("could not be used", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Notices, notice => notice.Tone == "critical");
+        clock.UtcNow = clock.UtcNow.AddHours(2);
+        ProviderActivity stale = new ActivityActions(catalog.Activity, activity, catalog.Verification, catalog.Policy, new LocalPace(), clock)
+            .Report(10).Providers.Single(provider => provider.ProviderId == VerificationProvider.ClaudeCode);
+        Assert.Null(stale.LastOutcome);
+        Assert.NotNull(stale.LastCallUtc);
     }
 
     private static void RecentModelCallAssert(ActivityResponse report)

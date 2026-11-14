@@ -26,7 +26,7 @@ public sealed class ModelSetup(
     {
         VerificationProvider? current = verification.ListProviders().FirstOrDefault(provider => provider.ProviderId == VerificationProvider.Ollama);
         string address = endpoint ?? current?.Endpoint ?? profiles?.Get(ModelProfile.LocalEnrichment)?.Endpoint ?? DefaultOllama;
-        ConnectOllama(address, model, enabled: true, current?.DailyLimit ?? VerificationProvider.Unlimited);
+        ConnectOllama(address, model, enabled: true);
         policy.SaveTier(ModelTiers.Local, VerificationProvider.Ollama);
         if (profiles?.Get(ModelProfile.LocalEnrichment) is { } enrichment)
         {
@@ -81,9 +81,9 @@ public sealed class ModelSetup(
     }
 
     /// <summary>Connects a local Ollama model for the local tier and for private chat.</summary>
-    public VerificationProvider ConnectOllama(string endpoint, string model, bool enabled, int dailyLimit)
+    public VerificationProvider ConnectOllama(string endpoint, string model, bool enabled)
     {
-        VerificationProvider saved = providers.Save(new VerificationProvider(VerificationProvider.Ollama, null, model, 0, dailyLimit, enabled, endpoint));
+        VerificationProvider saved = providers.Save(new VerificationProvider(VerificationProvider.Ollama, null, model, 0, VerificationProvider.Unlimited, enabled, endpoint));
         agents.SaveBackend(new AgentBackendProfile(VerificationProvider.Ollama, AgentBackendKinds.OpenAiCompatible,
             endpoint.TrimEnd('/') + OllamaChatEndpoint, model, null, null, enabled));
         return saved;

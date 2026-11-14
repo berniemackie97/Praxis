@@ -37,8 +37,14 @@ public sealed class UnderstandHandler(
     {
         LeasedUnderstandingSource? source = repository.ReadLeasedSource(lease);
         LeasedText? input = source is null ? null : texts.ReadLeasedInput(lease);
-        if (source is null || input is null || repository.TryReuse(lease, input))
+        if (source is null || input is null)
         {
+            return;
+        }
+
+        if (TechnicalEvidence.IsArtifact(source.Locator, input.Content))
+        {
+            repository.CloseUnderstanding(lease, input.Digest, UnderstandingStatuses.IndexOnly, "technical_evidence", 0, 0);
             return;
         }
 
@@ -47,6 +53,11 @@ public sealed class UnderstandHandler(
         if (source.Facts.Format == DocumentFormats.Code)
         {
             repository.CloseUnderstanding(lease, input.Digest, UnderstandingStatuses.IndexOnly, "project_level", 0, 0);
+            return;
+        }
+
+        if (repository.TryReuse(lease, input))
+        {
             return;
         }
 

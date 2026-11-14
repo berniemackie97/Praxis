@@ -148,7 +148,7 @@ private struct VerificationDetailView: View {
                     Button("Revoke External Disclosure", role: .destructive) { model.revokeDisclosure() }
                 }
                 if let tokens = request.inputTokens {
-                    Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens, counted against the selected provider's daily request allowance.")
+                    Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens.")
                         .font(.meta).foregroundStyle(.secondary)
                 }
                 Panel(title: request.awaitingApproval ? "What approval will send" : "What was sent", systemImage: "eye") {

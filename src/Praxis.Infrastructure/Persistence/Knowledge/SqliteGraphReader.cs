@@ -22,6 +22,7 @@ public sealed class SqliteGraphReader : IGraphReader
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
              WHEN v.verdict = 'unsupported' THEN 'contradicted'
              WHEN v.verdict = 'supported' THEN 'verified'
+             WHEN p.processor_key = 'technical-evidence-v1' THEN 'documented'
              WHEN p.processor_key = 'intake-understand-v1' AND EXISTS (
                   SELECT 1 FROM intake_documents d WHERE d.item_id = p.item_id
                     AND d.revision = p.revision AND d.tier IN ('strong', 'strongest', 'reused')
@@ -33,7 +34,7 @@ public sealed class SqliteGraphReader : IGraphReader
         (r.origin = 'owner' OR
          (p.proposal_id IS NOT NULL AND p.status <> 'rejected'
           AND (p.status IN ('accepted', 'corrected') OR
-               (v.verdict = 'supported') OR
+               (v.verdict = 'supported') OR p.processor_key = 'technical-evidence-v1' OR
                (p.processor_key = 'intake-understand-v1' AND EXISTS (
                     SELECT 1 FROM intake_documents d
                     WHERE d.item_id = p.item_id AND d.revision = p.revision
@@ -260,8 +261,16 @@ public sealed class SqliteGraphReader : IGraphReader
         )
         """;
 
+    private static string TechnicalType(string alias) => $"""
+        (SELECT MIN(m.entity_type) FROM visible_entity_mentions m
+         WHERE m.entity_id = {alias}.entity_id AND m.processor_key = 'technical-evidence-v1' AND m.flags IS NULL
+           {ScopeFilter("m")}
+         HAVING COUNT(DISTINCT m.entity_type) = 1)
+        """;
+
     private static string EffectiveType(string alias, GraphQuery query) => $"""
-        CASE WHEN {alias}.type_origin = 'inferred' THEN (
+        CASE WHEN {alias}.type_origin <> 'owner' AND {TechnicalType(alias)} IS NOT NULL THEN {TechnicalType(alias)}
+        WHEN {alias}.type_origin = 'inferred' THEN (
             SELECT m.entity_type FROM {MentionView(query)} m
             WHERE m.entity_id = {alias}.entity_id AND m.entity_type IS NOT NULL
               {ScopeFilter("m")}
@@ -285,7 +294,8 @@ public sealed class SqliteGraphReader : IGraphReader
                            WHERE confirmed.proposal_id = m.proposal_id)
                        THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
                    ), e.display_name) END,
-                   {EffectiveType("e", query)}, e.type_origin,
+                   {EffectiveType("e", query)},
+                   CASE WHEN e.type_origin <> 'owner' AND {TechnicalType("e")} IS NOT NULL THEN 'evidence' ELSE e.type_origin END,
                    (SELECT COUNT(DISTINCT m.proposal_id) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.source_id) FROM {MentionView(query)} m

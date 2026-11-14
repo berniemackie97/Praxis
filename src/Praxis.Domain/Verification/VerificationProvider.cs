@@ -19,8 +19,10 @@ public sealed record VerificationProvider(
 
     public bool IsLocal => ProviderId == Ollama;
 
+    public int EffectiveDailyLimit => IsLocal ? Unlimited : DailyLimit;
+
     /// <summary>True while <paramref name="startedToday"/> attempts leave room under the daily limit.</summary>
-    public bool WithinLimit(int startedToday) => DailyLimit == Unlimited || startedToday < DailyLimit;
+    public bool WithinLimit(int startedToday) => EffectiveDailyLimit == Unlimited || startedToday < EffectiveDailyLimit;
 
     public void EnsureValid()
     {

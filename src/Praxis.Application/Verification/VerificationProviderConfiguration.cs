@@ -16,6 +16,11 @@ public sealed class VerificationProviderConfiguration(IVerificationRepository re
             using ModelConnection connection = models.Create(provider);
         }
 
+        if (provider.IsLocal)
+        {
+            provider = provider with { DailyLimit = VerificationProvider.Unlimited };
+        }
+
         repository.SaveProvider(provider);
         return repository.ListProviders().Single(saved => saved.ProviderId == provider.ProviderId);
     }

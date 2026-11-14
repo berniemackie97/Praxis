@@ -147,7 +147,8 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<SqliteCatalog>().Text,
             CatalogProcessing.Ladder(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IVerifierModelFactory>(),
                 provider.GetRequiredService<TimeProvider>()),
-            provider.GetRequiredService<IPolicyRepository>(), provider.GetRequiredService<TimeProvider>()));
+            provider.GetRequiredService<IPolicyRepository>(), provider.GetRequiredService<TimeProvider>(),
+            sources => GitProjectRoots.Find(sources, provider.GetRequiredService<WatchedFolderIntakeGroup>().AvailableRoots())));
         services.AddHostedService<ProjectUnderstandingService>();
         return services;
     }

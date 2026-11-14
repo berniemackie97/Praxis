@@ -12,7 +12,7 @@ namespace Praxis.Application.Projects;
 /// change, and at most once per interval, so editing code does not spend tokens on every save.
 /// </summary>
 public sealed class ProjectUnderstander(
-    IProjectRepository projects, ITextDerivativeRepository texts, IntakeLadder ladder, IPolicyRepository policy, TimeProvider clock)
+    IProjectRepository projects, ITextDerivativeRepository texts, IntakeLadder ladder, IPolicyRepository policy, TimeProvider clock, Func<IReadOnlyList<ProjectSource>, IReadOnlyCollection<string>>? gitRoots = null)
 {
     public const string ProcessorKey = "project-understand-v1";
     public static readonly TimeSpan MinimumInterval = TimeSpan.FromMinutes(15);
@@ -22,7 +22,8 @@ public sealed class ProjectUnderstander(
     /// <summary>Runs one pass; returns how many projects were (re)understood.</summary>
     public async Task<int> RunAsync(CancellationToken cancellationToken)
     {
-        IReadOnlyList<ProjectCandidate> candidates = ProjectDetector.Detect(projects.ReadActiveSources(MaximumSources));
+        IReadOnlyList<ProjectSource> sources = projects.ReadActiveSources(MaximumSources);
+        IReadOnlyList<ProjectCandidate> candidates = ProjectDetector.Detect(sources, gitRoots?.Invoke(sources));
         projects.RemoveExcept(candidates.Select(candidate => candidate.ProjectId).ToArray());
         int done = 0;
         foreach (ProjectCandidate candidate in candidates)
@@ -55,7 +56,16 @@ public sealed class ProjectUnderstander(
             texts.ReadCurrent(member.ItemId, member.Revision) is { Outcome: "completed", Content: { } content } derivative && derivative.SourceId == member.SourceId
                 ? content
                 : null);
-        ProjectSource anchor = disclosed.FirstOrDefault(member => ProjectMarkers.IsMarker(Path.GetFileName(member.Locator))) ?? project.Members[0];
+        ProjectSource? anchor = disclosed.FirstOrDefault(member => ProjectMarkers.IsMarker(Path.GetFileName(member.Locator)));
+        // A Git marker is enough to group a notes repository, but is not authority to ship a
+        // multi-file prompt. Without a captured build marker, publish the local map only.
+        if (anchor is null)
+        {
+            return new ProjectUnderstanding(project.ProjectId, project.Root, project.Name, fingerprint, ProjectUnderstanding.MapOnly,
+                "local_repository_map", null, null, [], [], [], map.Dependencies.Order(StringComparer.OrdinalIgnoreCase).Take(300).ToArray(),
+                map.Languages, project.Members.Count, null, null, 0, 0, clock.GetUtcNow());
+        }
+
         LadderResult<ProjectDraft> result = await ladder.RunAsync(
             new TieredRequest(anchor.SourceId, null, null, ProcessorKey, DisclosurePurposes.Intake, ProjectPrompt.Create(map), DataCategories.Code),
             (content, _) =>

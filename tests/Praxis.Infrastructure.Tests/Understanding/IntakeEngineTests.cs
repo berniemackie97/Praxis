@@ -6,6 +6,9 @@ using Praxis.Application.Agents.Tools;
 using Praxis.Application.Finance;
 using Praxis.Application.Inference;
 using Praxis.Application.Policy;
+using Praxis.Application.Understanding;
+using Praxis.Application.Knowledge;
+using Praxis.Domain.Processing;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Policy;
@@ -267,6 +270,56 @@ public sealed class IntakeEngineTests : IDisposable
         Assert.Equal(DataCategories.Unclassified, state.Category);
         Assert.Single(catalog.Policy.ReadHolds(openOnly: true, 10), hold => hold.ItemId == note.ItemId);
         Assert.Single(catalog.Search.Query("Ortega"));
+    }
+
+    [Fact]
+    public async Task TechnicalExportsGiveTheGraphTypedCallsWithoutAnyModel()
+    {
+        using SqliteCatalog catalog = Open();
+        Grant(catalog, DataCategories.Unclassified, Strong);
+        ScriptedModelFactory models = Models(_ => GoodUnderstanding);
+        const string export = """
+            {"asm":{"content":[{"type":"text","text":"File: /sample/Client.exe.bndb\n\n# Block 1 at 0x62621c\n00626231  e8 b6 15 00 00 call    CRadar_TickZoomAnimation\n00626294  ff 15 a8 40 84 00 call    dword [GameDataSetQuery]\n006262a0  ff d0 call eax\n006262a2  90 nop ; call BogusComment\n006262b0  ff 50 04 call dword [eax+0x4]"}]}}
+            """;
+        CapturedOriginal source = await Capture(catalog, "CRadar_Show.json", Encoding.UTF8.GetBytes(export));
+        IReadOnlyList<Application.Processing.IProcessingHandler> handlers = CatalogProcessing.CreateHandlers(catalog, models, clock);
+        await ProcessingDriver.RunIntakeAsync(catalog, handlers);
+        Assert.True(new ProcessingDriver(catalog, handlers.Single(handler => handler.ProcessorKey == ProcessorKeys.TechnicalEvidence)).ProcessNext());
+        Assert.Empty(catalog.Policy.ReadInvocations(10));
+        Assert.Equal("technical_evidence", catalog.Understanding.ReadCurrent(source.SourceId)!.Reason);
+        Assert.Single(catalog.Search.Query("GameDataSetQuery"));
+
+        GraphQuery scope = new(SourceId: source.SourceId);
+        GraphNode callee = Assert.Single(catalog.Graph.Seeds("GameDataSetQuery", scope).Nodes);
+        Assert.Equal("function", callee.EntityType);
+        GraphEdge edge = Assert.Single(catalog.Graph.Neighborhood(callee.EntityId, scope).Edges);
+        Assert.Equal(("calls", "documented"), (edge.Predicate, edge.EvidenceStatus));
+        Assert.Contains("call    dword [GameDataSetQuery]", edge.Evidence!.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name is "eax" or "BogusComment");
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+        Assert.Empty(catalog.Graph.Seeds("GameDataSetQuery", scope).Nodes);
+    }
+
+    [Fact]
+    public void TechnicalNotesDistinguishClassesBinariesAndAssets()
+    {
+        const string source = """
+            # CItem & CItemData Classes — Item System
+            # CNpc Class
+            struct CPlayer : CRole {
+            This references `RoleView.dll`, `Conquer.exe.bndb` and `start.dat`.
+            """;
+        string path = Path.Combine(workspace, "notes.md");
+        Assert.False(TechnicalEvidence.IsArtifact(path, source));
+        var facts = TechnicalEvidence.Extract(path, source);
+        Assert.Contains(facts, fact => fact is { Value: "CItem", EntityType: "class" });
+        Assert.Contains(facts, fact => fact is { Value: "CItemData", EntityType: "class" });
+        Assert.Contains(facts, fact => fact is { Value: "CNpc", EntityType: "class" });
+        Assert.Contains(facts, fact => fact is { Value: "RoleView.dll", EntityType: "binary_module" });
+        Assert.Contains(facts, fact => fact is { Value: "start.dat", EntityType: "data_asset" });
+        Assert.Contains(facts, fact => fact is { Value: "inherits_from", RelationSubject: "CPlayer", RelationObject: "CRole" });
+        Assert.DoesNotContain(facts, fact => fact.Value == "Conquer.exe");
+        Assert.False(TechnicalEvidence.IsArtifact(Path.Combine(workspace, "settings.json"), """{"theme":"dark"}"""));
     }
 
     private static bool TransactionIs(ChatRequest request, string property) => Finance.TransactionIntakeTests.Is(request, property);

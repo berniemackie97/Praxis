@@ -13,8 +13,7 @@ namespace Praxis.Application.Understanding;
 /// it can read quickly (private and free); code verifies every quote; the strong tier reviews that
 /// draft and writes only corrections (or reads the span itself when there is no draft); the
 /// strongest tier sees the strong result and the verification problems and corrects again, only
-/// when needed. Spans are merged in code; a long document's span summaries are combined in one
-/// small call. Each tier's contribution is recorded as the document's cascade.
+/// when needed. Spans are merged in code; long documents keep a bounded summary from the spans actually read. Each tier's contribution is recorded as the document's cascade.
 /// </summary>
 public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles profiles, LocalDraftPolicy? draftPolicy = null, LocalPace? pace = null)
 {
@@ -147,12 +146,11 @@ public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles pro
         string? summary = drafts[0].Draft.Summary;
         if (drafts.Count > 1)
         {
-            LadderResult<string> combined = await ladder.RunAsync(
-                Request(lease, source, UnderstandingPrompt.Combine(source.FileName, drafts.Select(item => item.Draft.Summary ?? string.Empty).ToArray())),
-                (content, _) => UnderstandingVerifier.Summary(content), cancellationToken);
-            input += combined.InputTokens;
-            output += combined.OutputTokens;
-            summary = combined.Value ?? summary;
+            // Each synopsis can stand alone. Keep a bounded excerpt of each instead of buying
+            // another full CLI turn just to combine summaries.
+            int limit = (UnderstandingCommit.MaximumSummaryLength - 2 * (drafts.Count - 1)) / drafts.Count;
+            summary = string.Join("\n\n", drafts.Select(item => item.Draft.Summary).OfType<string>()
+                .Distinct(StringComparer.Ordinal).Select(value => SummaryExcerpt(value, limit)));
         }
 
         IReadOnlyList<IntakeRecord> records = drafts
@@ -187,14 +185,26 @@ public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles pro
     public static string CandidateKey(ProposalCandidate candidate) => string.Join("\u001f", candidate.Kind, KnowledgeKey(candidate.Value),
         candidate.EntityType, KnowledgeKey(candidate.RelationSubject), KnowledgeKey(candidate.RelationObject));
 
-    /// <summary>De-duplicates candidates and keeps the most useful within the per-run bound: topics, then entities, then relations.</summary>
+    /// <summary>De-duplicates candidates and keeps the most useful within the per-run bound: reserve space for both entities and relations.</summary>
     public static IReadOnlyList<ProposalCandidate> Merge(IEnumerable<ProposalCandidate> candidates)
     {
         ProposalCandidate[] unique = candidates.DistinctBy(CandidateKey).ToArray();
         return unique.Where(candidate => candidate.Kind == "topic").Take(8)
+            .Concat(unique.Where(candidate => candidate.Kind == "relation").Take(24))
             .Concat(unique.Where(candidate => candidate.Kind == "entity"))
-            .Concat(unique.Where(candidate => candidate.Kind == "relation"))
+            .Concat(unique.Where(candidate => candidate.Kind == "relation").Skip(24))
             .Take(ProposalLimits.MaximumPerRun).ToArray();
+    }
+
+    private static string SummaryExcerpt(string value, int limit)
+    {
+        if (value.Length <= limit)
+        {
+            return value;
+        }
+
+        int cut = value.LastIndexOfAny(['.', '!', '?'], limit - 1, limit);
+        return cut >= limit / 2 ? value[..(cut + 1)] : value[..(char.IsHighSurrogate(value[limit - 2]) ? limit - 2 : limit - 1)] + "…";
     }
 
     private static string? KnowledgeKey(string? value) => Domain.Knowledge.KnowledgeVocabulary.NameKey(value) ?? value;

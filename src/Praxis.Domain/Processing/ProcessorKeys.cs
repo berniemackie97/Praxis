@@ -10,6 +10,7 @@ public static class ProcessorKeys
     public const string MarkdownHeadings = "markdown-heading-v1";
     public const string TextSegments = "text-segments-v1";
     public const string SemanticExtraction = "semantic-extract-v2";
+    public const string TechnicalEvidence = "technical-evidence-v1";
     public const string MediaHeader = "media-header-v1";
     public const string TimedCaption = "timed-caption-v1";
 
@@ -39,7 +40,7 @@ public static class ProcessorKeys
     private static readonly IReadOnlyDictionary<string, string[]> Dependents =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            [SourceText] = [TextSegments, IntakeTriage, LinkFetch],
+            [SourceText] = [TextSegments, IntakeTriage, LinkFetch, TechnicalEvidence],
             [TextSegments] = [SemanticExtraction],
             [IntakeTriage] = [IntakeUnderstand]
         };

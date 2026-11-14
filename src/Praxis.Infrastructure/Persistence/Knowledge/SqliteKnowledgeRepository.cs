@@ -14,20 +14,26 @@ namespace Praxis.Infrastructure.Persistence.Knowledge;
 public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
 {
     private const string Summary = """
-        SELECT e.entity_id, e.display_name, e.entity_type, e.type_origin, e.status,
+        SELECT e.entity_id, e.display_name,
+               CASE WHEN e.type_origin = 'owner' THEN e.entity_type ELSE COALESCE(t.entity_type, e.entity_type) END,
+               CASE WHEN e.type_origin <> 'owner' AND t.entity_type IS NOT NULL THEN 'evidence' ELSE e.type_origin END, e.status,
                COUNT(m.proposal_id), COUNT(DISTINCT m.source_id),
-               e.type_origin = 'inferred' AND COUNT(DISTINCT m.entity_type) > 1
+               e.type_origin = 'inferred' AND t.entity_type IS NULL AND COUNT(DISTINCT m.entity_type) > 1
         FROM knowledge_entities e
+        LEFT JOIN technical_entity_types t ON t.entity_id = e.entity_id
         LEFT JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
         """ + "\n";
 
     // Knowledge is what the owner confirmed, a verifier supported, or the strong tiers verified;
     // local-model guesses are suggestions until then.
     private const string ConfirmedSummary = """
-        SELECT e.entity_id, e.display_name, e.entity_type, e.type_origin, e.status,
+        SELECT e.entity_id, e.display_name,
+               CASE WHEN e.type_origin = 'owner' THEN e.entity_type ELSE COALESCE(t.entity_type, e.entity_type) END,
+               CASE WHEN e.type_origin <> 'owner' AND t.entity_type IS NOT NULL THEN 'evidence' ELSE e.type_origin END, e.status,
                COUNT(m.proposal_id), COUNT(DISTINCT m.source_id),
-               e.type_origin = 'inferred' AND COUNT(DISTINCT m.entity_type) > 1
+               e.type_origin = 'inferred' AND t.entity_type IS NULL AND COUNT(DISTINCT m.entity_type) > 1
         FROM knowledge_entities e
+        LEFT JOIN technical_entity_types t ON t.entity_id = e.entity_id
         LEFT JOIN confirmed_entity_mentions m ON m.entity_id = e.entity_id
         """ + "\n";
 
@@ -62,7 +68,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         {
             using SqliteCommand query = connection.CreateCommand((includeSuggestions ? Summary : ConfirmedSummary) + """
                                                                            WHERE e.status = 'active'
-                                                                             AND ($type IS NULL OR e.entity_type = $type)
+                                                                             AND ($type IS NULL OR (CASE WHEN e.type_origin = 'owner' THEN e.entity_type ELSE COALESCE(t.entity_type, e.entity_type) END) = $type)
                                                                              AND ($search IS NULL OR EXISTS (SELECT 1 FROM entity_aliases a
                                                                                   WHERE a.entity_id = e.entity_id AND instr(a.alias_key, $search) > 0))
                                                                            GROUP BY e.entity_id
@@ -311,7 +317,8 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT m.proposal_id, m.source_id, m.item_id, m.revision, m.entity_type, m.evidence,
                                                                     m.evidence_offset,
-                                                                    CASE WHEN m.status = 'pending' AND c.proposal_id IS NOT NULL THEN 'verified' ELSE m.status END,
+                                                                    CASE WHEN m.processor_key = 'technical-evidence-v1' AND c.proposal_id IS NOT NULL THEN 'documented'
+                                                                         WHEN m.status = 'pending' AND c.proposal_id IS NOT NULL THEN 'verified' ELSE m.status END,
                                                                     s.locator, m.verdict
                                                              FROM visible_entity_mentions m JOIN sources s ON s.source_id = m.source_id
                                                              LEFT JOIN confirmed_entity_mentions c ON c.proposal_id = m.proposal_id
@@ -342,7 +349,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT r.relation_id, r.predicate, r.subject_id = $entity,
                                                                     CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END,
-                                                                    other.display_name, r.origin, p.evidence
+                                                                    other.display_name, CASE WHEN p.processor_key = 'technical-evidence-v1' THEN 'evidence' ELSE r.origin END, p.evidence
                                                              FROM knowledge_relations r
                                                              JOIN knowledge_entities other ON other.entity_id =
                                                                  CASE WHEN r.subject_id = $entity THEN r.object_id ELSE r.subject_id END

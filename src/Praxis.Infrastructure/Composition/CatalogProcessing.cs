@@ -48,6 +48,7 @@ public static class CatalogProcessing
             new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing),
             new SemanticExtractionHandler(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals,
                 catalog.Knowledge, catalog.Processing, new OllamaChatModelConnector()),
+            new TechnicalEvidenceHandler(catalog.Text, catalog.Proposals),
             new TriageHandler(catalog.Understanding, catalog.Text, tiers, catalog.Policy),
             new UnderstandHandler(catalog.Understanding, catalog.Text, catalog.Originals, readers,
                 new DocumentUnderstander(ladder, RecordProfiles.Default, new LocalDraftPolicy(catalog.Settings, localPace), localPace), new TransactionProfile(ladder, catalog.Understanding),

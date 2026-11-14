@@ -35,8 +35,9 @@ public sealed class ActivityActions(
         {
             ProviderUsage? usage = facts.Providers.FirstOrDefault(candidate => candidate.ProviderId == provider.ProviderId);
             string[] roles = tiers.Where(tier => tier.ProviderId == provider.ProviderId).Select(tier => tier.Tier).ToArray();
-            return new ProviderActivity(provider.ProviderId, provider.Enabled, provider.DailyLimit, usage?.CallsToday ?? 0, usage?.FailuresLastHour ?? 0,
-                usage?.LastCallUtc, usage?.LastOutcome, roles);
+            return new ProviderActivity(provider.ProviderId, provider.Enabled, provider.EffectiveDailyLimit, usage?.CallsToday ?? 0, usage?.FailuresLastHour ?? 0,
+                usage?.LastCallUtc,
+                usage?.LastCallUtc >= now.AddHours(-1) ? usage.LastOutcome : null, roles);
         }).ToArray();
 
         return new ActivityResponse(calling, facts.Running, facts.Stages, providers, facts.RecentCalls, facts.Outcomes,
@@ -69,9 +70,9 @@ public sealed class ActivityActions(
                     "Files that needed it are read again after midnight UTC, or as soon as you raise the limit."));
             }
 
-            if (provider is { FailuresLastHour: > 0, LastOutcome: { } last } && last != "completed")
+            else if (provider is { FailuresLastHour: > 0, LastOutcome: { } last } && last != "completed")
             {
-                notices.Add(new ActivityNotice("critical", $"{Name(provider.ProviderId)}'s latest calls failed: {Failure(last)}."));
+                notices.Add(new ActivityNotice("critical", $"{Name(provider.ProviderId)}'s last intake or chat call failed: {Failure(last)}."));
             }
         }
 

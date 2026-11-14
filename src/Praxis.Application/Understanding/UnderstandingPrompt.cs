@@ -14,8 +14,8 @@ namespace Praxis.Application.Understanding;
 public static class UnderstandingPrompt
 {
     public const string Version = "understanding-v1";
-    public const int OutputTokens = 8_192;
-    public const int ContextTokens = 65_536;
+    public const int OutputTokens = 4_096;
+    public const int ContextTokens = 49_152;
 
     public static ChatRequest Request(string fileName, DocumentProfile profile, IReadOnlyList<IRecordProfile> records, string text, DocumentChunk chunk, int chunks) => new(
     [
@@ -27,9 +27,10 @@ public static class UnderstandingPrompt
               amounts, obligations). No speculation.
             - documentType: a short noun phrase.
             - topics: up to 8 subjects the document is about.
-            - entities: people, organizations, projects, technologies, concepts, places, documents and events it names. type is one of:
+            - entities: up to 20 notable named people, organizations, projects, artifacts, symbols and other things. type is one of:
               {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
-            - relations between named entities. predicate is one of: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
+            - {KnowledgeVocabulary.TechnicalTypeGuide}
+            - up to 12 explicit relations between named entities. predicate is one of: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
             - records: {(records.Count == 0 ? "none; return an empty array." : "only these kinds — " + string.Join("; ", records.Select(record => record.PromptFields)) + ".")}
               Dates must be written in the document; resolve a missing year from the document's own dates. Never infer relative dates.
             Every item needs "quote": an exact, contiguous excerpt of at most 200 characters copied from the document that states it.
@@ -96,6 +97,7 @@ public static class UnderstandingPrompt
             - summary: 2-4 sentences, at most 900 characters, only if the draft's summary is wrong or weak; otherwise "".
             - documentType: only if the draft's is wrong; otherwise "".
             Entity types: {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
+            {KnowledgeVocabulary.TechnicalTypeGuide}
             Relation predicates: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
             Records: {(records.Count == 0 ? "none." : string.Join("; ", records.Select(record => record.PromptFields)) + ".")}
             Dates must be written in the document. Prefer fewer, correct items. An empty correction is a good answer when the draft is right.

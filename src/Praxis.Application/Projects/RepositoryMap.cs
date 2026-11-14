@@ -11,10 +11,10 @@ public sealed record RepositoryMap(
     string Text, IReadOnlySet<string> Paths, IReadOnlySet<string> Dependencies, IReadOnlySet<string> Commands, string Readme,
     IReadOnlyDictionary<string, int> Languages, IReadOnlyList<ProjectSource> Disclosed)
 {
-    public const int MaximumCharacters = 60_000;
-    private const int TreeEntries = 400;
-    private const int ReadmeCharacters = 8_000;
-    private const int OutlineCharacters = 24_000;
+    public const int MaximumCharacters = 24_000;
+    private const int TreeEntries = 160;
+    private const int ReadmeCharacters = 4_000;
+    private const int OutlineCharacters = 8_000;
 
     /// <summary>Builds the map from the members whose text may be shown; <paramref name="text"/> returns a member's read text or null.</summary>
     public static RepositoryMap Build(ProjectCandidate project, IReadOnlyList<ProjectSource> disclosed, Func<ProjectSource, string?> text)
@@ -25,7 +25,7 @@ public sealed record RepositoryMap(
         Dictionary<string, int> languages = new(StringComparer.OrdinalIgnoreCase);
         StringBuilder outlines = new();
         string readme = string.Empty;
-        foreach (ProjectSource member in project.Members)
+        foreach (ProjectSource member in disclosed)
         {
             string relative = project.Relative(member);
             paths.Add(relative);
@@ -81,15 +81,15 @@ public sealed record RepositoryMap(
         StringBuilder map = new();
         map.Append("Project folder: ").Append(project.Name).Append('\n');
         map.Append("Languages (characters): ").Append(string.Join(", ", languages.OrderByDescending(pair => pair.Value).Select(pair => $"{pair.Key} {pair.Value}")))
-            .Append("\n\nFiles (").Append(project.Members.Count).Append("):\n");
+            .Append("\n\nFiles (").Append(disclosed.Count).Append("):\n");
         foreach (string path in paths.Where(path => !path.EndsWith('/')).Order(StringComparer.Ordinal).Take(TreeEntries))
         {
             map.Append(path).Append('\n');
         }
 
-        if (project.Members.Count > TreeEntries)
+        if (disclosed.Count > TreeEntries)
         {
-            map.Append("… and ").Append(project.Members.Count - TreeEntries).Append(" more\n");
+            map.Append("… and ").Append(disclosed.Count - TreeEntries).Append(" more\n");
         }
 
         map.Append("\nDeclared dependencies: ").Append(dependencies.Count == 0 ? "none" : string.Join(", ", dependencies.Order(StringComparer.OrdinalIgnoreCase).Take(200)))

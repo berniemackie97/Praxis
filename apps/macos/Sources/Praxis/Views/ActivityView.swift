@@ -122,8 +122,10 @@ struct ActivityView: View {
                 Spacer(minLength: Spacing.s)
                 if !provider.enabled {
                     StatusPill(text: "Off", tone: .neutral)
+                } else if provider.dailyLimit > 0, provider.callsToday >= provider.dailyLimit {
+                    StatusPill(text: "Daily limit reached", tone: .warning)
                 } else if let outcome = provider.lastOutcome {
-                    StatusPill(text: ActivityText.outcome(outcome), tone: outcome == "completed" ? .positive : .critical)
+                    StatusPill(text: "Last call: " + ActivityText.outcome(outcome), tone: outcome == "completed" ? .positive : .critical)
                 }
             }
             if provider.dailyLimit > 0 {

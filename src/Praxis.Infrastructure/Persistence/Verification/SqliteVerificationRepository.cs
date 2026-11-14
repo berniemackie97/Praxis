@@ -70,7 +70,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                     enabled = excluded.enabled, updated_utc = excluded.updated_utc, effort = excluded.effort
                 """, ("$id", provider.ProviderId), ("$effort", provider.Effort), ("$executable", provider.Executable),
                 ("$endpoint", provider.Endpoint), ("$model", provider.Model),
-                ("$weight", provider.CostWeight), ("$limit", provider.DailyLimit),
+                ("$weight", provider.CostWeight), ("$limit", provider.EffectiveDailyLimit),
                 ("$enabled", provider.Enabled ? 1 : 0), ("$now", now));
 
             // A disabled or reconfigured target invalidates previous approvals and running
@@ -164,6 +164,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                     SELECT e.entity_id FROM knowledge_entities e
                     JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
                     WHERE e.status = 'active' AND e.type_origin = 'inferred'
+                      AND NOT EXISTS (SELECT 1 FROM technical_entity_types t WHERE t.entity_id = e.entity_id)
                       AND NOT EXISTS (SELECT 1 FROM verification_items i
                           JOIN verification_requests r ON r.request_id = i.request_id
                           WHERE i.entity_id = e.entity_id AND r.status <> 'failed')

@@ -7,8 +7,8 @@ namespace Praxis.Application.Understanding;
 /// </summary>
 public static class DocumentChunker
 {
-    public const int MaximumChunkCharacters = 60_000;
-    public const int MaximumChunks = 12;
+    public const int MaximumChunkCharacters = 24_000;
+    public const int MaximumChunks = 3;
 
     public static (IReadOnlyList<DocumentChunk> Chunks, bool Complete) Split(string text, int maximumCharacters = MaximumChunkCharacters, int maximumChunks = MaximumChunks)
     {

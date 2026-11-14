@@ -62,6 +62,9 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
             state => incidents?.RecordState(path, state))).ToArray();
     }
 
+    public IReadOnlyList<string> AvailableRoots() =>
+        monitors.Where(monitor => monitor.IsApprovedAndAvailable).Select(monitor => monitor.RootPath).ToArray();
+
     public IReadOnlyList<WatchedRootStatus> RootStatuses() =>
         monitors.Select(monitor => new WatchedRootStatus(monitor.RootPath, monitor.Snapshot())).ToArray();
 
