@@ -67,6 +67,10 @@ struct EntityDetail: Decodable {
     let mentions: [EntityMention]
     let relations: [EntityRelation]
     let related: [RelatedEntity]
+    /// Functions named as this class's members (CRadar_* for CRadar).
+    let members: [RelatedEntity]?
+    /// The class this function's name says it belongs to, when Praxis knows it.
+    let memberOf: RelatedEntity?
 }
 
 struct EntityListData: Decodable { let entities: [EntitySummary] }

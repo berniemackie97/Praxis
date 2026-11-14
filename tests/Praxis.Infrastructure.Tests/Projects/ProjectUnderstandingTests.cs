@@ -410,7 +410,9 @@ public sealed class ProjectUnderstandingTests : IDisposable
         KnowledgeProjectTool tool = new(catalog.Projects);
         AgentToolContext remote = AgentPrimitivesTests.Context() with
         {
-            BackendId = Strong, BackendIsLocal = false, MayDisclose = id => id != member.SourceId
+            BackendId = Strong,
+            BackendIsLocal = false,
+            MayDisclose = id => id != member.SourceId
         };
         AgentToolOutput deniedList = await tool.InvokeAsync(JsonDocument.Parse("{}").RootElement, remote, CancellationToken.None);
         Assert.DoesNotContain("guarded", deniedList.Content, StringComparison.Ordinal);

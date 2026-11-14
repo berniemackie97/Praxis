@@ -296,8 +296,28 @@ public sealed class IntakeEngineTests : IDisposable
         Assert.Equal(("calls", "documented"), (edge.Predicate, edge.EvidenceStatus));
         Assert.Contains("call    dword [GameDataSetQuery]", edge.Evidence!.Text, StringComparison.Ordinal);
         Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name is "eax" or "BogusComment");
+        Guid radar = Assert.Single(catalog.Knowledge.ListEntities(), entity => entity.Name == "CRadar").EntityId;
+        Guid member = Assert.Single(catalog.Knowledge.ListEntities(), entity => entity.Name == "CRadar_TickZoomAnimation").EntityId;
+        Assert.Equal(["CRadar_Show", "CRadar_TickZoomAnimation"], catalog.Knowledge.GetEntity(radar)!.Members!.Select(entity => entity.Name));
+        Assert.Equal(radar, catalog.Knowledge.GetEntity(member)!.MemberOf!.EntityId);
+        Assert.Contains(catalog.Knowledge.GetEntity(member)!.Relations, relation => relation is { Predicate: "part_of", Outgoing: true });
         Assert.True(catalog.Sources.Revoke(source.SourceId));
         Assert.Empty(catalog.Graph.Seeds("GameDataSetQuery", scope).Nodes);
+    }
+
+    [Fact]
+    public void MemberNamesInCallsLinkFunctionsToTheirClass()
+    {
+        const string export = """
+            {"asm":{"content":[{"type":"text","text":"File: /sample/Client.exe.bndb\n\n# Block 1 at 0x62621c\n00626231  e8 b6 15 00 00 call    CRadar_TickZoomAnimation\n00626294  ff 15 a8 40 84 00 call    dword [GameDataSetQuery]\n006262a0  e8 00 00 00 00 call    Role_Render"}]}}
+            """;
+        var facts = TechnicalEvidence.Extract(Path.Combine(workspace, "CMapPuzzleBitmap_Render.json"), export);
+
+        Assert.Contains(facts, fact => fact is { Value: "part_of", RelationSubject: "CRadar_TickZoomAnimation", RelationObject: "CRadar" });
+        Assert.Contains(facts, fact => fact is { Kind: "entity", Value: "CRadar", EntityType: "class" });
+        Assert.DoesNotContain(facts, fact => fact is { Value: "part_of", RelationSubject: "GameDataSetQuery" or "Role_Render" });
+        Assert.Equal(("CRadar", null, null), (TechnicalEvidence.OwningClass("CRadar_Show"), TechnicalEvidence.OwningClass("Role_Render"),
+            TechnicalEvidence.OwningClass("CRadar_")));
     }
 
     [Fact]
