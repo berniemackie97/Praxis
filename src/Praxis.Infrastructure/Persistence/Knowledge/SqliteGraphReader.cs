@@ -69,10 +69,9 @@ public sealed class SqliteGraphReader : IGraphReader
                       WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                         AND instr(upper(CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END),
                                   $search) > 0
-                  ) OR EXISTS (
-                      SELECT 1 FROM entity_aliases a
-                      WHERE a.entity_id = e.entity_id AND a.origin = 'owner'
-                        AND instr(a.alias_key, $search) > 0))
+                  ) OR (instr(upper(e.display_name), $search) > 0
+                     AND EXISTS (SELECT 1 FROM entity_decisions d
+                                 WHERE d.entity_id = e.entity_id AND d.action = 'rename')))
                   AND e.entity_id > $after
                 ORDER BY e.entity_id
                 LIMIT $take
