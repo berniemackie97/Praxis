@@ -15,6 +15,7 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published var predicate = ""
     @Published var evidenceStatus = ""
     @Published var collectionId = ""
+    @Published var sourceId = ""
     @Published var includeSuggestions = false
     @Published private(set) var seeds: [GraphNode] = []
     @Published private(set) var nodes: [GraphNode] = []
@@ -184,6 +185,7 @@ final class GraphWorkbenchModel: ObservableObject {
         var fields: [String: Any] = [:]
         if !entityType.isEmpty { fields["entityType"] = entityType }
         if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
         if includeSuggestions { fields["includeSuggestions"] = true }
         return fields
     }
