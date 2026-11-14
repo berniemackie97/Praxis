@@ -48,6 +48,25 @@ The generator writes four fixed JSON cases. It refuses to overwrite existing fil
 
 These are **synthetic load cases**, not a proposed catalog-wide render budget. No claim about real user graph sizes is made. The `seedX`/`seedY` fields are initial display positions only, not evidence or persisted layout. The generator is platform-neutral so it can be checked before a macOS graphical test.
 
+## Disposable native rendering prototypes
+
+The draft PR includes a small macOS-only comparison host under `scripts/macos/GraphRendererBenchmark`. It reads a **generated JSON fixture only**. It is not part of the production app, does not launch the .NET worker, and does not open an owner's Praxis data directory.
+
+Run from the repository root on a Mac with full Xcode selected:
+
+```sh
+fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/praxis-graph-384.XXXXXX")"
+python3 scripts/macos/graph_renderer_fixtures.py "$fixture_dir"
+bash scripts/macos/GraphRendererBenchmark/build-graph-benchmark.sh
+.artifacts/graph-renderer-benchmark "$fixture_dir/connected.json"
+```
+
+Use the in-window renderer selector to compare Canvas and SpriteKit with the same record set. Restart the command with `sparse.json`, `clustered.json` and `high_degree.json` to inspect the other cases. Keep the test window size, display mode and motion toggle the same. Use a clean process for each profiling run. macOS Reduce Motion must stop the motion in both modes. The right-side SwiftUI list provides a separate keyboard and VoiceOver navigation path over the full node set.
+
+**Limits of this initial prototype:** Both implementations redraw synthetic moving positions; this **does not implement a force-directed solver** and cannot measure real query or layout cost. Canvas currently includes an initial pointer-select, pan and zoom interaction; SpriteKit includes node selection but does not yet have equivalent pan, zoom and drag behavior. Therefore, this build supports an early **drawing and animation comparison**, not a complete interaction or accessibility decision. Do not record interaction parity as passed.
+
+The fixture and tests ran under Python. The Swift source passed a syntax parse on a non-macOS host, but **the native Swift 6/macOS 13 build, UI tests and profiling have not run**. Do not interpret syntax validation as a successful Xcode build. Fix any compile errors on the draft branch before collecting measurements.
+
 ## Same-task comparison
 
 Use a disposable host inside the existing Xcode application test target or a short-lived isolated experiment. Compare at least two runnable candidates. Include the third if either of the first two fails a required behavior or if measured results make the choice unclear.
