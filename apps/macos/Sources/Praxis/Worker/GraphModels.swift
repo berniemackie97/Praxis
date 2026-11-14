@@ -61,6 +61,23 @@ struct GraphEdge: Decodable, Identifiable, Equatable {
     var id: String { relationId }
 }
 
+/// A readable assertion summary retaining every separately reviewable graph observation.
+struct GraphRelationGroup: Identifiable {
+    let id: String
+    let observations: [GraphEdge]
+
+    static func group(_ edges: [GraphEdge]) -> [GraphRelationGroup] {
+        Dictionary(grouping: edges) {
+            "\($0.subjectId)|\($0.predicate)|\($0.objectId)"
+        }
+        .map { entry in
+            GraphRelationGroup(id: entry.key,
+                               observations: entry.value.sorted { $0.relationId < $1.relationId })
+        }
+        .sorted { $0.id < $1.id }
+    }
+}
+
 struct GraphPage: Decodable {
     let outcome: String
     let focusId: String?
