@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS technical_entity_types;
 -- Expand the closed knowledge vocabulary while preserving proposal, entity, edge and review ids.
 DROP VIEW confirmed_entity_mentions;
 DROP VIEW visible_entity_mentions;
@@ -173,7 +174,8 @@ JOIN items i ON i.item_id = j.item_id
 JOIN sources s ON s.source_id = i.source_id
 WHERE j.processor_key = 'source-text-v1' AND j.state = 'completed' AND t.outcome = 'completed'
   AND s.status = 'active'
-  AND j.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = j.item_id);
+  AND j.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = j.item_id)
+ON CONFLICT(item_id, revision, processor_key) DO NOTHING;
 
 -- An old hidden cap must not block local processing. Keep remote plan limits.
 UPDATE verification_providers SET daily_limit = 0 WHERE provider_id = 'ollama';

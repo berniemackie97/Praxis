@@ -17,7 +17,7 @@ public sealed class VerificationRouterTests
     {
         Assert.Equal(Local, VerificationRouter.Route([new(Claude, 0), new(Codex, 0), new(Local, 1)], null));
         Assert.Null(VerificationRouter.Route([new(Claude, 0), new(Codex, 0)], null));
-        Assert.Null(VerificationRouter.Route([new(Local, 3), new(Codex, 0)], null));
+        Assert.Equal(Local, VerificationRouter.Route([new(Local, 54), new(Codex, 0)], null));
         Assert.Null(VerificationRouter.Route([new(Local with { Enabled = false }, 0), new(Codex, 0)], null));
     }
 

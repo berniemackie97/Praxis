@@ -94,7 +94,7 @@ public sealed class VerificationTests : IDisposable
             excludedOrdinals: [alex], redactions: ["roadmap", "Alex Rivera"], remoteDisclosureApproved: true);
 
         Assert.Equal(VerificationProvider.Codex, approved.ProviderId);
-        var verifier = new ScriptedChatModel(_ => Verdicts((hacker, "unsupported", "none")));
+        var verifier = new ScriptedChatModel(call => CitedVerdicts(call, (hacker, "unsupported", "none")));
         var sent = new List<string>();
         VerificationRunner runner = Runner(catalog, provider => { sent.Add(provider.ProviderId); return verifier; });
         Assert.True(await runner.ProcessNextAsync());
@@ -127,8 +127,8 @@ public sealed class VerificationTests : IDisposable
         int hacker = Ordinal(catalog, request, "Hacker Inc");
         new VerificationApproval(catalog.Verification).Approve(request,
             providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
-        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
-            Verdicts((alex, "unsupported", "none"), (hacker, "supported", "person")))).ProcessNextAsync());
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(call =>
+            CitedVerdicts(call, (alex, "unsupported", "none"), (hacker, "supported", "person")))).ProcessNextAsync());
 
         // Unsupported hides an ordinary mention; supported releases one withheld for its wording,
         // and a corrected type becomes the verified type of the entity.
@@ -144,7 +144,7 @@ public sealed class VerificationTests : IDisposable
         Guid second = catalog.Verification.RequestForEntity(hackerEntity.EntityId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(second,
             providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
-        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts((1, "supported", "person")))).ProcessNextAsync());
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(call => CitedVerdicts(call, (1, "supported", "person")))).ProcessNextAsync());
         EntitySummary owned = catalog.Knowledge.ListEntities(includeSuggestions: true).Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("organization", "owner"), (owned.EntityType, owned.TypeOrigin));
 
@@ -507,8 +507,8 @@ public sealed class VerificationTests : IDisposable
         int hacker = Ordinal(catalog, request, "Hacker Inc");
         new VerificationApproval(catalog.Verification).Approve(request, providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
 
-        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
-            Verdicts((alex, "unsupported", "organization"), (hacker, "uncertain", "none")))).ProcessNextAsync());
+        Assert.True(await Runner(catalog, _ => new ScriptedChatModel(call =>
+            CitedVerdicts(call, (alex, "unsupported", "organization"), (hacker, "uncertain", "none")))).ProcessNextAsync());
         Guid proposal = catalog.Proposals.List(source.SourceId)
             .Single(candidate => candidate.Value == "Alex Rivera").ProposalId;
         Assert.True(catalog.Proposals.Review(proposal, "accepted"));
@@ -974,6 +974,38 @@ public sealed class VerificationTests : IDisposable
         {
             verdicts = verdicts.Select(verdict => new { ordinal = verdict.Ordinal, verdict = verdict.Verdict, correctedType = verdict.Type, note = "checked" })
         });
+
+    [Fact]
+    public void VerdictWithAnotherItemsQuoteCannotChangeKnowledge()
+    {
+        const string payload = """
+            {"items":[{"ordinal":1,"kind":"entity_type","contexts":[{"quote":"CItem Class"}]},
+                      {"ordinal":2,"kind":"entity_type","contexts":[{"quote":"call GameDataSetQuery"}]}]}
+            """;
+        const string answer = """
+            {"verdicts":[
+                {"ordinal":1,"verdict":"supported","correctedType":"function","evidenceIndex":1,"note":"call GameDataSetQuery"},
+                {"ordinal":2,"verdict":"supported","correctedType":"function","evidenceIndex":1,"note":"call GameDataSetQuery"}]}
+            """;
+        var verdicts = VerdictReader.Read(answer, new HashSet<int> { 1, 2 }, payload);
+        Assert.Equal(new VerificationVerdict(1, "uncertain", null, null), verdicts[0]);
+        Assert.Equal(new VerificationVerdict(2, "supported", "function", "call GameDataSetQuery"), verdicts[1]);
+    }
+
+    private static string CitedVerdicts(ChatRequest request, params (int Ordinal, string Verdict, string Type)[] verdicts)
+    {
+        string content = request.Messages[^1].Content;
+        IReadOnlyList<JsonNode> items = Items(content[content.IndexOf('{')..]);
+        return JsonSerializer.Serialize(new
+        {
+            verdicts = verdicts.Select(verdict =>
+            {
+                JsonNode item = items.Single(item => item["ordinal"]!.GetValue<int>() == verdict.Ordinal);
+                string quote = (string?)(item["quote"] ?? item["contexts"]?[0]?["quote"]) ?? "";
+                return new { ordinal = verdict.Ordinal, verdict = verdict.Verdict, correctedType = verdict.Type, evidenceIndex = 1, note = quote };
+            })
+        });
+    }
 
     private static string VerdictsFor(VerificationRequestView request) =>
         Verdicts(request.Items.Where(item => item.Included)
