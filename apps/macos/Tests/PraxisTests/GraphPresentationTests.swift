@@ -39,6 +39,72 @@ struct GraphPresentationTests {
         #expect(result.edges.map(\.relationId) == ["ok"])
     }
 
+    @Test func distinctObservationsRemainDistinctIncludingAContradictedVerdict() {
+        let observations = [
+            edge("first", "a", "b"),
+            GraphEdge(relationId: "second", subjectId: "a", objectId: "b",
+                      predicate: "references", origin: "model", evidenceStatus: "contradicted",
+                      evidence: nil, actions: ["inspectRelation"])
+        ]
+        let result = GraphProjection.merge(nodes: [], edges: [],
+                                           page: GraphPage(outcome: "ready", focusId: "a",
+                                                           nodes: [node("a"), node("b")],
+                                                           edges: observations, nextCursor: nil))
+        #expect(result.edges.map(\.relationId) == ["first", "second"])
+        #expect(result.edges.map(\.evidenceStatus) == ["owner", "contradicted"])
+    }
+
+    @Test func evidencePreviewAndReviewUseTheExistingTypedResponses() throws {
+        let preview = try JSONDecoder().decode(GraphPreview.self,
+            from: Data(#"{"outcome":"completed","content":"Example source text","reasonCode":null}"#.utf8))
+        let decision = try JSONDecoder().decode(GraphReviewOutcome.self,
+            from: Data(#"{"reviewed":false}"#.utf8))
+        #expect(preview.content == "Example source text")
+        #expect(decision.reviewed == false)
+    }
+
+    @Test func sourceJumpRequiresExactActiveSourceRevisionAndDigest() {
+        let evidence = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                     revision: 3, sourceDigest: "digest", locator: "file.md",
+                                     text: "quoted", offset: 0, status: "accepted", verdict: nil)
+        let current = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "active",
+                                  revision: 3, sha256: "digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        #expect(evidence.matchesCurrent(current))
+        let revoked = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "revoked",
+                                  revision: 3, sha256: "digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        let revised = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "active",
+                                  revision: 4, sha256: "new-digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        #expect(!evidence.matchesCurrent(revoked))
+        #expect(!evidence.matchesCurrent(revised))
+        let other = LibraryItem(sourceId: "other", itemId: "i", sourceKind: "file",
+                                sourceLocator: "file.md", sourceStatus: "active",
+                                revision: 3, sha256: "digest", originalBytes: 42,
+                                processingState: nil, extractionOutcome: nil)
+        #expect(!evidence.matchesCurrent(other))
+    }
+
+    @Test func evidenceExcerptRequiresTheExactCurrentUTF16Offset() {
+        let content = "😀 C3Reader parses PHY."
+        let evidence = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                     revision: 1, sourceDigest: "sha", locator: "reader.md",
+                                     text: "C3Reader parses PHY.", offset: 3,
+                                     status: "accepted", verdict: nil)
+        #expect(evidence.excerpt(in: content) == content)
+
+        let wrongOffset = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                        revision: 1, sourceDigest: "sha", locator: "reader.md",
+                                        text: "C3Reader parses PHY.", offset: 2,
+                                        status: "accepted", verdict: nil)
+        #expect(wrongOffset.excerpt(in: content) == nil)
+        #expect(evidence.excerpt(in: "C3Reader parses PHY.") == nil)
+    }
+
     @Test func repeatedPageIsIdempotentAndStable() {
         let page = GraphPage(outcome: "ready", focusId: "a", nodes: [node("b"), node("a")],
                              edges: [edge("r", "a", "b")], nextCursor: nil)

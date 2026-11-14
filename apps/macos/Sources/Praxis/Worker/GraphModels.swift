@@ -14,6 +14,27 @@ struct GraphEvidence: Decodable, Equatable {
     let verdict: String?
 }
 
+extension GraphEvidence {
+    func matchesCurrent(_ item: LibraryItem) -> Bool {
+        item.sourceId == sourceId && item.itemId == itemId &&
+            item.revision == revision && item.sha256 == sourceDigest &&
+            item.sourceStatus == "active"
+    }
+
+    func excerpt(in content: String) -> String? {
+        guard offset >= 0, !text.isEmpty,
+              let range = Range(NSRange(location: offset, length: (text as NSString).length), in: content),
+              content[range] == text else {
+            return nil
+        }
+        let start = content.index(range.lowerBound, offsetBy: -200, limitedBy: content.startIndex)
+            ?? content.startIndex
+        let end = content.index(range.upperBound, offsetBy: 400, limitedBy: content.endIndex)
+            ?? content.endIndex
+        return String(content[start..<end])
+    }
+}
+
 struct GraphNode: Decodable, Identifiable, Equatable {
     let entityId: String
     let label: String
@@ -46,6 +67,16 @@ struct GraphPage: Decodable {
     let nodes: [GraphNode]
     let edges: [GraphEdge]
     let nextCursor: String?
+}
+
+struct GraphPreview: Decodable {
+    let outcome: String
+    let content: String?
+    let reasonCode: String?
+}
+
+struct GraphReviewOutcome: Decodable {
+    let reviewed: Bool
 }
 
 /// Explicit bounds for the visible scene, independent of the catalog's query limits.

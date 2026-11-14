@@ -6,6 +6,8 @@ struct KnowledgeGraphView: View {
     let collections: [SourceCollection]
     let sources: [LibraryItem]
     let inspect: (String) -> Void
+    let explain: (String) -> Void
+    let openSource: (GraphEvidence) -> Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -13,6 +15,7 @@ struct KnowledgeGraphView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var zoom: CGFloat = 1
     @State private var zoomRevision = 0
+    @State private var confirmRejection = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,7 +57,7 @@ struct KnowledgeGraphView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottomTrailing) {
-                    if graph.selectedNode != nil || graph.selectedEdge != nil {
+                    if graph.selectedNodeId != nil || graph.selectedEdgeId != nil {
                         inspection
                             .frame(width: 285)
                             .padding(Spacing.m)
@@ -68,15 +71,21 @@ struct KnowledgeGraphView: View {
                 Text(message).font(.caption).foregroundStyle(.secondary).padding(Spacing.s)
             }
         }
+        .confirmationDialog("Reject this source-backed relationship?", isPresented: $confirmRejection) {
+            Button("Reject relationship", role: .destructive) { graph.reviewSelectedRelation("rejected") }
+            Button("Cancel", role: .cancel) {}
+        }
         .onAppear { graph.activate() }
         .onDisappear { graph.deactivate() }
+        .onChange(of: graph.selectedNodeId) { _ in graph.inspectSelectedNode() }
+        .onChange(of: graph.selectedEdgeId) { _ in graph.inspectSelectedRelation() }
         .onChange(of: graph.entityType) { _ in graph.refresh() }
         .onChange(of: graph.predicate) { _ in graph.refresh() }
         .onChange(of: graph.evidenceStatus) { _ in graph.refresh() }
         .onChange(of: graph.collectionId) { _ in graph.refresh() }
         .onChange(of: graph.sourceId) { _ in graph.refresh() }
         .onChange(of: graph.includeSuggestions) { allowed in
-            if !allowed && graph.evidenceStatus == "suggested" {
+            if !allowed && ["suggested", "contradicted"].contains(graph.evidenceStatus) {
                 graph.evidenceStatus = ""
             } else {
                 graph.refresh()
@@ -147,6 +156,7 @@ struct KnowledgeGraphView: View {
                 }
                 if graph.includeSuggestions {
                     Text("Suggested").tag("suggested")
+                    Text("Contradicted by verifier").tag("contradicted")
                 }
             }
             if !graph.seeds.isEmpty {
@@ -203,7 +213,9 @@ struct KnowledgeGraphView: View {
 
     private var inspection: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
-            if let node = graph.selectedNode {
+            if graph.inspectingNode {
+                ProgressView("Checking current entity")
+            } else if let node = graph.inspectedNode, node.entityId == graph.selectedNodeId {
                 HStack {
                     Image(systemName: EntitySymbol.of(node.entityType))
                     Text(node.label).font(.headline).lineLimit(2)
@@ -221,18 +233,61 @@ struct KnowledgeGraphView: View {
                 Button("Expand neighbors") { graph.expandSelected() }
                     .disabled(node.entityId == graph.focusId || graph.loading ||
                               graph.nodes.count >= GraphBudget.maximumNodes)
-            } else if let edge = graph.selectedEdge {
+            } else if graph.inspectingRelation {
+                ProgressView("Checking current relationship")
+            } else if let edge = graph.inspectedEdge, edge.relationId == graph.selectedEdgeId {
                 Text(relationTitle(edge)).font(.headline)
+                Text("Direction: subject → object · Origin: \(edge.origin)")
+                    .font(.caption).foregroundStyle(.secondary)
                 StatusPill(text: edge.evidenceStatus.capitalized,
-                           tone: edge.evidenceStatus == "suggested" ? .warning : .neutral)
+                           tone: ["suggested", "contradicted"].contains(edge.evidenceStatus) ? .warning : .neutral)
+                let alternatives = graph.edges.filter { other in
+                    other.relationId != edge.relationId &&
+                        Set([other.subjectId, other.objectId]) == Set([edge.subjectId, edge.objectId])
+                }
+                if !alternatives.isEmpty {
+                    Text("Other visible observations").font(.subheadline.weight(.semibold))
+                    ForEach(alternatives) { other in
+                        Button("\(KnowledgeVocabulary.label(other.predicate)) · \(other.evidenceStatus)") {
+                            graph.selectEdge(other.relationId)
+                        }
+                        .buttonStyle(.link)
+                    }
+                    Text("Separate observations do not necessarily contradict each other.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+
                 if let evidence = edge.evidence {
                     evidenceSummary(evidence)
+                    HStack {
+                        Button("Open current source") { graph.openSelectedEvidence(openSource) }
+                            .help("Opens the current Library source when available; otherwise shows its verified text excerpt.")
+                            .disabled(graph.reviewingRelation)
+                        if evidence.status == "pending" {
+                            Button("Accept") { graph.reviewSelectedRelation("accepted") }
+                                .disabled(graph.reviewingRelation)
+                        }
+                        Button("Reject…", role: .destructive) { confirmRejection = true }
+                            .disabled(graph.reviewingRelation)
+                    }
                 } else {
-                    Text("Owner assertion. No source citation is attached.")
+                    Text("Owner assertion. No source citation is attached; this is not a documented source claim.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Full relationship review is available in the evidence workflow.")
-                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Inspect subject") { inspect(edge.subjectId) }
+                    Button("Inspect object") { inspect(edge.objectId) }
+                }
+                .help("Open canonical entity details for owner-managed names, types and relationships.")
+                Button("Ask Praxis…") { graph.prepareExplanation(explain) }
+                    .help("Prepare a draft using revalidated relation identifiers. Review the model and text before sending.")
+                if let excerpt = graph.sourceExcerpt {
+                    Text(excerpt).font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            }
+            if let message = graph.inspectionMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(Spacing.l)
@@ -245,6 +300,10 @@ struct KnowledgeGraphView: View {
             Text(evidence.text).font(.callout).lineLimit(4).textSelection(.enabled)
             Text("Source: \(evidence.locator) · revision \(evidence.revision) · \(evidence.status)")
                 .font(.caption2).foregroundStyle(.secondary)
+            Text("Evidence offset: \(evidence.offset) · verifier: \(evidence.verdict ?? "not recorded")")
+                .font(.caption2).foregroundStyle(.secondary)
+            Text("The source path is not a PDF page, row, or media timestamp.")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 

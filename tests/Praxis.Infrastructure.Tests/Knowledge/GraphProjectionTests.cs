@@ -4,7 +4,9 @@ using Praxis.Application.Desktop;
 using Praxis.Application.Inference;
 using Praxis.Application.Knowledge;
 using Praxis.Application.Text;
+using Praxis.Application.Verification;
 using Praxis.Domain.Knowledge;
+using Praxis.Domain.Verification;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Persistence;
@@ -169,6 +171,149 @@ public sealed class GraphProjectionTests : IDisposable
         GraphPage filtered = catalog.Graph.Neighborhood(center, new GraphQuery(Predicate: "parses"));
         Assert.Empty(filtered.Edges);
         Assert.Single(filtered.Nodes);
+    }
+
+    [Fact]
+    public async Task RelationshipInspectionRechecksScopeOwnerEvidenceAndRevocation()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, captured);
+        Guid subject = Single(catalog, "C3Reader").EntityId;
+        Guid other = Single(catalog, "PHY").EntityId;
+        GraphEdge relation = Assert.Single(catalog.Graph.Neighborhood(subject, new GraphQuery()).Edges);
+
+        GraphPage inspection = catalog.Graph.Relation(subject, relation.RelationId, new GraphQuery());
+        GraphEdge current = Assert.Single(inspection.Edges);
+        Assert.Equal(relation.RelationId, current.RelationId);
+        Assert.Equal(captured.SourceId, current.Evidence!.SourceId);
+        Assert.Equal(captured.Sha256, current.Evidence.SourceDigest);
+        Assert.Equal(2, inspection.Nodes.Count);
+        Assert.Null(inspection.NextCursor);
+
+        Assert.Equal("unavailable", catalog.Graph.Relation(subject, Guid.NewGuid(), new GraphQuery()).Outcome);
+        Assert.Equal("unavailable", catalog.Graph.Relation(Guid.NewGuid(), relation.RelationId, new GraphQuery()).Outcome);
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Relation(subject, relation.RelationId,
+            new GraphQuery(Cursor: "invalid")));
+        Assert.Equal("unavailable", catalog.Graph.Relation(subject, relation.RelationId,
+            new GraphQuery(SourceId: Guid.NewGuid())).Outcome);
+
+        Guid ownerRelation = catalog.Knowledge.Relate(other, "references", subject);
+        GraphEdge owner = Assert.Single(catalog.Graph.Relation(subject, ownerRelation, new GraphQuery()).Edges);
+        Assert.Equal("owner", owner.EvidenceStatus);
+        Assert.Null(owner.Evidence);
+
+        Assert.True(catalog.Proposals.Review(relation.Evidence!.ProposalId, "rejected"));
+        Assert.Equal("unavailable", catalog.Graph.Relation(subject, relation.RelationId, new GraphQuery()).Outcome);
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        Assert.Equal("unavailable", catalog.Graph.Relation(subject, ownerRelation, new GraphQuery()).Outcome);
+    }
+
+    [Fact]
+    public async Task DesktopRelationshipInspectionUsesTheSameCurrentGraphScope()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "uses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "reader.md", "C3Reader uses PHY.");
+        await Accept(catalog, captured);
+        Guid subject = Single(catalog, "C3Reader").EntityId;
+        GraphEdge relation = Assert.Single(catalog.Graph.Neighborhood(subject, new GraphQuery()).Edges);
+        DesktopProtocol protocol = TestDesktop.Protocol(catalog);
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "inspection", action = "graphRelation",
+            entityId = subject, relationId = relation.RelationId
+        });
+        using JsonDocument response = JsonDocument.Parse(await protocol.HandleAsync(request));
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(relation.RelationId.ToString("D"),
+            response.RootElement.GetProperty("data").GetProperty("edges")[0]
+                .GetProperty("relationId").GetString());
+
+        string previewRequest = JsonSerializer.Serialize(new
+        {
+            requestId = "preview", action = "preview",
+            sourceId = captured.SourceId, itemId = captured.ItemId,
+            revision = captured.Revision, originalSha256 = captured.Sha256
+        });
+        using JsonDocument preview = JsonDocument.Parse(await protocol.HandleAsync(previewRequest));
+        Assert.True(preview.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("C3Reader uses PHY.", preview.RootElement.GetProperty("data")
+            .GetProperty("content").GetString());
+
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument denied = JsonDocument.Parse(await protocol.HandleAsync(request));
+        Assert.True(denied.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("unavailable", denied.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+        Assert.Empty(denied.RootElement.GetProperty("data").GetProperty("edges").EnumerateArray());
+
+        using JsonDocument revokedPreview = JsonDocument.Parse(await protocol.HandleAsync(previewRequest));
+        Assert.True(revokedPreview.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("unavailable", revokedPreview.RootElement.GetProperty("data")
+            .GetProperty("outcome").GetString());
+    }
+
+    [Fact]
+    public async Task MultipleSourcesRemainSeparateAndRevocationOnlyHidesAffectedRelations()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal first = await Enrich(catalog, "first.md", "C3Reader parses PHY.");
+        await Accept(catalog, first);
+        CapturedOriginal second = await Enrich(catalog, "second.md", "C3Reader parses PHY.");
+        await Accept(catalog, second);
+        Guid focus = Single(catalog, "C3Reader").EntityId;
+        GraphPage both = catalog.Graph.Neighborhood(focus, new GraphQuery());
+        Assert.Equal(2, both.Edges.Count);
+        Assert.Equal(2, both.Edges.Select(edge => edge.RelationId).Distinct().Count());
+        Assert.Equal(new[] { first.SourceId, second.SourceId }.Order().ToArray(),
+            both.Edges.Select(edge => edge.Evidence!.SourceId).Order().ToArray());
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        GraphEdge remaining = Assert.Single(catalog.Graph.Neighborhood(focus, new GraphQuery()).Edges);
+        Assert.Equal(second.SourceId, remaining.Evidence!.SourceId);
+        GraphEdge expired = both.Edges.Single(edge => edge.Evidence!.SourceId == first.SourceId);
+        Assert.Equal("unavailable", catalog.Graph.Relation(focus, expired.RelationId, new GraphQuery()).Outcome);
+        Assert.Equal(remaining.RelationId,
+            Assert.Single(catalog.Graph.Relation(focus, remaining.RelationId, new GraphQuery()).Edges).RelationId);
+    }
+
+    [Fact]
+    public async Task UnsupportedVerifierVerdictIsOnlyVisibleInExplicitContradictionMode()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal source = await Enrich(catalog, "claims.md", "C3Reader parses PHY.");
+        Guid focus = Single(catalog, "C3Reader").EntityId;
+        Guid relationProposal = catalog.Proposals.List(source.SourceId)
+            .Single(item => item.Kind == "relation").ProposalId;
+
+        catalog.Verification.SaveProvider(new VerificationProvider(VerificationProvider.Ollama, null,
+            "qwen:9b", 0, 20, true, "http://127.0.0.1:11434"));
+        Guid requestId = catalog.Verification.RequestForSource(source.SourceId)!.Value;
+        VerificationRequestView approved = new VerificationApproval(catalog.Verification).Approve(requestId);
+        var verdicts = approved.Items.Where(item => item.Included).Select(item =>
+            new VerificationVerdict(item.Ordinal,
+                item.ProposalId == relationProposal ? "unsupported" : "supported", null, null)).ToArray();
+        Assert.Contains(approved.Items, item => item.ProposalId == relationProposal);
+        var claim = catalog.Verification.Claim()!;
+        Assert.True(catalog.Verification.Complete(claim, new ScriptedChatModel(_ => "").Identity,
+            new ChatResult("{}", 10, 4, TimeSpan.FromSeconds(1)), verdicts));
+
+        Assert.Empty(catalog.Graph.Neighborhood(focus, new GraphQuery()).Edges);
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Neighborhood(focus,
+            new GraphQuery(EvidenceStatus: "contradicted")));
+        GraphEdge contradicted = Assert.Single(catalog.Graph.Neighborhood(focus,
+            new GraphQuery(IncludeSuggestions: true, EvidenceStatus: "contradicted")).Edges);
+        Assert.Equal("contradicted", contradicted.EvidenceStatus);
+        Assert.Equal("unsupported", contradicted.Evidence!.Verdict);
+
+        Assert.True(catalog.Proposals.Review(relationProposal, "accepted"));
+        GraphEdge ownerApproved = Assert.Single(catalog.Graph.Neighborhood(focus, new GraphQuery()).Edges);
+        Assert.Equal("accepted", ownerApproved.EvidenceStatus);
+        Assert.Empty(catalog.Graph.Neighborhood(focus,
+            new GraphQuery(IncludeSuggestions: true, EvidenceStatus: "contradicted")).Edges);
     }
 
     [Fact]

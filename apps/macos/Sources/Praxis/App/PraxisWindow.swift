@@ -43,6 +43,7 @@ struct PraxisWindow: View {
             ticks += 1
             model.refresh()
             model.approvals.refresh()
+            if section == .knowledge && ticks % 2 == 0 { model.knowledge.graph.recheckInspection() }
             if section == .verification || ticks % 6 == 0 { model.verification.refresh() }
         }
     }
@@ -73,7 +74,17 @@ struct WorkbenchSplitView: View {
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
         case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification,
-                                           collections: model.collections, sources: model.items)
+                                        collections: model.collections, sources: model.items,
+                                        explain: { prompt in
+                                            if model.chat.prepareDraft(prompt) { section = .chat }
+                                        }, openSource: { evidence in
+                                            guard let current = model.items.first(where: evidence.matchesCurrent) else {
+                                                return false
+                                            }
+                                            model.select(current)
+                                            section = .library
+                                            return true
+                                        })
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .activity: ActivityView(model: model.activity)
         case .collections: CollectionsView { collectionId in

@@ -6,6 +6,8 @@ struct KnowledgeView: View {
     let verification: VerificationWorkbenchModel
     let collections: [SourceCollection]
     let sources: [LibraryItem]
+    let explain: (String) -> Void
+    let openSource: (GraphEvidence) -> Bool
     @AppStorage("knowledgeViewMode") private var viewMode = "list"
 
     var body: some View {
@@ -20,10 +22,11 @@ struct KnowledgeView: View {
             .accessibilityLabel("Knowledge view")
             Divider()
             if viewMode == "graph" {
-                KnowledgeGraphView(graph: model.graph, collections: collections, sources: sources) { entityId in
-                    model.selectEntityId(entityId)
-                    viewMode = "list"
-                }
+                KnowledgeGraphView(graph: model.graph, collections: collections, sources: sources,
+                                   inspect: { entityId in
+                                       model.selectEntityId(entityId)
+                                       viewMode = "list"
+                                   }, explain: explain, openSource: openSource)
             } else {
                 listContent
             }

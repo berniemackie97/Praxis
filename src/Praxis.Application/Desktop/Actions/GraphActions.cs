@@ -12,7 +12,10 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
                 fields.OptionalText("search", 120, "The graph search is invalid."),
                 Query(fields), token))),
         new DesktopAction("graphNeighborhood", (fields, token) =>
-            Task.FromResult<object>(graph.Neighborhood(fields.RequireGuid("entityId"), Query(fields), token)))
+            Task.FromResult<object>(graph.Neighborhood(fields.RequireGuid("entityId"), Query(fields), token))),
+        new DesktopAction("graphRelation", (fields, token) =>
+            Task.FromResult<object>(graph.Relation(
+                fields.RequireGuid("entityId"), fields.RequireGuid("relationId"), Query(fields), token)))
     ];
 
     private static GraphQuery Query(DesktopRequestFields fields) => new(
