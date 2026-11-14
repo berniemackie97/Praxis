@@ -35,6 +35,7 @@ final class WorkbenchModel: ObservableObject {
     let knowledge: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
     let intelligence: IntelligenceSettingsModel
+    let modelSetup: ModelSetupModel
     let chat: ChatWorkbenchModel
     let approvals: ApprovalsWorkbenchModel
     let privacy: PrivacySettingsModel
@@ -54,6 +55,7 @@ final class WorkbenchModel: ObservableObject {
         knowledge = KnowledgeWorkbenchModel(channel: channel)
         verification = VerificationWorkbenchModel(channel: channel)
         intelligence = IntelligenceSettingsModel(channel: channel)
+        modelSetup = ModelSetupModel(channel: channel)
         chat = ChatWorkbenchModel(channel: channel)
         approvals = ApprovalsWorkbenchModel(channel: channel)
         privacy = PrivacySettingsModel(channel: channel)

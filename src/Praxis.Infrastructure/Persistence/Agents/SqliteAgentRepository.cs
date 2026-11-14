@@ -23,13 +23,13 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentBackendProfile> ReadBackends() => database.ExecuteRead(connection =>
     {
         using SqliteCommand command = connection.CreateCommand(
-            "SELECT backend_id, kind, endpoint, model, key_account, executable, enabled FROM agent_backends ORDER BY backend_id");
+            "SELECT backend_id, kind, endpoint, model, key_account, executable, enabled, effort FROM agent_backends ORDER BY backend_id");
         using SqliteDataReader reader = command.ExecuteReader();
         List<AgentBackendProfile> profiles = [];
         while (reader.Read())
         {
             profiles.Add(new AgentBackendProfile(reader.GetString(0), reader.GetString(1), Text(reader, 2), reader.GetString(3), Text(reader, 4),
-                Text(reader, 5), reader.GetInt64(6) == 1));
+                Text(reader, 5), reader.GetInt64(6) == 1, Text(reader, 7)));
         }
 
         return profiles;
@@ -39,11 +39,12 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     {
         profile.Validate();
         Write("""
-            INSERT INTO agent_backends (backend_id, kind, endpoint, model, key_account, executable, enabled, updated_utc)
-            VALUES ($id, $kind, $endpoint, $model, $key, $executable, $enabled, $now)
+            INSERT INTO agent_backends (backend_id, kind, endpoint, model, key_account, executable, enabled, updated_utc, effort)
+            VALUES ($id, $kind, $endpoint, $model, $key, $executable, $enabled, $now, $effort)
             ON CONFLICT(backend_id) DO UPDATE SET kind = excluded.kind, endpoint = excluded.endpoint, model = excluded.model,
-                key_account = excluded.key_account, executable = excluded.executable, enabled = excluded.enabled, updated_utc = excluded.updated_utc
-            """, ("$id", profile.BackendId), ("$kind", profile.Kind), ("$endpoint", profile.Endpoint), ("$model", profile.Model),
+                key_account = excluded.key_account, executable = excluded.executable, enabled = excluded.enabled, updated_utc = excluded.updated_utc,
+                effort = excluded.effort
+            """, ("$effort", profile.Effort), ("$id", profile.BackendId), ("$kind", profile.Kind), ("$endpoint", profile.Endpoint), ("$model", profile.Model),
             ("$key", profile.KeyAccount), ("$executable", profile.Executable), ("$enabled", profile.Enabled ? 1 : 0), ("$now", Now()));
     }
 

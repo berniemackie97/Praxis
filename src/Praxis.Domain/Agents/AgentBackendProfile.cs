@@ -5,7 +5,8 @@ namespace Praxis.Domain.Agents;
 /// rules name. API keys are referenced by Keychain account, never stored in the catalog. A
 /// backend is local only when its endpoint is loopback.
 /// </summary>
-public sealed record AgentBackendProfile(string BackendId, string Kind, string? Endpoint, string Model, string? KeyAccount, string? Executable, bool Enabled)
+public sealed record AgentBackendProfile(string BackendId, string Kind, string? Endpoint, string Model, string? KeyAccount, string? Executable, bool Enabled,
+    string? Effort = null)
 {
     public bool IsLocal => Kind == AgentBackendKinds.OpenAiCompatible && Endpoint is not null &&
                            Uri.TryCreate(Endpoint, UriKind.Absolute, out Uri? uri) && uri.IsLoopback;
@@ -14,7 +15,7 @@ public sealed record AgentBackendProfile(string BackendId, string Kind, string? 
     {
         if (string.IsNullOrWhiteSpace(BackendId) || BackendId.Length > 64 || !BackendId.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_') ||
             !AgentBackendKinds.All.Contains(Kind, StringComparer.Ordinal) || string.IsNullOrWhiteSpace(Model) || Model.Length > 200 ||
-            KeyAccount?.Length > 128)
+            KeyAccount?.Length > 128 || !Models.ModelEffort.IsValid(Effort))
         {
             throw new ArgumentException("The agent backend profile is invalid.");
         }

@@ -31,7 +31,11 @@ struct VerificationProvider: Decodable, Identifiable, Equatable {
     let costWeight: Int
     let dailyLimit: Int
     let enabled: Bool
+    var effort: String?
     var id: String { providerId }
+
+    /// A daily limit of zero means no cap.
+    static let unlimited = 0
 
     static func displayName(_ providerId: String) -> String {
         switch providerId {

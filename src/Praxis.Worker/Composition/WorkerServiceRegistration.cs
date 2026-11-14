@@ -77,6 +77,8 @@ internal static class WorkerServiceRegistration
             linkSnapshots: new LinkSnapshotWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot)));
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
+        services.AddSingleton<IModelToolDetector, ModelToolDetector>();
+        services.AddSingleton<ModelSetup>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
             provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
@@ -123,6 +125,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, IntakeActions>();
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
+        services.AddSingleton<IDesktopActionGroup, ModelSetupActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();
         services.AddSingleton<IDesktopActionGroup, FinanceActions>();
         services.AddSingleton<IDesktopActionGroup, UnderstandingActions>();

@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 25;
+    internal const int CurrentVersion = 26;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),

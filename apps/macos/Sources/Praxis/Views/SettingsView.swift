@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Tabs of the Settings window (⌘,).
 enum SettingsTab: String {
-    case general, models, privacy, agents
+    case general, models, privacy
 
     static let storageKey = "settingsTab"
 }
@@ -19,17 +19,14 @@ struct SettingsView: View {
             page { ConfigurationView(dataRoot: dataRoot, rootApprovals: $rootApprovals) }
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(SettingsTab.general)
-            page { IntelligenceSettingsView(model: model.intelligence) }
+            page { ModelsSettingsView(setup: model.modelSetup, intelligence: model.intelligence, privacy: model.privacy) }
                 .tabItem { Label("Models", systemImage: "cpu") }
                 .tag(SettingsTab.models)
             page { PrivacySettingsView(model: model.privacy, intelligence: model.intelligence) }
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
                 .tag(SettingsTab.privacy)
-            page { AgentSettingsView(model: model.privacy, intelligence: model.intelligence) }
-                .tabItem { Label("Agents", systemImage: "sparkles") }
-                .tag(SettingsTab.agents)
         }
-        .frame(width: 680, height: 620)
+        .frame(width: 760, height: 680)
     }
 
     @ViewBuilder
