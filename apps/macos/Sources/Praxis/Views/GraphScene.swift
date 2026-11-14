@@ -53,13 +53,16 @@ final class GraphScene: SKScene {
 
     func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
         guard graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
+        let previousFocus = focusId
         graphNodes = nodes
         graphEdges = edges
         focusId = focus
         if focus == nil {
             layout.configureAtlas(nodes: nodes, edges: edges)
         } else {
+            if previousFocus == nil { layout = GraphLayout() }
             layout.configure(nodes: nodes, focus: focus)
+            if previousFocus != focus { viewCamera.position = .zero }
         }
         for shape in nodeShapes.values { shape.removeFromParent() }
         for label in nodeLabels.values { label.removeFromParent() }
