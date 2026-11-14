@@ -24,6 +24,39 @@ public sealed class SqliteCatalogTests : IDisposable
     }
 
     [Fact]
+    public void FinderMetadataInPrivateFoldersIsIgnoredButStrangersAreRefused()
+    {
+        using (SqliteCatalog.Open(root))
+        {
+        }
+
+        // Opening the catalog folder in Finder or copying it across volumes leaves these behind.
+        File.WriteAllText(Path.Combine(root, ".DS_Store"), "finder");
+        File.WriteAllText(Path.Combine(root, "._catalog.sqlite"), "appledouble");
+        string objects = Path.Combine(root, "objects");
+        if (!Directory.Exists(objects))
+        {
+            Directory.CreateDirectory(objects);
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(objects, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+
+        File.WriteAllText(Path.Combine(objects, ".DS_Store"), "finder");
+        using (SqliteCatalog catalog = SqliteCatalog.Open(root))
+        {
+            Assert.Equal(CatalogSchema.CurrentVersion, catalog.SchemaVersion);
+        }
+
+        Directory.CreateDirectory(Path.Combine(root, ".DS_Store-dir"));
+        Assert.Throws<InvalidDataException>(() => SqliteCatalog.Open(root).Dispose());
+        Directory.Delete(Path.Combine(root, ".DS_Store-dir"));
+        File.WriteAllText(Path.Combine(root, "notes.txt"), "not Praxis");
+        Assert.Throws<InvalidDataException>(() => SqliteCatalog.Open(root).Dispose());
+    }
+
+    [Fact]
     public void NewCatalogOpensInOwnerDirectoryWithVersionedConstraints()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);

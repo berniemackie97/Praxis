@@ -31,6 +31,37 @@ public sealed class WatchedFolderIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task SourcesCapturedFromGitInternalsOrSecretsByOlderVersionsAreRetired()
+    {
+        Directory.CreateDirectory(Path.Combine(inbox, "repo", ".git"));
+        string gitConfig = Path.Combine(inbox, "repo", ".git", "config");
+        string secrets = Path.Combine(inbox, "repo", ".env");
+        string readme = Path.Combine(inbox, "repo", "README.md");
+        File.WriteAllText(gitConfig, "[branch \"main\"]");
+        File.WriteAllText(secrets, "TOKEN=x");
+        File.WriteAllText(readme, "# Repo");
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal git = await Capture(catalog, gitConfig);
+        CapturedOriginal env = await Capture(catalog, secrets);
+        CapturedOriginal kept = await Capture(catalog, readme);
+
+        IntakeHarness watcher = NewMonitor(catalog);
+        await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
+
+        Assert.Null(catalog.Sources.CurrentFile(git.SourceId));
+        Assert.Null(catalog.Sources.CurrentFile(env.SourceId));
+        Assert.NotNull(catalog.Sources.CurrentFile(kept.SourceId));
+    }
+
+    private static async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string path)
+    {
+        byte[] bytes = await File.ReadAllBytesAsync(path);
+        using MemoryStream content = new(bytes);
+        return await catalog.Originals.CaptureFileAsync(path, content, bytes.Length + 1, "old-" + Path.GetFileName(path));
+    }
+
+    [Fact]
     public async Task StableDropsEnterDurableLibraryAndSupportedTextIsSearchable()
     {
         string text = Path.Combine(inbox, "plan.md");

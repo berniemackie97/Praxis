@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Security;
+using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence.Security.Registry;
 
 namespace Praxis.Infrastructure.Persistence.Sync;
@@ -54,6 +55,11 @@ public sealed partial class OpaqueSyncStore : IDisposable
         };
         foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             if (!permitted.Contains(Path.GetFileName(entry)) ||
                 (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
                 !File.Exists(entry))
