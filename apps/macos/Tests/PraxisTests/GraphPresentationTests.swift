@@ -39,6 +39,30 @@ struct GraphPresentationTests {
         #expect(result.edges.map(\.relationId) == ["ok"])
     }
 
+    @Test func distinctObservationsRemainDistinctIncludingAContradictedVerdict() {
+        let observations = [
+            edge("first", "a", "b"),
+            GraphEdge(relationId: "second", subjectId: "a", objectId: "b",
+                      predicate: "references", origin: "model", evidenceStatus: "contradicted",
+                      evidence: nil, actions: ["inspectRelation"])
+        ]
+        let result = GraphProjection.merge(nodes: [], edges: [],
+                                           page: GraphPage(outcome: "ready", focusId: "a",
+                                                           nodes: [node("a"), node("b")],
+                                                           edges: observations, nextCursor: nil))
+        #expect(result.edges.map(\.relationId) == ["first", "second"])
+        #expect(result.edges.map(\.evidenceStatus) == ["owner", "contradicted"])
+    }
+
+    @Test func evidencePreviewAndReviewUseTheExistingTypedResponses() throws {
+        let preview = try JSONDecoder().decode(GraphPreview.self,
+            from: Data(#"{"outcome":"completed","content":"Example source text","reasonCode":null}"#.utf8))
+        let decision = try JSONDecoder().decode(GraphReviewOutcome.self,
+            from: Data(#"{"reviewed":false}"#.utf8))
+        #expect(preview.content == "Example source text")
+        #expect(decision.reviewed == false)
+    }
+
     @Test func repeatedPageIsIdempotentAndStable() {
         let page = GraphPage(outcome: "ready", focusId: "a", nodes: [node("b"), node("a")],
                              edges: [edge("r", "a", "b")], nextCursor: nil)
