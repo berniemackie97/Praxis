@@ -5,12 +5,15 @@ struct EntityDetailView: View {
     let detail: EntityDetail
     @ObservedObject var model: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
+    let exploreConnections: () -> Void
     @State private var renaming = false
+    @State private var showAllMentions = false
     @State private var newName = ""
     @State private var predicate = KnowledgeVocabulary.predicates[0]
 
     private var summary: EntitySummary { detail.summary }
     private var others: [EntitySummary] { model.entities.filter { $0.entityId != summary.entityId } }
+    private var relationGroups: [EntityRelationGroup] { EntityRelationGroup.group(detail.relations) }
 
     var body: some View {
         ScrollView {
@@ -36,6 +39,7 @@ struct EntityDetailView: View {
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onChange(of: summary.entityId) { _ in showAllMentions = false }
         .sheet(isPresented: $renaming) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 Text("Rename \(summary.name)").font(.headline)
@@ -74,6 +78,7 @@ struct EntityDetailView: View {
                 }
             }
             Spacer(minLength: Spacing.l)
+            Button("Explore connections", action: exploreConnections)
             Button("Ask a Stronger Model…") { verification.requestForEntity(summary.entityId) }
                 .help("Creates a verification request for review. Nothing is sent until you approve it.")
             Menu {
@@ -114,7 +119,7 @@ struct EntityDetailView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: Spacing.m) {
-                ForEach(detail.mentions) { mention in
+                ForEach(Array(detail.mentions.prefix(showAllMentions ? detail.mentions.count : 3))) { mention in
                     HStack(alignment: .top, spacing: Spacing.s) {
                         RoundedRectangle(cornerRadius: 1).fill(Color.accentColor.opacity(0.5)).frame(width: 2)
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
@@ -126,12 +131,22 @@ struct EntityDetailView: View {
                         }
                     }
                 }
+                if detail.mentions.count > 3 {
+                    Button(showAllMentions ? "Show fewer excerpts" : "Show all \(detail.mentions.count) excerpts") {
+                        showAllMentions.toggle()
+                    }
+                }
+                if detail.mentions.count == 200 {
+                    Text("Showing the first 200 evidence mentions. This is not the complete source history.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
             }
         }
     }
 
     private var relations: some View {
-        Panel(title: "Relations", systemImage: "arrow.triangle.branch", caption: Count.label(detail.relations.count, "relation")) {
+        Panel(title: "Relationships", systemImage: "arrow.triangle.branch",
+              caption: "\(relationGroups.count) assertions · \(detail.relations.count) observations") {
             Menu {
                 Picker("Relation", selection: $predicate) {
                     ForEach(KnowledgeVocabulary.predicates, id: \.self) { Text(KnowledgeVocabulary.label($0)).tag($0) }
@@ -148,17 +163,44 @@ struct EntityDetailView: View {
             .disabled(others.isEmpty || summary.status != "active")
         } content: {
             VStack(alignment: .leading, spacing: Spacing.s) {
-                ForEach(detail.relations) { relation in
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                ForEach(relationGroups) { group in
+                    VStack(alignment: .leading, spacing: Spacing.s) {
                         HStack(spacing: Spacing.xs) {
-                            Text(relation.outgoing ? summary.name : relation.otherName).font(.rowTitle)
-                            Text(KnowledgeVocabulary.label(relation.predicate)).foregroundStyle(.secondary)
-                            Text(relation.outgoing ? relation.otherName : summary.name).font(.rowTitle)
+                            Text(group.outgoing ? summary.name : group.otherName).font(.rowTitle)
+                            Text(KnowledgeVocabulary.label(group.predicate)).foregroundStyle(.secondary)
+                            Text(group.outgoing ? group.otherName : summary.name).font(.rowTitle)
                         }
-                        Text(relation.origin == "owner" ? "Added by you" : "“\(relation.evidence ?? "")”")
-                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(2)
+                        if group.observations.count == 1, let observation = group.observations.first {
+                            relationObservation(observation)
+                        } else {
+                            DisclosureGroup("\(group.observations.count) separate observations") {
+                                VStack(alignment: .leading, spacing: Spacing.s) {
+                                    ForEach(group.observations) { observation in
+                                        relationObservation(observation)
+                                    }
+                                }
+                                .padding(.top, Spacing.xs)
+                            }
+                            .font(.caption)
+                        }
                     }
+                    .padding(.vertical, Spacing.xs)
                 }
+                if detail.relations.count == 200 {
+                    Text("Showing the first 200 relation observations. Additional evidence may exist.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private func relationObservation(_ relation: EntityRelation) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
+            Text(relation.origin == "owner" ? "Owner assertion · no source citation" : "Source observation")
+                .font(.caption2).foregroundStyle(.tertiary)
+            if let evidence = relation.evidence {
+                Text(evidence).font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled).lineLimit(4)
             }
         }
     }

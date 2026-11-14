@@ -46,6 +46,140 @@ public sealed class GraphProjectionTests : IDisposable
     }
 
     [Fact]
+    public async Task UnifiedOverviewCountsScopedCurrentEntitiesRatherThanRandomSeeds()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal first = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, first);
+        CapturedOriginal second = await Enrich(catalog, "people.md", "Alex Rivera works on Client.");
+        await Accept(catalog, second);
+
+        GraphOverview all = catalog.Graph.Overview(new GraphQuery());
+        Assert.Equal(4, all.EntityCount);
+        Assert.Equal(all.EntityCount, all.Types.Sum(type => type.Count));
+        Assert.Contains(all.Types, type => type.EntityType == "project" && type.Count == 2);
+        Assert.Contains(all.Types, type => type.EntityType == "technology" && type.Count == 1);
+        Assert.Contains(all.Types, type => type.EntityType == "person" && type.Count == 1);
+
+        GraphOverview scoped = catalog.Graph.Overview(new GraphQuery(SourceId: first.SourceId));
+        Assert.Equal(2, scoped.EntityCount);
+        Assert.DoesNotContain(scoped.Types, type => type.EntityType == "person");
+
+        Guid collection = catalog.Collections.Create("One source").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collection, first.SourceId));
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery(CollectionId: collection)).EntityCount);
+        Assert.True(catalog.Collections.Archive(collection));
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery(CollectionId: collection)).EntityCount);
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Empty(catalog.Graph.Overview(new GraphQuery(SourceId: first.SourceId)).Types);
+    }
+
+    [Fact]
+    public async Task OverviewNeverPromotesPendingOrRevokedEvidenceIntoConfirmedCounts()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "pending.md", "C3Reader parses PHY.");
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery(IncludeSuggestions: true)).EntityCount);
+
+        await Accept(catalog, captured);
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Overview(new GraphQuery(Cursor: "stale")));
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Overview(new GraphQuery(EntityType: "project")));
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery(IncludeSuggestions: true)).EntityCount);
+    }
+
+    [Fact]
+    public async Task DesktopOverviewRespectsSourceScopeAndUsesTheSameCurrentReader()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal captured = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, captured);
+        DesktopProtocol desktop = TestDesktop.Protocol(catalog);
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "overview",
+            action = "graphOverview",
+            sourceId = captured.SourceId
+        });
+        using JsonDocument result = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(2, result.RootElement.GetProperty("data").GetProperty("entityCount").GetInt32());
+
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument revoked = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, revoked.RootElement.GetProperty("data").GetProperty("entityCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task AtlasPagesRealConnectionsAcrossIndependentSourcesWithoutCreatingLinks()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal first = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, first);
+
+        relations.Clear();
+        relations.Add(("Alex Rivera", "works_on", "Client"));
+        CapturedOriginal second = await Enrich(catalog, "people.md", "Alex Rivera works on Client.");
+        await Accept(catalog, second);
+
+        GraphQuery query = new(Limit: 1);
+        GraphPage firstPage = catalog.Graph.Atlas(query);
+        Assert.Equal("ready", firstPage.Outcome);
+        Assert.Single(firstPage.Edges);
+        Assert.Equal(2, firstPage.Nodes.Count);
+        Assert.NotNull(firstPage.NextCursor);
+        GraphPage secondPage = catalog.Graph.Atlas(query with { Cursor = firstPage.NextCursor });
+        Assert.Single(secondPage.Edges);
+        Assert.Null(secondPage.NextCursor);
+        GraphEdge[] edges = firstPage.Edges.Concat(secondPage.Edges).ToArray();
+        Assert.Equal(2, edges.Select(edge => edge.RelationId).Distinct().Count());
+        Assert.Equal(4, firstPage.Nodes.Concat(secondPage.Nodes).Select(node => node.EntityId).Distinct().Count());
+        Assert.All(edges, edge => Assert.Contains(edge.Predicate, new[] { "parses", "works_on" }));
+
+        Assert.Single(catalog.Graph.Atlas(new GraphQuery(SourceId: first.SourceId)).Edges);
+        Assert.Single(catalog.Graph.Atlas(new GraphQuery(SourceId: second.SourceId)).Edges);
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.Single(catalog.Graph.Atlas(new GraphQuery()).Edges);
+        Assert.Equal("empty", catalog.Graph.Atlas(new GraphQuery(SourceId: first.SourceId)).Outcome);
+        Assert.Throws<InvalidOperationException>(() => catalog.Graph.Atlas(
+            query with { Cursor = firstPage.NextCursor }));
+    }
+
+    [Fact]
+    public async Task AtlasSuggestionsRequireOptInAndDesktopTransportRespectsRevocation()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "draft.md", "C3Reader parses PHY.");
+        Assert.Equal("empty", catalog.Graph.Atlas(new GraphQuery()).Outcome);
+        Assert.Single(catalog.Graph.Atlas(new GraphQuery(IncludeSuggestions: true)).Edges);
+        await Accept(catalog, captured);
+        DesktopProtocol desktop = TestDesktop.Protocol(catalog);
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "atlas",
+            action = "graphAtlas",
+            limit = 10
+        });
+        using JsonDocument ready = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(ready.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Single(ready.RootElement.GetProperty("data").GetProperty("edges").EnumerateArray());
+
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument revoked = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("empty", revoked.RootElement.GetProperty("data").GetProperty("outcome").GetString());
+        Assert.Empty(revoked.RootElement.GetProperty("data").GetProperty("nodes").EnumerateArray());
+    }
+
+    [Fact]
     public async Task PendingKnowledgeIsNotAConfirmedGraphNodeOrEdge()
     {
         using SqliteCatalog catalog = Open();
@@ -448,6 +582,17 @@ public sealed class GraphProjectionTests : IDisposable
                 catalog.Knowledge.Relate(center, "references", Single(catalog, name).EntityId);
             }
         }
+
+        GraphOverview overview = catalog.Graph.Overview(new GraphQuery());
+        Assert.Equal(121, overview.EntityCount);
+        Assert.Equal(121, overview.Types.Sum(type => type.Count));
+
+        GraphPage atlasFirst = catalog.Graph.Atlas(new GraphQuery(Limit: 100));
+        Assert.Equal(100, atlasFirst.Edges.Count);
+        Assert.NotNull(atlasFirst.NextCursor);
+        GraphPage atlasLast = catalog.Graph.Atlas(new GraphQuery(Limit: 100, Cursor: atlasFirst.NextCursor));
+        Assert.Equal(20, atlasLast.Edges.Count);
+        Assert.Null(atlasLast.NextCursor);
 
         GraphPage first = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 100));
         Assert.Equal(100, first.Edges.Count);

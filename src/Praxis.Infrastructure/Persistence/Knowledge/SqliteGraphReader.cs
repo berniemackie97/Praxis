@@ -44,6 +44,41 @@ public sealed class SqliteGraphReader : IGraphReader
                 (p.flags IS NULL OR v.verdict = 'supported')))))
         """;
 
+    public GraphOverview Overview(GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        Validate(query, allowEdges: false);
+        if (query.Cursor is not null || query.EntityType is not null)
+        {
+            throw new ArgumentException("Overview accepts a source and collection scope, not a page or type filter.", nameof(query));
+        }
+
+        return database.Execute(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using SqliteCommand command = connection.CreateCommand($"""
+                SELECT kind, COUNT(*) AS count FROM (
+                    SELECT COALESCE({EffectiveType("e", query)}, 'other') AS kind
+                    FROM knowledge_entities e
+                    WHERE {NodeVisible("e", query)}
+                )
+                GROUP BY kind
+                ORDER BY count DESC, kind
+                """);
+            Scope(command, query);
+            List<GraphTypeCount> types = [];
+            int total = 0;
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int count = reader.GetInt32(1);
+                types.Add(new GraphTypeCount(reader.GetString(0), count));
+                total += count;
+            }
+            return new GraphOverview(total, types);
+        });
+    }
+
     public GraphPage Seeds(string? search, GraphQuery query, CancellationToken cancellationToken = default)
     {
         Validate(query, allowEdges: false);
@@ -112,8 +147,11 @@ public sealed class SqliteGraphReader : IGraphReader
         });
     }
 
+    public GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default) =>
+        ReadEdges(null, null, query, cancellationToken);
+
     public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default) =>
-        ReadNeighborhood(focusId, null, query, cancellationToken);
+        ReadEdges(focusId, null, query, cancellationToken);
 
     public GraphPage Relation(Guid focusId, Guid relationId, GraphQuery query, CancellationToken cancellationToken = default)
     {
@@ -123,10 +161,10 @@ public sealed class SqliteGraphReader : IGraphReader
         }
 
         Validate(query, allowEdges: true);
-        return ReadNeighborhood(focusId, relationId, query with { Limit = 1 }, cancellationToken);
+        return ReadEdges(focusId, relationId, query with { Limit = 1 }, cancellationToken);
     }
 
-    private GraphPage ReadNeighborhood(Guid focusId, Guid? relationId, GraphQuery query,
+    private GraphPage ReadEdges(Guid? focusId, Guid? relationId, GraphQuery query,
         CancellationToken cancellationToken)
     {
         if (focusId == Guid.Empty)
@@ -138,11 +176,11 @@ public sealed class SqliteGraphReader : IGraphReader
         {
             cancellationToken.ThrowIfCancellationRequested();
             long version = Version(connection);
-            string signature = Signature(relationId is null ? "neighbors" : "relation", focusId,
-                relationId?.ToString("D"), query);
+            string signature = Signature(focusId is null ? "atlas" : relationId is null ? "neighbors" : "relation",
+                focusId, relationId?.ToString("D"), query);
             string after = ReadCursor(query.Cursor, version, signature);
-            GraphNode? root = ReadNode(connection, focusId, query);
-            if (root is null)
+            GraphNode? root = focusId is Guid rootId ? ReadNode(connection, rootId, query) : null;
+            if (focusId is not null && root is null)
             {
                 if (query.Cursor is not null)
                 {
@@ -163,7 +201,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
                 LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
                 LEFT JOIN sources s ON s.source_id = p.source_id
-                WHERE (r.subject_id = $focus OR r.object_id = $focus)
+                WHERE ($focus IS NULL OR r.subject_id = $focus OR r.object_id = $focus)
                   AND ($relationId IS NULL OR r.relation_id = $relationId)
                   AND r.relation_id > $after
                   AND ({ConfirmedRelation} OR ($suggestions = 1
@@ -177,7 +215,10 @@ public sealed class SqliteGraphReader : IGraphReader
                   AND ($predicate IS NULL OR r.predicate = $predicate)
                   AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
                   AND ($type IS NULL OR
-                      (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object", query)} ELSE {EffectiveType("subject", query)} END) = $type)
+                      ($focus IS NULL AND ({EffectiveType("subject", query)} = $type OR {EffectiveType("object", query)} = $type))
+                      OR ($focus IS NOT NULL AND
+                          (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object", query)}
+                                ELSE {EffectiveType("subject", query)} END) = $type))
                   AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
                   AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
                       SELECT 1 FROM source_collection_memberships cm
@@ -189,7 +230,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 """))
             {
                 Scope(command, query);
-                command.Parameters.AddWithValue("$focus", focusId.ToString("D"));
+                command.Parameters.AddWithValue("$focus", (object?)focusId?.ToString("D") ?? DBNull.Value);
                 command.Parameters.AddWithValue("$relationId", (object?)relationId?.ToString("D") ?? DBNull.Value);
                 command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
                 command.Parameters.AddWithValue("$after", after);
@@ -218,16 +259,24 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            List<GraphNode> nodes = [root];
+            List<GraphNode> nodes = [];
             List<GraphEdge> edges = [];
-            HashSet<Guid> known = [focusId];
+            HashSet<Guid> known = [];
+            if (focusId is Guid knownFocusId && root is not null)
+            {
+                nodes.Add(root);
+                known.Add(knownFocusId);
+            }
             foreach (EdgeRow row in rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Guid other = row.SubjectId == focusId ? row.ObjectId : row.SubjectId;
-                if (known.Add(other) && ReadNode(connection, other, query) is { } node)
+                if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
                 {
-                    nodes.Add(node);
+                    nodes.Add(subject);
+                }
+                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
+                {
+                    nodes.Add(objectNode);
                 }
 
                 edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
@@ -235,7 +284,9 @@ public sealed class SqliteGraphReader : IGraphReader
                     row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
             }
 
-            return new GraphPage(relationId is not null && edges.Count == 0 ? "unavailable" : "ready", focusId,
+            string outcome = relationId is not null && edges.Count == 0 ? "unavailable" :
+                focusId is null && edges.Count == 0 ? "empty" : "ready";
+            return new GraphPage(outcome, focusId,
                 relationId is not null && edges.Count == 0 ? [] : nodes, edges,
                 more ? WriteCursor(version, signature, rows[^1].RelationId) : null);
         });

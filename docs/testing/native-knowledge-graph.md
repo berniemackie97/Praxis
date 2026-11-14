@@ -2,14 +2,14 @@
 
 ## Product boundary
 
-The Knowledge workspace offers an **Entities / Graph** switch. The existing list/detail and verification views stay in place. The Graph view embeds a first-party SpriteKit scene inside SwiftUI; SwiftUI provides the seed search, collection/source/type/relation/evidence filters, bounded expansion controls and keyboard/VoiceOver entity/relationship list.
+The Knowledge workspace offers **Browse / Connections** views of the **same** catalog. The existing list/detail and verification views stay in place. The Graph view embeds a first-party SpriteKit scene inside SwiftUI; SwiftUI provides the seed search, collection/source/type/relation/evidence filters, bounded expansion controls and keyboard/VoiceOver entity/relationship list.
 
 The graph reads the private desktop worker's `graphSeeds`, `graphNeighborhood` and scoped `graphRelation` responses. The .NET catalog remains the authority for entity identity, source visibility, revisions, review state, relation predicates and direction. The scene does not write the catalog, infer relationships from proximity, contact a model, or read user files directly. #387 adds current relationship reinspection, guarded owner review and supported source-text navigation. Unsupported media or PDF anchors remain explicitly unavailable.
 
 ## Interaction
 
-1. Open **Knowledge → Graph**. Confirmed entities load by default. Use search to choose a seed, or choose a result in the Explore list. The first eligible result is focused when loading completes.
-2. Only the current **one-hop** neighborhood loads. Click a node or select it from the accessible list. **Focus** replaces the current neighborhood with that node's own; **Expand neighbors** adds direct edges while respecting the visible budget.
+1. Open **Knowledge → Brain**. The main surface is a single global constellation of currently permitted entities, real relationships, and disconnected components. It never auto-focuses the first ID-sorted seed. The optional Entities view and the left context rail are secondary navigators, not separate knowledge databases.
+2. Search retrieves matching current entities and highlights them in the existing graph without replacing the canvas. Selecting a search result recenters it; **Focus** opens that entity's bounded one-hop neighborhood, and **All knowledge** returns to the global canvas. Focused expansion retains the existing guarded review and source-navigation actions.
 3. Pan by dragging empty space, drag a node to rearrange its view position, and zoom using the scroll wheel or the toolbar controls. Positions are never persisted as facts.
 4. Click an edge or select it from the SwiftUI list to inspect predicate, direction, trust status and exact available source excerpt. An owner assertion explicitly has **no invented citation**. Inactive or denied selections are removed when the projection is refreshed.
 5. Filter by active collection, active source, entity type, predicate and evidence status. **Suggestions** is an explicit opt-in; a suggestion is never labeled confirmed. A filter change invalidates outstanding replies and clears the old projection before requerying.
@@ -17,12 +17,14 @@ The graph reads the private desktop worker's `graphSeeds`, `graphNeighborhood` a
 
 ## Presentation constraints
 
-- The scene accepts at most **120 nodes** and **120 edges**. Seed pages load at most 32 entities, neighbor pages at most 60 edges. These are conservative *initial UI safety limits*, not measured hardware maxima. The authoritative worker additionally limits each request to 100.
+- The global atlas streams up to **600 real relationships / 960 atlas endpoint nodes**, plus at most 32 eligible discoverable/search-result nodes in 100-edge worker pages; its underlying authorized catalog may be much larger. It presents separate real connected components in one camera view and a truthful bounded-sample label. The focused graph retains its separate **120-node / 120-edge** safety cap, with 32 seed results and 60-edge neighbor pages. Each worker request is still limited to 100. These are engineering limits pending measured owner-Mac qualification, not claimed device maxima.
 - Nodes are colored by type, and proposed names are muted. Selection and evidence statuses are also expressed in text. Labels are shown for small graphs and focused/selected nodes, and expanded at closer zoom; dense neighborhoods do not label everything at once.
-- Layout starts from deterministic stable IDs, applies bounded repulsion, typed grouping and attraction only along **actual returned edges**, and stops after at most 180 simulation steps. Dragging only changes a local view position.
+- At the global level, the renderer uses a deterministic non-simulated layout derived from **actual graph components**, with small degree-weighted nodes, subdued links, automatic fit-to-view, pan and zoom. No edges are inferred from spatial proximity. Focused neighborhoods retain bounded real-edge repulsion/springs (at most 180 steps); dragging changes only a view position.
 - The scene is a visual surface, hidden from VoiceOver. The SwiftUI list and evidence panel expose the same currently authorized entity and relation identifiers via ordinary buttons, without requiring pointer input.
 - macOS Reduce Motion disables the simulation; increased contrast changes line and outline visibility. The screenshot fixture also exercises light/dark and compact window sizes.
 - The renderer uses bundled Apple frameworks (SpriteKit and SwiftUI), no remote assets or graph engine package. It remains inside the existing `NavigationSplitView`.
+
+The atlas buffers its pages and only publishes the bounded snapshot once the current source/revision cursor is valid across the complete read. If ingestion changes the catalog mid-read, the UI fails closed with a visible refresh prompt rather than displaying an arbitrarily partial/possibly stale constellation. Search and recenter operate on the rendered graph without replacing the canvas. The context rail can be hidden to maximize graph space.
 
 ## Verification
 
@@ -54,4 +56,6 @@ For an eligible proposal, **Accept** and **Reject** reuse the existing `topicRev
 
 ## Known delivery boundary
 
-The view exposes the existing source evidence metadata but does not implement cross-format evidence anchor jumps or relationship approval in the graph. Those belong to #387. Current data is refreshed when the owner opens the Graph view or explicitly refreshes/changes its filters; other running views can change the catalog in between queries. Every response is checked again by the worker; stale request replies are dropped client-side through scoped generations. #387 and #388 must revalidate selected evidence when performing an actionable source inspection or after revocation.
+The atlas replaces the owner-rejected category-card landing. It renders a **bounded, current, evidence-backed sample** of the canonical catalog and legitimately disconnected components together in one canvas; it does **not** claim that every indexed entity is drawn in very large corpora. The authoritative count comes from `graphOverview`, and the view shows current rendered counts separately. The left contexts are filters on that same graph, not separate brains. Browse remains a secondary entity inspector (up to 200 most-mentioned rows grouped by type), with preserved review IDs and progressively disclosed evidence. Data extraction quality is separately measured under #315.
+
+This is a substantial visual redesign toward the four owner-provided constellation/Obsidian graph references, **not yet a validated full-corpus hierarchical LOD or configurable saved-lens implementation**. #420 retains global density/aggregation and navigation quality acceptance, #388 retains measured performance/accessibility/security acceptance. No arbitrary file co-occurrence edges, missing evidence anchors or project membership is invented.

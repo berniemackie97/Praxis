@@ -16,6 +16,52 @@ struct GraphPresentationTests {
                   origin: "owner", evidenceStatus: "owner", evidence: nil, actions: ["inspectRelation"])
     }
 
+    @Test func unifiedOverviewReportsOnlyCanonicalScopeCounts() throws {
+        let json = #"{"entityCount":6,"types":[{"entityType":"project","count":4},{"entityType":"technology","count":2}]}"#
+        let overview = try JSONDecoder().decode(GraphOverview.self, from: Data(json.utf8))
+        #expect(overview.entityCount == 6)
+        #expect(overview.types.reduce(0) { $0 + $1.count } == overview.entityCount)
+        #expect(overview.types.map(\.entityType) == ["project", "technology"])
+    }
+
+    @Test func graphSidebarGroupsAssertionsWithoutCollapsingEvidence() {
+        let first = edge("e1", "subject", "object")
+        let second = edge("e2", "subject", "object")
+        let reverse = edge("e3", "object", "subject")
+        let grouped = GraphRelationGroup.group([first, second, reverse])
+        #expect(grouped.count == 2)
+        #expect(grouped.first(where: { $0.observations.count == 2 })?.observations.map(\.relationId) == ["e1", "e2"])
+        #expect(grouped.flatMap(\.observations).count == 3)
+    }
+
+    @Test func entityInspectorGroupsEvidenceWithoutMergingTheCanonicalRelations() {
+        let source = EntityRelation(relationId: "a", predicate: "uses", outgoing: true,
+                                    otherEntityId: "other", otherName: "Dependency",
+                                    origin: "model", evidence: "uses Dependency")
+        let second = EntityRelation(relationId: "b", predicate: "uses", outgoing: true,
+                                    otherEntityId: "other", otherName: "Dependency",
+                                    origin: "model", evidence: "separate source")
+        let reverse = EntityRelation(relationId: "c", predicate: "uses", outgoing: false,
+                                     otherEntityId: "other", otherName: "Dependency",
+                                     origin: "owner", evidence: nil)
+        let grouped = EntityRelationGroup.group([second, reverse, source])
+        #expect(grouped.count == 2)
+        #expect(grouped.first(where: { $0.outgoing })?.observations.map(\.relationId) == ["a", "b"])
+        #expect(grouped.flatMap(\.observations).count == 3)
+    }
+
+    @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
+        let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
+        let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
+        let first = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
+        let second = GraphAtlasLayout.positions(nodes: Array(nodes.reversed()), edges: Array(edges.reversed()))
+        #expect(first == second)
+        #expect(first.count == 5)
+        #expect(first.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+        #expect(first["isolated"] != first["b"])
+        #expect(first["a"] != first["c"])
+    }
+
     @Test func workerGraphEnvelopeDecodesWithoutInventingMetadata() throws {
         let json = """
             {"outcome":"ready","focusId":"a","nextCursor":null,

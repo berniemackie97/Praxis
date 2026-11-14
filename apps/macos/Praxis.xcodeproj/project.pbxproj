@@ -13,11 +13,14 @@
 		00000000000000000000E012 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
 		00000000000000000000E013 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
 		00000000000000000000E002 /* GraphModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E001 /* GraphModels.swift */; };
+		00000000000000000000E016 /* GraphOverview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E015 /* GraphOverview.swift */; };
 		00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E003 /* GraphWorkbenchModel.swift */; };
 		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
+		00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01B /* GraphAtlasLayout.swift */; };
 		00000000000000000000E008 /* GraphSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E007 /* GraphSceneView.swift */; };
 		00000000000000000000E00E /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00D /* GraphScene.swift */; };
 		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
+		00000000000000000000E01A /* EntityRelationGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E019 /* EntityRelationGroup.swift */; };
 		00000000000000000000E00C /* GraphPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00B /* GraphPresentationTests.swift */; };
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
 		00000000000000000000D020 /* ModelsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01F /* ModelsSettingsView.swift */; };
@@ -97,11 +100,14 @@
 		00000000000000000000D025 /* ActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityModels.swift; sourceTree = "<group>"; };
 		00000000000000000000E011 /* SpriteKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SpriteKit.framework; path = System/Library/Frameworks/SpriteKit.framework; sourceTree = SDKROOT; };
 		00000000000000000000E001 /* GraphModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphModels.swift; sourceTree = "<group>"; };
+		00000000000000000000E015 /* GraphOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphOverview.swift; sourceTree = "<group>"; };
 		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
+		00000000000000000000E01B /* GraphAtlasLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphAtlasLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E007 /* GraphSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSceneView.swift; sourceTree = "<group>"; };
 		00000000000000000000E00D /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
 		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
+		00000000000000000000E019 /* EntityRelationGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityRelationGroup.swift; sourceTree = "<group>"; };
 		00000000000000000000E00B /* GraphPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
 		00000000000000000000D01F /* ModelsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsSettingsView.swift; sourceTree = "<group>"; };
@@ -258,9 +264,11 @@
 				00000000000000000000A029 /* DesignSystem.swift */,
 				00000000000000000000A02D /* KnowledgeView.swift */,
 				00000000000000000000E005 /* GraphLayout.swift */,
+				00000000000000000000E01B /* GraphAtlasLayout.swift */,
 				00000000000000000000E007 /* GraphSceneView.swift */,
 		00000000000000000000E00D /* GraphScene.swift */,
 				00000000000000000000E009 /* KnowledgeGraphView.swift */,
+				00000000000000000000E019 /* EntityRelationGroup.swift */,
 				00000000000000000000A02F /* LibraryView.swift */,
 				00000000000000000000A031 /* ProposalReviewView.swift */,
 				00000000000000000000A033 /* QuickNoteView.swift */,
@@ -313,6 +321,7 @@
 				00000000000000000000A04F /* IntelligenceModels.swift */,
 				00000000000000000000A051 /* KnowledgeModels.swift */,
 				00000000000000000000E001 /* GraphModels.swift */,
+				00000000000000000000E015 /* GraphOverview.swift */,
 				00000000000000000000A053 /* LibraryModels.swift */,
 				00000000000000000000A055 /* MediaModels.swift */,
 				00000000000000000000A057 /* VerificationModels.swift */,
@@ -461,9 +470,11 @@
 				00000000000000000000A02A /* DesignSystem.swift in Sources */,
 				00000000000000000000A02E /* KnowledgeView.swift in Sources */,
 				00000000000000000000E006 /* GraphLayout.swift in Sources */,
+				00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */,
 				00000000000000000000E008 /* GraphSceneView.swift in Sources */,
 		00000000000000000000E00E /* GraphScene.swift in Sources */,
 				00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */,
+				00000000000000000000E01A /* EntityRelationGroup.swift in Sources */,
 				00000000000000000000A030 /* LibraryView.swift in Sources */,
 				00000000000000000000A032 /* ProposalReviewView.swift in Sources */,
 				00000000000000000000A034 /* QuickNoteView.swift in Sources */,
@@ -509,6 +520,7 @@
 				00000000000000000000A050 /* IntelligenceModels.swift in Sources */,
 				00000000000000000000A052 /* KnowledgeModels.swift in Sources */,
 				00000000000000000000E002 /* GraphModels.swift in Sources */,
+				00000000000000000000E016 /* GraphOverview.swift in Sources */,
 				00000000000000000000A054 /* LibraryModels.swift in Sources */,
 				00000000000000000000A056 /* MediaModels.swift in Sources */,
 				00000000000000000000A058 /* VerificationModels.swift in Sources */,

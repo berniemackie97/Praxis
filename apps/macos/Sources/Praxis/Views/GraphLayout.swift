@@ -25,6 +25,12 @@ struct GraphLayout {
         settledSteps = 0
     }
 
+    mutating func configureAtlas(nodes: [GraphNode], edges: [GraphEdge]) {
+        positions = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
+        velocities.removeAll()
+        settledSteps = 180
+    }
+
     /// One bounded step of repulsion, real-edge springs and weak type grouping.
     /// Return false when the layout has settled, so the scene stops simulation.
     mutating func advance(nodes: [GraphNode], edges: [GraphEdge], focus: String?, reducedMotion: Bool) -> Bool {

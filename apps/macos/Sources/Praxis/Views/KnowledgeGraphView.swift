@@ -16,41 +16,54 @@ struct KnowledgeGraphView: View {
     @State private var zoom: CGFloat = 1
     @State private var zoomRevision = 0
     @State private var confirmRejection = false
+    @State private var showContexts = true
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             HStack(spacing: 0) {
-                discovery
-                    .frame(width: 250)
-                Divider()
+                if showContexts {
+                    discovery
+                        .frame(width: 225)
+                    Divider()
+                }
                 ZStack {
-                    if graph.nodes.isEmpty {
+                    if graph.focusId == nil, let atlasError = graph.atlasError {
+                        EmptyState(systemImage: "exclamationmark.triangle",
+                                   title: "Current brain graph unavailable", message: atlasError)
+                    } else if graph.visibleNodes.isEmpty && !graph.atlasLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
-                                   title: graph.loading ? "Loading connections" : "No visible connections",
-                                   message: graph.outcome == "unavailable"
-                                       ? "The selected entity is no longer available in this scope."
-                                       : "Search or choose a confirmed entity to explore its relationships.")
+                                   title: "No current graph evidence",
+                                   message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
                     } else {
-                        GraphSceneView(nodes: graph.nodes, edges: graph.edges, focusId: graph.focusId,
+                        GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges, focusId: graph.focusId,
+                                       highlightedNodeIds: graph.highlightedNodeIds,
+                                       recenterNodeId: graph.recenterNodeId, recenterRevision: graph.recenterRevision,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
                                        reduceMotion: reduceMotion, active: scenePhase == .active,
                                        highContrast: contrast == .increased,
                                        colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
-                                Text("\(graph.nodes.count) nodes  ·  \(graph.edges.count) relationships")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(Spacing.s)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.s))
-                                    .padding(Spacing.m)
-                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(graph.focusId == nil ? "ONE BRAIN · GLOBAL ATLAS" : "FOCUSED CONNECTIONS")
+                                        .font(.caption2.weight(.semibold))
+                                    Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    if graph.focusId == nil {
+                                        Text("\(graph.overview?.entityCount ?? 0) current entities in scope · rendered relationship sample")
+                                            .font(.caption2).foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .padding(Spacing.s)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.s))
+                                .padding(Spacing.m)
+                                .accessibilityHidden(true)
                             }
                     }
-                    if graph.loading {
-                        ProgressView("Loading neighborhood")
+                    if graph.loading || graph.atlasLoading {
+                        ProgressView(graph.focusId == nil ? "Loading current atlas" : "Loading neighborhood")
                             .padding(Spacing.m)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
                     }
@@ -77,6 +90,10 @@ struct KnowledgeGraphView: View {
         }
         .onAppear { graph.activate() }
         .onDisappear { graph.deactivate() }
+        .onChange(of: graph.focusId) { _ in
+            zoom = 1
+            zoomRevision += 1
+        }
         .onChange(of: graph.selectedNodeId) { _ in graph.inspectSelectedNode() }
         .onChange(of: graph.selectedEdgeId) { _ in graph.inspectSelectedRelation() }
         .onChange(of: graph.entityType) { _ in graph.refresh() }
@@ -95,12 +112,22 @@ struct KnowledgeGraphView: View {
 
     private var toolbar: some View {
         HStack(spacing: Spacing.s) {
+            Button { showContexts.toggle() } label: {
+                Label(showContexts ? "Hide contexts" : "Show contexts", systemImage: "sidebar.left")
+            }
+            .accessibilityLabel(showContexts ? "Hide knowledge contexts" : "Show knowledge contexts")
+            if graph.focusId != nil {
+                Button { graph.showOverview() } label: {
+                    Label("All knowledge", systemImage: "arrow.left")
+                }
+                .help("Return to the full scoped knowledge overview")
+            }
             TextField("Search knowledge", text: $graph.search)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
-                .onSubmit { graph.refresh() }
+                .onSubmit { graph.searchNames() }
                 .accessibilityLabel("Find a knowledge entity")
-            Button { graph.refresh() } label: { Label("Search", systemImage: "magnifyingglass") }
+            Button { graph.searchNames() } label: { Label("Find", systemImage: "magnifyingglass") }
                 .disabled(graph.loading)
             Spacer()
             Toggle(isOn: $graph.includeSuggestions) {
@@ -110,10 +137,10 @@ struct KnowledgeGraphView: View {
             .help("Show unconfirmed model suggestions separately from confirmed knowledge")
             Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
                 .accessibilityLabel("Zoom out")
-            Button { zoom = max(0.35, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
+            Button { zoom = max(0.12, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
                 .accessibilityLabel("Zoom in")
-            Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
-                .accessibilityLabel("Reset zoom")
+            Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "viewfinder") }
+                .accessibilityLabel("Fit knowledge atlas")
             Button { graph.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
         }
         .buttonStyle(.borderless)
@@ -123,7 +150,7 @@ struct KnowledgeGraphView: View {
     private var discovery: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             HStack {
-                Text("Explore").font(.headline)
+                Text("Contexts").font(.headline)
                 Spacer()
                 if graph.loading { ProgressView().controlSize(.small) }
             }
@@ -159,13 +186,27 @@ struct KnowledgeGraphView: View {
                     Text("Contradicted by verifier").tag("contradicted")
                 }
             }
-            if !graph.seeds.isEmpty {
+            if let overview = graph.overview {
+                Text("\(overview.entityCount.formatted()) current entities · \(graph.visibleNodes.count) on canvas")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if graph.atlasTruncated {
+                Text("Global view is bounded; more graph evidence exists.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if let atlasError = graph.atlasError {
+                Text(atlasError).font(.caption2).foregroundStyle(.orange)
+            }
+            if !graph.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !graph.seeds.isEmpty {
                 Divider()
-                Text("Results").font(.subheadline.weight(.semibold))
+                Text("Search results").font(.subheadline.weight(.semibold))
+                Text("\(graph.seeds.count) loaded · up to \(GraphBudget.maximumNodes) browse results. Search for other names.")
+                    .font(.caption2).foregroundStyle(.secondary)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Spacing.xs) {
                         ForEach(graph.seeds) { entity in
-                            Button { graph.focus(entity.entityId) } label: {
+                            Button { graph.highlightNode(entity.entityId) } label: {
                                 HStack {
                                     Image(systemName: EntitySymbol.of(entity.entityType)).frame(width: 18)
                                     Text(entity.label).lineLimit(1)
@@ -179,32 +220,59 @@ struct KnowledgeGraphView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Focus \(entity.label), \(entity.status)")
+                            .accessibilityLabel("Locate \(entity.label), \(entity.status)")
                         }
                     }
                 }
-                .frame(maxHeight: 150)
-            }
-            Divider()
-            Text("Visible nodes and relationships").font(.subheadline.weight(.semibold))
-            List {
-                ForEach(graph.nodes) { node in
-                    Button { graph.selectNode(node.entityId) } label: {
-                        Label(node.label, systemImage: EntitySymbol.of(node.entityType))
-                    }
-                    .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
-                }
-                ForEach(graph.edges) { edge in
-                    Button { graph.selectEdge(edge.relationId) } label: {
-                        Label(relationTitle(edge), systemImage: "arrow.right")
-                    }
-                    .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
+                .frame(maxHeight: 160)
+                if graph.nextSeedCursor != nil {
+                    Button("More results") { graph.loadMoreSeeds() }
+                        .disabled(graph.loading)
                 }
             }
-            .listStyle(.plain)
-            if graph.canLoadMore {
-                Button("Load more connections") { graph.loadMore() }
-                    .disabled(graph.loading)
+            if !graph.visibleNodes.isEmpty {
+                Divider()
+                Text(graph.focusId == nil ? "Visible atlas items" : "Focused neighborhood")
+                    .font(.subheadline.weight(.semibold))
+                List {
+                    ForEach(graph.visibleNodes) { node in
+                        Button {
+                            if graph.focusId == nil {
+                                graph.highlightNode(node.entityId)
+                            } else {
+                                graph.selectNode(node.entityId)
+                            }
+                        } label: {
+                            Label(node.label, systemImage: EntitySymbol.of(node.entityType))
+                        }
+                        .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
+                    }
+                    ForEach(GraphRelationGroup.group(graph.visibleEdges)) { group in
+                        if let first = group.observations.first {
+                            if group.observations.count == 1 {
+                                Button { graph.selectEdge(first.relationId) } label: {
+                                    Label(relationTitle(first), systemImage: "arrow.right")
+                                }
+                                .accessibilityLabel("\(relationTitle(first)), \(first.evidenceStatus)")
+                            } else {
+                                DisclosureGroup("\(relationTitle(first)) · \(group.observations.count) observations") {
+                                    ForEach(group.observations) { edge in
+                                        Button { graph.selectEdge(edge.relationId) } label: {
+                                            Label(edge.evidence.map { "\(edge.evidenceStatus.capitalized) · revision \($0.revision)" }
+                                                      ?? "Owner assertion", systemImage: "doc.text.magnifyingglass")
+                                        }
+                                        .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                if graph.focusId != nil && graph.canLoadMore {
+                    Button("Load more connections") { graph.loadMore() }
+                        .disabled(graph.loading)
+                }
             }
         }
         .padding(Spacing.m)
@@ -230,9 +298,11 @@ struct KnowledgeGraphView: View {
                     Button("Details") { inspect(node.entityId) }
                     Button("Focus") { graph.focus(node.entityId) }
                 }
-                Button("Expand neighbors") { graph.expandSelected() }
-                    .disabled(node.entityId == graph.focusId || graph.loading ||
-                              graph.nodes.count >= GraphBudget.maximumNodes)
+                if graph.focusId != nil {
+                    Button("Expand neighbors") { graph.expandSelected() }
+                        .disabled(node.entityId == graph.focusId || graph.loading ||
+                                  graph.nodes.count >= GraphBudget.maximumNodes)
+                }
             } else if graph.inspectingRelation {
                 ProgressView("Checking current relationship")
             } else if let edge = graph.inspectedEdge, edge.relationId == graph.selectedEdgeId {
@@ -241,7 +311,7 @@ struct KnowledgeGraphView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 StatusPill(text: edge.evidenceStatus.capitalized,
                            tone: ["suggested", "contradicted"].contains(edge.evidenceStatus) ? .warning : .neutral)
-                let alternatives = graph.edges.filter { other in
+                let alternatives = graph.visibleEdges.filter { other in
                     other.relationId != edge.relationId &&
                         Set([other.subjectId, other.objectId]) == Set([edge.subjectId, edge.objectId])
                 }
@@ -308,8 +378,8 @@ struct KnowledgeGraphView: View {
     }
 
     private func relationTitle(_ edge: GraphEdge) -> String {
-        let subject = graph.nodes.first { $0.entityId == edge.subjectId }?.label ?? "Entity"
-        let object = graph.nodes.first { $0.entityId == edge.objectId }?.label ?? "Entity"
+        let subject = graph.visibleNodes.first { $0.entityId == edge.subjectId }?.label ?? "Entity"
+        let object = graph.visibleNodes.first { $0.entityId == edge.objectId }?.label ?? "Entity"
         return "\(subject) \(KnowledgeVocabulary.label(edge.predicate)) \(object)"
     }
 }

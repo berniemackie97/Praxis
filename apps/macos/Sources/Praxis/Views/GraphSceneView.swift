@@ -8,6 +8,9 @@ struct GraphSceneView: NSViewRepresentable {
     let nodes: [GraphNode]
     let edges: [GraphEdge]
     let focusId: String?
+    let highlightedNodeIds: Set<String>
+    let recenterNodeId: String?
+    let recenterRevision: Int
     @Binding var selectedNodeId: String?
     @Binding var selectedEdgeId: String?
     let reduceMotion: Bool
@@ -36,8 +39,10 @@ struct GraphSceneView: NSViewRepresentable {
         scene.configure(nodes: nodes, edges: edges, focus: focusId)
         scene.updateAppearance(dark: colorScheme == .dark, highContrast: highContrast)
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
+        scene.setHighlights(highlightedNodeIds)
         scene.reduceMotion = reduceMotion
         scene.setToolbarZoom(zoom, revision: zoomRevision)
+        scene.recenter(on: recenterNodeId, revision: recenterRevision)
         view.isPaused = !active
     }
 

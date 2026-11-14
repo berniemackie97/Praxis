@@ -61,6 +61,23 @@ struct GraphEdge: Decodable, Identifiable, Equatable {
     var id: String { relationId }
 }
 
+/// A readable assertion summary retaining every separately reviewable graph observation.
+struct GraphRelationGroup: Identifiable {
+    let id: String
+    let observations: [GraphEdge]
+
+    static func group(_ edges: [GraphEdge]) -> [GraphRelationGroup] {
+        Dictionary(grouping: edges) {
+            "\($0.subjectId)|\($0.predicate)|\($0.objectId)"
+        }
+        .map { entry in
+            GraphRelationGroup(id: entry.key,
+                               observations: entry.value.sorted { $0.relationId < $1.relationId })
+        }
+        .sorted { $0.id < $1.id }
+    }
+}
+
 struct GraphPage: Decodable {
     let outcome: String
     let focusId: String?
@@ -85,19 +102,24 @@ enum GraphBudget {
     static let maximumEdges = 120
     static let seedCount = 32
     static let neighborhoodPageSize = 60
+    static let atlasNodes = 960
+    static let atlasEdges = 600
+    static let atlasPageSize = 100
 }
 
 /// A page merge never fabricates an edge or substitutes an unverified node.
 enum GraphProjection {
-    static func merge(nodes: [GraphNode], edges: [GraphEdge], page: GraphPage) -> (nodes: [GraphNode], edges: [GraphEdge]) {
+    static func merge(nodes: [GraphNode], edges: [GraphEdge], page: GraphPage,
+                      maximumNodes: Int = GraphBudget.maximumNodes,
+                      maximumEdges: Int = GraphBudget.maximumEdges) -> (nodes: [GraphNode], edges: [GraphEdge]) {
         var knownNodes = Dictionary(uniqueKeysWithValues: nodes.map { ($0.entityId, $0) })
         for node in page.nodes {
-            if knownNodes[node.entityId] == nil && knownNodes.count >= GraphBudget.maximumNodes { break }
+            if knownNodes[node.entityId] == nil && knownNodes.count >= maximumNodes { break }
             knownNodes[node.entityId] = node
         }
         var knownEdges = Dictionary(uniqueKeysWithValues: edges.map { ($0.relationId, $0) })
         for edge in page.edges {
-            guard knownEdges.count < GraphBudget.maximumEdges,
+            guard knownEdges.count < maximumEdges,
                   knownNodes[edge.subjectId] != nil, knownNodes[edge.objectId] != nil else { continue }
             knownEdges[edge.relationId] = edge
         }

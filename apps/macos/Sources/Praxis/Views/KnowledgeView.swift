@@ -8,13 +8,13 @@ struct KnowledgeView: View {
     let sources: [LibraryItem]
     let explain: (String) -> Void
     let openSource: (GraphEvidence) -> Bool
-    @AppStorage("knowledgeViewMode") private var viewMode = "list"
+    @AppStorage("knowledgeViewModeV2") private var viewMode = "graph"
 
     var body: some View {
         VStack(spacing: 0) {
             Picker("Knowledge view", selection: $viewMode) {
+                Label("Brain", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
                 Label("Entities", systemImage: "list.bullet").tag("list")
-                Label("Graph", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
             }
             .pickerStyle(.segmented)
             .frame(width: 230)
@@ -33,23 +33,52 @@ struct KnowledgeView: View {
         }
     }
 
+    private struct EntityGroup: Identifiable {
+        let type: String
+        let entities: [EntitySummary]
+        var id: String { type }
+    }
+
+    private var entityGroups: [EntityGroup] {
+        Dictionary(grouping: model.entities, by: { $0.entityType ?? "other" })
+            .map { EntityGroup(type: $0.key, entities: $0.value) }
+            .sorted {
+                $0.entities.count == $1.entities.count
+                    ? $0.type < $1.type : $0.entities.count > $1.entities.count
+            }
+    }
+
     private var listContent: some View {
         MasterDetail(listWidth: (260, 320, 440)) {
             List(selection: Binding<String?>(
                 get: { model.selected?.summary.entityId },
                 set: { id in if let entity = model.entities.first(where: { $0.entityId == id }) { model.select(entity) } })) {
-                ForEach(model.entities) { entity in
-                    ItemRow(systemImage: EntitySymbol.of(entity.entityType), title: entity.name,
-                            subtitle: "\(KnowledgeVocabulary.label(entity.entityType).capitalized) · \(Count.label(entity.sources, "source"))",
-                            tint: entity.status == "rejected" ? .secondary : .accentColor) {
-                        if entity.typeConflict {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                                .help("Conflicting types").accessibilityLabel("Conflicting types")
+                Text("Showing up to 200 current entities, ordered by mentions. Search to find others.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+                ForEach(entityGroups) { group in
+                    Section {
+                        ForEach(group.entities) { entity in
+                            ItemRow(systemImage: EntitySymbol.of(entity.entityType), title: entity.name,
+                                    subtitle: Count.label(entity.sources, "source"),
+                                    tint: entity.status == "rejected" ? .secondary : .accentColor) {
+                                if entity.typeConflict {
+                                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                                        .help("Conflicting types").accessibilityLabel("Conflicting types")
+                                }
+                                Text("\(entity.mentions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    .help(Count.label(entity.mentions, "mention"))
+                            }
+                            .tag(entity.entityId)
                         }
-                        Text("\(entity.mentions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            .help(Count.label(entity.mentions, "mention"))
+                    } header: {
+                        HStack {
+                            Label(KnowledgeVocabulary.label(group.type).capitalized,
+                                  systemImage: EntitySymbol.of(group.type))
+                            Spacer()
+                            Text("\(group.entities.count) shown")
+                        }
                     }
-                    .tag(entity.entityId)
                 }
             }
             .overlay {
@@ -67,7 +96,10 @@ struct KnowledgeView: View {
             }
         } detail: {
             if let detail = model.selected {
-                EntityDetailView(detail: detail, model: model, verification: verification)
+                EntityDetailView(detail: detail, model: model, verification: verification) {
+                    model.graph.focusEntityFromBrowse(detail.summary.entityId)
+                    viewMode = "graph"
+                }
             } else {
                 EmptyState(systemImage: "person.crop.rectangle.stack", title: "Select an entity",
                            message: "See where it's mentioned, how it relates to others, and correct it.")
