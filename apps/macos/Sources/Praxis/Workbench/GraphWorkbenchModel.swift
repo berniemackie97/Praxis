@@ -130,7 +130,6 @@ final class GraphWorkbenchModel: ObservableObject {
         guard let id, edges.contains(where: { $0.relationId == id }) else { return }
         selectedEdgeId = id
         selectedNodeId = nil
-        inspectSelectedRelation()
     }
 
     func inspectSelectedRelation() {
@@ -221,6 +220,7 @@ final class GraphWorkbenchModel: ObservableObject {
                 message = "That connection is no longer visible in the selected sources."
                 return
             }
+            inspectedEdge = current
             apply(current)
         }
     }
