@@ -52,11 +52,11 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
                 SELECT e.entity_id
                 FROM knowledge_entities e
                 WHERE {NodeVisible("e")}
-                  AND ($type IS NULL OR ${EffectiveType("e")} = $type)
+                  AND ($type IS NULL OR {EffectiveType("e")} = $type)
                   AND ($search IS NULL OR EXISTS (
                       SELECT 1 FROM confirmed_entity_mentions m
                       JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
-                      WHERE m.entity_id = e.entity_id ${ScopeFilter("m")}
+                      WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                         AND (instr(upper(p.value), $search) > 0 OR
                              (p.correction IS NOT NULL AND instr(upper(p.correction), $search) > 0))
                   ) OR EXISTS (
@@ -132,7 +132,7 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
                   AND ($predicate IS NULL OR r.predicate = $predicate)
                   AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
                   AND ($type IS NULL OR
-                      (CASE WHEN r.subject_id = $focus THEN ${EffectiveType("object")} ELSE ${EffectiveType("subject")} END) = $type)
+                      (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object")} ELSE {EffectiveType("subject")} END) = $type)
                   AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
                   AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
                       SELECT 1 FROM source_collection_memberships cm
@@ -226,10 +226,10 @@ public sealed class SqliteGraphReader(CatalogDatabase database) : IGraphReader
                        SELECT CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END
                        FROM confirmed_entity_mentions m
                        JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
-                       WHERE m.entity_id = e.entity_id ${ScopeFilter("m")}
+                       WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                        ORDER BY m.source_id, m.proposal_id LIMIT 1
                    ), e.display_name) END,
-                   ${EffectiveType("e")}, e.type_origin,
+                   {EffectiveType("e")}, e.type_origin,
                    (SELECT COUNT(*) FROM confirmed_entity_mentions m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.source_id) FROM confirmed_entity_mentions m
