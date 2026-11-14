@@ -125,6 +125,14 @@ struct WorkerSessionTests {
             throw Failure.unexpected("Knowledge or verification lists did not decode")
         }
 
+        var graphOverview: WorkerReply<GraphOverview>?
+        try session.send("graphOverview", fields: [:], as: GraphOverview.self) { graphOverview = $0 }
+        try await waitFor("unified graph overview") { graphOverview != nil }
+        guard graphOverview?.ok == true, graphOverview?.data?.entityCount == 0,
+              graphOverview?.data?.types.isEmpty == true else {
+            throw Failure.unexpected("Unified overview did not decode an empty authorized catalog")
+        }
+
         var graphSeeds: WorkerReply<GraphPage>?
         try session.send("graphSeeds", fields: ["limit": 10], as: GraphPage.self) {
             graphSeeds = $0
