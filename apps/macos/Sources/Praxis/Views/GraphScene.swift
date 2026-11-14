@@ -27,7 +27,7 @@ final class GraphScene: SKScene {
     private var lastFrame: TimeInterval?
     private var draggingNode: String?
 
-    init() {
+    override init() {
         super.init(size: CGSize(width: 1000, height: 700))
         scaleMode = .resizeFill
         viewCamera.position = .zero

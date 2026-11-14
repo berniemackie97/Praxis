@@ -15,7 +15,7 @@ fi
 
 mkdir -p "$output"
 TEST_RUNNER_PRAXIS_SNAPSHOT_DIR="$output" TEST_RUNNER_PRAXIS_DOTNET="$dotnet" \
-  xcodebuild \
+  xcodebuild -quiet \
     -project "$PRAXIS_XCODE_PROJECT" \
     -scheme "$PRAXIS_XCODE_SCHEME" \
     -configuration Debug \
