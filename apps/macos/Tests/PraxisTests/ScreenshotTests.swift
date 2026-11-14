@@ -134,6 +134,9 @@ struct ScreenshotTests {
 
 @MainActor
 private struct SyntheticGraphPreview: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var selectedNode: String? = "project"
     @State private var selectedEdge: String?
 
@@ -160,7 +163,8 @@ private struct SyntheticGraphPreview: View {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
-                           reduceMotion: false, highContrast: false, colorScheme: .dark, zoom: 1)
+                           reduceMotion: reduceMotion, highContrast: contrast == .increased,
+                           colorScheme: scheme, zoom: 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(Spacing.l)
