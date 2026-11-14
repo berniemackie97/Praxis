@@ -328,6 +328,28 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Single(catalog.Graph.Neighborhood(client, new GraphQuery()).Edges);
     }
 
+    [Fact]
+    public async Task ConcurrentCanonicalWriteInvalidatesBothGraphPageTypes()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal captured = await Enrich(catalog, "three.md", "Client NodeOne NodeTwo NodeThree.");
+        await Accept(catalog, captured);
+        Guid center = Single(catalog, "Client").EntityId;
+        catalog.Knowledge.Relate(center, "uses", Single(catalog, "NodeOne").EntityId);
+        catalog.Knowledge.Relate(center, "uses", Single(catalog, "NodeTwo").EntityId);
+
+        GraphPage seeds = catalog.Graph.Seeds(null, new GraphQuery(Limit: 1));
+        GraphPage neighbors = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 1));
+        Assert.NotNull(seeds.NextCursor);
+        Assert.NotNull(neighbors.NextCursor);
+
+        await Task.Run(() => catalog.Knowledge.Relate(center, "uses", Single(catalog, "NodeThree").EntityId));
+        Assert.Throws<InvalidOperationException>(() => catalog.Graph.Seeds(null,
+            new GraphQuery(Limit: 1, Cursor: seeds.NextCursor)));
+        Assert.Throws<InvalidOperationException>(() => catalog.Graph.Neighborhood(center,
+            new GraphQuery(Limit: 1, Cursor: neighbors.NextCursor)));
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
