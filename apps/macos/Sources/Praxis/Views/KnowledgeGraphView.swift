@@ -154,6 +154,7 @@ struct KnowledgeGraphView: View {
                 }
                 if graph.includeSuggestions {
                     Text("Suggested").tag("suggested")
+                    Text("Contradicted by verifier").tag("contradicted")
                 }
             }
             if !graph.seeds.isEmpty {
@@ -235,7 +236,23 @@ struct KnowledgeGraphView: View {
                 Text("Direction: subject → object · Origin: \(edge.origin)")
                     .font(.caption).foregroundStyle(.secondary)
                 StatusPill(text: edge.evidenceStatus.capitalized,
-                           tone: edge.evidenceStatus == "suggested" ? .warning : .neutral)
+                           tone: ["suggested", "contradicted"].contains(edge.evidenceStatus) ? .warning : .neutral)
+                let alternatives = graph.edges.filter { other in
+                    other.relationId != edge.relationId &&
+                        Set([other.subjectId, other.objectId]) == Set([edge.subjectId, edge.objectId])
+                }
+                if !alternatives.isEmpty {
+                    Text("Other visible observations").font(.subheadline.weight(.semibold))
+                    ForEach(alternatives) { other in
+                        Button("\(KnowledgeVocabulary.label(other.predicate)) · \(other.evidenceStatus)") {
+                            graph.selectEdge(other.relationId)
+                        }
+                        .buttonStyle(.link)
+                    }
+                    Text("Separate observations do not necessarily contradict each other.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+
                 if let evidence = edge.evidence {
                     evidenceSummary(evidence)
                     HStack {
