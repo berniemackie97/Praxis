@@ -259,9 +259,14 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            List<GraphNode> nodes = root is null ? [] : [root];
+            List<GraphNode> nodes = [];
             List<GraphEdge> edges = [];
-            HashSet<Guid> known = focusId is Guid id ? [id] : [];
+            HashSet<Guid> known = [];
+            if (focusId is Guid rootId && root is not null)
+            {
+                nodes.Add(root);
+                known.Add(rootId);
+            }
             foreach (EdgeRow row in rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -269,9 +274,9 @@ public sealed class SqliteGraphReader : IGraphReader
                 {
                     nodes.Add(subject);
                 }
-                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objective)
+                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
                 {
-                    nodes.Add(objective);
+                    nodes.Add(objectNode);
                 }
 
                 edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
