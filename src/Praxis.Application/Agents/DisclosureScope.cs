@@ -4,31 +4,11 @@ using Praxis.Domain.Policy;
 namespace Praxis.Application.Agents;
 
 /// <summary>
-/// Per-run disclosure predicate for chat: may this source's content reach this backend? Decisions
-/// come from the ADR 0043 policy for purpose <c>chat</c> and are cached for the run, so one turn
-/// sees one consistent policy. Local backends always may.
+/// Current disclosure predicate for chat. A previous tool call must never turn a revoked
+/// permission into a grant for later calls in the same conversation turn.
 /// </summary>
 public sealed class DisclosureScope(DisclosureGate gate, string backendId, bool backendIsLocal)
 {
-    private readonly Dictionary<Guid, bool> decisions = [];
-    private readonly Lock gateLock = new();
-
-    public bool MayDisclose(Guid sourceId)
-    {
-        if (backendIsLocal)
-        {
-            return true;
-        }
-
-        lock (gateLock)
-        {
-            if (!decisions.TryGetValue(sourceId, out bool allowed))
-            {
-                allowed = gate.Decide(sourceId, backendId, false, DisclosurePurposes.Chat).Decision.Allowed;
-                decisions[sourceId] = allowed;
-            }
-
-            return allowed;
-        }
-    }
+    public bool MayDisclose(Guid sourceId) =>
+        backendIsLocal || gate.Decide(sourceId, backendId, false, DisclosurePurposes.Chat).Decision.Allowed;
 }

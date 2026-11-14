@@ -498,6 +498,22 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task ChatDisclosureReflectsRevocationInsideTheSameTurn()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Capture(catalog, "chat/package.json", PackageJson);
+        catalog.Policy.SaveCategory(new SourceCategory(source.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        DisclosureRule grant = new(Guid.NewGuid(), DataCategories.Code, Strong, DisclosurePurposes.Chat, true, null);
+        new PolicyService(catalog.Policy).Request(new PolicyChange(AddRule: grant), PolicyActors.Owner);
+        DisclosureScope scope = new(new DisclosureGate(catalog.Policy, clock), Strong, false);
+
+        Assert.True(scope.MayDisclose(source.SourceId));
+        new PolicyService(catalog.Policy).Request(new PolicyChange(RemoveRuleId: grant.RuleId), PolicyActors.Owner);
+        Assert.False(scope.MayDisclose(source.SourceId));
+        Assert.True(new DisclosureScope(new DisclosureGate(catalog.Policy, clock), Local, true).MayDisclose(source.SourceId));
+    }
+
+    [Fact]
     public void VerifierDropsPathsAndCommandsTheProjectDoesNotHave()
     {
         ProjectCandidate project = new("p", "/r", "r", [Source("/r/package.json"), Source("/r/src/index.ts")]);
