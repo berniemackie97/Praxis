@@ -388,6 +388,116 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task CachedProjectRequiresCurrentSourcesAndRecipientDisclosure()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "guarded/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "guarded/src/server.ts", Server);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => """
+            {"purpose":"A source-backed service.","summary":"Contains application functions.",
+             "components":[{"name":"Server","path":"src/server.ts","role":"application entry"}],
+             "entryPoints":["src/server.ts"],"buildCommands":[]}
+            """);
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding project = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, project.Status);
+        Assert.Equal(2, project.Sources!.Count);
+
+        KnowledgeProjectTool tool = new(catalog.Projects);
+        AgentToolContext remote = AgentPrimitivesTests.Context() with
+        {
+            BackendId = Strong, BackendIsLocal = false, MayDisclose = id => id != member.SourceId
+        };
+        AgentToolOutput deniedList = await tool.InvokeAsync(JsonDocument.Parse("{}").RootElement, remote, CancellationToken.None);
+        Assert.DoesNotContain("guarded", deniedList.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("source-backed", deniedList.Content, StringComparison.Ordinal);
+        Assert.Equal(1, Assert.Single(deniedList.Withheld).Count);
+
+        AgentToolOutput deniedDetail = await tool.InvokeAsync(JsonDocument.Parse("""{"name":"guarded"}""").RootElement,
+            remote, CancellationToken.None);
+        Assert.Contains("project_not_available", deniedDetail.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("application entry", deniedDetail.Content, StringComparison.Ordinal);
+
+        AgentToolOutput permitted = await tool.InvokeAsync(JsonDocument.Parse("""{"name":"guarded"}""").RootElement,
+            remote with { MayDisclose = _ => true }, CancellationToken.None);
+        Assert.Contains("A source-backed service.", permitted.Content, StringComparison.Ordinal);
+
+        Assert.True(catalog.Sources.Revoke(member.SourceId));
+        ProjectUnderstanding invalid = Assert.Single(catalog.Projects.List());
+        Assert.Equal((ProjectUnderstanding.MapOnly, "source_scope_changed"), (invalid.Status, invalid.Reason));
+        Assert.Null(invalid.Summary);
+        Assert.Empty(invalid.Components);
+        Assert.Empty(invalid.Dependencies);
+        AgentToolOutput afterRevocation = await tool.InvokeAsync(JsonDocument.Parse("{}").RootElement,
+            remote with { MayDisclose = _ => true }, CancellationToken.None);
+        Assert.DoesNotContain("source-backed", afterRevocation.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("guarded", afterRevocation.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CategoryChangeInvalidatesCachedProjectWithoutFileChange()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "recategorized/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "recategorized/src/server.ts", Server);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => """
+            {"purpose":"A build project.","summary":"Verified.",
+             "components":[{"name":"Manifest","path":"package.json","role":"build"}],
+             "entryPoints":[],"buildCommands":[]}
+            """);
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding before = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, before.Status);
+        Assert.Equal(0, await understander.RunAsync(CancellationToken.None));
+
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Personal, SourceCategory.OwnerOrigin, false));
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding after = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, after.Status);
+        Assert.Single(after.Sources!);
+        Assert.Equal(marker.SourceId, after.Sources![0].SourceId);
+        Assert.Equal(2, models.Count(Strong));
+    }
+
+    [Fact]
+    public async Task LegacyAndExpiredScopeSummariesCannotBeReadAsCurrent()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "stale/package.json", PackageJson);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => """
+            {"purpose":"A stale service.","summary":"Sensitive metadata.",
+             "components":[{"name":"Manifest","path":"package.json","role":"build"}],
+             "entryPoints":[],"buildCommands":[]}
+            """);
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding saved = Assert.Single(catalog.Projects.List());
+        Assert.NotNull(saved.Sources);
+
+        catalog.Projects.Save(saved with { Sources = null });
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+
+        catalog.Projects.Save(saved);
+        new PolicyService(catalog.Policy).Request(new PolicyChange(RemoveRuleId:
+            catalog.Policy.ReadPolicy().Rules.Single(rule => rule.ProviderId == Strong && rule.Category == DataCategories.Code).RuleId), PolicyActors.Owner);
+        ProjectUnderstanding expired = Assert.Single(catalog.Projects.List());
+        Assert.Equal((ProjectUnderstanding.MapOnly, "source_scope_changed"), (expired.Status, expired.Reason));
+        Assert.DoesNotContain("Sensitive metadata.", (await new KnowledgeProjectTool(catalog.Projects)
+            .InvokeAsync(JsonDocument.Parse("{}").RootElement, AgentPrimitivesTests.Context(), CancellationToken.None)).Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void VerifierDropsPathsAndCommandsTheProjectDoesNotHave()
     {
         ProjectCandidate project = new("p", "/r", "r", [Source("/r/package.json"), Source("/r/src/index.ts")]);
