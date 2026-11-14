@@ -36,6 +36,7 @@ final class GraphScene: SKScene {
     private var dark = false
     private var highContrast = false
     private var toolbarZoomRevision = -1
+    private var lastToolbarZoom: CGFloat = 1
     private var atlasFitScale: CGFloat = 1
     private var highlightedNodeIds: Set<String> = []
     private var recenterRevision = -1
@@ -68,6 +69,7 @@ final class GraphScene: SKScene {
     func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
         guard graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
         let previousFocus = focusId
+        if previousFocus != focus { lastToolbarZoom = 1 }
         graphNodes = nodes
         graphEdges = edges
         nodesById = Dictionary(uniqueKeysWithValues: nodes.map { ($0.entityId, $0) })
@@ -219,10 +221,14 @@ final class GraphScene: SKScene {
         if focusId == nil && zoom == 1 {
             fitAtlas()
         } else {
-            viewCamera.setScale(zoom * (focusId == nil ? atlasFitScale : 1))
+            let base = focusId == nil ? atlasFitScale : CGFloat(1)
+            let relative = lastToolbarZoom > 0 ? zoom / lastToolbarZoom : zoom
+            viewCamera.setScale(min(base * 2.5, max(base * 0.12,
+                                                     viewCamera.xScale * relative)))
             updateStrokeWidths()
             updateVisibility()
         }
+        lastToolbarZoom = zoom
     }
 
     func setHighlights(_ ids: Set<String>) {
