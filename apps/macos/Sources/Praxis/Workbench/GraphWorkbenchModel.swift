@@ -251,18 +251,11 @@ final class GraphWorkbenchModel: ObservableObject {
                     inspectionMessage = "The current source has no readable text."
                     return
                 }
-                let text = content as NSString
-                let quote = evidence.text as NSString
-                let offset = evidence.offset
-                guard offset >= 0, quote.length > 0, offset <= text.length,
-                      quote.length <= text.length - offset,
-                      text.substring(with: NSRange(location: offset, length: quote.length)) == evidence.text else {
+                guard let excerpt = evidence.excerpt(in: content) else {
                     inspectionMessage = "No exact current text anchor is available for this evidence."
                     return
                 }
-                let start = max(0, offset - 200)
-                let end = min(text.length, offset + quote.length + 400)
-                sourceExcerpt = text.substring(with: NSRange(location: start, length: end - start))
+                sourceExcerpt = excerpt
             }
         }
     }
