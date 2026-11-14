@@ -303,6 +303,31 @@ public sealed class GraphProjectionTests : IDisposable
             .Select(edge => edge.RelationId).Distinct().Count());
     }
 
+    [Fact]
+    public async Task MergeRejectAndRestoreUpdateOnlyTheCurrentDirectRelationships()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "first.md", "C3Reader Client PHY.");
+        await Accept(catalog, source);
+        Guid reader = Single(catalog, "C3Reader").EntityId;
+        Guid client = Single(catalog, "Client").EntityId;
+        Guid phy = Single(catalog, "PHY").EntityId;
+        catalog.Knowledge.Relate(reader, "uses", phy);
+
+        Assert.True(catalog.Knowledge.Merge(reader, client));
+        Assert.Equal("unavailable", catalog.Graph.Neighborhood(reader, new GraphQuery()).Outcome);
+        GraphEdge redirected = Assert.Single(catalog.Graph.Neighborhood(client, new GraphQuery()).Edges);
+        Assert.Equal(client, redirected.SubjectId);
+        Assert.Equal(phy, redirected.ObjectId);
+
+        Assert.True(catalog.Knowledge.Reject(phy));
+        Assert.Empty(catalog.Graph.Neighborhood(client, new GraphQuery()).Edges);
+        Assert.DoesNotContain(catalog.Graph.Seeds(null, new GraphQuery()).Nodes, node => node.EntityId == phy);
+
+        Assert.True(catalog.Knowledge.Restore(phy));
+        Assert.Single(catalog.Graph.Neighborhood(client, new GraphQuery()).Edges);
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
