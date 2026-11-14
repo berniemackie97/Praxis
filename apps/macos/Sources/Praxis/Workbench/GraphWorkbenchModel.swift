@@ -148,8 +148,13 @@ final class GraphWorkbenchModel: ObservableObject {
         fields["relationId"] = edge.relationId
         if !predicate.isEmpty { fields["predicate"] = predicate }
         if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        channel.reset(watchScope)
         channel.send("graphRelation", fields, as: GraphPage.self, scope: watchScope,
-                     failed: { [weak self] error in self?.inspectionMessage = error }) { [weak self] page in
+                     failed: { [weak self] error in
+                         self?.inspectedEdge = nil
+                         self?.sourceExcerpt = nil
+                         self?.inspectionMessage = "Unable to verify the current relationship: \(error)"
+                     }) { [weak self] page in
             guard let self, active, selectedEdgeId == edge.relationId else { return }
             guard page.outcome == "ready", let current = page.edges.first,
                   current.relationId == edge.relationId else {
@@ -248,6 +253,7 @@ final class GraphWorkbenchModel: ObservableObject {
         guard active, selectedEdgeId == edge.relationId else { return }
         channel.reset(inspectionScope)
         channel.reset(previewScope)
+        channel.reset(watchScope)
         inspectedEdge = nil
         sourceExcerpt = nil
         inspectionMessage = nil
