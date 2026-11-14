@@ -134,6 +134,15 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
                 ("$tier", commit.Tier), ("$provider", commit.ProviderId), ("$model", Bound(commit.Identity?.Model, 200)),
                 ("$verified", commit.VerifiedItems), ("$rejected", commit.RejectedItems), ("$input", commit.InputTokens), ("$output", commit.OutputTokens),
                 ("$now", now), ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision));
+            if (commit.Cascade.Length > 0)
+            {
+                connection.Run(transaction, """
+                    INSERT INTO intake_cascades (item_id, revision, cascade, updated_utc) VALUES ($item, $revision, $cascade, $now)
+                    ON CONFLICT(item_id, revision) DO UPDATE SET cascade = excluded.cascade, updated_utc = excluded.updated_utc
+                    """, ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision),
+                    ("$cascade", commit.Cascade.Length <= 400 ? commit.Cascade : commit.Cascade[..400]), ("$now", now));
+            }
+
             transaction.Commit();
             return true;
         });
@@ -269,7 +278,8 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
                    d.status, d.reason, d.tier, d.provider_id, d.model_name, d.verified_items, d.rejected_items,
                    (SELECT COUNT(*) FROM intake_records r WHERE r.item_id = d.item_id AND r.revision = d.revision),
                    (SELECT COUNT(*) FROM financial_transactions t WHERE t.item_id = d.item_id AND t.revision = d.revision),
-                   d.input_tokens, d.output_tokens, d.updated_utc
+                   d.input_tokens, d.output_tokens, d.updated_utc,
+                   (SELECT c.cascade FROM intake_cascades c WHERE c.item_id = d.item_id AND c.revision = d.revision)
             FROM items i
             JOIN sources s ON s.source_id = i.source_id
             JOIN intake_documents d ON d.item_id = i.item_id
@@ -283,7 +293,8 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
             ? new SourceUnderstanding(Guid.Parse(reader.GetString(0)), reader.GetInt32(1), reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetInt32(3),
                 Text(reader, 4), reader.GetInt64(5) == 1, Text(reader, 6), Text(reader, 7), Text(reader, 8), Text(reader, 9), Text(reader, 10),
                 reader.GetString(11), Text(reader, 12), Text(reader, 13), Text(reader, 14), Text(reader, 15), reader.GetInt32(16), reader.GetInt32(17),
-                reader.GetInt32(18), reader.GetInt32(19), reader.GetInt64(20), reader.GetInt64(21), CatalogValues.ParseTimestamp(reader.GetString(22)))
+                reader.GetInt32(18), reader.GetInt32(19), reader.GetInt64(20), reader.GetInt64(21), CatalogValues.ParseTimestamp(reader.GetString(22)),
+                Text(reader, 23))
             : null;
     });
 

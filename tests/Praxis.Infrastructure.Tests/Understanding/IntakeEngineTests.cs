@@ -71,7 +71,8 @@ public sealed class IntakeEngineTests : IDisposable
         CapturedOriginal note = await Capture(catalog, "renovation.docx", OfficeFixtures.Docx("Renovation", Notes.Split('\n')));
         await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
 
-        Assert.Single(models.Requests[Local]);
+        // The local tier triages and drafts; with nothing usable in its draft the strong tier reads the file itself.
+        Assert.Equal(2, models.Requests[Local].Count);
         Assert.Single(models.Requests[Strong]);
         Assert.Equal(0, models.Count(Strongest));
         SourceUnderstanding understood = catalog.Understanding.ReadCurrent(note.SourceId)!;
@@ -91,6 +92,66 @@ public sealed class IntakeEngineTests : IDisposable
         AgentToolOutput timeline = await new KnowledgeTimelineTool(catalog.Library, catalog.Sources, new FinancialLedger(catalog.Finance), catalog.Understanding)
             .InvokeAsync(JsonDocument.Parse("""{"from":"2026-11-16","to":"2026-11-22"}""").RootElement, AgentPrimitivesTests.Context(), CancellationToken.None);
         Assert.Contains("Site visit", timeline.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheLocalDraftIsReviewedByTheStrongTierWhichWritesOnlyCorrections()
+    {
+        using SqliteCatalog catalog = Open();
+        Grant(catalog, DataCategories.Documents, Strong);
+        const string localDraft = """
+            {"summary":"Kitchen renovation notes.","documentType":"meeting notes","topics":[],"relations":[],
+             "entities":[{"name":"Ortega Renovations","type":"organization","quote":"Ortega Renovations will install the cabinets."},
+                         {"name":"Alex Ortega","type":"person","quote":"Alex Ortega leads the crew."},
+                         {"name":"Site visit","type":"concept","quote":"Site visit on Nov 20, 2026 at 2:30 pm."}],
+             "records":[{"kind":"event","title":"Site visit","start":"2026-11-20T14:30","quote":"Site visit on Nov 20, 2026 at 2:30 pm."}]}
+            """;
+        const string corrections = """
+            {"remove":["E3"],"add":{"topics":[{"name":"Kitchen renovation","quote":"Kitchen renovation"}],"entities":[],"relations":[],"records":[]},
+             "summary":"","documentType":""}
+            """;
+        ScriptedModelFactory models = new ScriptedModelFactory()
+            .Answer(Local, request => TransactionIs(request, "recordKinds") ? Triage : localDraft)
+            .Answer(Strong, request => TransactionIs(request, "remove") ? corrections : "{}");
+        CapturedOriginal note = await Capture(catalog, "renovation.md", Encoding.UTF8.GetBytes(Notes));
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+
+        // One strong call, reviewing the draft rather than reading from scratch.
+        ChatRequest review = Assert.Single(models.Requests[Strong]);
+        Assert.True(TransactionIs(review, "remove"));
+        Assert.Contains("<draft>", review.Messages[^1].Content, StringComparison.Ordinal);
+        Assert.Equal(0, models.Count(Strongest));
+
+        SourceUnderstanding understood = catalog.Understanding.ReadCurrent(note.SourceId)!;
+        Assert.Equal((UnderstandingStatuses.Understood, ModelTiers.Strong), (understood.Status, understood.Tier));
+        Assert.Equal("Kitchen renovation notes.", understood.Summary);
+        Assert.StartsWith("local drafted 4 → strong kept 3, removed 1, added 1 → 4 verified", understood.Cascade, StringComparison.Ordinal);
+        Assert.Contains(catalog.Knowledge.ListEntities(null, "Ortega Renovations", 10), entity => entity.EntityType == "organization");
+        Assert.Empty(catalog.Knowledge.ListEntities(null, "Site visit", 10));
+        Assert.Equal(1, understood.Records);
+    }
+
+    [Fact]
+    public async Task FilesLeftIndexOnlyForLackOfAModelAreUnderstoodOnceOneIsConnected()
+    {
+        using SqliteCatalog catalog = Open();
+        catalog.Policy.SaveTier(ModelTiers.Strong, null);
+        catalog.Policy.SaveTier(ModelTiers.Strongest, null);
+        ScriptedModelFactory models = Models(_ => GoodUnderstanding);
+        CapturedOriginal note = await Capture(catalog, "renovation.md", Encoding.UTF8.GetBytes(Notes));
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+        Assert.Equal(UnderstandingStatuses.IndexOnly, catalog.Understanding.ReadCurrent(note.SourceId)!.Status);
+
+        // Nothing changes on its own: a failed file is not retried in a loop.
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+        Assert.Empty(models.Requests.GetValueOrDefault(Strong) ?? []);
+
+        clock.UtcNow = clock.UtcNow.AddMinutes(5);
+        catalog.Policy.SaveTier(ModelTiers.Strong, Strong);
+        Grant(catalog, DataCategories.Documents, Strong);
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+
+        Assert.Equal(UnderstandingStatuses.Understood, catalog.Understanding.ReadCurrent(note.SourceId)!.Status);
     }
 
     [Fact]

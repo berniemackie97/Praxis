@@ -29,7 +29,8 @@ struct ConfigurationView: View {
                     LabeledContent("Files", value: "\(status.observedFiles.formatted()) observed · \(status.importedSinceStart.formatted()) captured this session")
                 }
                 if let backlog = model.intakeBacklog {
-                    LabeledContent("Processing", value: "\(backlog.queued) queued · \(backlog.running) running · \(backlog.failed) failed")
+                    LabeledContent("Processing", value: "\(backlog.queued) queued · \(backlog.running) running · \(backlog.failed) failed"
+                        + ((backlog.enrichmentPending ?? 0) > 0 ? " · local enrichment \(backlog.enrichmentPending!) left" : ""))
                 }
                 HStack {
                     Button(model.intakeStatus?.paused == true ? "Resume Intake" : "Pause Intake") {
