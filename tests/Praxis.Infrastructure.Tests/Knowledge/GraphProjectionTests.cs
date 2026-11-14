@@ -253,6 +253,32 @@ public sealed class GraphProjectionTests : IDisposable
     }
 
     [Fact]
+    public async Task MultipleSourcesRemainSeparateAndRevocationOnlyHidesAffectedRelations()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal first = await Enrich(catalog, "first.md", "C3Reader parses PHY.");
+        await Accept(catalog, first);
+        CapturedOriginal second = await Enrich(catalog, "second.md", "C3Reader parses PHY.");
+        await Accept(catalog, second);
+        Guid focus = Single(catalog, "C3Reader").EntityId;
+        GraphPage both = catalog.Graph.Neighborhood(focus, new GraphQuery());
+        Assert.Equal(2, both.Edges.Count);
+        Assert.Equal(2, both.Edges.Select(edge => edge.RelationId).Distinct().Count());
+        Assert.Equal([first.SourceId, second.SourceId],
+            both.Edges.Select(edge => edge.Evidence!.SourceId).Order().ToArray()
+                .Order().ToArray());
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        GraphEdge remaining = Assert.Single(catalog.Graph.Neighborhood(focus, new GraphQuery()).Edges);
+        Assert.Equal(second.SourceId, remaining.Evidence!.SourceId);
+        GraphEdge expired = both.Edges.Single(edge => edge.Evidence!.SourceId == first.SourceId);
+        Assert.Equal("unavailable", catalog.Graph.Relation(focus, expired.RelationId, new GraphQuery()).Outcome);
+        Assert.Equal(remaining.RelationId,
+            Assert.Single(catalog.Graph.Relation(focus, remaining.RelationId, new GraphQuery()).Edges).RelationId);
+    }
+
+    [Fact]
     public async Task GraphPagesRejectStaleOrMismatchedCursors()
     {
         using SqliteCatalog catalog = Open();
