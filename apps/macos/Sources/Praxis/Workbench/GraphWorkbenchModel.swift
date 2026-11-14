@@ -38,7 +38,6 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var message: String?
 
     var selectedNode: GraphNode? { nodes.first { $0.entityId == selectedNodeId } }
-    var selectedEdge: GraphEdge? { edges.first { $0.relationId == selectedEdgeId } }
     var canLoadMore: Bool {
         nextCursor != nil && nodes.count < GraphBudget.maximumNodes && edges.count < GraphBudget.maximumEdges
     }
@@ -137,7 +136,7 @@ final class GraphWorkbenchModel: ObservableObject {
             clearInspection()
             return
         }
-        validate(edge, then: { [weak self] current in self?.inspectedEdge = current })
+        validate(edge)
     }
 
     func recheckInspection() {
@@ -249,7 +248,7 @@ final class GraphWorkbenchModel: ObservableObject {
         }
     }
 
-    private func validate(_ edge: GraphEdge, then apply: @escaping (GraphEdge) -> Void) {
+    private func validate(_ edge: GraphEdge, then apply: ((GraphEdge) -> Void)? = nil) {
         guard active, selectedEdgeId == edge.relationId else { return }
         channel.reset(inspectionScope)
         channel.reset(previewScope)
@@ -277,7 +276,7 @@ final class GraphWorkbenchModel: ObservableObject {
                 return
             }
             inspectedEdge = current
-            apply(current)
+            apply?(current)
         }
     }
 
