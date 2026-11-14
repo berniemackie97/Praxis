@@ -1,8 +1,8 @@
 using Praxis.Application.Policy;
 using Praxis.Application.Text;
+using Praxis.Domain.Models;
 using Praxis.Domain.Policy;
 using Praxis.Domain.Projects;
-using Praxis.Domain.Models;
 using Praxis.Domain.Verification;
 
 namespace Praxis.Application.Projects;
