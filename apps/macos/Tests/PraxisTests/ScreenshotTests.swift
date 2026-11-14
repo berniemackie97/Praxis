@@ -164,7 +164,7 @@ private struct SyntheticGraphPreview: View {
             GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: reduceMotion, highContrast: contrast == .increased,
-                           colorScheme: scheme, zoom: 1)
+                           colorScheme: scheme, zoom: 1, zoomRevision: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(Spacing.l)
