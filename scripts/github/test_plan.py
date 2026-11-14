@@ -140,6 +140,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertIn(388, dependencies[170])
         self.assertNotIn(171, dependencies[170])
         self.assertEqual([171], self.plan["dependency_removals"]["170"])
+        self.assertEqual([143, 149], self.plan["dependency_removals"]["171"])
         self.assertEqual(57, items[171]["parent"])
         self.assertEqual("P2", items[57]["priority"])
         self.assertEqual("P2", items[171]["priority"])
