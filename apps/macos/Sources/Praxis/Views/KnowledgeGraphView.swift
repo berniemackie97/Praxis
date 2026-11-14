@@ -27,7 +27,7 @@ struct KnowledgeGraphView: View {
                 Divider()
                 ZStack {
                     if graph.focusId == nil {
-                        KnowledgeOverviewView(overview: graph.overview, category: graph.entityType,
+                        KnowledgeOverviewView(overview: graph.overview, error: graph.error, category: graph.entityType,
                                               scopeDescription: scopeDescription) { graph.entityType = $0 }
                     } else if graph.nodes.isEmpty {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
