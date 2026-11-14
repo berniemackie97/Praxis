@@ -57,10 +57,10 @@ public sealed class SqliteGraphReader : IGraphReader
             using (SqliteCommand command = connection.CreateCommand($"""
                 SELECT e.entity_id
                 FROM knowledge_entities e
-                WHERE {NodeVisible("e")}
-                  AND ($type IS NULL OR {EffectiveType("e")} = $type)
+                WHERE {NodeVisible("e", query)}
+                  AND ($type IS NULL OR {EffectiveType("e", query)} = $type)
                   AND ($search IS NULL OR EXISTS (
-                      SELECT 1 FROM confirmed_entity_mentions m
+                      SELECT 1 FROM {MentionView(query)} m
                       JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                       WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                         AND instr(upper(CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END),
@@ -133,12 +133,12 @@ public sealed class SqliteGraphReader : IGraphReader
                 WHERE (r.subject_id = $focus OR r.object_id = $focus)
                   AND r.relation_id > $after
                   AND {ConfirmedRelation}
-                  AND {NodeVisible("subject")}
-                  AND {NodeVisible("object")}
+                  AND {NodeVisible("subject", query)}
+                  AND {NodeVisible("object", query)}
                   AND ($predicate IS NULL OR r.predicate = $predicate)
                   AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
                   AND ($type IS NULL OR
-                      (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object")} ELSE {EffectiveType("subject")} END) = $type)
+                      (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object", query)} ELSE {EffectiveType("subject", query)} END) = $type)
                   AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
                   AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
                       SELECT 1 FROM source_collection_memberships cm
@@ -205,17 +205,20 @@ public sealed class SqliteGraphReader : IGraphReader
               AND c.archived_utc IS NULL))
         """;
 
-    private static string NodeVisible(string alias) => $"""
+    private static string MentionView(GraphQuery query) =>
+        query.IncludeSuggestions ? "visible_entity_mentions" : "confirmed_entity_mentions";
+
+    private static string NodeVisible(string alias, GraphQuery query) => $"""
         {alias}.status = 'active' AND EXISTS (
-            SELECT 1 FROM confirmed_entity_mentions scoped
+            SELECT 1 FROM {MentionView(query)} scoped
             WHERE scoped.entity_id = {alias}.entity_id
               {ScopeFilter("scoped")}
         )
         """;
 
-    private static string EffectiveType(string alias) => $"""
+    private static string EffectiveType(string alias, GraphQuery query) => $"""
         CASE WHEN {alias}.type_origin = 'inferred' THEN (
-            SELECT m.entity_type FROM confirmed_entity_mentions m
+            SELECT m.entity_type FROM {MentionView(query)} m
             WHERE m.entity_id = {alias}.entity_id AND m.entity_type IS NOT NULL
               {ScopeFilter("m")}
             GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1)
@@ -230,20 +233,20 @@ public sealed class SqliteGraphReader : IGraphReader
                        WHERE d.entity_id = e.entity_id AND d.action = 'rename')
                    THEN e.display_name ELSE COALESCE((
                        SELECT CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END
-                       FROM confirmed_entity_mentions m
+                       FROM {MentionView(query)} m
                        JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                        WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                        ORDER BY m.source_id, m.proposal_id LIMIT 1
                    ), e.display_name) END,
-                   {EffectiveType("e")}, e.type_origin,
-                   (SELECT COUNT(*) FROM confirmed_entity_mentions m
+                   {EffectiveType("e", query)}, e.type_origin,
+                   (SELECT COUNT(*) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
-                   (SELECT COUNT(DISTINCT m.source_id) FROM confirmed_entity_mentions m
+                   (SELECT COUNT(DISTINCT m.source_id) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
-                   (SELECT COUNT(DISTINCT m.entity_type) FROM confirmed_entity_mentions m
+                   (SELECT COUNT(DISTINCT m.entity_type) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}) > 1
             FROM knowledge_entities e
-            WHERE e.entity_id = $id AND {NodeVisible("e")}
+            WHERE e.entity_id = $id AND {NodeVisible("e", query)}
             """);
         Scope(command, query);
         command.Parameters.AddWithValue("$id", id.ToString("D"));
@@ -269,7 +272,7 @@ public sealed class SqliteGraphReader : IGraphReader
         using SqliteCommand command = connection.CreateCommand($"""
             SELECT m.proposal_id, m.source_id, m.item_id, m.revision, p.source_digest,
                    s.locator, m.evidence, m.evidence_offset, m.status, m.verdict
-            FROM confirmed_entity_mentions m
+            FROM {MentionView(query)} m
             JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
             JOIN sources s ON s.source_id = m.source_id
             WHERE m.entity_id = $id {ScopeFilter("m")}
