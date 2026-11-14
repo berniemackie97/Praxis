@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000000000000000E002 /* GraphModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E001 /* GraphModels.swift */; };
+		00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E003 /* GraphWorkbenchModel.swift */; };
+		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
+		00000000000000000000E008 /* GraphSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E007 /* GraphSceneView.swift */; };
+		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
+		00000000000000000000E00C /* GraphPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00B /* GraphPresentationTests.swift */; };
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
 		00000000000000000000D020 /* ModelsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01F /* ModelsSettingsView.swift */; };
 		00000000000000000000D01A /* MediaClipCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D019 /* MediaClipCard.swift */; };
@@ -80,6 +86,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00000000000000000000E001 /* GraphModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphModels.swift; sourceTree = "<group>"; };
+		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
+		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
+		00000000000000000000E007 /* GraphSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSceneView.swift; sourceTree = "<group>"; };
+		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
+		00000000000000000000E00B /* GraphPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
 		00000000000000000000D01F /* ModelsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsSettingsView.swift; sourceTree = "<group>"; };
 		00000000000000000000D019 /* MediaClipCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaClipCard.swift; sourceTree = "<group>"; };
@@ -188,6 +200,7 @@
 				00000000000000000000A061 /* CanonicalPathTests.swift */,
 				00000000000000000000A063 /* PayloadReviewTests.swift */,
 				00000000000000000000A065 /* PresentationTests.swift */,
+				00000000000000000000E00B /* GraphPresentationTests.swift */,
 				00000000000000000000A067 /* WorkerSessionTests.swift */,
 				00000000000000000000C015 /* AgentPresentationTests.swift */,
 				00000000000000000000D00B /* ScreenshotTests.swift */,
@@ -222,6 +235,9 @@
 				00000000000000000000A027 /* EntityDetailView.swift */,
 				00000000000000000000A029 /* DesignSystem.swift */,
 				00000000000000000000A02D /* KnowledgeView.swift */,
+				00000000000000000000E005 /* GraphLayout.swift */,
+				00000000000000000000E007 /* GraphSceneView.swift */,
+				00000000000000000000E009 /* KnowledgeGraphView.swift */,
 				00000000000000000000A02F /* LibraryView.swift */,
 				00000000000000000000A031 /* ProposalReviewView.swift */,
 				00000000000000000000A033 /* QuickNoteView.swift */,
@@ -246,6 +262,7 @@
 			children = (
 				00000000000000000000A03D /* IntelligenceSettingsModel.swift */,
 				00000000000000000000A03F /* KnowledgeWorkbenchModel.swift */,
+				00000000000000000000E003 /* GraphWorkbenchModel.swift */,
 				00000000000000000000A041 /* SearchWorkbenchModel.swift */,
 				00000000000000000000A043 /* VerificationWorkbenchModel.swift */,
 				00000000000000000000A045 /* WorkbenchAction.swift */,
@@ -269,6 +286,7 @@
 				00000000000000000000B073 /* IntakeIncident.swift */,
 				00000000000000000000A04F /* IntelligenceModels.swift */,
 				00000000000000000000A051 /* KnowledgeModels.swift */,
+				00000000000000000000E001 /* GraphModels.swift */,
 				00000000000000000000A053 /* LibraryModels.swift */,
 				00000000000000000000A055 /* MediaModels.swift */,
 				00000000000000000000A057 /* VerificationModels.swift */,
@@ -416,6 +434,9 @@
 				00000000000000000000A028 /* EntityDetailView.swift in Sources */,
 				00000000000000000000A02A /* DesignSystem.swift in Sources */,
 				00000000000000000000A02E /* KnowledgeView.swift in Sources */,
+				00000000000000000000E006 /* GraphLayout.swift in Sources */,
+				00000000000000000000E008 /* GraphSceneView.swift in Sources */,
+				00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */,
 				00000000000000000000A030 /* LibraryView.swift in Sources */,
 				00000000000000000000A032 /* ProposalReviewView.swift in Sources */,
 				00000000000000000000A034 /* QuickNoteView.swift in Sources */,
@@ -445,6 +466,7 @@
 				00000000000000000000D024 /* ModelSetupModels.swift in Sources */,
 				00000000000000000000A03E /* IntelligenceSettingsModel.swift in Sources */,
 				00000000000000000000A040 /* KnowledgeWorkbenchModel.swift in Sources */,
+				00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */,
 				00000000000000000000A042 /* SearchWorkbenchModel.swift in Sources */,
 				00000000000000000000A044 /* VerificationWorkbenchModel.swift in Sources */,
 				00000000000000000000A046 /* WorkbenchAction.swift in Sources */,
@@ -456,6 +478,7 @@
 				00000000000000000000B074 /* IntakeIncident.swift in Sources */,
 				00000000000000000000A050 /* IntelligenceModels.swift in Sources */,
 				00000000000000000000A052 /* KnowledgeModels.swift in Sources */,
+				00000000000000000000E002 /* GraphModels.swift in Sources */,
 				00000000000000000000A054 /* LibraryModels.swift in Sources */,
 				00000000000000000000A056 /* MediaModels.swift in Sources */,
 				00000000000000000000A058 /* VerificationModels.swift in Sources */,
@@ -473,6 +496,7 @@
 				00000000000000000000A062 /* CanonicalPathTests.swift in Sources */,
 				00000000000000000000A064 /* PayloadReviewTests.swift in Sources */,
 				00000000000000000000A066 /* PresentationTests.swift in Sources */,
+				00000000000000000000E00C /* GraphPresentationTests.swift in Sources */,
 				00000000000000000000A068 /* WorkerSessionTests.swift in Sources */,
 				00000000000000000000D00C /* ScreenshotTests.swift in Sources */,
 				00000000000000000000C016 /* AgentPresentationTests.swift in Sources */,
