@@ -85,7 +85,7 @@ struct KnowledgeGraphView: View {
         .onChange(of: graph.collectionId) { _ in graph.refresh() }
         .onChange(of: graph.sourceId) { _ in graph.refresh() }
         .onChange(of: graph.includeSuggestions) { allowed in
-            if !allowed && graph.evidenceStatus == "suggested" {
+            if !allowed && ["suggested", "contradicted"].contains(graph.evidenceStatus) {
                 graph.evidenceStatus = ""
             } else {
                 graph.refresh()
