@@ -7,6 +7,7 @@ final class GraphWorkbenchModel: ObservableObject {
     private let channel: WorkerChannel
     private let seedScope = "graph-seeds"
     private let overviewScope = "graph-overview"
+    private let atlasScope = "graph-atlas"
     private let neighborhoodScope = "graph-neighborhood"
     private let inspectionScope = "graph-inspection"
     private let previewScope = "graph-preview"
@@ -26,6 +27,11 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published var includeSuggestions = false
     @Published private(set) var seeds: [GraphNode] = []
     @Published private(set) var overview: GraphOverview?
+    @Published private(set) var atlasNodes: [GraphNode] = []
+    @Published private(set) var atlasEdges: [GraphEdge] = []
+    @Published private(set) var atlasLoading = false
+    @Published private(set) var atlasTruncated = false
+    @Published private(set) var atlasError: String?
     @Published private(set) var nextSeedCursor: String?
     @Published private(set) var nodes: [GraphNode] = []
     @Published private(set) var edges: [GraphEdge] = []
@@ -45,6 +51,15 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var message: String?
 
+    var visibleNodes: [GraphNode] {
+        guard focusId == nil else { return nodes }
+        let ids = Set(atlasNodes.map(\.entityId))
+        return atlasNodes + Array(seeds.filter { !ids.contains($0.entityId) }
+            .prefix(max(0, GraphBudget.atlasNodes - atlasNodes.count)))
+    }
+
+    var visibleEdges: [GraphEdge] { focusId == nil ? atlasEdges : edges }
+
     var canLoadMore: Bool {
         nextCursor != nil && nodes.count < GraphBudget.maximumNodes && edges.count < GraphBudget.maximumEdges
     }
@@ -62,9 +77,15 @@ final class GraphWorkbenchModel: ObservableObject {
         active = false
         channel.reset(seedScope)
         channel.reset(overviewScope)
+        channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
+        atlasNodes = []
+        atlasEdges = []
+        atlasLoading = false
+        atlasTruncated = false
+        atlasError = nil
         nextSeedCursor = nil
         seeds = []
         nodes = []
@@ -82,9 +103,15 @@ final class GraphWorkbenchModel: ObservableObject {
         guard active else { return }
         channel.reset(seedScope)
         channel.reset(overviewScope)
+        channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
+        atlasNodes = []
+        atlasEdges = []
+        atlasLoading = false
+        atlasTruncated = false
+        atlasError = nil
         nextSeedCursor = nil
         seeds = []
         nodes = []
@@ -108,6 +135,39 @@ final class GraphWorkbenchModel: ObservableObject {
             overview = summary
         }
         loadSeeds(cursor: nil)
+        loadAtlas(cursor: nil)
+    }
+
+    private func loadAtlas(cursor: String?) {
+        guard active else { return }
+        atlasLoading = true
+        var fields = scope()
+        fields["limit"] = GraphBudget.atlasPageSize
+        if let cursor { fields["cursor"] = cursor }
+        if !predicate.isEmpty { fields["predicate"] = predicate }
+        if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        channel.send("graphAtlas", fields, as: GraphPage.self, scope: atlasScope,
+                     failed: { [weak self] error in
+                         self?.atlasLoading = false
+                         self?.atlasNodes = []
+                         self?.atlasEdges = []
+                         self?.atlasError = "The atlas changed while loading. Refresh to read current knowledge. \(error)"
+                     }) { [weak self] page in
+            guard let self, active else { return }
+            let merged = GraphProjection.merge(nodes: atlasNodes, edges: atlasEdges, page: page,
+                                               maximumNodes: GraphBudget.atlasNodes,
+                                               maximumEdges: GraphBudget.atlasEdges)
+            atlasNodes = merged.nodes
+            atlasEdges = merged.edges
+            let full = atlasNodes.count >= GraphBudget.atlasNodes ||
+                atlasEdges.count >= GraphBudget.atlasEdges
+            if let next = page.nextCursor, !full {
+                loadAtlas(cursor: next)
+            } else {
+                atlasTruncated = page.nextCursor != nil
+                atlasLoading = false
+            }
+        }
     }
 
     func loadMoreSeeds() {
@@ -118,7 +178,17 @@ final class GraphWorkbenchModel: ObservableObject {
 
     func showOverview() {
         requestedFocusId = nil
-        refresh()
+        channel.reset(neighborhoodScope)
+        clearInspection()
+        focusId = nil
+        selectedNodeId = nil
+        selectedEdgeId = nil
+        nodes = []
+        edges = []
+        nextCursor = nil
+        currentExpansion = nil
+        loading = false
+        message = nil
     }
 
     private func loadSeeds(cursor: String?) {
@@ -148,7 +218,7 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func focus(_ id: String) {
-        guard (seeds + nodes).contains(where: { $0.entityId == id }) else { return }
+        guard (seeds + nodes + atlasNodes).contains(where: { $0.entityId == id }) else { return }
         focusValidated(id)
     }
 
@@ -174,7 +244,7 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func selectNode(_ id: String?) {
-        guard let id, nodes.contains(where: { $0.entityId == id }) else {
+        guard let id, visibleNodes.contains(where: { $0.entityId == id }) else {
             selectedNodeId = nil
             selectedEdgeId = nil
             return
@@ -184,7 +254,7 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func selectEdge(_ id: String?) {
-        guard let id, edges.contains(where: { $0.relationId == id }) else { return }
+        guard let id, visibleEdges.contains(where: { $0.relationId == id }) else { return }
         selectedEdgeId = id
         selectedNodeId = nil
     }
@@ -194,7 +264,7 @@ final class GraphWorkbenchModel: ObservableObject {
             if selectedNodeId == nil { clearInspection() }
             return
         }
-        guard let edge = edges.first(where: { $0.relationId == id }) else {
+        guard let edge = visibleEdges.first(where: { $0.relationId == id }) else {
             clearInspection()
             return
         }
@@ -206,7 +276,7 @@ final class GraphWorkbenchModel: ObservableObject {
             if selectedEdgeId == nil { clearInspection() }
             return
         }
-        guard active, nodes.contains(where: { $0.entityId == id }) else { return }
+        guard active, visibleNodes.contains(where: { $0.entityId == id }) else { return }
         channel.reset(nodeScope)
         channel.reset(nodeWatchScope)
         channel.reset(inspectionScope)
