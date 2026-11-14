@@ -13,12 +13,12 @@ struct EntityRelationGroup: Identifiable {
         Dictionary(grouping: relations) {
             "\($0.outgoing ? "out" : "in")|\($0.predicate)|\($0.otherEntityId)"
         }
-        .map { id, observations in
-            let first = observations[0]
-            return EntityRelationGroup(id: id, predicate: first.predicate,
+        .map { entry in
+            let first = entry.value[0]
+            return EntityRelationGroup(id: entry.key, predicate: first.predicate,
                                        outgoing: first.outgoing, otherEntityId: first.otherEntityId,
                                        otherName: first.otherName,
-                                       observations: observations.sorted { $0.relationId < $1.relationId })
+                                       observations: entry.value.sorted { $0.relationId < $1.relationId })
         }
         .sorted { left, right in
             if left.otherName != right.otherName { return left.otherName < right.otherName }
