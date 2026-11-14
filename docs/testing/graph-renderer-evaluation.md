@@ -50,7 +50,7 @@ These are **synthetic load cases**, not a proposed catalog-wide render budget. N
 
 ## Disposable native rendering prototypes
 
-The draft PR includes a small macOS-only comparison host under `scripts/macos/GraphRendererBenchmark`. It reads a **generated JSON fixture only**. It is not part of the production app, does not launch the .NET worker, and does not open an owner's Praxis data directory.
+The renderer spike includes a small macOS-only comparison host under `scripts/macos/GraphRendererBenchmark`. It reads a **generated JSON fixture only**. It is not part of the production app, does not launch the .NET worker, and does not open an owner's Praxis data directory.
 
 Run from the repository root on a Mac with full Xcode selected:
 
@@ -58,14 +58,16 @@ Run from the repository root on a Mac with full Xcode selected:
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/praxis-graph-384.XXXXXX")"
 python3 scripts/macos/graph_renderer_fixtures.py "$fixture_dir"
 bash scripts/macos/GraphRendererBenchmark/build-graph-benchmark.sh
-.artifacts/graph-renderer-benchmark "$fixture_dir/connected.json"
+open -n -a "$PWD/.artifacts/GraphRendererBenchmark.app" --args "$fixture_dir/connected.json"
 ```
+
+The benchmark is packaged as a separate macOS app and started through Launch Services rather than directly executing a SwiftUI binary. This resolves a suspected cause of the owner's first build launching without a visible window; the correction still needs owner-Mac runtime verification. The `open` command returns to the terminal. If the window does not appear, inspect macOS application logs and process state rather than assuming it is running.
 
 Use the in-window renderer selector to compare Canvas and SpriteKit with the same record set. Restart the command with `sparse.json`, `clustered.json` and `high_degree.json` to inspect the other cases. Keep the test window size, display mode and motion toggle the same. Use a clean process for each profiling run. macOS Reduce Motion must stop the motion in both modes. The right-side SwiftUI list provides a separate keyboard and VoiceOver navigation path over the full node set.
 
 **Limits of this initial prototype:** Both implementations redraw synthetic moving positions; this **does not implement a force-directed solver** and cannot measure real query or layout cost. Canvas currently includes an initial pointer-select, pan and zoom interaction; SpriteKit includes node selection but does not yet have equivalent pan, zoom and drag behavior. Therefore, this build supports an early **drawing and animation comparison**, not a complete interaction or accessibility decision. Do not record interaction parity as passed.
 
-The fixture and tests ran under Python. The Swift source passed a syntax parse on a non-macOS host, but **the native Swift 6/macOS 13 build, UI tests and profiling have not run**. Do not interpret syntax validation as a successful Xcode build. Fix any compile errors on the draft branch before collecting measurements.
+The owner ran the fixture tests (2 passed) and compiled the initial unbundled Swift executable successfully on macOS. Four SpriteKit actor-isolation warnings were observed, and no visible window was confirmed. A follow-up package/actor correction is in PR #391. **A successful build is not a confirmed launched window or a measured renderer result.** Run the bundled app, verify visible controls and collect measurements before closing #384.
 
 ## Same-task comparison
 
