@@ -163,7 +163,8 @@ private struct SyntheticGraphPreview: View {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
-                           reduceMotion: reduceMotion, highContrast: contrast == .increased,
+                           reduceMotion: reduceMotion, active: true,
+                           highContrast: contrast == .increased,
                            colorScheme: scheme, zoom: 1, zoomRevision: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
