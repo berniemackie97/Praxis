@@ -221,9 +221,9 @@ public sealed class ProjectUnderstandingTests : IDisposable
         ProjectUnderstanding project = await understander.UnderstandAsync(captured, ProjectDetector.Fingerprint(captured), CancellationToken.None);
         Assert.Equal((ProjectUnderstanding.Understood, ModelTiers.Strongest), (project.Status, project.Tier));
 
-        string strong = Assert.Single(models.Requests[Strong].Where(call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal)))
+        string strong = Assert.Single(models.Requests[Strong], call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal))
             .Messages[^1].Content;
-        string strongest = Assert.Single(models.Requests[Strongest].Where(call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal)))
+        string strongest = Assert.Single(models.Requests[Strongest], call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal))
             .Messages[^1].Content;
         Assert.Contains("src/public.ts", strong, StringComparison.Ordinal);
         Assert.DoesNotContain("README.md", strong, StringComparison.Ordinal);
