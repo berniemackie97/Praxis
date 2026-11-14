@@ -139,10 +139,11 @@ final class GraphWorkbenchModel: ObservableObject {
         validate(edge, then: { [weak self] current in self?.inspectedEdge = current })
     }
 
-    func openSelectedEvidence() {
-        guard let edge = inspectedEdge, let evidence = edge.evidence else { return }
+    func openSelectedEvidence(_ navigate: @escaping (GraphEvidence) -> Bool) {
+        guard let edge = inspectedEdge, edge.evidence != nil else { return }
         validate(edge) { [weak self] current in
             guard let self, let evidence = current.evidence else { return }
+            if navigate(evidence) { return }
             channel.reset(previewScope)
             sourceExcerpt = nil
             inspectionMessage = nil
