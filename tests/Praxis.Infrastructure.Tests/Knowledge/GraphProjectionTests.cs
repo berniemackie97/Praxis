@@ -265,9 +265,8 @@ public sealed class GraphProjectionTests : IDisposable
         GraphPage both = catalog.Graph.Neighborhood(focus, new GraphQuery());
         Assert.Equal(2, both.Edges.Count);
         Assert.Equal(2, both.Edges.Select(edge => edge.RelationId).Distinct().Count());
-        Assert.Equal([first.SourceId, second.SourceId],
-            both.Edges.Select(edge => edge.Evidence!.SourceId).Order().ToArray()
-                .Order().ToArray());
+        Assert.Equal(new[] { first.SourceId, second.SourceId }.Order().ToArray(),
+            both.Edges.Select(edge => edge.Evidence!.SourceId).Order().ToArray());
 
         Assert.True(catalog.Sources.Revoke(first.SourceId));
         GraphEdge remaining = Assert.Single(catalog.Graph.Neighborhood(focus, new GraphQuery()).Edges);
