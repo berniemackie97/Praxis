@@ -243,14 +243,22 @@ final class GraphWorkbenchModel: ObservableObject {
             ], as: GraphPreview.self, scope: previewScope,
                failed: { [weak self] message in self?.inspectionMessage = message }) { [weak self] result in
                 guard let self, active, selectedEdgeId == current.relationId else { return }
-                guard let content = result.content, let range = content.range(of: evidence.text) else {
+                guard let content = result.content else {
+                    inspectionMessage = "The current source has no readable text."
+                    return
+                }
+                let text = content as NSString
+                let quote = evidence.text as NSString
+                let offset = evidence.offset
+                guard offset >= 0, quote.length > 0, offset <= text.length,
+                      quote.length <= text.length - offset,
+                      text.substring(with: NSRange(location: offset, length: quote.length)) == evidence.text else {
                     inspectionMessage = "No exact current text anchor is available for this evidence."
                     return
                 }
-                let offset = content.distance(from: content.startIndex, to: range.lowerBound)
-                let start = content.index(content.startIndex, offsetBy: max(0, offset - 200))
-                let end = content.index(range.upperBound, offsetBy: min(400, content.distance(from: range.upperBound, to: content.endIndex)))
-                sourceExcerpt = String(content[start..<end])
+                let start = max(0, offset - 200)
+                let end = min(text.length, offset + quote.length + 400)
+                sourceExcerpt = text.substring(with: NSRange(location: start, length: end - start))
             }
         }
     }
