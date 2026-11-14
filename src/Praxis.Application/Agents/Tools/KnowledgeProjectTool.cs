@@ -27,26 +27,36 @@ public sealed class KnowledgeProjectTool(IProjectRepository projects) : IAgentTo
         string? id = args.Text("projectId", 32);
         string? name = args.Text("name", 256);
         IReadOnlyList<ProjectUnderstanding> all = projects.List();
+        ProjectUnderstanding[] visible = all.Where(project =>
+            context.BackendIsLocal || (project.Sources is { Count: > 0 } sources && sources.All(source => context.MayDisclose(source.SourceId))))
+            .ToArray();
+        int withheld = all.Count - visible.Length;
+        IReadOnlyList<WithheldNotice>? notices = withheld > 0 ? [new WithheldNotice(withheld, WithheldNotice.DisclosurePolicy)] : null;
         if (id is null && name is null)
         {
             return Task.FromResult(AgentToolOutput.Of(new
             {
-                projects = all.Select(project => new
+                projects = visible.Select(project => new
                 {
                     project.ProjectId,
                     project.Name,
                     project.Purpose,
                     project.Status,
-                    files = project.Members,
+                    files = context.BackendIsLocal ? project.Members : project.Sources?.Count ?? 0,
                     languages = project.Languages.OrderByDescending(pair => pair.Value).Take(4).Select(pair => pair.Key)
                 }),
                 note = all.Count == 0 ? "No code projects found yet. A project is a watched folder with a solution, package manifest or build file." : null
-            }));
+            }, withheld: notices));
         }
 
-        ProjectUnderstanding project = all.FirstOrDefault(candidate => candidate.ProjectId == id ||
-                                                                       (name is not null && candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                                       ?? throw new ArgumentException("No project with that projectId or name; call knowledge_project without arguments to list them.");
+        ProjectUnderstanding? project = visible.FirstOrDefault(candidate => candidate.ProjectId == id ||
+                                                                       (name is not null && candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        if (project is null)
+        {
+            return Task.FromResult(AgentToolOutput.Of(new { error = "project_not_available" },
+                withheld: notices));
+        }
+
         return Task.FromResult(AgentToolOutput.Of(new
         {
             project.ProjectId,
@@ -60,9 +70,9 @@ public sealed class KnowledgeProjectTool(IProjectRepository projects) : IAgentTo
             buildCommands = project.BuildCommands,
             dependencies = project.Dependencies.Take(120),
             project.Languages,
-            files = project.Members,
+            files = context.BackendIsLocal ? project.Members : project.Sources?.Count ?? 0,
             project.Tier,
             project.UpdatedUtc
-        }));
+        }, withheld: notices));
     }
 }

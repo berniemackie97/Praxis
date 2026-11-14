@@ -97,7 +97,7 @@ public sealed class SqliteCatalog : IDisposable
         Links = new SqliteLinkRepository(database, clock);
         Settings = new SqliteSettingsStore(database, clock);
         Activity = new SqliteActivityReader(database);
-        Projects = new SqliteProjectRepository(database);
+        Projects = new SqliteProjectRepository(database, Policy, clock);
     }
 
     public static SqliteCatalog Open(string dataDirectory, TimeProvider? clock = null) =>

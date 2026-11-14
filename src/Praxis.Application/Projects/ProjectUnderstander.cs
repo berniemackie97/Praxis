@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Praxis.Application.Policy;
 using Praxis.Application.Text;
 using Praxis.Domain.Models;
@@ -36,17 +38,52 @@ public sealed class ProjectUnderstander(
             }
 
             string fingerprint = ProjectDetector.Fingerprint(candidate);
+            string disclosureFingerprint = DisclosureFingerprint(candidate);
             ProjectUnderstanding? existing = projects.Read(candidate.ProjectId);
-            if (existing?.Fingerprint == fingerprint || (existing is not null && clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval))
+            if (existing is not null && existing.Reason != "source_scope_changed" &&
+                ((existing.Fingerprint == fingerprint && existing.DisclosureFingerprint == disclosureFingerprint) ||
+                 (existing.Fingerprint != fingerprint && clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval)))
             {
                 continue;
             }
 
-            projects.Save(await UnderstandAsync(candidate, fingerprint, cancellationToken));
+            ProjectUnderstanding understanding = await UnderstandAsync(candidate, fingerprint, cancellationToken);
+            projects.Save(understanding with { DisclosureFingerprint = disclosureFingerprint });
             done++;
         }
 
         return done;
+    }
+
+    private string DisclosureFingerprint(ProjectCandidate project)
+    {
+        DisclosurePolicy settings = policy.ReadPolicy();
+        TierAssignment[] tiers = policy.ReadTiers().Where(tier => tier.Tier is ModelTiers.Strong or ModelTiers.Strongest or ModelTiers.Local)
+            .OrderBy(tier => tier.Tier, StringComparer.Ordinal).ToArray();
+        StringBuilder state = new();
+        foreach (TierAssignment tier in tiers)
+        {
+            state.Append(tier.Tier).Append('\0').Append(tier.ProviderId).Append('\0').Append(tier.Model).Append('\0').Append(tier.Effort).Append('\n');
+        }
+
+        DateTimeOffset now = clock.GetUtcNow();
+        foreach (ProjectSource member in project.Members)
+        {
+            SourceCategory? category = policy.ReadCategory(member.SourceId);
+            string kind = category?.Category ?? DataCategories.Unclassified;
+            bool localOnly = category?.LocalOnly ?? false;
+            state.Append(member.SourceId).Append('\0').Append(kind).Append('\0').Append(localOnly).Append(':');
+            foreach (TierAssignment tier in tiers)
+            {
+                bool local = tier.ProviderId == VerificationProvider.Ollama;
+                DisclosureDecision decision = DisclosureEvaluator.Decide(settings, kind, tier.ProviderId, local, DisclosurePurposes.Intake, localOnly, now);
+                state.Append(decision.Allowed ? '1' : '0');
+            }
+
+            state.Append('\n');
+        }
+
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(state.ToString())));
     }
 
     public async Task<ProjectUnderstanding> UnderstandAsync(ProjectCandidate project, string fingerprint, CancellationToken cancellationToken)
@@ -73,6 +110,23 @@ public sealed class ProjectUnderstander(
              gate.Decide(member.SourceId, providerId, false, DisclosurePurposes.Intake).Decision.Allowed);
 
         Dictionary<string, RepositoryMap> maps = new(StringComparer.Ordinal);
+        Dictionary<string, ProjectSummarySource[]> scopes = new(StringComparer.Ordinal);
+        ProjectSummarySource CaptureScope(ProjectSource member)
+        {
+            SourceCategory? category = policy.ReadCategory(member.SourceId);
+            return new ProjectSummarySource(member.SourceId, member.ItemId, member.Revision, member.Locator, member.Digest,
+                category?.Category ?? DataCategories.Unclassified, category?.LocalOnly ?? false);
+        }
+
+        bool ScopeCurrent(IReadOnlyList<ProjectSummarySource> sources) =>
+            projects.ReadCurrentMembers(sources.Select(source =>
+                new ProjectSource(source.SourceId, source.ItemId, source.Revision, source.Locator, source.Digest)).ToArray()).Count == sources.Count &&
+            sources.All(source =>
+            {
+                SourceCategory? category = policy.ReadCategory(source.SourceId);
+                return (category?.Category ?? DataCategories.Unclassified) == source.Category &&
+                       (category?.LocalOnly ?? false) == source.LocalOnly;
+            });
         TieredRequest? RequestForTier(string tier)
         {
             string? configuredProvider = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == tier)?.ProviderId;
@@ -91,12 +145,13 @@ public sealed class ProjectUnderstander(
 
             RepositoryMap map = RepositoryMap.Build(project, allowed, ReadText);
             maps[tier] = map;
-            bool ScopeCurrent() => projects.ReadCurrentMembers(allowed).Count == allowed.Length &&
-                allowed.All(member => IsEligible(member, providerId));
+            ProjectSummarySource[] sourceScope = allowed.Select(CaptureScope).ToArray();
+            scopes[tier] = sourceScope;
+            bool Current() => ScopeCurrent(sourceScope) && allowed.All(member => IsEligible(member, providerId));
 
             return new TieredRequest(anchor.SourceId, null, null, ProcessorKey, DisclosurePurposes.Intake,
                 ProjectPrompt.Create(map), DisclosureSources: allowed.Select(member => member.SourceId).ToArray(),
-                SourceScopeCurrent: ScopeCurrent);
+                SourceScopeCurrent: Current);
         }
 
         LadderResult<ProjectDraft> result = await ladder.RunAsync(RequestForTier,
@@ -115,10 +170,13 @@ public sealed class ProjectUnderstander(
             : value is not null ? ProjectUnderstanding.PartiallyVerified
             : ProjectUnderstanding.MapOnly;
         RepositoryMap basis = result.Tier is { } usedTier && maps.TryGetValue(usedTier, out RepositoryMap? selected) ? selected : localMap;
+        ProjectSummarySource[]? evidence = result.Tier is { } evidenceTier && scopes.TryGetValue(evidenceTier, out ProjectSummarySource[]? attached)
+            ? attached
+            : null;
         if (result.Tier is { } completedTier && result.ProviderId is { } providerId)
         {
             bool stillAuthorized = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == completedTier)?.ProviderId == providerId &&
-                projects.ReadCurrentMembers(basis.Disclosed).Count == basis.Disclosed.Count &&
+                evidence is { Length: > 0 } && ScopeCurrent(evidence) &&
                 basis.Disclosed.All(member => IsEligible(member, providerId));
             if (!stillAuthorized)
             {
@@ -133,6 +191,6 @@ public sealed class ProjectUnderstander(
         return new ProjectUnderstanding(project.ProjectId, project.Root, project.Name, fingerprint, status,
             status == ProjectUnderstanding.Understood ? null : result.Reason, value?.Purpose, value?.Summary, value?.Components ?? [],
             value?.EntryPoints ?? [], value?.BuildCommands ?? [], basis.Dependencies.Order(StringComparer.OrdinalIgnoreCase).Take(300).ToArray(),
-            basis.Languages, localMembers.Length, result.Tier, result.ProviderId, result.InputTokens, result.OutputTokens, clock.GetUtcNow());
+            basis.Languages, localMembers.Length, result.Tier, result.ProviderId, result.InputTokens, result.OutputTokens, clock.GetUtcNow(), evidence);
     }
 }
