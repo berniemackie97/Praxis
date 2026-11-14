@@ -8,6 +8,12 @@ public interface ITextSearchIndex
     /// <summary>Ranked lexical matches for an owner query; operators in the query are treated as text.</summary>
     IReadOnlyList<SearchHit> Query(string query, int limit, Guid? collectionId = null);
 
+    /// <summary>
+    /// Ranked lexical matches containing any of the query's terms, best first: the fallback when no
+    /// source contains them all, such as a long question where some words never appear.
+    /// </summary>
+    IReadOnlyList<SearchHit> QueryAny(string query, int limit, Guid? collectionId = null);
+
     /// <summary>Rebuilds the index from canonical text within the given bounds; returns the documents indexed.</summary>
     int Rebuild(int maxDocuments, long maxTextBytes);
 

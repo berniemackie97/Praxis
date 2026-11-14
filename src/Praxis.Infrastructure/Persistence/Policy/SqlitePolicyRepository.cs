@@ -313,14 +313,14 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
         using SqliteTransaction transaction = connection.BeginTransaction();
         connection.Run(transaction, """
             INSERT INTO model_invocations (tier, provider_id, remote, purpose, category, decision_reason, item_id, revision, processor_key,
-                model_name, input_tokens, output_tokens, outcome, started_utc)
-            VALUES ($tier, $provider, $remote, $purpose, $category, $reason, $item, $revision, $processor, $model, $input, $output, $outcome, $started)
+                model_name, input_tokens, output_tokens, outcome, started_utc, duration_ms)
+            VALUES ($tier, $provider, $remote, $purpose, $category, $reason, $item, $revision, $processor, $model, $input, $output, $outcome, $started, $duration)
             """, ("$tier", invocation.Tier), ("$provider", invocation.ProviderId), ("$remote", invocation.Remote ? 1 : 0), ("$purpose", invocation.Purpose),
             ("$category", invocation.Category), ("$reason", invocation.DecisionReason), ("$item", invocation.ItemId?.ToString("D")),
             ("$revision", invocation.Revision), ("$processor", invocation.ProcessorKey),
             ("$model", invocation.ModelName is { Length: > 200 } name ? name[..200] : invocation.ModelName),
             ("$input", Math.Max(0, invocation.InputTokens)), ("$output", Math.Max(0, invocation.OutputTokens)), ("$outcome", invocation.Outcome),
-            ("$started", CatalogValues.Timestamp(invocation.StartedUtc)));
+            ("$started", CatalogValues.Timestamp(invocation.StartedUtc)), ("$duration", invocation.DurationMs is >= 0 ? invocation.DurationMs : null));
         transaction.Commit();
     });
 
@@ -336,7 +336,7 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
     {
         using SqliteCommand command = connection.CreateCommand("""
             SELECT tier, provider_id, remote, purpose, category, decision_reason, item_id, revision, processor_key, model_name,
-                   input_tokens, output_tokens, outcome, started_utc
+                   input_tokens, output_tokens, outcome, started_utc, duration_ms
             FROM model_invocations ORDER BY invocation_id DESC LIMIT $limit
             """);
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 1_000));
@@ -347,7 +347,7 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
             invocations.Add(new ModelInvocation(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) == 1, reader.GetString(3), reader.GetString(4),
                 reader.GetString(5), reader.IsDBNull(6) ? null : Guid.Parse(reader.GetString(6)), reader.IsDBNull(7) ? null : reader.GetInt32(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9), reader.GetInt32(10), reader.GetInt32(11),
-                reader.GetString(12), CatalogValues.ParseTimestamp(reader.GetString(13))));
+                reader.GetString(12), CatalogValues.ParseTimestamp(reader.GetString(13)), reader.IsDBNull(14) ? null : reader.GetInt32(14)));
         }
 
         return invocations;

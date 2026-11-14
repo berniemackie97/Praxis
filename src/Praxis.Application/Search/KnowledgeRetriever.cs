@@ -11,7 +11,17 @@ namespace Praxis.Application.Search;
 /// </summary>
 public sealed class KnowledgeRetriever(ITextSearchIndex lexical, ISemanticVectorStore vectors, IModelProfileRepository profiles, IEmbeddingModelConnector embeddings)
 {
+    /// <summary>
+    /// Every query term first; when no source contains them all, any of them, ranked by how many and
+    /// how rare (mode <c>partial</c>), so a long question still finds the closest sources.
+    /// </summary>
     public async Task<(IReadOnlyList<SearchHit> Hits, string Mode)> SearchAsync(string query, int limit, Guid? collection, CancellationToken cancellationToken)
+    {
+        (IReadOnlyList<SearchHit> hits, string mode) = await AllTermsAsync(query, limit, collection, cancellationToken);
+        return hits.Count > 0 ? (hits, mode) : (lexical.RetainCurrent(lexical.QueryAny(query, limit, collection), collection), "partial");
+    }
+
+    private async Task<(IReadOnlyList<SearchHit> Hits, string Mode)> AllTermsAsync(string query, int limit, Guid? collection, CancellationToken cancellationToken)
     {
         if (profiles.Get(ModelProfile.LocalEmbedding) is { Enabled: true } profile)
         {

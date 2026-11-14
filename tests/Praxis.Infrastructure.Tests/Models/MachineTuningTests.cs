@@ -48,8 +48,9 @@ public sealed class MachineTuningTests
         LocalPace pace = new();
         LocalDraftPolicy policy = new(settings, pace);
 
-        Assert.True(policy.ShouldDraft(2_000));
-        Assert.False(policy.ShouldDraft(5_000));
+        // Before any measurement one span of any draftable size probes; others wait for its result.
+        Assert.True(policy.ShouldDraft(5_000));
+        Assert.False(policy.ShouldDraft(2_000));
         pace.Observe(2_000, TimeSpan.FromSeconds(30));
         Assert.False(policy.ShouldDraft(2_000));
         pace.Observe(2_000, TimeSpan.FromSeconds(2));

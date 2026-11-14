@@ -52,8 +52,13 @@ public sealed class ClaudeCodeChatModel : IChatModel
             "-p", "Answer the request provided on standard input. Respond only through the required schema.",
             "--output-format", "json",
             "--json-schema", request.ResponseSchema.GetRawText(),
+            // No built-in tools; Claude Code returns schema output through its own StructuredOutput
+            // tool, which must stay allowed. None of the owner's settings, hooks, plugins or
+            // commands apply to Praxis's calls.
             "--tools", "",
-            "--disallowedTools", "*",
+            "--allowedTools", "StructuredOutput",
+            "--setting-sources", "",
+            "--disable-slash-commands",
             "--permission-mode", "dontAsk",
             "--no-session-persistence",
             "--strict-mcp-config",

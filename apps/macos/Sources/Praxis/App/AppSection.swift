@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The workspaces in the main window's sidebar, grouped by what the owner is doing.
 enum AppSection: String, CaseIterable, Identifiable {
-    case chat, approvals, library, quickNote, search, knowledge, collections, verification
+    case chat, approvals, library, quickNote, search, knowledge, collections, verification, activity
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .knowledge: "Knowledge"
         case .collections: "Collections"
         case .verification: "Verification"
+        case .activity: "Activity"
         }
     }
 
@@ -29,6 +30,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .knowledge: "People, projects and ideas found in your sources"
         case .collections: "Your own groupings of sources"
         case .verification: "Check local results with a stronger model"
+        case .activity: "What each model is doing, what runs and what waits"
         }
     }
 
@@ -42,6 +44,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .knowledge: "point.3.connected.trianglepath.dotted"
         case .collections: "folder"
         case .verification: "checkmark.shield"
+        case .activity: "waveform.path.ecg"
         }
     }
 
@@ -59,7 +62,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         Group(title: "Ask", sections: [.chat]),
         Group(title: "Capture", sections: [.library, .quickNote]),
         Group(title: "Explore", sections: [.search, .knowledge, .collections]),
-        Group(title: "Review", sections: [.approvals, .verification])
+        Group(title: "Review", sections: [.approvals, .verification, .activity])
     ]
 }
 

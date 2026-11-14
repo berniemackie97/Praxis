@@ -40,6 +40,7 @@ final class WorkbenchModel: ObservableObject {
     let approvals: ApprovalsWorkbenchModel
     let privacy: PrivacySettingsModel
     let links: LinkSettingsModel
+    let activity: ActivityModel
     private let worker: WorkerSession
     private let channel: WorkerChannel
     private var watchedInboxes: [URL] = []
@@ -60,6 +61,7 @@ final class WorkbenchModel: ObservableObject {
         approvals = ApprovalsWorkbenchModel(channel: channel)
         privacy = PrivacySettingsModel(channel: channel)
         links = LinkSettingsModel(channel: channel)
+        activity = ActivityModel(channel: channel)
     }
 
     func start(dataRoot: String, inbox: String, additionalInboxes: String,

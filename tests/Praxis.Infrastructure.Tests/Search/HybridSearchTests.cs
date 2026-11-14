@@ -343,6 +343,9 @@ public sealed class HybridSearchTests : IDisposable
             return results;
         }
 
+        public IReadOnlyList<SearchHit> QueryAny(string query, int limit, Guid? collectionId = null) =>
+            inner.QueryAny(query, limit, collectionId);
+
         public IReadOnlyList<SearchHit> RetainCurrent(IReadOnlyList<SearchHit> candidates,
             Guid? collectionId = null) => inner.RetainCurrent(candidates, collectionId);
 

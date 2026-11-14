@@ -189,10 +189,12 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
                               WHERE d.item_id = processing_jobs.item_id AND d.revision = processing_jobs.revision
                                 AND d.status = 'index_only'
                                 AND d.reason IN ('tier_unavailable', 'model_unavailable', 'model_timeout', 'model_quota_exhausted', 'model_unauthenticated')
-                                AND d.updated_utc < (SELECT MAX(changed) FROM (
-                                    SELECT updated_utc AS changed FROM model_tiers
-                                    UNION ALL SELECT updated_utc FROM verification_providers WHERE enabled = 1)))
-                """, ("$now", now));
+                                AND (d.updated_utc < (SELECT MAX(changed) FROM (
+                                         SELECT updated_utc AS changed FROM model_tiers
+                                         UNION ALL SELECT updated_utc FROM verification_providers WHERE enabled = 1))
+                                     -- Daily limits and plan quotas reset each day: try again then.
+                                     OR (d.reason IN ('tier_unavailable', 'model_quota_exhausted') AND d.updated_utc < $today)))
+                """, ("$now", now), ("$today", CatalogValues.Timestamp(new DateTimeOffset(clock.GetUtcNow().UtcDateTime.Date, TimeSpan.Zero))));
             transaction.Commit();
             return queued;
         });

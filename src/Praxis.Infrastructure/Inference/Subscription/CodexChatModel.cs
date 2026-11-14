@@ -52,7 +52,8 @@ public sealed class CodexChatModel : IChatModel
         using var workspace = new CliWorkspace();
         var schemaPath = Path.Combine(workspace.Path, "schema.json");
         var answerPath = Path.Combine(workspace.Path, "answer.json");
-        await File.WriteAllTextAsync(schemaPath, request.ResponseSchema.GetRawText(), cancellationToken);
+        // Codex enforces OpenAI's strict structured-output rules.
+        await File.WriteAllTextAsync(schemaPath, StrictSchema.Convert(request.ResponseSchema), cancellationToken);
         List<string> arguments =
         [
             "exec", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules",

@@ -65,7 +65,7 @@ public static class CatalogProcessing
     ]);
 
     public static TieredModels Tiers(SqliteCatalog catalog, IVerifierModelFactory models, TimeProvider clock) =>
-        new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock);
+        new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock, Activity);
 
     public static IntakeLadder Ladder(SqliteCatalog catalog, IVerifierModelFactory models, TimeProvider clock) =>
         new(Tiers(catalog, models, clock), catalog.Policy, clock);
@@ -77,6 +77,9 @@ public static class CatalogProcessing
 
     /// <summary>The worker's measured local pace, shared by its pipeline and the settings page.</summary>
     public static LocalPace Pace { get; } = new();
+
+    /// <summary>The worker's model calls in flight, shared by intake, chat delegation and the Activity view.</summary>
+    public static ModelActivity Activity { get; } = new();
 
     /// <summary>One safe fetcher per process: its connection pool is shared by every link job.</summary>
     private static readonly Lazy<SafeHttpFetcher> SharedFetcher = new(() => new SafeHttpFetcher());

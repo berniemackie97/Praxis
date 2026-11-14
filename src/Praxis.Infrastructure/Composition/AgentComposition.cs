@@ -24,7 +24,7 @@ public static class AgentComposition
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
         IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger), new RecordsDataset(catalog.Understanding)];
-        TieredModels tiers = new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock);
+        TieredModels tiers = new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock, CatalogProcessing.Activity);
         PdfPigTextReader pdf = new();
         MediaMoments moments = new(catalog.Text, new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals, catalog.Collections));
         KnowledgeRetriever retriever = new(catalog.Search, catalog.Embeddings, catalog.Models, embeddings);

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000000000000000D02A /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D029 /* ActivityView.swift */; };
+		00000000000000000000D028 /* ActivityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D027 /* ActivityModel.swift */; };
+		00000000000000000000D026 /* ActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D025 /* ActivityModels.swift */; };
 		00000000000000000000E012 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
 		00000000000000000000E013 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
 		00000000000000000000E002 /* GraphModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E001 /* GraphModels.swift */; };
@@ -89,6 +92,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00000000000000000000D029 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		00000000000000000000D027 /* ActivityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityModel.swift; sourceTree = "<group>"; };
+		00000000000000000000D025 /* ActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityModels.swift; sourceTree = "<group>"; };
 		00000000000000000000E011 /* SpriteKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SpriteKit.framework; path = System/Library/Frameworks/SpriteKit.framework; sourceTree = SDKROOT; };
 		00000000000000000000E001 /* GraphModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphModels.swift; sourceTree = "<group>"; };
 		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
@@ -267,6 +273,7 @@
 				00000000000000000000C013 /* PrivacySettingsView.swift */,
 				00000000000000000000D003 /* SettingsView.swift */,
 				00000000000000000000D017 /* IntakePanel.swift */,
+				00000000000000000000D029 /* ActivityView.swift */,
 				00000000000000000000D01F /* ModelsSettingsView.swift */,
 				00000000000000000000D019 /* MediaClipCard.swift */,
 				00000000000000000000D01B /* LinkSettingsSection.swift */,
@@ -286,6 +293,7 @@
 				00000000000000000000A047 /* WorkbenchModel.swift */,
 				00000000000000000000A049 /* WorkerChannel.swift */,
 				00000000000000000000C009 /* ChatWorkbenchModel.swift */,
+				00000000000000000000D027 /* ActivityModel.swift */,
 				00000000000000000000D021 /* ModelSetupModel.swift */,
 				00000000000000000000C00B /* ApprovalsWorkbenchModel.swift */,
 				00000000000000000000C00D /* PrivacySettingsModel.swift */,
@@ -299,6 +307,7 @@
 			children = (
 				00000000000000000000A04B /* CanonicalPath.swift */,
 				00000000000000000000A04D /* IntakeModels.swift */,
+				00000000000000000000D025 /* ActivityModels.swift */,
 				00000000000000000000B071 /* ProcessingBacklog.swift */,
 				00000000000000000000B073 /* IntakeIncident.swift */,
 				00000000000000000000A04F /* IntelligenceModels.swift */,
@@ -476,6 +485,9 @@
 				00000000000000000000C00E /* PrivacySettingsModel.swift in Sources */,
 				00000000000000000000C00C /* ApprovalsWorkbenchModel.swift in Sources */,
 				00000000000000000000C00A /* ChatWorkbenchModel.swift in Sources */,
+				00000000000000000000D026 /* ActivityModels.swift in Sources */,
+				00000000000000000000D028 /* ActivityModel.swift in Sources */,
+				00000000000000000000D02A /* ActivityView.swift in Sources */,
 				00000000000000000000D022 /* ModelSetupModel.swift in Sources */,
 				00000000000000000000C008 /* KeychainStore.swift in Sources */,
 				00000000000000000000C006 /* PolicyLabels.swift in Sources */,

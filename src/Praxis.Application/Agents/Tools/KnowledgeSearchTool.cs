@@ -24,7 +24,7 @@ public sealed class KnowledgeSearchTool(
     public AgentToolDefinition Definition { get; } = new("knowledge_search",
         """
         Search everything in the owner's second brain. Returns ranked passages with sourceId/itemId/revision for knowledge_open and a citation number.
-        Use specific keywords; run several searches for multi-part questions. Filters: kind (note|document|code|media|financial|data), category
+        Use specific keywords or a file name; run several searches for multi-part questions. When no source has every word, partial matches return (mode=partial). Filters: kind (note|document|code|media|financial|data), category
         (financial|correspondence|health|identity|personal|documents|media|code), collectionId, entityId (only sources mentioning that entity).
         detail=full adds longer snippets. Results withheld by the owner's disclosure policy are counted, never shown.
         """,
@@ -57,15 +57,24 @@ public sealed class KnowledgeSearchTool(
         HashSet<Guid>? entitySources = entity is { } id
             ? (knowledge.GetEntity(id) ?? throw new ArgumentException("No entity with that entityId.")).Mentions.Select(mention => mention.SourceId).ToHashSet()
             : null;
-        SearchHit[] filtered = hits.Where(hit => KindMatches(kind, hit.SourceLocator) && (entitySources?.Contains(hit.SourceId) ?? true) &&
-                                                 (category is null || (policy.ReadCategory(hit.SourceId)?.Category ?? DataCategories.Unclassified) == category))
+        SearchHit[] scoped = hits.Where(hit => (entitySources?.Contains(hit.SourceId) ?? true) &&
+                                               (category is null || (policy.ReadCategory(hit.SourceId)?.Category ?? DataCategories.Unclassified) == category))
             .ToArray();
+        SearchHit[] filtered = scoped.Where(hit => KindMatches(kind, hit.SourceLocator)).ToArray();
+        // A kind is a guess at the file type; when it would hide every match, show the matches anyway.
+        bool kindIgnored = filtered.Length == 0 && scoped.Length > 0 && kind != "any";
+        if (kindIgnored)
+        {
+            filtered = scoped;
+        }
+
         SearchHit[] visible = filtered.Where(hit => context.MayDisclose(hit.SourceId)).ToArray();
         SearchHit[] page = visible.Skip(offset).Take(limit).ToArray();
         int withheld = filtered.Length - visible.Length;
         return AgentToolOutput.Of(new
         {
             mode,
+            note = kindIgnored ? $"Nothing matched kind '{kind}', so results of every kind are shown." : null,
             results = page.Select(hit => new
             {
                 hit.SourceId,
