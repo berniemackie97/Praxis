@@ -219,6 +219,61 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Throws<OperationCanceledException>(() => catalog.Graph.Seeds(null, new GraphQuery(), canceled.Token));
     }
 
+    [Fact]
+    public async Task ExpansionStopsAtOneHopAndRejectedRelationIsRemoved()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "uses", "PHY"));
+        CapturedOriginal first = await Enrich(catalog, "first.md", "C3Reader uses PHY.");
+        await Accept(catalog, first);
+        relations.Clear();
+        relations.Add(("PHY", "part_of", "Client"));
+        CapturedOriginal second = await Enrich(catalog, "second.md", "PHY is part of Client.");
+        await Accept(catalog, second);
+
+        Guid reader = Single(catalog, "C3Reader").EntityId;
+        GraphPage neighborhood = catalog.Graph.Neighborhood(reader, new GraphQuery());
+        Assert.Single(neighborhood.Edges);
+        Assert.Contains(neighborhood.Nodes, node => node.Label == "PHY");
+        Assert.DoesNotContain(neighborhood.Nodes, node => node.Label == "Client");
+
+        Guid proposal = catalog.Proposals.List(first.SourceId)
+            .Single(item => item.Kind == "relation").ProposalId;
+        Assert.True(catalog.Proposals.Review(proposal, "rejected"));
+        GraphPage removed = catalog.Graph.Neighborhood(reader, new GraphQuery());
+        Assert.Empty(removed.Edges);
+        Assert.Single(removed.Nodes);
+        Assert.Equal("ready", removed.Outcome);
+
+        Assert.Empty(catalog.Graph.Neighborhood(Single(catalog, "PHY").EntityId,
+            new GraphQuery(SourceId: first.SourceId)).Edges);
+    }
+
+    [Fact]
+    public async Task TypeProjectionAndCountsUseOnlyTheSelectedConfirmedSources()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal first = await Enrich(catalog, "first.md", "PHY is documented as technology.");
+        await Accept(catalog, first);
+        types["PHY"] = "concept";
+        CapturedOriginal second = await Enrich(catalog, "second.md", "PHY is described as concept.");
+        await Accept(catalog, second);
+
+        GraphNode unscoped = Assert.Single(catalog.Graph.Seeds("PHY", new GraphQuery()).Nodes);
+        Assert.Equal(2, unscoped.Mentions);
+        Assert.Equal(2, unscoped.Sources);
+        Assert.True(unscoped.TypeConflict);
+        Assert.Equal("concept", unscoped.EntityType);
+
+        GraphNode scoped = Assert.Single(catalog.Graph.Seeds("PHY", new GraphQuery(SourceId: first.SourceId)).Nodes);
+        Assert.Equal("technology", scoped.EntityType);
+        Assert.Equal(1, scoped.Sources);
+        Assert.Equal(1, scoped.Mentions);
+        Assert.False(scoped.TypeConflict);
+        Assert.Equal(first.SourceId, scoped.Evidence!.SourceId);
+        Assert.NotEqual(second.SourceId, scoped.Evidence.SourceId);
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
