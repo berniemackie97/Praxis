@@ -121,6 +121,7 @@ public sealed class SqliteGraphReader : IGraphReader
             throw new ArgumentException("A valid relationship and no cursor are required.");
         }
 
+        Validate(query, allowEdges: true);
         return ReadNeighborhood(focusId, relationId, query with { Limit = 1 }, cancellationToken);
     }
 
