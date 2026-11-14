@@ -73,7 +73,9 @@ struct WorkbenchSplitView: View {
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
         case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification,
-                                           collections: model.collections, sources: model.items)
+                                        collections: model.collections, sources: model.items) { prompt in
+            if model.chat.prepareDraft(prompt) { section = .chat }
+        }
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
