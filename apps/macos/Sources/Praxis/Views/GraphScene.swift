@@ -215,7 +215,6 @@ final class GraphScene: SKScene {
         nodeHighlights.strokeColor = .controlAccentColor
         for node in graphNodes { refreshNodeStyle(node.entityId) }
         for label in nodeLabels.values { label.fontColor = .labelColor }
-        updateStrokeWidths()
         updateHighlightPaths()
     }
 
