@@ -54,7 +54,7 @@ struct GraphPresentationTests {
         let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
         let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
         let first = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
-        let second = GraphAtlasLayout.positions(nodes: nodes.reversed(), edges: edges.reversed())
+        let second = GraphAtlasLayout.positions(nodes: Array(nodes.reversed()), edges: Array(edges.reversed()))
         #expect(first == second)
         #expect(first.count == 5)
         #expect(first.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
