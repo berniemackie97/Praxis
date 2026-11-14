@@ -8,6 +8,7 @@ The existing private desktop worker protocol is the only transport. The catalog 
 
 ## Actions and output
 
+- **graphOverview** accepts sourceId, collectionId and includeSuggestions, returning exact counts of currently visible entities grouped by effective canonical type. It has no graph edges, names, search samples or cursor. Counts use the same active-source, current-revision and source/collection visibility predicates as other graph reads; they do not include queued intake.
 - **graphSeeds** accepts optional search, entityType, collectionId, sourceId, limit and cursor. It returns confirmed matching entities and one eligible source reference per entity.
 - **graphNeighborhood** requires entityId, and accepts optional entityType, collectionId, sourceId, predicate, evidenceStatus, limit and cursor. It returns one focused entity and a page of its immediate, authorized relations and neighbors. The entityType filter applies to neighbors, not the focus.
 - **graphRelation** requires entityId (an endpoint) and relationId, and accepts the same scope and filters but no cursor. It returns a single relationship and its currently visible endpoints, or unavailable without exposing hidden names. It reuses the neighborhood SQL/visibility rules and rechecks authorization at inspection time.
@@ -46,7 +47,9 @@ Reads run through the existing serialized catalog gate so concurrent canonical m
 
 ## Implementation and acceptance boundaries
 
-The graph projects entity/relation knowledge, not arbitrary file co-occurrence. One sample of confirmed source evidence is returned per node; the existing evidence inspector supplies further source detail. No graph-wide total is exposed. The source and mention counts are confined to current eligible evidence within the selected scope and selected trust mode.
+The graph projects entity/relation knowledge, not arbitrary file co-occurrence. One sample of confirmed source evidence is returned per node; the existing evidence inspector supplies further source detail. The overview exposes a count of **visible current entities** across the selected source/collection/trust scope, not a count of connected components or rendered nodes. A focused neighborhood and a paginated seed sample remain bounded. Source and mention counts remain confined to current eligible evidence within the selected scope and trust mode.
+
+Issue #417 adds the unified overview entry state and explicit drill-down; #418 groups equal-looking assertions in presentation only. Both are under the One Brain feature #416. Display grouping retains relation IDs and never changes the canonical database or evidence status.
 
 Issue #386 owns the SpriteKit scene, layout, viewport budgets, focused neighborhood expansion, semantic zoom and keyboard-accessible navigation. Issue #387 owns evidence inspection and review interactions. Issue #388 owns measured production macOS performance, accessibility, resource limits and revocation acceptance.
 
