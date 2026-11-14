@@ -96,7 +96,10 @@ struct KnowledgeView: View {
             }
         } detail: {
             if let detail = model.selected {
-                EntityDetailView(detail: detail, model: model, verification: verification)
+                EntityDetailView(detail: detail, model: model, verification: verification) {
+                    model.graph.focusEntityFromBrowse(detail.summary.entityId)
+                    viewMode = "graph"
+                }
             } else {
                 EmptyState(systemImage: "person.crop.rectangle.stack", title: "Select an entity",
                            message: "See where it's mentioned, how it relates to others, and correct it.")
