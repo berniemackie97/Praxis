@@ -15,6 +15,7 @@ final class GraphWorkbenchModel: ObservableObject {
     private let nodeWatchScope = "graph-node-watch"
     private var active = false
     private var currentExpansion: String?
+    private var requestedFocusId: String?
 
     @Published var search = ""
     @Published var entityType = ""
@@ -54,6 +55,10 @@ final class GraphWorkbenchModel: ObservableObject {
         guard !active else { return }
         active = true
         refresh()
+        if let requestedFocusId {
+            self.requestedFocusId = nil
+            focusValidated(requestedFocusId)
+        }
     }
 
     func deactivate() {
@@ -142,7 +147,17 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func focus(_ id: String) {
-        guard active, (seeds + nodes).contains(where: { $0.entityId == id }) else { return }
+        guard (seeds + nodes).contains(where: { $0.entityId == id }) else { return }
+        focusValidated(id)
+    }
+
+    func focusEntityFromBrowse(_ id: String) {
+        guard UUID(uuidString: id) != nil else { return }
+        if active { focusValidated(id) } else { requestedFocusId = id }
+    }
+
+    private func focusValidated(_ id: String) {
+        guard active else { return }
         channel.reset(neighborhoodScope)
         clearInspection()
         focusId = id
