@@ -11,17 +11,17 @@ The existing private desktop worker protocol is the only transport. The catalog 
 - **graphSeeds** accepts optional search, entityType, collectionId, sourceId, limit and cursor. It returns confirmed matching entities and one eligible source reference per entity.
 - **graphNeighborhood** requires entityId, and accepts optional entityType, collectionId, sourceId, predicate, evidenceStatus, limit and cursor. It returns one focused entity and a page of its immediate, authorized relations and neighbors. The entityType filter applies to neighbors, not the focus.
 
-Each page is bounded to 1–100 edges or seed nodes (default 40). The response includes stable canonical entity and relation IDs, real predicates and direction, visible labels, owner or evidence origins, review states, current scoped mention/source counts, and actions for opening the canonical inspector. Node and edge evidence includes the exact eligible proposal, source, item, revision, digest, locator and span. Owner-authored relations have no invented document evidence.
+Each page is bounded to 1–100 edges or seed nodes (default 40). Suggested nodes and edges require explicit includeSuggestions=true. The neighborhood evidenceStatus filter accepts owner, accepted, verified, documented, or suggested (the last only with opt-in). The response includes stable canonical entity and relation IDs, real predicates and direction, visible labels, owner or evidence origins, review states, current scoped mention/source counts, and actions for opening the canonical inspector. Node and edge evidence includes the exact eligible proposal, source, item, revision, digest, locator and span. Owner-authored relations have no invented document evidence.
 
 The result outcome is ready, empty or unavailable. Invalid and over-limit requests are rejected by the private protocol.
 
 ## Visibility rules
 
-Only active entities with at least one **confirmed, current, in-scope** source mention are returned. This is true even when the owner changed the entity type: a revoked source must not keep its old identity visible through an owner type override.
+By default, only active entities with **confirmed, current, in-scope** source mentions are returned. With explicit includeSuggestions=true, eligible pending model mentions from visible_entity_mentions can also appear as suggested or mixed, not as confirmed. Rejected, revoked, superseded and withheld instruction-shaped proposals remain hidden. Even an owner type override cannot keep revoked content visible.
 
-The existing confirmed_entity_mentions view is the basis for node visibility. An inferred node type and display label come from confirmed evidence; an explicit owner rename or type decision takes precedence. Unreviewed machine aliases cannot make a search result match; an owner-authored alias may match a currently visible entity.
+The existing confirmed_entity_mentions view controls default node visibility. Explicit suggestion mode uses visible_entity_mentions, with distinct trust states. An inferred node type and label come from evidence eligible in the selected trust mode; an explicit owner rename or type decision takes precedence. When suggestions are included, node status is suggested, mixed or confirmed, and example evidence prefers a confirmed citation. Unreviewed machine aliases cannot make a search result match; an owner-authored alias may match a currently visible entity.
 
-A model relation must have an eligible current source proposal and confirmed evidence: owner acceptance/correction, supporting verifier verdict, or the existing confirmed strong/strongest intake path. Instruction-shaped evidence has stricter review rules. An owner-authored relation stays an owner assertion with no invented source proof. Both endpoints must be visible within the current source/collection scope before its row can enter pagination.
+By default, a model relation needs an eligible current source proposal and confirmed evidence: owner acceptance/correction, supporting verifier verdict, or the existing confirmed strong/strongest intake path. With includeSuggestions=true, ordinary pending model relations can appear as suggested; unsupported/rejected and unapproved instruction-shaped edges remain hidden. Instruction-shaped evidence has stricter review rules. An owner-authored relation stays an owner assertion with no invented source proof. Both endpoints must be visible within the current source/collection scope before its row can enter pagination.
 
 A confirmed relation is not inferred from a co-mention, proximity, similarity score or graph position. There is no multihop expansion, client SQL, automatic approval or write action.
 
@@ -37,7 +37,7 @@ Reads run through the existing serialized catalog gate so concurrent canonical m
 
 ## Implementation and acceptance boundaries
 
-The graph projects entity/relation knowledge, not arbitrary file co-occurrence. One sample of confirmed source evidence is returned per node; the existing evidence inspector supplies further source detail. No graph-wide total is exposed. The source and mention counts are confined to current confirmed evidence within the selected scope.
+The graph projects entity/relation knowledge, not arbitrary file co-occurrence. One sample of confirmed source evidence is returned per node; the existing evidence inspector supplies further source detail. No graph-wide total is exposed. The source and mention counts are confined to current eligible evidence within the selected scope and selected trust mode.
 
 Issue #386 owns the SpriteKit scene, layout, viewport budgets, focused neighborhood expansion, semantic zoom and keyboard-accessible navigation. Issue #387 owns evidence inspection and review interactions. Issue #388 owns measured production macOS performance, accessibility, resource limits and revocation acceptance.
 
