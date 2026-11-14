@@ -13,6 +13,17 @@ namespace Praxis.Infrastructure.Inference.Subscription;
 /// </summary>
 public sealed class CodexChatModel : IChatModel
 {
+    private const string Instructions =
+        "You answer one request from a private knowledge base. Return only JSON that matches the given schema. Use no tools.\n";
+
+    // Agent features Praxis never uses; each adds tool definitions to every request.
+    private static readonly string[] UnusedFeatures =
+    [
+        "apps", "browser_use", "browser_use_external", "code_mode_host", "computer_use", "goals", "hooks", "image_generation",
+        "in_app_browser", "memories", "multi_agent", "plugins", "shell_snapshot", "shell_tool", "skill_search", "sleep_tool",
+        "steer", "tool_suggest", "unified_exec", "view_image", "workspace_dependencies", "worktrees"
+    ];
+
     public const string ProviderName = "codex";
     private readonly string executable;
     private readonly string? model;
@@ -54,13 +65,18 @@ public sealed class CodexChatModel : IChatModel
         var answerPath = Path.Combine(workspace.Path, "answer.json");
         // Codex enforces OpenAI's strict structured-output rules.
         await File.WriteAllTextAsync(schemaPath, StrictSchema.Convert(request.ResponseSchema), cancellationToken);
+        // Codex's own agent instructions and tool definitions cost about 9,000 input tokens per call;
+        // Praxis needs neither, so it replaces the instructions and turns the tools off.
+        var instructionsPath = Path.Combine(workspace.Path, "instructions.md");
+        await File.WriteAllTextAsync(instructionsPath, Instructions, cancellationToken);
         List<string> arguments =
         [
             "exec", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules",
             "--skip-git-repo-check", "-C", workspace.Path, "--output-schema", schemaPath,
             "-o", answerPath, "--json",
+            "-c", $"model_instructions_file=\"{instructionsPath}\"",
             "-c", "mcp_servers={}", "-c", "web_search=\"disabled\"",
-            "--disable", "apps", "--disable", "shell_tool", "--disable", "memories"
+            .. UnusedFeatures.SelectMany(feature => new[] { "-c", $"features.{feature}=false" })
         ];
         if (model is not null)
         {

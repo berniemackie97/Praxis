@@ -10,5 +10,12 @@ public sealed record UnderstandingDraft(
     /// <summary>The share of items that may fail verification before a stronger tier is asked.</summary>
     public const double TolerableRejection = 0.25;
 
-    public bool Acceptable => Summary is not null && Rejected <= (Verified + Rejected) * TolerableRejection;
+    /// <summary>
+    /// Verified items that make an answer worth keeping however many others were dropped. Rejected
+    /// items are discarded anyway; a stronger tier would re-read the whole span only to replace them,
+    /// which on code, disassembly and data (where quotes often fail) doubled the cost for little gain.
+    /// </summary>
+    public const int EnoughVerified = 8;
+
+    public bool Acceptable => Summary is not null && (Verified >= EnoughVerified || Rejected <= (Verified + Rejected) * TolerableRejection);
 }
