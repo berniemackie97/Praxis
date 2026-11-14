@@ -76,6 +76,12 @@ struct ScreenshotTests {
         try await render(SyntheticGraphPreview(forceReducedMotion: true),
                          size: CGSize(width: 780, height: 540),
                          name: "graph-synthetic-compact-reduced-motion", to: outputURL)
+        for dark in [false, true] {
+            try await render(SyntheticGraphAtlasPreview(),
+                             size: CGSize(width: 1200, height: 780),
+                             name: "brain-atlas-synthetic\(dark ? "-dark" : "")",
+                             dark: dark, to: outputURL)
+        }
         for tab in [SettingsTab.general, .models, .privacy] {
             await settle(model)
             UserDefaults.standard.set(tab.rawValue, forKey: SettingsTab.storageKey)
@@ -172,9 +178,49 @@ private struct SyntheticGraphPreview: View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
+                           highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: reduceMotion || forceReducedMotion, active: true,
                            highContrast: contrast == .increased,
+                           colorScheme: scheme, zoom: 1, zoomRevision: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(Spacing.l)
+    }
+}
+
+@MainActor
+private struct SyntheticGraphAtlasPreview: View {
+    @Environment(\.colorScheme) private var scheme
+    @State private var selectedNode: String?
+    @State private var selectedEdge: String?
+
+    private let nodes: [GraphNode] = (0..<252).map { index in
+        let types = ["project", "technology", "concept", "document"]
+        return GraphNode(entityId: "entity-\(index)", label: "Entity \(index)",
+                         entityType: types[min(index / 60, 3)], typeOrigin: "inferred",
+                         status: "confirmed", mentions: 1 + index % 12, sources: 1 + index % 4,
+                         typeConflict: false, evidence: nil, actions: ["openEntity"])
+    }
+
+    private let edges: [GraphEdge] = (0..<240).compactMap { index in
+        let within = index % 60
+        guard within != 0 else { return nil }
+        let parent = index - within + (within - 1) / 2
+        return GraphEdge(relationId: "relation-\(index)", subjectId: "entity-\(parent)",
+                         objectId: "entity-\(index)", predicate: "references",
+                         origin: "owner", evidenceStatus: "owner", evidence: nil,
+                         actions: ["inspectRelation"])
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            PageHeader(title: "One Brain · Global Atlas",
+                       subtitle: "Synthetic, bounded multi-component topology; no real user data")
+            GraphSceneView(nodes: nodes, edges: edges, focusId: nil,
+                           highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
+                           selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
+                           reduceMotion: true, active: true, highContrast: false,
                            colorScheme: scheme, zoom: 1, zoomRevision: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
