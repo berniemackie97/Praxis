@@ -54,7 +54,10 @@ final class ChatWorkbenchModel: ObservableObject {
             guard let self else { return }
             backends = data.backends
             if backendChoice.isEmpty || !data.backends.contains(where: { $0.backendId == backendChoice && $0.enabled }) {
-                backendChoice = data.backends.first(where: \.enabled)?.backendId ?? ""
+                // Start with the model chosen for Chat in Settings → Models.
+                let preferred = UserDefaults.standard.string(forKey: "defaultChatBackend") ?? ""
+                backendChoice = data.backends.first { $0.backendId == preferred && $0.enabled }?.backendId
+                    ?? data.backends.first(where: \.enabled)?.backendId ?? ""
             }
         }
         channel.send("agentConversations", ["limit": 100], as: AgentConversationsData.self, failed: report) { [weak self] data in

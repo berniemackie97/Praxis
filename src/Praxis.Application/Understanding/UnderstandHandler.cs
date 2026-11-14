@@ -29,7 +29,9 @@ public sealed class UnderstandHandler(
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(20);
     public int MaxConcurrency => 2;
 
-    public bool TryReopenWork() => policy.ExpireHolds(clock.GetUtcNow()) > 0;
+    // Expired holds continue down their fallback chain; files left index-only because no model was
+    // set up are understood once one is.
+    public bool TryReopenWork() => policy.ExpireHolds(clock.GetUtcNow()) > 0 | repository.RequeueAwaitingModels() > 0;
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {

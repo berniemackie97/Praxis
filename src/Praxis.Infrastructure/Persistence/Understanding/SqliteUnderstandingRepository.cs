@@ -163,6 +163,32 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
         });
     }
 
+    public int RequeueAwaitingModels()
+    {
+        string now = Now();
+        return database.Execute(connection =>
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            int queued = connection.Run(transaction, """
+                UPDATE processing_jobs
+                SET state = 'queued', attempt = 0, lease_key = NULL, lease_until_utc = NULL, failure_code = NULL, updated_utc = $now
+                WHERE processor_key = 'intake-understand-v1' AND state = 'completed'
+                  AND revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = processing_jobs.item_id)
+                  AND EXISTS (SELECT 1 FROM items i JOIN sources s ON s.source_id = i.source_id
+                              WHERE i.item_id = processing_jobs.item_id AND s.status = 'active')
+                  AND EXISTS (SELECT 1 FROM intake_documents d
+                              WHERE d.item_id = processing_jobs.item_id AND d.revision = processing_jobs.revision
+                                AND d.status = 'index_only'
+                                AND d.reason IN ('tier_unavailable', 'model_unavailable', 'model_timeout', 'model_quota_exhausted', 'model_unauthenticated')
+                                AND d.updated_utc < (SELECT MAX(changed) FROM (
+                                    SELECT updated_utc AS changed FROM model_tiers
+                                    UNION ALL SELECT updated_utc FROM verification_providers WHERE enabled = 1)))
+                """, ("$now", now));
+            transaction.Commit();
+            return queued;
+        });
+    }
+
     public bool TryReuse(ProcessingLease lease, LeasedText input)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);

@@ -35,6 +35,13 @@ public interface IUnderstandingRepository
     SourceUnderstanding? ReadCurrent(Guid sourceId);
 
     /// <summary>
+    /// Queues understanding again for current revisions that were left index-only because no model
+    /// could run, when the model setup changed after they were closed. Returns how many were queued.
+    /// A revision that fails again closes after the change and is not queued again until the next one.
+    /// </summary>
+    int RequeueAwaitingModels();
+
+    /// <summary>
     /// Verified records of current revisions of active sources, newest-dated first, optionally
     /// limited to one kind. Callers apply the disclosure policy per source.
     /// </summary>

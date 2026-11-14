@@ -58,9 +58,12 @@ public sealed class ModelSetup(
         string? concreteModel = model is null or "default" ? null : model;
         if (role == ModelRoles.Chat)
         {
+            // Chat can use any connection: a plan CLI, a local Ollama model, or an API key.
             AgentBackendProfile backend = agents.ReadBackends().FirstOrDefault(profile => profile.BackendId == connectionId)
+                                          ?? ChatBackendFor(connectionId)
                                           ?? throw new ArgumentException("Connect that model before choosing it for chat.", nameof(connectionId));
-            agents.SaveBackend(backend with { Model = concreteModel ?? (backend.Kind == AgentBackendKinds.OpenAiCompatible ? backend.Model : "default"), Effort = effort });
+            string chatModel = concreteModel ?? (backend.Kind == AgentBackendKinds.OpenAiCompatible ? backend.Model : "default");
+            agents.SaveBackend(backend with { Model = chatModel, Effort = backend.Kind == AgentBackendKinds.OpenAiCompatible ? null : effort, Enabled = true });
             return;
         }
 
@@ -70,6 +73,21 @@ public sealed class ModelSetup(
         }
 
         policy.SaveTier(role, connectionId, concreteModel, effort);
+    }
+
+    /// <summary>The chat backend a connected provider implies, for providers connected before chat was wired to them.</summary>
+    private AgentBackendProfile? ChatBackendFor(string? connectionId)
+    {
+        VerificationProvider? provider = verification.ListProviders().FirstOrDefault(candidate => candidate.ProviderId == connectionId && candidate.Enabled);
+        return provider switch
+        {
+            { ProviderId: VerificationProvider.Ollama, Endpoint: { } endpoint, Model: { } model } =>
+                new AgentBackendProfile(provider.ProviderId, AgentBackendKinds.OpenAiCompatible, endpoint.TrimEnd('/') + OllamaChatEndpoint, model, null, null, true),
+            { ProviderId: VerificationProvider.ClaudeCode or VerificationProvider.Codex, Executable: { } executable } =>
+                new AgentBackendProfile(provider.ProviderId, provider.ProviderId == VerificationProvider.Codex ? AgentBackendKinds.Codex : AgentBackendKinds.ClaudeCode,
+                    null, "default", null, executable, true),
+            _ => null
+        };
     }
 
     private static int DefaultWeight(string toolId) => toolId == VerificationProvider.Codex ? 10 : 50;
