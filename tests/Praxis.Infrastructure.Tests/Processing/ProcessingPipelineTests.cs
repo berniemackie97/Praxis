@@ -79,6 +79,48 @@ public sealed class ProcessingPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task ReopeningIsCheckedWhileOtherWorkRunsAndAgainAfterAWake()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        await Capture(catalog, "busy.txt", "long job", "busy");
+        BlockingHandler busy = new(ProcessorKeys.SourceText, maxConcurrency: 1);
+        CountingReopenHandler waiting = new();
+        ProcessingPipeline pipeline = new(catalog.Processing, [busy, waiting], TimeProvider.System, TimeSpan.FromMilliseconds(50));
+        using CancellationTokenSource cancellation = new();
+        Task running = pipeline.RunAsync(cancellation.Token);
+
+        await busy.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitForAsync(() => waiting.Asked >= 1);
+        int before = waiting.Asked;
+
+        // A model was connected: the stage is asked again although the long job is still running.
+        pipeline.Wake();
+        await WaitForAsync(() => waiting.Asked > before);
+        Assert.Equal(1, busy.Active);
+
+        await cancellation.CancelAsync();
+        await running;
+    }
+
+    private sealed class CountingReopenHandler : IProcessingHandler
+    {
+        private int asked;
+
+        public string ProcessorKey => ProcessorKeys.TextSegments;
+        public TimeSpan LeaseDuration => TimeSpan.FromMinutes(1);
+        public int MaxConcurrency => 1;
+        public int Asked => Volatile.Read(ref asked);
+
+        public bool TryReopenWork()
+        {
+            Interlocked.Increment(ref asked);
+            return false;
+        }
+
+        public Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    [Fact]
     public async Task ConcurrencyIsBoundedPerHandler()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);

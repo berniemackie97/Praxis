@@ -27,7 +27,9 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
                                                                     COALESCE(SUM(CASE WHEN j.state = 'queued' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
                                                                     COALESCE(SUM(CASE WHEN j.state = 'running' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
                                                                     COALESCE(SUM(CASE WHEN j.state = 'failed' AND j.processor_key <> $enrichment THEN 1 ELSE 0 END), 0),
-                                                                    COALESCE(SUM(CASE WHEN j.state IN ('queued', 'running') AND j.processor_key = $enrichment THEN 1 ELSE 0 END), 0)
+                                                                    COALESCE(SUM(CASE WHEN j.state IN ('queued', 'running') AND j.processor_key = $enrichment
+                                                                        AND EXISTS (SELECT 1 FROM model_profiles p WHERE p.role = 'local-enrichment' AND p.enabled = 1)
+                                                                        THEN 1 ELSE 0 END), 0)
                                                                 FROM processing_jobs j
                                                                 JOIN items i ON i.item_id = j.item_id
                                                                 JOIN sources s ON s.source_id = i.source_id

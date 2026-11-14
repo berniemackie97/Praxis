@@ -43,7 +43,7 @@ struct ModelsSettingsView: View {
                     }
                 }
                 apiConnections
-                LocalModelsSection(intelligence: intelligence)
+                LocalModelsSection(setup: setup, intelligence: intelligence)
                 ActivitySection(privacy: privacy)
             }
             .padding(.horizontal, Spacing.xl)
@@ -400,18 +400,45 @@ private struct DailyLimitMenu: View {
     }
 }
 
-/// Local enrichment and semantic search, both on this Mac through Ollama.
+/// This Mac's local models: one model kept loaded for every local job, when it drafts, semantic
+/// search, and the optional background suggestions, with a one-click setup tuned to the machine.
 private struct LocalModelsSection: View {
+    @ObservedObject var setup: ModelSetupModel
     @ObservedObject var intelligence: IntelligenceSettingsModel
 
+    private var installed: [InstalledModel] { setup.machine?.installed ?? intelligence.installedModels }
+    private var generative: [InstalledModel] { installed.filter { !$0.name.localizedCaseInsensitiveContains("embed") } }
+    private var embeddings: [InstalledModel] { installed.filter { $0.name.localizedCaseInsensitiveContains("embed") } }
+    private var localModel: String { setup.provider(ModelTool.ollama)?.enabled == true ? setup.provider(ModelTool.ollama)?.model ?? "" : "" }
+
     var body: some View {
-        FlatSection("On this Mac",
-                    footer: "Semantic search finds passages by meaning. Background enrichment adds the local model's guesses as suggestions; with a Reading model connected you can leave it off. Both run in your Ollama and never leave the Mac.") {
-            EmptyView()
+        FlatSection("On this Mac", footer: footer) {
+            Button("Optimize for This Mac") { setup.optimizeForThisMac() }
         } content: {
-            LabeledContent("Semantic search") {
+            if let plan = setup.machine?.recommended, !matches(plan) {
+                RecommendationRow(plan: plan) { setup.optimizeForThisMac() }
+                Divider()
+            }
+            SettingRow(title: "Local model", detail: localDetail) {
+                Picker("Local model", selection: Binding(get: { localModel }, set: { if !$0.isEmpty { setup.setLocalModel($0) } })) {
+                    if localModel.isEmpty { Text("None").tag("") }
+                    ForEach(generative) { Text("\($0.name.split(separator: "/").last.map(String.init) ?? $0.name)  ·  \(Self.size($0.sizeBytes))").tag($0.name) }
+                }
+                .labelsHidden().frame(maxWidth: 320)
+            }
+            Divider()
+            SettingRow(title: "Local drafts", detail: draftDetail) {
+                Picker("Local drafts", selection: Binding(get: { setup.machine?.draftMode ?? "auto" }, set: { setup.setDraftMode($0) })) {
+                    Text("Auto").tag("auto")
+                    Text("Always").tag("always")
+                    Text("Off").tag("off")
+                }
+                .pickerStyle(.segmented).labelsHidden().frame(width: 220)
+            }
+            Divider()
+            SettingRow(title: "Semantic search", detail: "Finds passages by meaning. Uses an embedding model, not a chat model.") {
                 Picker("Semantic search", selection: Binding(get: { intelligence.embeddingProfile?.enabled == true ? intelligence.embeddingProfile?.model ?? "" : "" }, set: { model in
-                    let endpoint = intelligence.embeddingProfile?.endpoint ?? "http://127.0.0.1:11434"
+                    let endpoint = intelligence.embeddingProfile?.endpoint ?? setup.provider(ModelTool.ollama)?.endpoint ?? "http://127.0.0.1:11434"
                     if model.isEmpty, let profile = intelligence.embeddingProfile {
                         intelligence.saveEmbeddingProfile(endpoint: profile.endpoint, model: profile.model, enabled: false)
                     } else if !model.isEmpty {
@@ -419,26 +446,100 @@ private struct LocalModelsSection: View {
                     }
                 })) {
                     Text("Off (keyword search)").tag("")
-                    ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
+                    ForEach(embeddings) { Text("\($0.name)  ·  \(Self.size($0.sizeBytes))").tag($0.name) }
                 }
-                .labelsHidden().fixedSize()
+                .labelsHidden().frame(maxWidth: 320)
             }
             Divider()
-            LabeledContent("Background enrichment") {
-                Picker("Background enrichment", selection: Binding(get: { intelligence.profile?.enabled == true ? intelligence.profile?.model ?? "" : "" }, set: { model in
-                    let endpoint = intelligence.profile?.endpoint ?? "http://127.0.0.1:11434"
-                    if model.isEmpty, let profile = intelligence.profile {
-                        intelligence.saveProfile(endpoint: profile.endpoint, model: profile.model, contextTokens: profile.contextTokens, enabled: false)
-                    } else if !model.isEmpty {
-                        intelligence.saveProfile(endpoint: endpoint, model: model, contextTokens: intelligence.profile?.contextTokens ?? 8_192, enabled: true)
-                    }
-                })) {
-                    Text("Off").tag("")
-                    ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
-                }
-                .labelsHidden().fixedSize()
+            SettingRow(title: "Background suggestions",
+                       detail: "The local model suggests topics and people for every chunk of text. Slow on this Mac, and the Reading model already does this.") {
+                Toggle("Background suggestions", isOn: Binding(get: { intelligence.profile?.enabled == true }, set: { on in
+                    let model = localModel.isEmpty ? (intelligence.profile?.model ?? "") : localModel
+                    guard !model.isEmpty else { return }
+                    let endpoint = setup.provider(ModelTool.ollama)?.endpoint ?? intelligence.profile?.endpoint ?? "http://127.0.0.1:11434"
+                    intelligence.saveProfile(endpoint: endpoint, model: model, contextTokens: intelligence.profile?.contextTokens ?? 8_192, enabled: on)
+                }))
+                .toggleStyle(.switch).labelsHidden()
             }
         }
+        .onAppear { setup.refreshMachine() }
+    }
+
+    private var footer: String {
+        "Everything here runs in your Ollama and never leaves the Mac. Keep one local model: switching models means reloading several gigabytes."
+    }
+
+    private var localDetail: String {
+        var parts = ["Sorts every new file, drafts small documents and answers private chats."]
+        if let pace = setup.machine?.secondsPerThousandCharacters {
+            parts.append(String(format: "Measured here: about %.0f s per page of text.", pace * 2))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private var draftDetail: String {
+        switch setup.machine?.draftMode ?? "auto" {
+        case "always": "The local model drafts every small document before the Reading model reviews it. Saves cloud tokens; slow on smaller Macs."
+        case "off": "The Reading model reads every document itself. Fastest, uses the most cloud tokens."
+        default: "Drafts only when this Mac is measured to finish within \(setup.machine?.draftBudgetSeconds ?? 20) s; otherwise the Reading model reads directly."
+        }
+    }
+
+    private func matches(_ plan: MachinePlan) -> Bool {
+        (plan.localModel == nil || plan.localModel == localModel)
+            && (plan.embeddingModel == nil || (intelligence.embeddingProfile?.enabled == true && intelligence.embeddingProfile?.model == plan.embeddingModel))
+            && plan.draftMode == setup.machine?.draftMode
+            && plan.enrichment == (intelligence.profile?.enabled == true)
+    }
+
+    static func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+}
+
+/// A labelled setting with an explanation under the label and its control on the right.
+private struct SettingRow<Control: View>: View {
+    let title: String
+    let detail: String
+    @ViewBuilder let control: Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Spacing.l) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(title)
+                Text(detail).font(.meta).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            control
+        }
+        .padding(.vertical, Spacing.xxs)
+    }
+}
+
+/// What Praxis recommends for this Mac when the current setup differs.
+private struct RecommendationRow: View {
+    let plan: MachinePlan
+    let apply: () -> Void
+
+    private var summary: String {
+        let memory = ByteCountFormatter.string(fromByteCount: plan.memoryBytes, countStyle: .memory)
+        var parts: [String] = []
+        if let local = plan.localModel { parts.append(local.split(separator: "/").last.map(String.init) ?? local) }
+        if let embedding = plan.embeddingModel { parts.append("\(embedding) for search") }
+        parts.append("drafts \(plan.draftMode)")
+        parts.append(plan.enrichment ? "suggestions on" : "suggestions off")
+        return "Recommended for this \(memory) Mac: " + parts.joined(separator: ", ") + "."
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Spacing.m) {
+            Image(systemName: "gauge.with.dots.needle.67percent").foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(summary).font(.callout)
+                ForEach(plan.notes, id: \.self) { Text($0).font(.meta).foregroundStyle(.secondary) }
+            }
+            Spacer()
+            Button("Apply", action: apply).buttonStyle(.borderedProminent).controlSize(.small)
+        }
+        .padding(.vertical, Spacing.xs)
     }
 }
 

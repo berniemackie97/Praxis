@@ -34,8 +34,9 @@ public static class CatalogProcessing
     public static IReadOnlyList<IProcessingHandler> CreateHandlers(
         SqliteCatalog catalog, IVerifierModelFactory? models = null, TimeProvider? clock = null, IOcrEngine? ocr = null,
         ITranscriptionEngine? transcriber = null, ILinkSnapshotWriter? linkSnapshots = null, ILinkFetcher? linkFetcher = null,
-        IReadOnlyList<IVideoLinkResolver>? videoResolvers = null)
+        IReadOnlyList<IVideoLinkResolver>? videoResolvers = null, LocalPace? pace = null)
     {
+        LocalPace localPace = pace ?? new LocalPace();
         TimeProvider time = clock ?? TimeProvider.System;
         IntakeLadder ladder = Ladder(catalog, models ?? new VerificationModelFactory(), time);
         TieredModels tiers = Tiers(catalog, models ?? new VerificationModelFactory(), time);
@@ -49,7 +50,7 @@ public static class CatalogProcessing
                 catalog.Knowledge, catalog.Processing, new OllamaChatModelConnector()),
             new TriageHandler(catalog.Understanding, catalog.Text, tiers, catalog.Policy),
             new UnderstandHandler(catalog.Understanding, catalog.Text, catalog.Originals, readers,
-                new DocumentUnderstander(ladder, RecordProfiles.Default), new TransactionProfile(ladder, catalog.Understanding),
+                new DocumentUnderstander(ladder, RecordProfiles.Default, new LocalDraftPolicy(catalog.Settings, localPace), localPace), new TransactionProfile(ladder, catalog.Understanding),
                 catalog.Policy, catalog.Processing, time),
             new LinkFetchHandler(catalog.Links, fetcher, linkSnapshots, videoResolvers ?? [new YouTubeLinkResolver(fetcher)], time)
         ];
@@ -72,7 +73,10 @@ public static class CatalogProcessing
     public static ProcessingPipeline CreatePipeline(
         SqliteCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null, TimeProvider? clock = null,
         IVerifierModelFactory? models = null, IOcrEngine? ocr = null, ILinkSnapshotWriter? linkSnapshots = null) =>
-        new(catalog.Processing, CreateHandlers(catalog, models, clock, ocr, linkSnapshots: linkSnapshots), clock ?? TimeProvider.System, idlePoll, status);
+        new(catalog.Processing, CreateHandlers(catalog, models, clock, ocr, linkSnapshots: linkSnapshots, pace: Pace), clock ?? TimeProvider.System, idlePoll, status);
+
+    /// <summary>The worker's measured local pace, shared by its pipeline and the settings page.</summary>
+    public static LocalPace Pace { get; } = new();
 
     /// <summary>One safe fetcher per process: its connection pool is shared by every link job.</summary>
     private static readonly Lazy<SafeHttpFetcher> SharedFetcher = new(() => new SafeHttpFetcher());

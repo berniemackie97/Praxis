@@ -10,7 +10,7 @@ struct ModelProfile: Decodable, Equatable {
     let enabled: Bool
 }
 
-struct InstalledModel: Decodable, Identifiable {
+struct InstalledModel: Decodable, Identifiable, Equatable {
     let name: String
     let digest: String
     let sizeBytes: Int64

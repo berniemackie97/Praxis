@@ -75,6 +75,9 @@ internal sealed class OllamaChatModel : IChatModel
             writer.WriteString("model", model);
             writer.WriteBoolean("stream", false);
             writer.WriteBoolean("think", false);
+            // Keep the one local model loaded between intake calls; reloading it costs minutes on
+            // smaller Macs, especially when models live on an external disk.
+            writer.WriteString("keep_alive", KeepAlive);
             writer.WritePropertyName("format");
             request.ResponseSchema.WriteTo(writer);
             writer.WriteStartArray("messages");
@@ -93,7 +96,7 @@ internal sealed class OllamaChatModel : IChatModel
 
             writer.WriteEndArray();
             writer.WriteStartObject("options");
-            writer.WriteNumber("num_ctx", request.ContextTokens);
+            writer.WriteNumber("num_ctx", ResidentContext(request.ContextTokens));
             writer.WriteNumber("num_predict", request.MaxOutputTokens);
             writer.WriteNumber("temperature", request.Temperature);
             writer.WriteNumber("seed", Seed);
@@ -113,4 +116,19 @@ internal sealed class OllamaChatModel : IChatModel
 
     private static long OptionalInt64(JsonElement element, string property) =>
         element.TryGetProperty(property, out JsonElement value) && value.TryGetInt64(out long number) && number >= 0 ? number : 0;
+
+    /// <summary>
+    /// The context size sent to Ollama, in a few fixed steps. Ollama restarts the model whenever the
+    /// context size changes, so triage, drafts, enrichment and chat share 8,192 tokens and only a
+    /// request that needs more moves to a larger step.
+    /// </summary>
+    internal static int ResidentContext(int requested) => requested switch
+    {
+        <= 8_192 => 8_192,
+        <= 16_384 => 16_384,
+        _ => 32_768
+    };
+
+    internal const string KeepAlive = "30m";
+
 }

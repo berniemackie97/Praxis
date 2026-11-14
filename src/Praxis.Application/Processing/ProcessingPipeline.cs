@@ -21,7 +21,12 @@ public sealed class ProcessingPipeline
     private readonly SemaphoreSlim wakeSignal = new(0, 1);
     private static readonly TimeSpan MinimumBackoff = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaximumBackoff = TimeSpan.FromMinutes(10);
-    private readonly HashSet<string> reopenExhausted = new(StringComparer.Ordinal);
+    /// <summary>
+    /// How often a stage that had nothing to reopen is asked again, even while other work runs:
+    /// reopening depends on state that changes at runtime (a model connected, a hold expired).
+    /// </summary>
+    private static readonly TimeSpan ReopenInterval = TimeSpan.FromMinutes(1);
+    private readonly Dictionary<string, DateTimeOffset> reopenAfter = new(StringComparer.Ordinal);
     private readonly Lock backoffGate = new();
     private readonly Dictionary<string, (DateTimeOffset Until, TimeSpan Next)> backoff =
         new(StringComparer.Ordinal);
@@ -68,6 +73,7 @@ public sealed class ProcessingPipeline
         lock (backoffGate)
         {
             backoff.Clear();
+            reopenAfter.Clear();
         }
 
         if (Interlocked.CompareExchange(ref wakePending, 1, 0) == 0)
@@ -108,7 +114,8 @@ public sealed class ProcessingPipeline
                     running.Add((ExecuteAsync(job.Handler, job.Lease, cancellationToken), job.Handler));
                 }
 
-                if (running.Count == 0 && ReopenWork())
+                // Checked while other work runs too: a busy optional stage must not starve reopening.
+                if (ReopenWork())
                 {
                     continue;
                 }
@@ -166,11 +173,15 @@ public sealed class ProcessingPipeline
     private bool ReopenWork()
     {
         bool reopened = false;
+        DateTimeOffset now = clock.GetUtcNow();
         foreach (IProcessingHandler handler in handlers)
         {
-            if (reopenExhausted.Contains(handler.ProcessorKey))
+            lock (backoffGate)
             {
-                continue;
+                if (reopenAfter.TryGetValue(handler.ProcessorKey, out DateTimeOffset after) && now < after)
+                {
+                    continue;
+                }
             }
 
             if (handler.TryReopenWork())
@@ -179,7 +190,10 @@ public sealed class ProcessingPipeline
             }
             else
             {
-                reopenExhausted.Add(handler.ProcessorKey);
+                lock (backoffGate)
+                {
+                    reopenAfter[handler.ProcessorKey] = now + ReopenInterval;
+                }
             }
         }
 

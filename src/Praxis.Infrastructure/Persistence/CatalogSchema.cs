@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 27;
+    internal const int CurrentVersion = 28;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -290,6 +290,7 @@ internal static class CatalogSchema
             ("trigger", "intake_source_revoked"),
             ("view", "confirmed_entity_mentions"),
             ("table", "intake_cascades"),
+            ("table", "runtime_settings"),
             ("table", "text_timings"),
             ("table", "link_snapshots"),
             ("table", "link_settings"),
