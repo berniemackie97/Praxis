@@ -498,6 +498,36 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task SupersededSourceAndProviderChangeInvalidatePersistedProject()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "revised/package.json", PackageJson);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => """
+            {"purpose":"A revisioned project.","summary":"Explains package.json.",
+             "components":[{"name":"Manifest","path":"package.json","role":"build"}],
+             "entryPoints":[],"buildCommands":[]}
+            """);
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding saved = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, saved.Status);
+
+        await Capture(catalog, "revised/package.json", """{"name":"changed"}""", "revision-2");
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+
+        catalog.Projects.Save(saved);
+        catalog.Policy.SaveTier(ModelTiers.Strong, Strongest);
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+
+        catalog.Policy.SaveTier(ModelTiers.Strong, Strong);
+        catalog.Projects.Save(saved);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, true));
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+    }
+
+    [Fact]
     public async Task ChatDisclosureReflectsRevocationInsideTheSameTurn()
     {
         using SqliteCatalog catalog = Open();
