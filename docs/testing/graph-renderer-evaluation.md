@@ -1,6 +1,6 @@
 # Knowledge graph renderer evaluation — #384
 
-**Status:** Research and repeatable fixture generation complete. Native renderer benchmarks and the final technology decision are pending. Do not close #384 from this document alone.
+**Status:** Architecture decision completed in [ADR 0048](../decisions/0048-native-knowledge-graph-spritekit.md): use SpriteKit in the native SwiftUI Knowledge workspace. This document preserves the earlier research, synthetic fixtures and owner Mac findings. The cross-renderer benchmark plan below is historical guidance, **not an outstanding prerequisite**. Production performance and accessibility acceptance remain mandatory under #386 and #388.
 
 ## Existing application contract
 
@@ -50,7 +50,7 @@ These are **synthetic load cases**, not a proposed catalog-wide render budget. N
 
 ## Disposable native rendering prototypes
 
-The draft PR includes a small macOS-only comparison host under `scripts/macos/GraphRendererBenchmark`. It reads a **generated JSON fixture only**. It is not part of the production app, does not launch the .NET worker, and does not open an owner's Praxis data directory.
+The renderer spike includes a small macOS-only comparison host under `scripts/macos/GraphRendererBenchmark`. It reads a **generated JSON fixture only**. It is not part of the production app, does not launch the .NET worker, and does not open an owner's Praxis data directory.
 
 Run from the repository root on a Mac with full Xcode selected:
 
@@ -58,16 +58,38 @@ Run from the repository root on a Mac with full Xcode selected:
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/praxis-graph-384.XXXXXX")"
 python3 scripts/macos/graph_renderer_fixtures.py "$fixture_dir"
 bash scripts/macos/GraphRendererBenchmark/build-graph-benchmark.sh
-.artifacts/graph-renderer-benchmark "$fixture_dir/connected.json"
+open -n -a "$PWD/.artifacts/GraphRendererBenchmark.app" --args "$fixture_dir/connected.json"
 ```
+
+The benchmark is packaged as a separate macOS app and started through Launch Services rather than directly executing a SwiftUI binary. This resolves a suspected cause of the owner's first build launching without a visible window; the correction still needs owner-Mac runtime verification. The `open` command returns to the terminal. If the window does not appear, inspect macOS application logs and process state rather than assuming it is running.
 
 Use the in-window renderer selector to compare Canvas and SpriteKit with the same record set. Restart the command with `sparse.json`, `clustered.json` and `high_degree.json` to inspect the other cases. Keep the test window size, display mode and motion toggle the same. Use a clean process for each profiling run. macOS Reduce Motion must stop the motion in both modes. The right-side SwiftUI list provides a separate keyboard and VoiceOver navigation path over the full node set.
 
 **Limits of this initial prototype:** Both implementations redraw synthetic moving positions; this **does not implement a force-directed solver** and cannot measure real query or layout cost. Canvas currently includes an initial pointer-select, pan and zoom interaction; SpriteKit includes node selection but does not yet have equivalent pan, zoom and drag behavior. Therefore, this build supports an early **drawing and animation comparison**, not a complete interaction or accessibility decision. Do not record interaction parity as passed.
 
-The fixture and tests ran under Python. The Swift source passed a syntax parse on a non-macOS host, but **the native Swift 6/macOS 13 build, UI tests and profiling have not run**. Do not interpret syntax validation as a successful Xcode build. Fix any compile errors on the draft branch before collecting measurements.
+The owner ran the fixture tests (2 passed) and compiled the initial unbundled Swift executable successfully on macOS. Four SpriteKit actor-isolation warnings were observed, and no visible window was confirmed. A follow-up package/actor correction is in PR #395. **A successful build is not a confirmed launched window or a measured renderer result.** Run the bundled app, verify visible controls and collect measurements before closing #384.
 
-## Same-task comparison
+## Owner-Mac SpriteKit crash — November 13, 2026
+
+The owner's new macOS application bundle compiled without the earlier actor-isolation warnings and launched a visible graph window. Selecting SpriteKit caused a crash on macOS 26.6.2, Apple Silicon (crash report dated 2026-11-13 21:44:43 -0500).
+
+The stack traces `GraphScene.init(fixture:)` → SpriteKit `-[SKScene initWithSize:]` → `didChangeSize` → `updatePositions(at:)`, ending in a main-thread Swift trap. SpriteKit invokes the size-change override while the superclass initializer is still executing. At that time the benchmark has not appended its circle nodes. The first `circles[index]` access is therefore invalid.
+
+The regression fix makes `didChangeSize` skip the premature layout until the number of circle nodes equals the fixture node count. Initial layout still happens at the end of the scene initializer; subsequent real size changes still update the scene.
+
+**Reproduce and verify on owner macOS:**
+
+```sh
+fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/praxis-graph-384.XXXXXX")"
+python3 scripts/macos/graph_renderer_fixtures.py "$fixture_dir"
+bash scripts/macos/GraphRendererBenchmark/test-spritekit-startup.sh "$fixture_dir"/*.json
+bash scripts/macos/GraphRendererBenchmark/build-graph-benchmark.sh
+open -n -a "$PWD/.artifacts/GraphRendererBenchmark.app" --args "$fixture_dir/sparse.json"
+```
+
+The new native smoke test creates and resizes a SpriteKit scene for each synthetic graph and checks its child count. It is **not yet executed on the owner's Mac**. After it passes, also select SpriteKit in the graphical comparison app and test the graph and window resizing; the smoke test does not cover the full SwiftUI integration. Leave #384 open until this regression and the renderer selection acceptance both pass.
+
+## Historical comparison plan (not a delivery requirement)
 
 Use a disposable host inside the existing Xcode application test target or a short-lived isolated experiment. Compare at least two runnable candidates. Include the third if either of the first two fails a required behavior or if measured results make the choice unclear.
 
@@ -80,7 +102,7 @@ Use a disposable host inside the existing Xcode application test target or a sho
 
 **Measurement guidance:** On a 60 Hz display, one refresh interval is about 16.7 ms. This is a reference for interpreting frame pacing, **not a measured result or a guaranteed pass threshold**. Record 50th/95th percentile frame time and observed missed frames. Add a justified performance budget to the final decision after the native baseline is measured. If dense content does not meet it, test focused views or visible-node caps before escalating rendering complexity.
 
-## Decision record evidence required
+## Historical comparison checklist (unmeasured)
 
 | Test | Canvas | SpriteKit | WKWebView |
 | --- | --- | --- | --- |
@@ -92,6 +114,8 @@ Use a disposable host inside the existing Xcode application test target or a sho
 | Keyboard and VoiceOver path | Not tested | Not tested | Not tested |
 | Offline bundle / security review | Built-in API only | Built-in API only | Native WebKit; JS contents unselected |
 
-The **provisional candidate to prototype first is SpriteKit**, because its 2D scene and pause support align with a force-directed graph. That is an engineering hypothesis, not a selected technology. Test Canvas as a simple native comparison. Keep WebKit in scope if the measured interaction and accessibility costs justify it.
+## Decision and remaining acceptance
 
-After measurements, write a concise accepted ADR with the selected renderer, rejected alternatives, limits, accessibility design and exact #386 boundaries. Then update the #384 acceptance checklist. Until that evidence exists, #384 remains open and continues to block #386.
+[ADR 0048](../decisions/0048-native-knowledge-graph-spritekit.md) selects **SpriteKit** for native graph rendering, with SwiftUI for the surrounding interface and accessible evidence navigation. The selection is grounded in supported framework behavior and Praxis architecture, not an asserted performance ranking. The owner's 200/800-node demonstrations ran smoothly but their visual design was poor; the comparison did not control presentation or produce profiling measurements.
+
+This is a decision spike, not a release-qualification exercise. Do **not** build a duplicate Canvas renderer or a WKWebView prototype simply to create a comparison. The reproduction fixtures and smoke tests remain useful for #386. Implement read-only, bounded scene updates and meaningful focus; then measure the **selected implementation** under #388. Frame pacing, CPU/memory/energy, accessibility, keyboard navigation, Reduce Motion and source revocation must still pass. Reopen the renderer decision only if that evidence identifies a concrete blocker.

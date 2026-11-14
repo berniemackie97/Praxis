@@ -1,6 +1,7 @@
 import SpriteKit
 import SwiftUI
 
+@MainActor
 struct SpriteGraphView: NSViewRepresentable {
     let fixture: GraphFixture
     let animated: Bool
@@ -22,6 +23,7 @@ struct SpriteGraphView: NSViewRepresentable {
         view.isPaused = !animated
     }
 
+    @MainActor
     final class Coordinator {
         let scene: GraphScene
 
@@ -101,6 +103,8 @@ struct SpriteGraphView: NSViewRepresentable {
         }
 
         override func didChangeSize(_ oldSize: CGSize) {
+            // SKScene calls this from its initializer, before our nodes exist.
+            guard circles.count == fixture.nodes.count else { return }
             updatePositions(at: 0)
         }
 
