@@ -275,12 +275,27 @@ internal sealed class OriginalFileStore
         CheckDirectory(root);
         foreach (string first in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(first))
+            {
+                continue;
+            }
+
             CheckDirectory(first);
             foreach (string second in Directory.EnumerateFileSystemEntries(first))
             {
+                if (FinderMetadata.IsBenign(second))
+                {
+                    continue;
+                }
+
                 CheckDirectory(second);
                 foreach (string file in Directory.EnumerateFileSystemEntries(second))
                 {
+                    if (FinderMetadata.IsBenign(file))
+                    {
+                        continue;
+                    }
+
                     if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0 || !File.Exists(file))
                     {
                         throw new InvalidDataException("The object inventory contains an unexpected file.");
@@ -311,6 +326,11 @@ internal sealed class OriginalFileStore
         int count = 0;
         foreach (string entry in Directory.EnumerateFileSystemEntries(staging))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 || !File.Exists(entry) || Path.GetExtension(entry) != ".part")
             {
                 throw new InvalidDataException("The staging inventory contains an unexpected entry.");

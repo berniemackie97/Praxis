@@ -103,7 +103,7 @@ internal static class SnapshotFiles
         {
             "catalog.sqlite", "manifest.json", "objects"
         };
-        if (Directory.EnumerateFileSystemEntries(root).Any(entry => !allowed.Contains(Path.GetFileName(entry)) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0))
+        if (Directory.EnumerateFileSystemEntries(root).Where(entry => !FinderMetadata.IsBenign(entry)).Any(entry => !allowed.Contains(Path.GetFileName(entry)) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0))
         {
             throw new InvalidDataException("The backup contains an unexpected or linked entry.");
         }
