@@ -350,6 +350,40 @@ public sealed class GraphProjectionTests : IDisposable
             new GraphQuery(Limit: 1, Cursor: neighbors.NextCursor)));
     }
 
+    [Fact]
+    public async Task SuggestedEdgesNeedExplicitOptInAndNeverGainAuthorityFromRendering()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "review.md", "C3Reader parses PHY.");
+        Guid center = Single(catalog, "C3Reader").EntityId;
+
+        Assert.Equal("empty", catalog.Graph.Seeds("C3Reader", new GraphQuery()).Outcome);
+        GraphNode suggestion = Assert.Single(catalog.Graph.Seeds("C3Reader",
+            new GraphQuery(IncludeSuggestions: true)).Nodes);
+        Assert.Equal("suggested", suggestion.Status);
+        Assert.Equal("pending", suggestion.Evidence!.Status);
+
+        GraphPage proposed = catalog.Graph.Neighborhood(center,
+            new GraphQuery(IncludeSuggestions: true, EvidenceStatus: "suggested"));
+        GraphEdge relation = Assert.Single(proposed.Edges);
+        Assert.Equal("suggested", relation.EvidenceStatus);
+        Assert.Equal("pending", relation.Evidence!.Status);
+        Assert.Equal("unavailable", catalog.Graph.Neighborhood(center,
+            new GraphQuery(IncludeSuggestions: true, SourceId: Guid.NewGuid())).Outcome);
+
+        Guid proposal = catalog.Proposals.List(captured.SourceId)
+            .Single(item => item.Kind == "relation").ProposalId;
+        Assert.True(catalog.Proposals.Review(proposal, "rejected"));
+        Assert.Empty(catalog.Graph.Neighborhood(center,
+            new GraphQuery(IncludeSuggestions: true)).Edges);
+
+        await Accept(catalog, captured);
+        GraphNode accepted = Assert.Single(catalog.Graph.Seeds("C3Reader", new GraphQuery()).Nodes);
+        Assert.Equal("confirmed", accepted.Status);
+        Assert.Empty(catalog.Graph.Neighborhood(center, new GraphQuery()).Edges);
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
