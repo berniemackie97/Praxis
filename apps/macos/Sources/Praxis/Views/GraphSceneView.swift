@@ -11,6 +11,7 @@ struct GraphSceneView: NSViewRepresentable {
     @Binding var selectedNodeId: String?
     @Binding var selectedEdgeId: String?
     let reduceMotion: Bool
+    let active: Bool
     let highContrast: Bool
     let colorScheme: ColorScheme
     let zoom: CGFloat
@@ -37,7 +38,7 @@ struct GraphSceneView: NSViewRepresentable {
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
         scene.reduceMotion = reduceMotion
         scene.setToolbarZoom(zoom, revision: zoomRevision)
-        view.isPaused = false
+        view.isPaused = !active
     }
 
     static func dismantleNSView(_ view: SKView, coordinator: Coordinator) {
