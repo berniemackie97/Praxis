@@ -91,12 +91,18 @@ public sealed class SqliteGraphReader : IGraphReader
             }
 
             bool more = ids.Count > query.Limit;
-            if (more) ids.RemoveAt(ids.Count - 1);
+            if (more)
+            {
+                ids.RemoveAt(ids.Count - 1);
+            }
             List<GraphNode> nodes = [];
             foreach (Guid id in ids)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (ReadNode(connection, id, query) is { } node) nodes.Add(node);
+                if (ReadNode(connection, id, query) is { } node)
+                {
+                    nodes.Add(node);
+                }
             }
 
             return new GraphPage(nodes.Count == 0 ? "empty" : "ready", null, nodes, [],
@@ -106,7 +112,10 @@ public sealed class SqliteGraphReader : IGraphReader
 
     public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default)
     {
-        if (focusId == Guid.Empty) throw new ArgumentException("A valid graph focus is required.", nameof(focusId));
+        if (focusId == Guid.Empty)
+        {
+            throw new ArgumentException("A valid graph focus is required.", nameof(focusId));
+        }
         Validate(query, allowEdges: true);
         return database.Execute(connection =>
         {
@@ -117,7 +126,10 @@ public sealed class SqliteGraphReader : IGraphReader
             GraphNode? root = ReadNode(connection, focusId, query);
             if (root is null)
             {
-                if (query.Cursor is not null) throw new InvalidOperationException("The graph page is no longer current.");
+                if (query.Cursor is not null)
+                {
+                    throw new InvalidOperationException("The graph page is no longer current.");
+                }
                 return new GraphPage("unavailable", null, [], [], null);
             }
 
@@ -180,7 +192,10 @@ public sealed class SqliteGraphReader : IGraphReader
             }
 
             bool more = rows.Count > query.Limit;
-            if (more) rows.RemoveAt(rows.Count - 1);
+            if (more)
+            {
+                rows.RemoveAt(rows.Count - 1);
+            }
             List<GraphNode> nodes = [root];
             List<GraphEdge> edges = [];
             HashSet<Guid> known = [focusId];
@@ -263,7 +278,10 @@ public sealed class SqliteGraphReader : IGraphReader
         Scope(command, query);
         command.Parameters.AddWithValue("$id", id.ToString("D"));
         using SqliteDataReader reader = command.ExecuteReader();
-        if (!reader.Read()) return null;
+        if (!reader.Read())
+        {
+            return null;
+        }
         string label = reader.GetString(0);
         string? type = reader.IsDBNull(1) ? null : reader.GetString(1);
         string typeOrigin = reader.GetString(2);
@@ -296,7 +314,10 @@ public sealed class SqliteGraphReader : IGraphReader
         Scope(command, query);
         command.Parameters.AddWithValue("$id", id.ToString("D"));
         using SqliteDataReader reader = command.ExecuteReader();
-        if (!reader.Read()) return null;
+        if (!reader.Read())
+        {
+            return null;
+        }
         return new GraphEvidence(
             Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
             Guid.Parse(reader.GetString(2)), reader.GetInt32(3), reader.GetString(4),
@@ -312,19 +333,32 @@ public sealed class SqliteGraphReader : IGraphReader
 
     private static void Validate(GraphQuery query, bool allowEdges)
     {
-        if (query.Limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(query), "The graph page limit must be between 1 and 100.");
+        if (query.Limit is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(query), "The graph page limit must be between 1 and 100.");
+        }
         if (query.SourceId == Guid.Empty || query.CollectionId == Guid.Empty)
+        {
             throw new ArgumentException("A valid graph scope is required.", nameof(query));
+        }
         if (query.EntityType is not null && !KnowledgeVocabulary.EntityTypes.Contains(query.EntityType))
+        {
             throw new ArgumentException("The graph entity type is invalid.", nameof(query));
+        }
         if (query.Predicate is not null && (!allowEdges || !KnowledgeVocabulary.Predicates.Contains(query.Predicate)))
+        {
             throw new ArgumentException("The graph relation predicate is invalid.", nameof(query));
+        }
         if (query.EvidenceStatus is not null && (!allowEdges ||
             query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented" or "suggested") ||
             (query.EvidenceStatus == "suggested" && !query.IncludeSuggestions)))
+        {
             throw new ArgumentException("The graph evidence filter is invalid.", nameof(query));
+        }
         if (query.Cursor is { Length: > 256 })
+        {
             throw new ArgumentException("The graph cursor is invalid.", nameof(query));
+        }
     }
 
     private static long Version(SqliteConnection connection)
@@ -343,7 +377,10 @@ public sealed class SqliteGraphReader : IGraphReader
 
     private string ReadCursor(string? cursor, long version, string signature)
     {
-        if (cursor is null) return "";
+        if (cursor is null)
+        {
+            return "";
+        }
         try
         {
             string encoded = cursor.Replace('-', '+').Replace('_', '/');
@@ -353,7 +390,10 @@ public sealed class SqliteGraphReader : IGraphReader
                 long.TryParse(fields[1], out long observed) &&
                 Guid.TryParseExact(fields[3], "D", out Guid id) && id != Guid.Empty)
             {
-                if (observed != version) throw new InvalidOperationException("The graph page is no longer current.");
+                if (observed != version)
+                {
+                    throw new InvalidOperationException("The graph page is no longer current.");
+                }
                 return id.ToString("D");
             }
         }
