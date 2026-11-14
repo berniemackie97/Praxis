@@ -21,7 +21,11 @@ public sealed class SqliteGraphReader : IGraphReader
         CASE WHEN r.origin = 'owner' THEN 'owner'
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
              WHEN v.verdict = 'supported' THEN 'verified'
-             ELSE 'documented' END
+             WHEN p.processor_key = 'intake-understand-v1' AND EXISTS (
+                  SELECT 1 FROM intake_documents d WHERE d.item_id = p.item_id
+                    AND d.revision = p.revision AND d.tier IN ('strong', 'strongest', 'reused')
+             ) THEN 'documented'
+             ELSE 'suggested' END
         """;
 
     private const string ConfirmedRelation = """
@@ -132,7 +136,10 @@ public sealed class SqliteGraphReader : IGraphReader
                 LEFT JOIN sources s ON s.source_id = p.source_id
                 WHERE (r.subject_id = $focus OR r.object_id = $focus)
                   AND r.relation_id > $after
-                  AND {ConfirmedRelation}
+                  AND ({ConfirmedRelation} OR ($suggestions = 1
+                      AND r.origin = 'model' AND p.proposal_id IS NOT NULL
+                      AND p.status = 'pending' AND p.flags IS NULL
+                      AND COALESCE(v.verdict, '') IN ('', 'uncertain')))
                   AND {NodeVisible("subject", query)}
                   AND {NodeVisible("object", query)}
                   AND ($predicate IS NULL OR r.predicate = $predicate)
@@ -151,6 +158,7 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 Scope(command, query);
                 command.Parameters.AddWithValue("$focus", focusId.ToString("D"));
+                command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
                 command.Parameters.AddWithValue("$after", after);
                 command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
                 command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
@@ -236,15 +244,19 @@ public sealed class SqliteGraphReader : IGraphReader
                        FROM {MentionView(query)} m
                        JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                        WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
-                       ORDER BY m.source_id, m.proposal_id LIMIT 1
+                       ORDER BY CASE WHEN EXISTS (
+                SELECT 1 FROM confirmed_entity_mentions confirmed WHERE confirmed.proposal_id = m.proposal_id)
+                THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
                    ), e.display_name) END,
                    {EffectiveType("e", query)}, e.type_origin,
-                   (SELECT COUNT(*) FROM {MentionView(query)} m
+                   (SELECT COUNT(DISTINCT m.proposal_id) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.source_id) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.entity_type) FROM {MentionView(query)} m
-                    WHERE m.entity_id = e.entity_id {ScopeFilter("m")}) > 1
+                    WHERE m.entity_id = e.entity_id {ScopeFilter("m")}) > 1,
+                   (SELECT COUNT(DISTINCT m.proposal_id) FROM confirmed_entity_mentions confirmed
+                    WHERE confirmed.entity_id = e.entity_id {ScopeFilter("confirmed")})
             FROM knowledge_entities e
             WHERE e.entity_id = $id AND {NodeVisible("e", query)}
             """);
@@ -258,11 +270,12 @@ public sealed class SqliteGraphReader : IGraphReader
         int mentions = reader.GetInt32(3);
         int sources = reader.GetInt32(4);
         bool conflict = typeOrigin == "inferred" && reader.GetInt64(5) == 1;
+        int confirmed = reader.GetInt32(6);
         reader.Close();
 
         GraphEvidence? evidence = ReadMention(connection, id, query);
-        return new GraphNode(id, label, type, typeOrigin,
-            typeOrigin == "owner" && mentions == 0 ? "owner" : "confirmed",
+        string status = confirmed == 0 ? "suggested" : confirmed < mentions ? "mixed" : "confirmed";
+        return new GraphNode(id, label, type, typeOrigin, status,
             mentions, sources, conflict, evidence,
             evidence is null ? ["openEntity"] : ["openEntity", "openSource"]);
     }
@@ -305,7 +318,8 @@ public sealed class SqliteGraphReader : IGraphReader
         if (query.Predicate is not null && (!allowEdges || !KnowledgeVocabulary.Predicates.Contains(query.Predicate)))
             throw new ArgumentException("The graph relation predicate is invalid.", nameof(query));
         if (query.EvidenceStatus is not null && (!allowEdges ||
-            query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented")))
+            query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented" or "suggested") ||
+            (query.EvidenceStatus == "suggested" && !query.IncludeSuggestions)))
             throw new ArgumentException("The graph evidence filter is invalid.", nameof(query));
         if (query.Cursor is { Length: > 256 })
             throw new ArgumentException("The graph cursor is invalid.", nameof(query));
@@ -321,7 +335,7 @@ public sealed class SqliteGraphReader : IGraphReader
     {
         string key = string.Join("|", mode, focus?.ToString("D"), search,
             query.CollectionId?.ToString("D"), query.SourceId?.ToString("D"),
-            query.EntityType, query.Predicate, query.EvidenceStatus, query.Limit);
+            query.EntityType, query.Predicate, query.EvidenceStatus, query.Limit, query.IncludeSuggestions);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..24];
     }
 
