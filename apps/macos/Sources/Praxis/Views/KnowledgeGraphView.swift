@@ -6,6 +6,7 @@ struct KnowledgeGraphView: View {
     let collections: [SourceCollection]
     let sources: [LibraryItem]
     let inspect: (String) -> Void
+    let explain: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -251,6 +252,8 @@ struct KnowledgeGraphView: View {
                     Text("Owner assertion. No source citation is attached; this is not a documented source claim.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                Button("Ask Praxis…") { graph.prepareExplanation(explain) }
+                    .help("Prepare a draft using revalidated relation identifiers. Review the model and text before sending.")
                 if let excerpt = graph.sourceExcerpt {
                     Text(excerpt).font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
