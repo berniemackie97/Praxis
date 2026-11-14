@@ -8,6 +8,7 @@ struct KnowledgeGraphView: View {
     let inspect: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var scheme
     @State private var zoom: CGFloat = 1
@@ -31,7 +32,8 @@ struct KnowledgeGraphView: View {
                     } else {
                         GraphSceneView(nodes: graph.nodes, edges: graph.edges, focusId: graph.focusId,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
-                                       reduceMotion: reduceMotion, highContrast: contrast == .increased,
+                                       reduceMotion: reduceMotion, active: scenePhase == .active,
+                                       highContrast: contrast == .increased,
                                        colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
