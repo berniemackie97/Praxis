@@ -245,8 +245,9 @@ public sealed class SqliteGraphReader : IGraphReader
                        JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                        WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
                        ORDER BY CASE WHEN EXISTS (
-                SELECT 1 FROM confirmed_entity_mentions confirmed WHERE confirmed.proposal_id = m.proposal_id)
-                THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
+                           SELECT 1 FROM confirmed_entity_mentions confirmed
+                           WHERE confirmed.proposal_id = m.proposal_id)
+                       THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
                    ), e.display_name) END,
                    {EffectiveType("e", query)}, e.type_origin,
                    (SELECT COUNT(DISTINCT m.proposal_id) FROM {MentionView(query)} m
@@ -255,7 +256,7 @@ public sealed class SqliteGraphReader : IGraphReader
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
                    (SELECT COUNT(DISTINCT m.entity_type) FROM {MentionView(query)} m
                     WHERE m.entity_id = e.entity_id {ScopeFilter("m")}) > 1,
-                   (SELECT COUNT(DISTINCT m.proposal_id) FROM confirmed_entity_mentions confirmed
+                   (SELECT COUNT(DISTINCT confirmed.proposal_id) FROM confirmed_entity_mentions confirmed
                     WHERE confirmed.entity_id = e.entity_id {ScopeFilter("confirmed")})
             FROM knowledge_entities e
             WHERE e.entity_id = $id AND {NodeVisible("e", query)}
