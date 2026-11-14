@@ -77,13 +77,16 @@ public sealed class ProjectUnderstander(
             }
 
             ProjectSource[] current = CurrentMembers();
-            ProjectSource[] allowed = tier == ModelTiers.Local || providerId == VerificationProvider.Ollama ? current :
-                current.Where(member =>
+            ProjectSource[] allowed = current;
+            if (tier != ModelTiers.Local && providerId is { } remoteProvider && remoteProvider != VerificationProvider.Ollama)
+            {
+                allowed = current.Where(member =>
                 {
                     SourceCategory? category = policy.ReadCategory(member.SourceId);
                     return category is { LocalOnly: false, Category: DataCategories.Code or DataCategories.Documents } &&
-                        gate.Decide(member.SourceId, providerId, false, DisclosurePurposes.Intake).Decision.Allowed;
+                        gate.Decide(member.SourceId, remoteProvider, false, DisclosurePurposes.Intake).Decision.Allowed;
                 }).ToArray();
+            }
             ProjectSource? anchor = allowed.FirstOrDefault(member => ProjectMarkers.IsMarker(Path.GetFileName(member.Locator)));
             if (anchor is null)
             {
