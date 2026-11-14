@@ -12,7 +12,6 @@ final class GraphScene: SKScene {
     private var graphNodes: [GraphNode] = []
     private var graphEdges: [GraphEdge] = []
     private var nodesById: [String: GraphNode] = [:]
-    private var edgesById: [String: GraphEdge] = [:]
     private var nodeRadii: [String: CGFloat] = [:]
     private var layout = GraphLayout()
     private var focusId: String?
@@ -24,11 +23,7 @@ final class GraphScene: SKScene {
     private let atlasArtwork = GraphAtlasArtwork()
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let nodeHighlights = SKShapeNode()
-    private let edgeLines = SKShapeNode()
-    private let unconfirmedEdges = SKShapeNode()
-    private let edgeArrows = SKShapeNode()
-    private let highlightedEdge = SKShapeNode()
-    private let edgeLabel = SKLabelNode(fontNamed: "Helvetica Neue")
+    private let edgeArtwork = GraphEdgeArtwork()
     private let viewCamera = SKCameraNode()
     private var dark = false
     private var highContrast = false
@@ -45,20 +40,10 @@ final class GraphScene: SKScene {
         scaleMode = .resizeFill
         camera = viewCamera
         addChild(viewCamera)
-        edgeLines.zPosition = -4
-        unconfirmedEdges.zPosition = -3
-        edgeArrows.zPosition = -2
-        highlightedEdge.zPosition = -1
+        edgeArtwork.attach(to: self)
         nodeHighlights.zPosition = 4
-        for layer in [edgeLines, unconfirmedEdges, edgeArrows, highlightedEdge, nodeHighlights] {
-            layer.lineWidth = 1
-            addChild(layer)
-        }
         nodeHighlights.fillColor = .clear
-        edgeLabel.fontSize = 11
-        edgeLabel.zPosition = 10
-        edgeLabel.isHidden = true
-        addChild(edgeLabel)
+        addChild(nodeHighlights)
     }
 
     required init?(coder: NSCoder) { return nil }
@@ -70,7 +55,6 @@ final class GraphScene: SKScene {
         graphNodes = nodes
         graphEdges = edges
         nodesById = Dictionary(uniqueKeysWithValues: nodes.map { ($0.entityId, $0) })
-        edgesById = Dictionary(uniqueKeysWithValues: edges.map { ($0.relationId, $0) })
         focusId = focus
         if focus == nil {
             layout.configureAtlas(nodes: nodes, edges: edges)
@@ -164,7 +148,7 @@ final class GraphScene: SKScene {
         refreshNodeStyle(node)
         updateHighlightPaths()
         updateVisibility()
-        if previousEdge != edge { updateEdgeOverlay() }
+        if previousEdge != edge { edgeArtwork.highlight(selected: selectedEdgeId, hovered: hoveredEdgeId) }
     }
 
     func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
@@ -226,14 +210,9 @@ final class GraphScene: SKScene {
         self.dark = dark
         self.highContrast = highContrast
         backgroundColor = dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .windowBackgroundColor
-        edgeLines.strokeColor = (dark ? NSColor.lightGray : .secondaryLabelColor)
-            .withAlphaComponent(highContrast ? 0.75 : 0.45)
-        unconfirmedEdges.strokeColor = NSColor.systemOrange
-            .withAlphaComponent(highContrast ? 0.85 : 0.32)
-        edgeArrows.strokeColor = edgeLines.strokeColor
-        highlightedEdge.strokeColor = .controlAccentColor
+        edgeArtwork.applyAppearance(dark: dark, highContrast: highContrast,
+                                    cameraScale: viewCamera.xScale)
         nodeHighlights.strokeColor = .controlAccentColor
-        edgeLabel.fontColor = .labelColor
         for node in graphNodes { refreshNodeStyle(node.entityId) }
         for label in nodeLabels.values { label.fontColor = .labelColor }
         updateStrokeWidths()
@@ -269,11 +248,7 @@ final class GraphScene: SKScene {
     }
 
     private func updateStrokeWidths() {
-        let scale = viewCamera.xScale
-        edgeLines.lineWidth = max(0.7, scale * (highContrast ? 1.3 : 0.85))
-        unconfirmedEdges.lineWidth = max(0.7, scale * (highContrast ? 1.3 : 0.85))
-        edgeArrows.lineWidth = max(0.7, scale * (highContrast ? 1.3 : 0.85))
-        highlightedEdge.lineWidth = max(2, scale * (highContrast ? 2.8 : 2))
+        edgeArtwork.setScale(viewCamera.xScale, highContrast: highContrast)
         updateHighlightPaths()
     }
 
@@ -312,50 +287,9 @@ final class GraphScene: SKScene {
         }
     }
 
-    private func edgeSegment(_ edge: GraphEdge) ->
-        (start: CGPoint, end: CGPoint, direction: CGVector, midpoint: CGPoint)? {
-        guard let a = layout.positions[edge.subjectId],
-              let b = layout.positions[edge.objectId] else { return nil }
-        let dx = b.x - a.x
-        let dy = b.y - a.y
-        let distance = max(1, hypot(dx, dy))
-        let ux = dx / distance
-        let uy = dy / distance
-        let inset: CGFloat = focusId == nil ? min(4, distance * 0.2) : min(15, distance * 0.2)
-        return (
-            CGPoint(x: a.x + ux * inset, y: a.y + uy * inset),
-            CGPoint(x: b.x - ux * inset, y: b.y - uy * inset),
-            CGVector(dx: ux, dy: uy),
-            CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 12)
-        )
-    }
-
     private func updatePaths() {
-        let lines = CGMutablePath()
-        let unconfirmed = CGMutablePath()
-        let arrows = CGMutablePath()
-        for edge in graphEdges {
-            guard let segment = edgeSegment(edge) else { continue }
-            let suggested = edge.evidenceStatus == "suggested" ||
-                edge.evidenceStatus == "contradicted"
-            let path = suggested ? unconfirmed : lines
-            path.move(to: segment.start)
-            path.addLine(to: segment.end)
-            if focusId != nil {
-                let wing: CGFloat = highContrast ? 7 : 5
-                let dx = segment.direction.dx
-                let dy = segment.direction.dy
-                arrows.move(to: segment.end)
-                arrows.addLine(to: CGPoint(x: segment.end.x - dx * wing - dy * wing,
-                                           y: segment.end.y - dy * wing + dx * wing))
-                arrows.move(to: segment.end)
-                arrows.addLine(to: CGPoint(x: segment.end.x - dx * wing + dy * wing,
-                                           y: segment.end.y - dy * wing - dx * wing))
-            }
-        }
-        edgeLines.path = lines
-        unconfirmedEdges.path = unconfirmed
-        edgeArrows.path = arrows
+        edgeArtwork.rebuild(edges: graphEdges, positions: layout.positions, focused: focusId != nil,
+                            selected: selectedEdgeId, hovered: hoveredEdgeId)
         for (id, shape) in nodeShapes {
             if let point = layout.positions[id] { shape.position = point }
         }
@@ -363,24 +297,6 @@ final class GraphScene: SKScene {
             if let point = layout.positions[id] {
                 label.position = CGPoint(x: point.x + 19, y: point.y + 1)
             }
-        }
-        updateEdgeOverlay()
-    }
-
-    private func updateEdgeOverlay() {
-        let path = CGMutablePath()
-        for id in Set([selectedEdgeId, hoveredEdgeId].compactMap { $0 }) {
-            guard let edge = edgesById[id], let segment = edgeSegment(edge) else { continue }
-            path.move(to: segment.start)
-            path.addLine(to: segment.end)
-        }
-        highlightedEdge.path = path
-        edgeLabel.isHidden = true
-        if let id = selectedEdgeId ?? hoveredEdgeId,
-           let edge = edgesById[id], let segment = edgeSegment(edge) {
-            edgeLabel.text = KnowledgeVocabulary.label(edge.predicate)
-            edgeLabel.position = segment.midpoint
-            edgeLabel.isHidden = false
         }
     }
 
@@ -427,7 +343,7 @@ final class GraphScene: SKScene {
         refreshNodeStyle(node)
         updateHighlightPaths()
         updateVisibility()
-        if previousEdge != edge { updateEdgeOverlay() }
+        if previousEdge != edge { edgeArtwork.highlight(selected: selectedEdgeId, hovered: hoveredEdgeId) }
     }
 
     override func mouseDown(with event: NSEvent) {
