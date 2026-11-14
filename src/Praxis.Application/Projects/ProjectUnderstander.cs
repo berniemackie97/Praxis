@@ -67,26 +67,22 @@ public sealed class ProjectUnderstander(
         }
 
         DisclosureGate gate = new(policy, clock);
+        bool IsEligible(ProjectSource member, string providerId) =>
+            providerId == VerificationProvider.Ollama ||
+            (policy.ReadCategory(member.SourceId) is { LocalOnly: false, Category: DataCategories.Code or DataCategories.Documents } &&
+             gate.Decide(member.SourceId, providerId, false, DisclosurePurposes.Intake).Decision.Allowed);
+
         Dictionary<string, RepositoryMap> maps = new(StringComparer.Ordinal);
         TieredRequest? RequestForTier(string tier)
         {
-            string? providerId = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == tier)?.ProviderId;
-            if (providerId is null && tier != ModelTiers.Local)
+            string? configuredProvider = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == tier)?.ProviderId;
+            if (configuredProvider is not { } providerId || (tier == ModelTiers.Local && providerId != VerificationProvider.Ollama))
             {
                 return null;
             }
 
             ProjectSource[] current = CurrentMembers();
-            ProjectSource[] allowed = current;
-            if (tier != ModelTiers.Local && providerId is { } remoteProvider && remoteProvider != VerificationProvider.Ollama)
-            {
-                allowed = current.Where(member =>
-                {
-                    SourceCategory? category = policy.ReadCategory(member.SourceId);
-                    return category is { LocalOnly: false, Category: DataCategories.Code or DataCategories.Documents } &&
-                        gate.Decide(member.SourceId, remoteProvider, false, DisclosurePurposes.Intake).Decision.Allowed;
-                }).ToArray();
-            }
+            ProjectSource[] allowed = current.Where(member => IsEligible(member, providerId)).ToArray();
             ProjectSource? anchor = allowed.FirstOrDefault(member => ProjectMarkers.IsMarker(Path.GetFileName(member.Locator)));
             if (anchor is null)
             {
@@ -95,7 +91,8 @@ public sealed class ProjectUnderstander(
 
             RepositoryMap map = RepositoryMap.Build(project, allowed, ReadText);
             maps[tier] = map;
-            bool ScopeCurrent() => projects.ReadCurrentMembers(allowed).Count == allowed.Length;
+            bool ScopeCurrent() => projects.ReadCurrentMembers(allowed).Count == allowed.Length &&
+                allowed.All(member => IsEligible(member, providerId));
 
             return new TieredRequest(anchor.SourceId, null, null, ProcessorKey, DisclosurePurposes.Intake,
                 ProjectPrompt.Create(map), DisclosureSources: allowed.Select(member => member.SourceId).ToArray(),
@@ -122,12 +119,7 @@ public sealed class ProjectUnderstander(
         {
             bool stillAuthorized = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == completedTier)?.ProviderId == providerId &&
                 projects.ReadCurrentMembers(basis.Disclosed).Count == basis.Disclosed.Count &&
-                (providerId == VerificationProvider.Ollama || basis.Disclosed.All(member =>
-                {
-                    SourceCategory? category = policy.ReadCategory(member.SourceId);
-                    return category is { LocalOnly: false, Category: DataCategories.Code or DataCategories.Documents } &&
-                        gate.Decide(member.SourceId, providerId, false, DisclosurePurposes.Intake).Decision.Allowed;
-                }));
+                basis.Disclosed.All(member => IsEligible(member, providerId));
             if (!stillAuthorized)
             {
                 ProjectSource[] current = CurrentMembers();

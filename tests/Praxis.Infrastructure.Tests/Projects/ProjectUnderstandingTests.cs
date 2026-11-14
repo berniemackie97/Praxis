@@ -314,6 +314,56 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task RemoteProviderCannotActAsLocalProjectFallback()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "remote-local/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "remote-local/src/private.ts", "export class PrivateRoutine {}");
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Personal, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        Grant(catalog, DataCategories.Personal, Strong);
+        catalog.Policy.SaveTier(ModelTiers.Strong, null);
+        catalog.Policy.SaveTier(ModelTiers.Strongest, null);
+        catalog.Policy.SaveTier(ModelTiers.Local, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => "{}");
+        ProjectCandidate project = Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100)));
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+
+        ProjectUnderstanding result = await understander.UnderstandAsync(project, ProjectDetector.Fingerprint(project), CancellationToken.None);
+        Assert.Equal(ProjectUnderstanding.MapOnly, result.Status);
+        Assert.Equal(0, models.Count(Strong));
+    }
+
+    [Fact]
+    public async Task CategoryChangesDuringInferenceInvalidateProjectSummary()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "category-change/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "category-change/src/public.ts", Server);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        Grant(catalog, DataCategories.Personal, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ =>
+        {
+            catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Personal, SourceCategory.OwnerOrigin, false));
+            return """
+                {"purpose":"A service.","summary":"Contains source functions.",
+                 "components":[{"name":"Public","path":"src/public.ts","role":"entry"}],"entryPoints":[],"buildCommands":[]}
+                """;
+        });
+        ProjectCandidate project = Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100)));
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+
+        ProjectUnderstanding result = await understander.UnderstandAsync(project, ProjectDetector.Fingerprint(project), CancellationToken.None);
+        Assert.Equal((ProjectUnderstanding.MapOnly, "source_scope_changed"), (result.Status, result.Reason));
+        Assert.Null(result.Summary);
+        Assert.Empty(result.Components);
+        Assert.Equal(1, models.Count(Strong));
+    }
+
+    [Fact]
     public async Task ExpiredProjectDisclosureGrantDoesNotAuthorizeRemoteCall()
     {
         using SqliteCatalog catalog = Open();
