@@ -77,6 +77,10 @@ enum GraphPalette {
         case "document": return .systemGreen
         case "event": return .systemPink
         case "place": return .systemIndigo
+        case "class": return .systemCyan
+        case "function": return .systemOrange
+        case "binary_module": return .systemRed
+        case "data_asset": return .systemBrown
         default: return .secondaryLabelColor
         }
     }
