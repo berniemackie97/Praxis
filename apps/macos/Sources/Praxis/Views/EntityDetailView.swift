@@ -5,6 +5,7 @@ struct EntityDetailView: View {
     let detail: EntityDetail
     @ObservedObject var model: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
+    let exploreConnections: () -> Void
     @State private var renaming = false
     @State private var showAllMentions = false
     @State private var newName = ""
@@ -77,6 +78,7 @@ struct EntityDetailView: View {
                 }
             }
             Spacer(minLength: Spacing.l)
+            Button("Explore connections", action: exploreConnections)
             Button("Ask a Stronger Model…") { verification.requestForEntity(summary.entityId) }
                 .help("Creates a verification request for review. Nothing is sent until you approve it.")
             Menu {
