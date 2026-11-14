@@ -43,16 +43,21 @@ public sealed class TieredModels(
         {
             using ModelConnection connection = factory.Create(provider);
             ModelIdentity identity = await connection.Model.DescribeAsync(cancellationToken);
+            if (request.SourceScopeCurrent is { } current && !current())
+            {
+                DisclosureDecision stale = new(false, false, DisclosureDecision.SourceChanged, null);
+                return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, stale, stale.Reason);
+            }
+
             (decision, category) = ScopeDecision(request, provider);
             if (!decision.Allowed && (request.DisclosureSources is { Count: > 0 } || !ApprovedOnce(request, provider)))
             {
                 return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, decision, decision.Reason);
             }
 
-            if (request.SourceScopeCurrent is { } current && !current())
+            if (Resolve(tier) is not { } currentProvider || currentProvider != provider)
             {
-                DisclosureDecision stale = new(false, false, DisclosureDecision.SourceChanged, null);
-                return new TieredOutcome(TieredOutcome.Disallowed, null, null, provider.ProviderId, stale, stale.Reason);
+                return new TieredOutcome(TieredOutcome.NotConfigured, null, null, provider.ProviderId, null, "tier_changed");
             }
 
             ChatResult result = await connection.Model.CompleteAsync(request.Request, cancellationToken);
