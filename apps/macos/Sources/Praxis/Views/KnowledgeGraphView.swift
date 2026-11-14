@@ -173,7 +173,7 @@ struct KnowledgeGraphView: View {
             if !graph.seeds.isEmpty {
                 Divider()
                 Text("Explore entities").font(.subheadline.weight(.semibold))
-                Text("Showing \(graph.seeds.count) current results in this scope. Search to find other names.")
+                Text("\(graph.seeds.count) loaded · up to \(GraphBudget.maximumNodes) browse results. Search for other names.")
                     .font(.caption2).foregroundStyle(.secondary)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Spacing.xs) {
@@ -223,8 +223,8 @@ struct KnowledgeGraphView: View {
                             DisclosureGroup("\(relationTitle(first)) · \(group.observations.count) observations") {
                                 ForEach(group.observations) { edge in
                                     Button { graph.selectEdge(edge.relationId) } label: {
-                                        Label("\(edge.evidenceStatus.capitalized) · \(edge.evidence?.locator ?? "Owner assertion")",
-                                              systemImage: "doc.text.magnifyingglass")
+                                        Label(edge.evidence.map { "\(edge.evidenceStatus.capitalized) · revision \($0.revision)" }
+                                                  ?? "Owner assertion", systemImage: "doc.text.magnifyingglass")
                                     }
                                     .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
                                 }
