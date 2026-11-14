@@ -6,9 +6,9 @@ using Praxis.Application.Knowledge;
 using Praxis.Application.Text;
 using Praxis.Application.Verification;
 using Praxis.Domain.Knowledge;
-using Praxis.Domain.Verification;
 using Praxis.Domain.Models;
 using Praxis.Domain.Originals;
+using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -222,8 +222,10 @@ public sealed class GraphProjectionTests : IDisposable
         DesktopProtocol protocol = TestDesktop.Protocol(catalog);
         string request = JsonSerializer.Serialize(new
         {
-            requestId = "inspection", action = "graphRelation",
-            entityId = subject, relationId = relation.RelationId
+            requestId = "inspection",
+            action = "graphRelation",
+            entityId = subject,
+            relationId = relation.RelationId
         });
         using JsonDocument response = JsonDocument.Parse(await protocol.HandleAsync(request));
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
@@ -233,9 +235,12 @@ public sealed class GraphProjectionTests : IDisposable
 
         string previewRequest = JsonSerializer.Serialize(new
         {
-            requestId = "preview", action = "preview",
-            sourceId = captured.SourceId, itemId = captured.ItemId,
-            revision = captured.Revision, originalSha256 = captured.Sha256
+            requestId = "preview",
+            action = "preview",
+            sourceId = captured.SourceId,
+            itemId = captured.ItemId,
+            revision = captured.Revision,
+            originalSha256 = captured.Sha256
         });
         using JsonDocument preview = JsonDocument.Parse(await protocol.HandleAsync(previewRequest));
         Assert.True(preview.RootElement.GetProperty("ok").GetBoolean());
