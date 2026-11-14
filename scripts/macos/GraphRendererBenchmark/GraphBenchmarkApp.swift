@@ -2,20 +2,25 @@ import SwiftUI
 
 @main
 struct GraphBenchmarkApp: App {
-    private let fixture: GraphFixture
+    private let fixture: GraphFixture?
 
     init() {
-        guard CommandLine.arguments.count == 2,
-              let value = try? GraphFixture.load(from: CommandLine.arguments[1]) else {
-            fatalError("Usage: graph-renderer-benchmark /path/to/synthetic-case.json")
+        guard CommandLine.arguments.count == 2 else {
+            fixture = nil
+            return
         }
-        fixture = value
+        fixture = try? GraphFixture.load(from: CommandLine.arguments[1])
     }
 
     var body: some Scene {
         WindowGroup("Graph renderer comparison") {
-            BenchmarkScreen(fixture: fixture)
-                .frame(minWidth: 900, minHeight: 640)
+            if let fixture {
+                BenchmarkScreen(fixture: fixture)
+                    .frame(minWidth: 900, minHeight: 640)
+            } else {
+                Text("Provide one generated graph fixture JSON file as the command-line argument.")
+                    .frame(minWidth: 700, minHeight: 300)
+            }
         }
     }
 
@@ -52,7 +57,7 @@ struct GraphBenchmarkApp: App {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    List(fixture.nodes.prefix(40), selection: $selection) { node in
+                    List(fixture.nodes, selection: $selection) { node in
                         Text(node.label)
                             .accessibilityLabel("\(node.kind), \(node.label)")
                             .tag(node.id)
