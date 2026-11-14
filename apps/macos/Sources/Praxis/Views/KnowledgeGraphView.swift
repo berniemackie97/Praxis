@@ -57,7 +57,7 @@ struct KnowledgeGraphView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottomTrailing) {
-                    if graph.selectedNode != nil || graph.selectedEdgeId != nil {
+                    if graph.selectedNodeId != nil || graph.selectedEdgeId != nil {
                         inspection
                             .frame(width: 285)
                             .padding(Spacing.m)
@@ -77,6 +77,7 @@ struct KnowledgeGraphView: View {
         }
         .onAppear { graph.activate() }
         .onDisappear { graph.deactivate() }
+        .onChange(of: graph.selectedNodeId) { _ in graph.inspectSelectedNode() }
         .onChange(of: graph.selectedEdgeId) { _ in graph.inspectSelectedRelation() }
         .onChange(of: graph.entityType) { _ in graph.refresh() }
         .onChange(of: graph.predicate) { _ in graph.refresh() }
@@ -212,7 +213,9 @@ struct KnowledgeGraphView: View {
 
     private var inspection: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
-            if let node = graph.selectedNode {
+            if graph.inspectingNode {
+                ProgressView("Checking current entity")
+            } else if let node = graph.inspectedNode {
                 HStack {
                     Image(systemName: EntitySymbol.of(node.entityType))
                     Text(node.label).font(.headline).lineLimit(2)
