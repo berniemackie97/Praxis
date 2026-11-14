@@ -260,17 +260,6 @@ struct KnowledgeGraphView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private var scopeDescription: String {
-        var parts: [String] = []
-        if let collection = collections.first(where: { $0.collectionId == graph.collectionId }) {
-            parts.append("Collection: \(collection.name)")
-        }
-        if let source = sources.first(where: { $0.sourceId == graph.sourceId && $0.sourceStatus == "active" }) {
-            parts.append("Source: \(source.title)")
-        }
-        return parts.isEmpty ? "All current sources and collections" : parts.joined(separator: " · ")
-    }
-
     private var inspection: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             if graph.inspectingNode {
@@ -303,7 +292,7 @@ struct KnowledgeGraphView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 StatusPill(text: edge.evidenceStatus.capitalized,
                            tone: ["suggested", "contradicted"].contains(edge.evidenceStatus) ? .warning : .neutral)
-                let alternatives = graph.edges.filter { other in
+                let alternatives = graph.visibleEdges.filter { other in
                     other.relationId != edge.relationId &&
                         Set([other.subjectId, other.objectId]) == Set([edge.subjectId, edge.objectId])
                 }
@@ -370,8 +359,8 @@ struct KnowledgeGraphView: View {
     }
 
     private func relationTitle(_ edge: GraphEdge) -> String {
-        let subject = graph.nodes.first { $0.entityId == edge.subjectId }?.label ?? "Entity"
-        let object = graph.nodes.first { $0.entityId == edge.objectId }?.label ?? "Entity"
+        let subject = graph.visibleNodes.first { $0.entityId == edge.subjectId }?.label ?? "Entity"
+        let object = graph.visibleNodes.first { $0.entityId == edge.objectId }?.label ?? "Entity"
         return "\(subject) \(KnowledgeVocabulary.label(edge.predicate)) \(object)"
     }
 }
