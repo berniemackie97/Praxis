@@ -12,6 +12,7 @@ struct PrivacySettingsView: View {
     }
 
     var body: some View {
+        ScrollView {
         Form {
             if let error = model.error ?? model.notice {
                 Banner(text: error, tone: model.error == nil ? .accent : .warning,
@@ -38,7 +39,7 @@ struct PrivacySettingsView: View {
                         ForEach(DisclosurePolicy.toolPermissions, id: \.self) { Text(PolicyLabels.toolPermission($0)).tag($0) }
                     }
                 } header: {
-                    Text("What may leave this Mac")
+                    Text("What may leave this Mac").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
                 } footer: {
                     Text("Files you pin as local-only never leave, whatever the mode. Changes requested in chat that widen any of this always wait for you in Approvals.")
                         .font(.meta).foregroundStyle(.secondary)
@@ -66,7 +67,7 @@ struct PrivacySettingsView: View {
                     }
                     Button("Add Rule…") { addingRule = true }
                 } header: {
-                    Text("Grants and denials")
+                    Text("Grants and denials").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
                 } footer: {
                     Text("A denial always wins. Grants apply in Standing grants mode.").font(.meta).foregroundStyle(.secondary)
                 }
@@ -82,14 +83,16 @@ struct PrivacySettingsView: View {
                         }))
                     }
                 } header: {
-                    Text("When a remote model isn't allowed")
+                    Text("When a remote model isn't allowed").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
                 } footer: {
                     Text("Steps run in this order. Held items continue down the chain when their deadline passes, so nothing waits forever.")
                         .font(.meta).foregroundStyle(.secondary)
                 }
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .padding(.horizontal, Spacing.xl).padding(.vertical, Spacing.l)
+        }
         .sheet(isPresented: $addingRule) {
             RuleEditor(providerIds: providerIds) { category, provider, purpose, allow, days in
                 model.addRule(category: category, providerId: provider, purpose: purpose, allow: allow, expiresInDays: days)

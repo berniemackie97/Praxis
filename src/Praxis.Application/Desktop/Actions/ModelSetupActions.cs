@@ -17,7 +17,11 @@ public sealed class ModelSetupActions(
 {
     public IEnumerable<DesktopAction> Actions =>
     [
-        DesktopAction.OfAsync("modelSetup", async (_, cancellationToken) => Snapshot(await detector.DetectAsync(cancellationToken))),
+        DesktopAction.OfAsync("modelSetup", async (_, cancellationToken) =>
+        {
+            setup.EnsureChatBackends();
+            return Snapshot(await detector.DetectAsync(cancellationToken));
+        }),
         DesktopAction.OfAsync("modelToolInspect", async (fields, cancellationToken) => new ModelToolResponse(
             await detector.InspectAsync(fields.RequireString("toolId", 32), fields.RequireString("path", 1024), cancellationToken))),
         DesktopAction.Of("modelConnect", fields =>

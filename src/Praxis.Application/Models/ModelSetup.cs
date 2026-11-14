@@ -75,6 +75,26 @@ public sealed class ModelSetup(
         policy.SaveTier(role, connectionId, concreteModel, effort);
     }
 
+    /// <summary>
+    /// Makes every enabled connection available to chat — plan CLIs and local Ollama alike — for
+    /// connections made before chat was wired to them. Returns how many chat backends were added.
+    /// </summary>
+    public int EnsureChatBackends()
+    {
+        HashSet<string> existing = agents.ReadBackends().Select(profile => profile.BackendId).ToHashSet(StringComparer.Ordinal);
+        int added = 0;
+        foreach (VerificationProvider provider in verification.ListProviders().Where(provider => provider.Enabled && !existing.Contains(provider.ProviderId)))
+        {
+            if (ChatBackendFor(provider.ProviderId) is { } backend)
+            {
+                agents.SaveBackend(backend);
+                added++;
+            }
+        }
+
+        return added;
+    }
+
     /// <summary>The chat backend a connected provider implies, for providers connected before chat was wired to them.</summary>
     private AgentBackendProfile? ChatBackendFor(string? connectionId)
     {

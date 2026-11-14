@@ -1,6 +1,7 @@
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Desktop.Contracts;
+using Praxis.Application.Models;
 using Praxis.Domain.Agents;
 
 namespace Praxis.Application.Desktop.Actions;
@@ -10,12 +11,18 @@ namespace Praxis.Application.Desktop.Actions;
 /// background; poll <c>agentRun</c> for events and the reply), cancel, and review the agent's
 /// proposals and memories. Reachable only through the owner's private pipe.
 /// </summary>
-public sealed class AgentActions(IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets)
+public sealed class AgentActions(
+    IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets, ModelSetup? setup = null)
     : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
     [
-        DesktopAction.Of("agentBackends", _ => new AgentBackendsResponse(repository.ReadBackends())),
+        DesktopAction.Of("agentBackends", _ =>
+        {
+            // Every connected model, local or remote, can chat.
+            setup?.EnsureChatBackends();
+            return new AgentBackendsResponse(repository.ReadBackends());
+        }),
         DesktopAction.Of("agentBackendSave", fields =>
         {
             repository.SaveBackend(new AgentBackendProfile(fields.RequireString("backendId", 64), fields.RequireString("kind", 32),

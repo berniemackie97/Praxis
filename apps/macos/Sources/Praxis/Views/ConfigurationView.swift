@@ -8,6 +8,7 @@ struct ConfigurationView: View {
     @Binding var rootApprovals: String
 
     var body: some View {
+        ScrollView {
         Form {
             Section {
                 LabeledContent("Location") {
@@ -18,7 +19,7 @@ struct ConfigurationView: View {
                     }
                 }
             } header: {
-                Text("Private catalog")
+                Text("Private catalog").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
             }
 
             Section {
@@ -40,7 +41,7 @@ struct ConfigurationView: View {
                         .disabled(model.intakeStatus?.paused == true)
                 }
             } header: {
-                Text("Intake")
+                Text("Intake").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
             }
 
             Section {
@@ -74,7 +75,7 @@ struct ConfigurationView: View {
                 }
                 Button("Stop Praxis to Edit Folders…") { model.stop() }
             } header: {
-                Text("Watched folders")
+                Text("Watched folders").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
             } footer: {
                 Text("Captured originals stay preserved when a folder disappears. A reconnected or replaced folder isn't scanned until its identity is confirmed.")
                     .font(.meta).foregroundStyle(.secondary)
@@ -91,11 +92,13 @@ struct ConfigurationView: View {
                         }
                     }
                 } header: {
-                    Text("Recent incidents")
+                    Text("Recent incidents").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
                 }
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .padding(.horizontal, Spacing.xl).padding(.vertical, Spacing.l)
+        }
     }
 
     private func approve(_ path: String) {
