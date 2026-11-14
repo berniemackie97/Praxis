@@ -260,6 +260,30 @@ public sealed class ProjectUnderstandingTests : IDisposable
             request with { SourceScopeCurrent = () => false }, CancellationToken.None);
         Assert.Equal((TieredOutcome.Disallowed, DisclosureDecision.SourceChanged), (stale.Status, stale.Decision!.Reason));
         Assert.Equal(0, models.Count(Strong));
+
+        TieredOutcome reassigned = await tier.CompleteAsync(ModelTiers.Strong,
+            request with { SourceScopeCurrent = () =>
+            {
+                catalog.Policy.SaveTier(ModelTiers.Strong, Strongest);
+                return true;
+            } }, CancellationToken.None);
+        Assert.Equal((TieredOutcome.NotConfigured, "tier_changed"), (reassigned.Status, reassigned.FailureCode));
+        Assert.Equal(0, models.Count(Strong));
+    }
+
+    [Fact]
+    public async Task ReplacedProjectSourceCannotRejoinAnOlderSnapshot()
+    {
+        using SqliteCatalog catalog = Open();
+        await Capture(catalog, "current/package.json", PackageJson);
+        ProjectSource original = Assert.Single(catalog.Projects.ReadActiveSources(100));
+        Assert.Equal(original, Assert.Single(catalog.Projects.ReadCurrentMembers([original])));
+
+        await Capture(catalog, "current/package.json", """{"name":"changed"}""");
+        Assert.Empty(catalog.Projects.ReadCurrentMembers([original]));
+        ProjectSource latest = Assert.Single(catalog.Projects.ReadActiveSources(100));
+        Assert.NotEqual(original.Revision, latest.Revision);
+        Assert.Equal(latest, Assert.Single(catalog.Projects.ReadCurrentMembers([latest])));
     }
 
     [Fact]
