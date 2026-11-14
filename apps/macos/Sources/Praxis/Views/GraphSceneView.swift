@@ -28,7 +28,7 @@ struct GraphSceneView: NSViewRepresentable {
         let view = GraphInputView()
         view.ignoresSiblingOrder = true
         view.shouldCullNonVisibleNodes = true
-        view.preferredFramesPerSecond = 30
+        view.preferredFramesPerSecond = 60
         view.presentScene(context.coordinator.scene)
         return view
     }
