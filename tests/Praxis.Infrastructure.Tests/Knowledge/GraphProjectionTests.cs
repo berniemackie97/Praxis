@@ -90,7 +90,7 @@ public sealed class GraphProjectionTests : IDisposable
         GraphQuery scope = new(CollectionId: selected);
 
         Assert.Equal("empty", catalog.Graph.Seeds("Alex Rivera", scope).Outcome);
-        Assert.Empty(catalog.Graph.Seeds(null, scope).Nodes.Where(n => n.Label == "Alex Rivera"));
+        Assert.DoesNotContain(catalog.Graph.Seeds(null, scope).Nodes, n => n.Label == "Alex Rivera");
         Assert.Equal("unavailable", catalog.Graph.Neighborhood(Single(catalog, "Alex Rivera").EntityId, scope).Outcome);
         Assert.Equal("ready", catalog.Graph.Neighborhood(Single(catalog, "C3Reader").EntityId, scope).Outcome);
         Assert.All(catalog.Graph.Neighborhood(Single(catalog, "C3Reader").EntityId, scope).Nodes,
@@ -179,7 +179,9 @@ public sealed class GraphProjectionTests : IDisposable
         await Accept(catalog, source);
         Guid center = Single(catalog, "Client").EntityId;
         foreach (string name in new[] { "NodeOne", "NodeTwo", "NodeThree" })
+        {
             catalog.Knowledge.Relate(center, "uses", Single(catalog, name).EntityId);
+        }
 
         GraphPage first = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 1));
         Assert.NotNull(first.NextCursor);
@@ -283,13 +285,18 @@ public sealed class GraphProjectionTests : IDisposable
         {
             string[] names = Enumerable.Range(batch * 10 + 1, 10)
                 .Select(index => $"Item{index:D3}").ToArray();
-            foreach (string name in names) types.Add(name, "concept");
+            foreach (string name in names)
+            {
+                types.Add(name, "concept");
+            }
             CapturedOriginal source = await Enrich(catalog, $"batch{batch:D2}.md",
                 $"Client connects {string.Join(' ', names)}.");
             await Accept(catalog, source);
             center = Single(catalog, "Client").EntityId;
             foreach (string name in names)
+            {
                 catalog.Knowledge.Relate(center, "references", Single(catalog, name).EntityId);
+            }
         }
 
         GraphPage first = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 100));
@@ -464,6 +471,9 @@ public sealed class GraphProjectionTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(workspace)) Directory.Delete(workspace, recursive: true);
+        if (Directory.Exists(workspace))
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
     }
 }
