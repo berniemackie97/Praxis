@@ -10,6 +10,8 @@ final class GraphWorkbenchModel: ObservableObject {
     private let inspectionScope = "graph-inspection"
     private let previewScope = "graph-preview"
     private let watchScope = "graph-watch"
+    private let nodeScope = "graph-node-inspection"
+    private let nodeWatchScope = "graph-node-watch"
     private var active = false
     private var currentExpansion: String?
 
@@ -28,6 +30,8 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published var selectedEdgeId: String?
     @Published private(set) var nextCursor: String?
     @Published private(set) var inspectedEdge: GraphEdge?
+    @Published private(set) var inspectedNode: GraphNode?
+    @Published private(set) var inspectingNode = false
     @Published private(set) var inspectingRelation = false
     @Published private(set) var sourceExcerpt: String?
     @Published private(set) var inspectionMessage: String?
@@ -37,7 +41,6 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var message: String?
 
-    var selectedNode: GraphNode? { nodes.first { $0.entityId == selectedNodeId } }
     var canLoadMore: Bool {
         nextCursor != nil && nodes.count < GraphBudget.maximumNodes && edges.count < GraphBudget.maximumEdges
     }
@@ -132,11 +135,41 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func inspectSelectedRelation() {
-        guard let id = selectedEdgeId, let edge = edges.first(where: { $0.relationId == id }) else {
+        guard let id = selectedEdgeId else { return }
+        guard let edge = edges.first(where: { $0.relationId == id }) else {
             clearInspection()
             return
         }
         validate(edge)
+    }
+
+    func inspectSelectedNode() {
+        guard let id = selectedNodeId else { return }
+        guard active, nodes.contains(where: { $0.entityId == id }) else { return }
+        channel.reset(nodeScope)
+        channel.reset(nodeWatchScope)
+        channel.reset(inspectionScope)
+        channel.reset(previewScope)
+        channel.reset(watchScope)
+        inspectedNode = nil
+        inspectedEdge = nil
+        sourceExcerpt = nil
+        inspectingNode = true
+        inspectionMessage = nil
+        channel.send("graphNeighborhood", nodeFields(id), as: GraphPage.self, scope: nodeScope,
+                     failed: { [weak self] error in
+                         self?.inspectingNode = false
+                         self?.inspectionMessage = error
+                     }) { [weak self] page in
+            guard let self, active, selectedNodeId == id else { return }
+            inspectingNode = false
+            guard page.outcome == "ready", let node = page.nodes.first(where: { $0.entityId == id }) else {
+                refresh()
+                message = "The selected entity is no longer visible."
+                return
+            }
+            inspectedNode = node
+        }
     }
 
     func recheckInspection() {
@@ -276,6 +309,10 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(inspectionScope)
         channel.reset(previewScope)
         channel.reset(watchScope)
+        channel.reset(nodeScope)
+        channel.reset(nodeWatchScope)
+        inspectedNode = nil
+        inspectingNode = false
         inspectedEdge = nil
         sourceExcerpt = nil
         inspectionMessage = nil
@@ -341,6 +378,13 @@ final class GraphWorkbenchModel: ObservableObject {
                 message = "Showing a bounded neighborhood. Focus another entity to explore further."
             }
         }
+    }
+
+    private func nodeFields(_ id: String) -> [String: Any] {
+        var fields = scope()
+        fields["entityId"] = id
+        fields["limit"] = 1
+        return fields
     }
 
     private func relationFields(_ edge: GraphEdge) -> [String: Any] {
