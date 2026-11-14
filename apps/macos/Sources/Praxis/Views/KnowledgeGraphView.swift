@@ -23,37 +23,41 @@ struct KnowledgeGraphView: View {
             Divider()
             HStack(spacing: 0) {
                 discovery
-                    .frame(width: 250)
+                    .frame(width: 225)
                 Divider()
                 ZStack {
-                    if graph.focusId == nil {
-                        KnowledgeOverviewView(overview: graph.overview, error: graph.error, category: graph.entityType,
-                                              scopeDescription: scopeDescription) { graph.entityType = $0 }
-                    } else if graph.nodes.isEmpty {
+                    if graph.visibleNodes.isEmpty && !graph.atlasLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
-                                   title: graph.loading ? "Loading neighborhood" : "No visible connections",
-                                   message: graph.outcome == "unavailable"
-                                       ? "The selected entity is no longer available in this scope."
-                                       : "This focused entity has no current visible connections. Return to All knowledge to explore elsewhere.")
+                                   title: "No current graph evidence",
+                                   message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
                     } else {
-                        GraphSceneView(nodes: graph.nodes, edges: graph.edges, focusId: graph.focusId,
+                        GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges, focusId: graph.focusId,
+                                       highlightedNodeIds: graph.highlightedNodeIds,
+                                       recenterNodeId: graph.recenterNodeId, recenterRevision: graph.recenterRevision,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
                                        reduceMotion: reduceMotion, active: scenePhase == .active,
                                        highContrast: contrast == .increased,
                                        colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
-                                Text("\(graph.nodes.count) nodes  ·  \(graph.edges.count) relationships")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(Spacing.s)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.s))
-                                    .padding(Spacing.m)
-                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(graph.focusId == nil ? "ONE BRAIN · GLOBAL ATLAS" : "FOCUSED CONNECTIONS")
+                                        .font(.caption2.weight(.semibold))
+                                    Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    if graph.focusId == nil {
+                                        Text("\(graph.overview?.entityCount ?? 0) current entities in scope · \(graph.atlasTruncated ? "bounded sample" : "available relationships loaded")")
+                                            .font(.caption2).foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .padding(Spacing.s)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.s))
+                                .padding(Spacing.m)
+                                .accessibilityHidden(true)
                             }
                     }
-                    if graph.loading {
-                        ProgressView("Loading neighborhood")
+                    if graph.loading || graph.atlasLoading {
+                        ProgressView(graph.focusId == nil ? "Loading current atlas" : "Loading neighborhood")
                             .padding(Spacing.m)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
                     }
@@ -107,9 +111,9 @@ struct KnowledgeGraphView: View {
             TextField("Search knowledge", text: $graph.search)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
-                .onSubmit { graph.refresh() }
+                .onSubmit { graph.searchNames() }
                 .accessibilityLabel("Find a knowledge entity")
-            Button { graph.refresh() } label: { Label("Search", systemImage: "magnifyingglass") }
+            Button { graph.searchNames() } label: { Label("Find", systemImage: "magnifyingglass") }
                 .disabled(graph.loading)
             Spacer()
             Toggle(isOn: $graph.includeSuggestions) {
@@ -117,14 +121,12 @@ struct KnowledgeGraphView: View {
             }
             .toggleStyle(.button)
             .help("Show unconfirmed model suggestions separately from confirmed knowledge")
-            if graph.focusId != nil {
-                Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
-                    .accessibilityLabel("Zoom out")
-                Button { zoom = max(0.35, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
-                    .accessibilityLabel("Zoom in")
-                Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
-                    .accessibilityLabel("Reset zoom")
-            }
+            Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
+                .accessibilityLabel("Zoom out")
+            Button { zoom = max(0.12, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
+                .accessibilityLabel("Zoom in")
+            Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "viewfinder") }
+                .accessibilityLabel("Fit knowledge atlas")
             Button { graph.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
         }
         .buttonStyle(.borderless)
@@ -134,7 +136,7 @@ struct KnowledgeGraphView: View {
     private var discovery: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             HStack {
-                Text("Explore").font(.headline)
+                Text("Contexts").font(.headline)
                 Spacer()
                 if graph.loading { ProgressView().controlSize(.small) }
             }
@@ -170,6 +172,17 @@ struct KnowledgeGraphView: View {
                     Text("Contradicted by verifier").tag("contradicted")
                 }
             }
+            if let overview = graph.overview {
+                Text("\(overview.entityCount.formatted()) current entities · \(graph.visibleNodes.count) on canvas")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if graph.atlasTruncated {
+                Text("Global view is bounded; more graph evidence exists.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if let atlasError = graph.atlasError {
+                Text(atlasError).font(.caption2).foregroundStyle(.orange)
+            }
             if !graph.seeds.isEmpty {
                 Divider()
                 Text("Explore entities").font(.subheadline.weight(.semibold))
@@ -178,7 +191,7 @@ struct KnowledgeGraphView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Spacing.xs) {
                         ForEach(graph.seeds) { entity in
-                            Button { graph.focus(entity.entityId) } label: {
+                            Button { graph.highlightNode(entity.entityId) } label: {
                                 HStack {
                                     Image(systemName: EntitySymbol.of(entity.entityType)).frame(width: 18)
                                     Text(entity.label).lineLimit(1)
@@ -192,7 +205,7 @@ struct KnowledgeGraphView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Focus \(entity.label), \(entity.status)")
+                            .accessibilityLabel("Locate \(entity.label), \(entity.status)")
                         }
                     }
                 }
@@ -274,9 +287,11 @@ struct KnowledgeGraphView: View {
                     Button("Details") { inspect(node.entityId) }
                     Button("Focus") { graph.focus(node.entityId) }
                 }
-                Button("Expand neighbors") { graph.expandSelected() }
-                    .disabled(node.entityId == graph.focusId || graph.loading ||
-                              graph.nodes.count >= GraphBudget.maximumNodes)
+                if graph.focusId != nil {
+                    Button("Expand neighbors") { graph.expandSelected() }
+                        .disabled(node.entityId == graph.focusId || graph.loading ||
+                                  graph.nodes.count >= GraphBudget.maximumNodes)
+                }
             } else if graph.inspectingRelation {
                 ProgressView("Checking current relationship")
             } else if let edge = graph.inspectedEdge, edge.relationId == graph.selectedEdgeId {
