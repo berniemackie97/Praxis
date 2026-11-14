@@ -6,8 +6,8 @@ final class GraphScene: SKScene {
     var didSelectNode: ((String?) -> Void)?
     var didSelectEdge: ((String?) -> Void)?
     var reduceMotion = false
-    private var nodes: [GraphNode] = []
-    private var edges: [GraphEdge] = []
+    private var graphNodes: [GraphNode] = []
+    private var graphEdges: [GraphEdge] = []
     private var layout = GraphLayout()
     private var focusId: String?
     private var selectedNodeId: String?
@@ -49,9 +49,9 @@ final class GraphScene: SKScene {
     required init?(coder: NSCoder) { return nil }
 
     func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
-        guard self.nodes != nodes || self.edges != edges || focusId != focus else { return }
-        self.nodes = nodes
-        self.edges = edges
+        guard graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
+        graphNodes = nodes
+        graphEdges = edges
         focusId = focus
         layout.configure(nodes: nodes, focus: focus)
         for shape in nodeShapes.values { shape.removeFromParent() }
@@ -105,7 +105,7 @@ final class GraphScene: SKScene {
         highlightedEdge.strokeColor = .controlAccentColor
         highlightedEdge.lineWidth = highContrast ? 3 : 2
         edgeLabel.fontColor = .labelColor
-        for node in nodes {
+        for node in graphNodes {
             guard let shape = nodeShapes[node.entityId] else { continue }
             let selected = node.entityId == selectedNodeId || node.entityId == focusId ||
                 node.entityId == hoveredNodeId
@@ -137,9 +137,9 @@ final class GraphScene: SKScene {
 
     private func updateVisibility() {
         let expanded = viewCamera.xScale < 0.8
-        for node in nodes {
+        for node in graphNodes {
             nodeLabels[node.entityId]?.isHidden = !(
-                expanded || nodes.count <= 24 || node.entityId == focusId || node.entityId == selectedNodeId
+                expanded || graphNodes.count <= 24 || node.entityId == focusId || node.entityId == selectedNodeId
             )
         }
     }
@@ -150,7 +150,7 @@ final class GraphScene: SKScene {
         let arrows = CGMutablePath()
         let selection = CGMutablePath()
         edgeLabel.isHidden = true
-        for edge in edges {
+        for edge in graphEdges {
             guard let a = points[edge.subjectId], let b = points[edge.objectId] else { continue }
             let dx = b.x - a.x
             let dy = b.y - a.y
@@ -191,7 +191,7 @@ final class GraphScene: SKScene {
         defer { lastFrame = currentTime }
         guard let lastFrame, currentTime - lastFrame >= 1.0 / 32.0,
               !reduceMotion, draggingNode == nil else { return }
-        if layout.advance(nodes: nodes, edges: edges, focus: focusId, reducedMotion: false) {
+        if layout.advance(nodes: graphNodes, edges: graphEdges, focus: focusId, reducedMotion: false) {
             updatePaths()
         }
     }
@@ -248,7 +248,7 @@ final class GraphScene: SKScene {
     private func closestEdge(to point: CGPoint) -> String? {
         var bestDistance: CGFloat = 10
         var best: String?
-        for edge in edges {
+        for edge in graphEdges {
             guard let a = layout.positions[edge.subjectId], let b = layout.positions[edge.objectId] else { continue }
             let dx = b.x - a.x
             let dy = b.y - a.y
