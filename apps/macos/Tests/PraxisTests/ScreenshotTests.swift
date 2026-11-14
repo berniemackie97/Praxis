@@ -135,15 +135,15 @@ struct ScreenshotTests {
 @MainActor
 private struct SyntheticGraphPreview: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @State private var selectedNode: String? = "project"
+    @State private var selectedEdge: String?
     private let forceReducedMotion: Bool
 
     init(forceReducedMotion: Bool = false) {
         self.forceReducedMotion = forceReducedMotion
     }
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @State private var selectedNode: String? = "project"
-    @State private var selectedEdge: String?
 
     private let nodes: [GraphNode] = [
         GraphNode(entityId: "project", label: "Praxis", entityType: "project", typeOrigin: "owner",
