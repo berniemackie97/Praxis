@@ -14,6 +14,7 @@ struct GraphSceneView: NSViewRepresentable {
     let highContrast: Bool
     let colorScheme: ColorScheme
     let zoom: CGFloat
+    let zoomRevision: Int
 
     func makeCoordinator() -> Coordinator {
         Coordinator(selectedNodeId: $selectedNodeId, selectedEdgeId: $selectedEdgeId)
@@ -35,7 +36,7 @@ struct GraphSceneView: NSViewRepresentable {
         scene.updateAppearance(dark: colorScheme == .dark, highContrast: highContrast)
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
         scene.reduceMotion = reduceMotion
-        scene.setToolbarZoom(zoom)
+        scene.setToolbarZoom(zoom, revision: zoomRevision)
         view.isPaused = false
     }
 
