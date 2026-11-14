@@ -63,6 +63,32 @@ struct GraphPresentationTests {
         #expect(decision.reviewed == false)
     }
 
+    @Test func sourceJumpRequiresExactActiveSourceRevisionAndDigest() {
+        let evidence = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                     revision: 3, sourceDigest: "digest", locator: "file.md",
+                                     text: "quoted", offset: 0, status: "accepted", verdict: nil)
+        let current = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "active",
+                                  revision: 3, sha256: "digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        #expect(evidence.matchesCurrent(current))
+        let revoked = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "revoked",
+                                  revision: 3, sha256: "digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        let revised = LibraryItem(sourceId: "s", itemId: "i", sourceKind: "file",
+                                  sourceLocator: "file.md", sourceStatus: "active",
+                                  revision: 4, sha256: "new-digest", originalBytes: 42,
+                                  processingState: nil, extractionOutcome: nil)
+        #expect(!evidence.matchesCurrent(revoked))
+        #expect(!evidence.matchesCurrent(revised))
+        let other = LibraryItem(sourceId: "other", itemId: "i", sourceKind: "file",
+                                sourceLocator: "file.md", sourceStatus: "active",
+                                revision: 3, sha256: "digest", originalBytes: 42,
+                                processingState: nil, extractionOutcome: nil)
+        #expect(!evidence.matchesCurrent(other))
+    }
+
     @Test func repeatedPageIsIdempotentAndStable() {
         let page = GraphPage(outcome: "ready", focusId: "a", nodes: [node("b"), node("a")],
                              edges: [edge("r", "a", "b")], nextCursor: nil)
