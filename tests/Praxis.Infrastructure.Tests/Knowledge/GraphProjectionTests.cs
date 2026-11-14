@@ -46,6 +46,75 @@ public sealed class GraphProjectionTests : IDisposable
     }
 
     [Fact]
+    public async Task UnifiedOverviewCountsScopedCurrentEntitiesRatherThanRandomSeeds()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal first = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, first);
+        CapturedOriginal second = await Enrich(catalog, "people.md", "Alex Rivera works on Client.");
+        await Accept(catalog, second);
+
+        GraphOverview all = catalog.Graph.Overview(new GraphQuery());
+        Assert.Equal(4, all.EntityCount);
+        Assert.Equal(all.EntityCount, all.Types.Sum(type => type.Count));
+        Assert.Contains(all.Types, type => type.EntityType == "project" && type.Count == 2);
+        Assert.Contains(all.Types, type => type.EntityType == "technology" && type.Count == 1);
+        Assert.Contains(all.Types, type => type.EntityType == "person" && type.Count == 1);
+
+        GraphOverview scoped = catalog.Graph.Overview(new GraphQuery(SourceId: first.SourceId));
+        Assert.Equal(2, scoped.EntityCount);
+        Assert.DoesNotContain(scoped.Types, type => type.EntityType == "person");
+
+        Guid collection = catalog.Collections.Create("One source").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collection, first.SourceId));
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery(CollectionId: collection)).EntityCount);
+        Assert.True(catalog.Collections.Archive(collection));
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery(CollectionId: collection)).EntityCount);
+
+        Assert.True(catalog.Sources.Revoke(first.SourceId));
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Empty(catalog.Graph.Overview(new GraphQuery(SourceId: first.SourceId)).Types);
+    }
+
+    [Fact]
+    public async Task OverviewNeverPromotesPendingOrRevokedEvidenceIntoConfirmedCounts()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal captured = await Enrich(catalog, "pending.md", "C3Reader parses PHY.");
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery(IncludeSuggestions: true)).EntityCount);
+
+        await Accept(catalog, captured);
+        Assert.Equal(2, catalog.Graph.Overview(new GraphQuery()).EntityCount);
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Overview(new GraphQuery(Cursor: "stale")));
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Overview(new GraphQuery(EntityType: "project")));
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        Assert.Equal(0, catalog.Graph.Overview(new GraphQuery(IncludeSuggestions: true)).EntityCount);
+    }
+
+    [Fact]
+    public async Task DesktopOverviewRespectsSourceScopeAndUsesTheSameCurrentReader()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal captured = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, captured);
+        DesktopProtocol desktop = TestDesktop.Protocol(catalog);
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "overview", action = "graphOverview", sourceId = captured.SourceId
+        });
+        using JsonDocument result = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(2, result.RootElement.GetProperty("data").GetProperty("entityCount").GetInt32());
+
+        Assert.True(catalog.Sources.Revoke(captured.SourceId));
+        using JsonDocument revoked = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(revoked.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, revoked.RootElement.GetProperty("data").GetProperty("entityCount").GetInt32());
+    }
+
+    [Fact]
     public async Task PendingKnowledgeIsNotAConfirmedGraphNodeOrEdge()
     {
         using SqliteCatalog catalog = Open();
