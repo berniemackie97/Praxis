@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Policy;
 using Praxis.Application.Projects;
-using Praxis.Domain.Models;
 using Praxis.Domain.Policy;
 using Praxis.Domain.Projects;
 using Praxis.Domain.Verification;
