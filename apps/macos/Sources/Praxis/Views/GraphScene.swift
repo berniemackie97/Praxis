@@ -15,6 +15,7 @@ final class GraphScene: SKScene {
     private var graphNodes: [GraphNode] = []
     private var graphEdges: [GraphEdge] = []
     private var nodesById: [String: GraphNode] = [:]
+    private var edgesById: [String: GraphEdge] = [:]
     private var nodeRadii: [String: CGFloat] = [:]
     private var layout = GraphLayout()
     private var focusId: String?
@@ -73,6 +74,7 @@ final class GraphScene: SKScene {
         graphNodes = nodes
         graphEdges = edges
         nodesById = Dictionary(uniqueKeysWithValues: nodes.map { ($0.entityId, $0) })
+        edgesById = Dictionary(uniqueKeysWithValues: edges.map { ($0.relationId, $0) })
         focusId = focus
         if focus == nil {
             layout.configureAtlas(nodes: nodes, edges: edges)
@@ -212,7 +214,7 @@ final class GraphScene: SKScene {
         refreshNodeStyle(node)
         updateHighlightPaths()
         updateVisibility()
-        if previousEdge != edge { updatePaths() }
+        if previousEdge != edge { updateEdgeOverlay() }
     }
 
     func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
@@ -375,55 +377,75 @@ final class GraphScene: SKScene {
         }
     }
 
+    private func edgeSegment(_ edge: GraphEdge) ->
+        (start: CGPoint, end: CGPoint, direction: CGVector, midpoint: CGPoint)? {
+        guard let a = layout.positions[edge.subjectId],
+              let b = layout.positions[edge.objectId] else { return nil }
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let distance = max(1, hypot(dx, dy))
+        let ux = dx / distance
+        let uy = dy / distance
+        let inset: CGFloat = focusId == nil ? min(4, distance * 0.2) : min(15, distance * 0.2)
+        return (
+            CGPoint(x: a.x + ux * inset, y: a.y + uy * inset),
+            CGPoint(x: b.x - ux * inset, y: b.y - uy * inset),
+            CGVector(dx: ux, dy: uy),
+            CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 12)
+        )
+    }
+
     private func updatePaths() {
-        let points = layout.positions
         let lines = CGMutablePath()
         let unconfirmed = CGMutablePath()
         let arrows = CGMutablePath()
-        let selection = CGMutablePath()
-        edgeLabel.isHidden = true
         for edge in graphEdges {
-            guard let a = points[edge.subjectId], let b = points[edge.objectId] else { continue }
-            let dx = b.x - a.x
-            let dy = b.y - a.y
-            let distance = max(1, hypot(dx, dy))
-            let ux = dx / distance
-            let uy = dy / distance
-            let endpointInset: CGFloat = focusId == nil ? min(4, distance * 0.2) : min(15, distance * 0.2)
-            let start = CGPoint(x: a.x + ux * endpointInset, y: a.y + uy * endpointInset)
-            let end = CGPoint(x: b.x - ux * endpointInset, y: b.y - uy * endpointInset)
-            let isUnconfirmed = edge.evidenceStatus == "suggested" ||
+            guard let segment = edgeSegment(edge) else { continue }
+            let suggested = edge.evidenceStatus == "suggested" ||
                 edge.evidenceStatus == "contradicted"
-            let path = edge.relationId == selectedEdgeId || edge.relationId == hoveredEdgeId
-                ? selection : (isUnconfirmed ? unconfirmed : lines)
-            path.move(to: start)
-            path.addLine(to: end)
-            let wing: CGFloat = highContrast ? 7 : 5
+            let path = suggested ? unconfirmed : lines
+            path.move(to: segment.start)
+            path.addLine(to: segment.end)
             if focusId != nil {
-                arrows.move(to: end)
-                arrows.addLine(to: CGPoint(x: end.x - ux * wing - uy * wing,
-                                           y: end.y - uy * wing + ux * wing))
-                arrows.move(to: end)
-                arrows.addLine(to: CGPoint(x: end.x - ux * wing + uy * wing,
-                                           y: end.y - uy * wing - ux * wing))
-            }
-            if edge.relationId == selectedEdgeId || edge.relationId == hoveredEdgeId {
-                edgeLabel.text = KnowledgeVocabulary.label(edge.predicate)
-                edgeLabel.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 12)
-                edgeLabel.isHidden = false
+                let wing: CGFloat = highContrast ? 7 : 5
+                let dx = segment.direction.dx
+                let dy = segment.direction.dy
+                arrows.move(to: segment.end)
+                arrows.addLine(to: CGPoint(x: segment.end.x - dx * wing - dy * wing,
+                                           y: segment.end.y - dy * wing + dx * wing))
+                arrows.move(to: segment.end)
+                arrows.addLine(to: CGPoint(x: segment.end.x - dx * wing + dy * wing,
+                                           y: segment.end.y - dy * wing - dx * wing))
             }
         }
         edgeLines.path = lines
         unconfirmedEdges.path = unconfirmed
         edgeArrows.path = arrows
-        highlightedEdge.path = selection
         for (id, shape) in nodeShapes {
-            if let location = points[id] { shape.position = location }
+            if let point = layout.positions[id] { shape.position = point }
         }
         for (id, label) in nodeLabels {
-            if let location = points[id] {
-                label.position = CGPoint(x: location.x + 19, y: location.y + 1)
+            if let point = layout.positions[id] {
+                label.position = CGPoint(x: point.x + 19, y: point.y + 1)
             }
+        }
+        updateEdgeOverlay()
+    }
+
+    private func updateEdgeOverlay() {
+        let path = CGMutablePath()
+        for id in Set([selectedEdgeId, hoveredEdgeId].compactMap { $0 }) {
+            guard let edge = edgesById[id], let segment = edgeSegment(edge) else { continue }
+            path.move(to: segment.start)
+            path.addLine(to: segment.end)
+        }
+        highlightedEdge.path = path
+        edgeLabel.isHidden = true
+        if let id = selectedEdgeId ?? hoveredEdgeId,
+           let edge = edgesById[id], let segment = edgeSegment(edge) {
+            edgeLabel.text = KnowledgeVocabulary.label(edge.predicate)
+            edgeLabel.position = segment.midpoint
+            edgeLabel.isHidden = false
         }
     }
 
@@ -470,7 +492,7 @@ final class GraphScene: SKScene {
         refreshNodeStyle(node)
         updateHighlightPaths()
         updateVisibility()
-        if previousEdge != edge { updatePaths() }
+        if previousEdge != edge { updateEdgeOverlay() }
     }
 
     override func mouseDown(with event: NSEvent) {
