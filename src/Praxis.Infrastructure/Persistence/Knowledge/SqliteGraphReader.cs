@@ -63,8 +63,8 @@ public sealed class SqliteGraphReader : IGraphReader
                       SELECT 1 FROM confirmed_entity_mentions m
                       JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
                       WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
-                        AND (instr(upper(p.value), $search) > 0 OR
-                             (p.correction IS NOT NULL AND instr(upper(p.correction), $search) > 0))
+                        AND instr(upper(CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END),
+                                  $search) > 0
                   ) OR EXISTS (
                       SELECT 1 FROM entity_aliases a
                       WHERE a.entity_id = e.entity_id AND a.origin = 'owner'
