@@ -143,6 +143,16 @@ struct WorkerSessionTests {
             throw Failure.unexpected("Graph neighborhood did not deny an unknown entity")
         }
 
+        var graphRelation: WorkerReply<GraphPage>?
+        try session.send("graphRelation", fields: [
+            "entityId": UUID().uuidString.lowercased(), "relationId": UUID().uuidString.lowercased()
+        ], as: GraphPage.self) { graphRelation = $0 }
+        try await waitFor("graph relation inspection") { graphRelation != nil }
+        guard graphRelation?.ok == true, graphRelation?.data?.outcome == "unavailable",
+              graphRelation?.data?.edges.isEmpty == true else {
+            throw Failure.unexpected("Graph inspection revealed a missing relationship")
+        }
+
         var rejected: WorkerReply<VerificationCreatedData>?
         try session.send("verificationApprove", fields: ["verificationId": UUID().uuidString.lowercased()],
                          as: VerificationCreatedData.self) { rejected = $0 }
