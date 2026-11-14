@@ -85,6 +85,10 @@ final class ChatWorkbenchModel: ObservableObject {
             error = "Finish or cancel the current response before preparing a graph question."
             return false
         }
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft == text else {
+            error = "Your current draft was preserved. Save or send it before preparing a graph question."
+            return false
+        }
         draft = String(text.prefix(Self.maximumMessageCharacters))
         return true
     }
