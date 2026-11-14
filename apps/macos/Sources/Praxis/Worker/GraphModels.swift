@@ -22,16 +22,16 @@ extension GraphEvidence {
     }
 
     func excerpt(in content: String) -> String? {
-        let source = content as NSString
-        let quoted = text as NSString
-        guard offset >= 0, quoted.length > 0, offset <= source.length,
-              quoted.length <= source.length - offset,
-              source.substring(with: NSRange(location: offset, length: quoted.length)) == text else {
+        guard offset >= 0, !text.isEmpty,
+              let range = Range(NSRange(location: offset, length: (text as NSString).length), in: content),
+              content[range] == text else {
             return nil
         }
-        let start = max(0, offset - 200)
-        let end = min(source.length, offset + quoted.length + 400)
-        return source.substring(with: NSRange(location: start, length: end - start))
+        let start = content.index(range.lowerBound, offsetBy: -200, limitedBy: content.startIndex)
+            ?? content.startIndex
+        let end = content.index(range.upperBound, offsetBy: 400, limitedBy: content.endIndex)
+            ?? content.endIndex
+        return String(content[start..<end])
     }
 }
 
