@@ -78,13 +78,9 @@ struct WorkbenchSplitView: View {
                                         explain: { prompt in
                                             if model.chat.prepareDraft(prompt) { section = .chat }
                                         }, openSource: { evidence in
-                                            guard let current = model.items.first(where: {
-                                                $0.sourceId == evidence.sourceId &&
-                                                $0.itemId == evidence.itemId &&
-                                                $0.revision == evidence.revision &&
-                                                $0.sha256 == evidence.sourceDigest &&
-                                                $0.sourceStatus == "active"
-                                            }) else { return false }
+                                            guard let current = model.items.first(where: evidence.matchesCurrent) else {
+                                                return false
+                                            }
                                             model.select(current)
                                             section = .library
                                             return true
