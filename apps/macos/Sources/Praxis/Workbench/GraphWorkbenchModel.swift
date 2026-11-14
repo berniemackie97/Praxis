@@ -106,7 +106,6 @@ final class GraphWorkbenchModel: ObservableObject {
         focusId = id
         selectedNodeId = id
         selectedEdgeId = nil
-        clearInspection()
         nodes = []
         edges = []
         nextCursor = nil
@@ -180,7 +179,10 @@ final class GraphWorkbenchModel: ObservableObject {
                 Object entity ID: \(current.objectId)
                 Relation ID: \(current.relationId)
                 Origin: \(current.origin); status: \(current.evidenceStatus).
-                Do not claim a source citation for an owner-only assertion. Recheck all source permissions,                 revisions and disclosures through the available tools; abstain if evidence is unavailable.                 Do not create or approve any proposed relation. State uncertainties and contradictions.
+                Do not claim a source citation for an owner-only assertion.
+                Recheck current source permissions, revisions and disclosures through the available tools.
+                Abstain if evidence is unavailable. Do not create or approve any proposed relation.
+                State uncertainties and contradictions.
                 """
             deliver(prompt)
         }
