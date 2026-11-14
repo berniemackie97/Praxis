@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00000000000000000000E012 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
+		00000000000000000000E013 /* SpriteKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E011 /* SpriteKit.framework */; };
 		00000000000000000000E002 /* GraphModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E001 /* GraphModels.swift */; };
 		00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E003 /* GraphWorkbenchModel.swift */; };
 		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
@@ -87,6 +89,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00000000000000000000E011 /* SpriteKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SpriteKit.framework; path = System/Library/Frameworks/SpriteKit.framework; sourceTree = SDKROOT; };
 		00000000000000000000E001 /* GraphModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphModels.swift; sourceTree = "<group>"; };
 		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
@@ -163,6 +166,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00000000000000000000E012 /* SpriteKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -170,18 +174,28 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00000000000000000000E013 /* SpriteKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		00000000000000000000E014 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				00000000000000000000E011 /* SpriteKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		00000000000000000000A000 = {
 			isa = PBXGroup;
 			children = (
 				00000000000000000000A001 /* Sources/Praxis */,
 				00000000000000000000A002 /* Tests/PraxisTests */,
 				00000000000000000000A003 /* Products */,
+				00000000000000000000E014 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
