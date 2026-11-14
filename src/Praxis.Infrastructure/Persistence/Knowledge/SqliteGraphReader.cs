@@ -19,6 +19,7 @@ public sealed class SqliteGraphReader : IGraphReader
 
     private const string RelationStatus = """
         CASE WHEN r.origin = 'owner' THEN 'owner'
+             WHEN v.verdict = 'unsupported' THEN 'contradicted'
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
              WHEN v.verdict = 'supported' THEN 'verified'
              WHEN p.processor_key = 'intake-understand-v1' AND EXISTS (
@@ -165,8 +166,9 @@ public sealed class SqliteGraphReader : IGraphReader
                   AND r.relation_id > $after
                   AND ({ConfirmedRelation} OR ($suggestions = 1
                       AND r.origin = 'model' AND p.proposal_id IS NOT NULL
-                      AND p.status = 'pending' AND p.flags IS NULL
-                      AND COALESCE(v.verdict, '') IN ('', 'uncertain')))
+                      AND p.status <> 'rejected' AND (v.verdict = 'unsupported' OR
+                          (p.status = 'pending' AND p.flags IS NULL
+                           AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
                   AND {NodeVisible("subject", query)}
                   AND {NodeVisible("object", query)}
                   AND ($predicate IS NULL OR r.predicate = $predicate)
@@ -368,8 +370,8 @@ public sealed class SqliteGraphReader : IGraphReader
             throw new ArgumentException("The graph relation predicate is invalid.", nameof(query));
         }
         if (query.EvidenceStatus is not null && (!allowEdges ||
-            query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented" or "suggested") ||
-            (query.EvidenceStatus == "suggested" && !query.IncludeSuggestions)))
+            query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented" or "suggested" or "contradicted") ||
+            (query.EvidenceStatus is "suggested" or "contradicted" && !query.IncludeSuggestions)))
         {
             throw new ArgumentException("The graph evidence filter is invalid.", nameof(query));
         }
