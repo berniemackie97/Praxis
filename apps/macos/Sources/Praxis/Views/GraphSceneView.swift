@@ -30,12 +30,18 @@ struct GraphSceneView: NSViewRepresentable {
 
     func updateNSView(_ view: SKView, context: Context) {
         let scene = context.coordinator.scene
+        view.window?.acceptsMouseMovedEvents = true
         scene.configure(nodes: nodes, edges: edges, focus: focusId)
         scene.updateAppearance(dark: colorScheme == .dark, highContrast: highContrast)
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
         scene.reduceMotion = reduceMotion
         scene.setToolbarZoom(zoom)
         view.isPaused = false
+    }
+
+    static func dismantleNSView(_ view: SKView, coordinator: Coordinator) {
+        view.isPaused = true
+        view.presentScene(nil)
     }
 
     @MainActor
@@ -60,6 +66,8 @@ final class GraphScene: SKScene {
     private var focusId: String?
     private var selectedNodeId: String?
     private var selectedEdgeId: String?
+    private var hoveredNodeId: String?
+    private var hoveredEdgeId: String?
     private var nodeShapes: [String: SKShapeNode] = [:]
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let edgeLines = SKShapeNode()
@@ -92,7 +100,7 @@ final class GraphScene: SKScene {
         edgeLabel.isHidden = true
     }
 
-    required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { return nil }
 
     func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
         guard self.nodes != nodes || self.edges != edges || focusId != focus else { return }
@@ -153,7 +161,8 @@ final class GraphScene: SKScene {
         edgeLabel.fontColor = .labelColor
         for node in nodes {
             guard let shape = nodeShapes[node.entityId] else { continue }
-            let selected = node.entityId == selectedNodeId || node.entityId == focusId
+            let selected = node.entityId == selectedNodeId || node.entityId == focusId ||
+                node.entityId == hoveredNodeId
             shape.fillColor = Self.color(for: node.entityType, suggested: node.status == "suggested")
             shape.strokeColor = selected ? .controlAccentColor :
                 (highContrast ? .labelColor : .separatorColor)
@@ -204,7 +213,8 @@ final class GraphScene: SKScene {
             let uy = dy / distance
             let start = CGPoint(x: a.x + ux * 15, y: a.y + uy * 15)
             let end = CGPoint(x: b.x - ux * 15, y: b.y - uy * 15)
-            let path = edge.relationId == selectedEdgeId ? selection : lines
+            let path = edge.relationId == selectedEdgeId || edge.relationId == hoveredEdgeId
+                ? selection : lines
             path.move(to: start)
             path.addLine(to: end)
             let wing = highContrast ? CGFloat(7) : 5
@@ -240,10 +250,21 @@ final class GraphScene: SKScene {
         }
     }
 
+    override func mouseMoved(with event: NSEvent) {
+        let location = event.location(in: self)
+        let node = nodes(at: location).first(where: { $0.name?.hasPrefix("node:") == true })?.name
+            .map { String($0.dropFirst(5)) }
+        let edge = node == nil ? closestEdge(to: location) : nil
+        guard node != hoveredNodeId || edge != hoveredEdgeId else { return }
+        hoveredNodeId = node
+        hoveredEdgeId = edge
+        updateAppearance(dark: dark, highContrast: highContrast)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let location = event.location(in: self)
         if let hit = nodes(at: location).first(where: { $0.name?.hasPrefix("node:") == true }),
-           let id = hit.name?.dropFirst(5).description {
+           let id = hit.name.map({ String($0.dropFirst(5)) }) {
             draggingNode = id
             didSelectNode?(id)
             didSelectEdge?(nil)
