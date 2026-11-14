@@ -186,9 +186,10 @@ struct KnowledgeGraphView: View {
             if let atlasError = graph.atlasError {
                 Text(atlasError).font(.caption2).foregroundStyle(.orange)
             }
-            if !graph.seeds.isEmpty {
+            if !graph.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !graph.seeds.isEmpty {
                 Divider()
-                Text("Explore entities").font(.subheadline.weight(.semibold))
+                Text("Search results").font(.subheadline.weight(.semibold))
                 Text("\(graph.seeds.count) loaded · up to \(GraphBudget.maximumNodes) browse results. Search for other names.")
                     .font(.caption2).foregroundStyle(.secondary)
                 ScrollView {
@@ -212,23 +213,30 @@ struct KnowledgeGraphView: View {
                         }
                     }
                 }
-                .frame(maxHeight: graph.focusId == nil ? .infinity : 200)
+                .frame(maxHeight: 160)
                 if graph.nextSeedCursor != nil {
                     Button("More results") { graph.loadMoreSeeds() }
                         .disabled(graph.loading)
                 }
             }
-            if graph.focusId != nil {
+            if !graph.visibleNodes.isEmpty {
                 Divider()
-                Text("Focused neighborhood").font(.subheadline.weight(.semibold))
+                Text(graph.focusId == nil ? "Visible atlas items" : "Focused neighborhood")
+                    .font(.subheadline.weight(.semibold))
                 List {
-                    ForEach(graph.nodes) { node in
-                        Button { graph.selectNode(node.entityId) } label: {
+                    ForEach(graph.visibleNodes) { node in
+                        Button {
+                            if graph.focusId == nil {
+                                graph.highlightNode(node.entityId)
+                            } else {
+                                graph.selectNode(node.entityId)
+                            }
+                        } label: {
                             Label(node.label, systemImage: EntitySymbol.of(node.entityType))
                         }
                         .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
                     }
-                    ForEach(GraphRelationGroup.group(graph.edges)) { group in
+                    ForEach(GraphRelationGroup.group(graph.visibleEdges)) { group in
                         if let first = group.observations.first {
                             if group.observations.count == 1 {
                                 Button { graph.selectEdge(first.relationId) } label: {
@@ -250,7 +258,7 @@ struct KnowledgeGraphView: View {
                     }
                 }
                 .listStyle(.plain)
-                if graph.canLoadMore {
+                if graph.focusId != nil && graph.canLoadMore {
                     Button("Load more connections") { graph.loadMore() }
                         .disabled(graph.loading)
                 }
