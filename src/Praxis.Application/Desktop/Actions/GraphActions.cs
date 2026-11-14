@@ -7,6 +7,8 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
     [
+        new DesktopAction("graphOverview", (fields, token) =>
+            Task.FromResult<object>(graph.Overview(Query(fields), token))),
         new DesktopAction("graphSeeds", (fields, token) =>
             Task.FromResult<object>(graph.Seeds(
                 fields.OptionalText("search", 120, "The graph search is invalid."),
