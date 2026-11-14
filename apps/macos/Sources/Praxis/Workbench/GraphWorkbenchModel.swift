@@ -57,7 +57,7 @@ final class GraphWorkbenchModel: ObservableObject {
         guard focusId == nil else { return nodes }
         let ids = Set(atlasNodes.map(\.entityId))
         return atlasNodes + Array(seeds.filter { !ids.contains($0.entityId) }
-            .prefix(max(0, GraphBudget.atlasNodes - atlasNodes.count)))
+            .prefix(GraphBudget.seedCount))
     }
 
     var visibleEdges: [GraphEdge] { focusId == nil ? atlasEdges : edges }
@@ -161,9 +161,13 @@ final class GraphWorkbenchModel: ObservableObject {
                          self?.atlasError = "The atlas changed while loading. Refresh to read current knowledge. \(error)"
                      }) { [weak self] page in
             guard let self, active else { return }
+            let previousEdges = Set(atlasEdges.map(\.relationId))
             let merged = GraphProjection.merge(nodes: atlasNodes, edges: atlasEdges, page: page,
                                                maximumNodes: GraphBudget.atlasNodes,
                                                maximumEdges: GraphBudget.atlasEdges)
+            let admitted = merged.edges.count - previousEdges.count
+            let newRelations = page.edges.filter { !previousEdges.contains($0.relationId) }.count
+            atlasTruncated = atlasTruncated || admitted < newRelations
             atlasNodes = merged.nodes
             atlasEdges = merged.edges
             let full = atlasNodes.count >= GraphBudget.atlasNodes ||
@@ -171,7 +175,7 @@ final class GraphWorkbenchModel: ObservableObject {
             if let next = page.nextCursor, !full {
                 loadAtlas(cursor: next)
             } else {
-                atlasTruncated = page.nextCursor != nil
+                atlasTruncated = atlasTruncated || page.nextCursor != nil
                 atlasLoading = false
             }
         }
