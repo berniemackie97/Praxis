@@ -173,8 +173,12 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func recheckInspection() {
-        guard active, !inspectingRelation, !reviewingRelation,
-              let edge = inspectedEdge, selectedEdgeId == edge.relationId else { return }
+        guard active, !inspectingRelation, !inspectingNode, !reviewingRelation else { return }
+        if let node = inspectedNode, selectedNodeId == node.entityId {
+            recheckNode(node)
+            return
+        }
+        guard let edge = inspectedEdge, selectedEdgeId == edge.relationId else { return }
         let fields = relationFields(edge)
         channel.reset(watchScope)
         channel.send("graphRelation", fields, as: GraphPage.self, scope: watchScope,
@@ -194,6 +198,27 @@ final class GraphWorkbenchModel: ObservableObject {
                 inspectedEdge = current
                 sourceExcerpt = nil
                 inspectionMessage = "The relationship evidence changed. Reopen its current source."
+            }
+        }
+    }
+
+    private func recheckNode(_ node: GraphNode) {
+        channel.reset(nodeWatchScope)
+        channel.send("graphNeighborhood", nodeFields(node.entityId), as: GraphPage.self,
+                     scope: nodeWatchScope, failed: { [weak self] error in
+                         self?.inspectedNode = nil
+                         self?.inspectionMessage = "Unable to verify the current entity: \(error)"
+                     }) { [weak self] page in
+            guard let self, active, selectedNodeId == node.entityId else { return }
+            guard page.outcome == "ready",
+                  let current = page.nodes.first(where: { $0.entityId == node.entityId }) else {
+                refresh()
+                message = "The inspected entity is no longer visible."
+                return
+            }
+            if inspectedNode != current {
+                inspectedNode = current
+                inspectionMessage = "The entity evidence changed."
             }
         }
     }
@@ -282,6 +307,10 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(inspectionScope)
         channel.reset(previewScope)
         channel.reset(watchScope)
+        channel.reset(nodeScope)
+        channel.reset(nodeWatchScope)
+        inspectedNode = nil
+        inspectingNode = false
         inspectedEdge = nil
         sourceExcerpt = nil
         inspectionMessage = nil
@@ -368,6 +397,9 @@ final class GraphWorkbenchModel: ObservableObject {
             let merged = GraphProjection.merge(nodes: nodes, edges: edges, page: page)
             nodes = merged.nodes
             edges = merged.edges
+            if replace, let selectedNodeId {
+                inspectedNode = nodes.first(where: { $0.entityId == selectedNodeId })
+            }
             if replace || id == focusId {
                 nextCursor = page.nextCursor
             } else {
