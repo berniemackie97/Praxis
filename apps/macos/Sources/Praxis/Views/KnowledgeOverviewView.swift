@@ -3,6 +3,7 @@ import SwiftUI
 /// A scoped entry into the single knowledge catalog; the animated graph is a focused drill-down.
 struct KnowledgeOverviewView: View {
     let overview: GraphOverview?
+    let error: String?
     let category: String
     let scopeDescription: String
     let chooseCategory: (String) -> Void
@@ -60,6 +61,9 @@ struct KnowledgeOverviewView: View {
                     if !category.isEmpty {
                         Button("Show all types") { chooseCategory("") }
                     }
+                } else if let error {
+                    EmptyState(systemImage: "exclamationmark.triangle", title: "Knowledge overview unavailable",
+                               message: error)
                 } else {
                     ProgressView("Reading current knowledge")
                 }
