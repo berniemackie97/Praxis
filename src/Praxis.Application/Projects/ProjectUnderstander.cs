@@ -55,7 +55,7 @@ public sealed class ProjectUnderstander(
 
         string? ReadText(ProjectSource member) =>
             texts.ReadCurrent(member.ItemId, member.Revision, expectedSourceId: member.SourceId, expectedSha256: member.Digest) is
-                { Outcome: "completed", Content: { } content } ? content : null;
+            { Outcome: "completed", Content: { } content } ? content : null;
 
         ProjectSource[] localMembers = CurrentMembers();
         RepositoryMap localMap = RepositoryMap.Build(project, localMembers, ReadText);

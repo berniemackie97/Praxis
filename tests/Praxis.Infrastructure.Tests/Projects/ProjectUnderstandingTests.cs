@@ -262,11 +262,14 @@ public sealed class ProjectUnderstandingTests : IDisposable
         Assert.Equal(0, models.Count(Strong));
 
         TieredOutcome reassigned = await tier.CompleteAsync(ModelTiers.Strong,
-            request with { SourceScopeCurrent = () =>
+            request with
+            {
+                SourceScopeCurrent = () =>
             {
                 catalog.Policy.SaveTier(ModelTiers.Strong, Strongest);
                 return true;
-            } }, CancellationToken.None);
+            }
+            }, CancellationToken.None);
         Assert.Equal((TieredOutcome.NotConfigured, "tier_changed"), (reassigned.Status, reassigned.FailureCode));
         Assert.Equal(0, models.Count(Strong));
     }
