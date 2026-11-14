@@ -168,6 +168,11 @@ public static class RecoverySet
         HashSet<string> names = new(StringComparer.Ordinal) { "manifest.json", "catalog", "identity" };
         foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             string name = Path.GetFileName(entry);
             if (!names.Remove(name) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
                 (name == "manifest.json" ? !File.Exists(entry) : !Directory.Exists(entry)))

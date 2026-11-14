@@ -82,6 +82,27 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
         }
     }
 
+    /// <summary>
+    /// Revokes sources older versions captured from version-control internals, dependency folders
+    /// or secrets files, which capture now skips; their derived knowledge goes with them.
+    /// </summary>
+    private void RetireExcluded()
+    {
+        int retired = 0;
+        foreach ((Guid sourceId, string locator, string _) in sources.ActiveFileLocators())
+        {
+            if (IntakeIgnoreRules.IsAlwaysExcluded(root, locator) && sources.Revoke(sourceId))
+            {
+                retired++;
+            }
+        }
+
+        if (retired > 0)
+        {
+            report($"Retired {retired} sources from version-control, dependency or secrets files.");
+        }
+    }
+
     internal async Task<WatchedScanResult> ReconcileAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         ApplyInvalidations();
@@ -90,6 +111,7 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             // Before the first scan, so canonical paths match existing sources instead of
             // being captured again under a second identity.
             new SourceLocatorCanonicalizer(sources, report).Run();
+            RetireExcluded();
             locatorsNormalized = true;
         }
 

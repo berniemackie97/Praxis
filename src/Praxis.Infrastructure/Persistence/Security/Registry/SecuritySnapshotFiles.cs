@@ -24,6 +24,11 @@ internal static class SecuritySnapshotFiles
         HashSet<string> expected = new(StringComparer.Ordinal) { "identity.sqlite", "manifest.json" };
         foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             if (!expected.Remove(Path.GetFileName(entry)) ||
                 (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 || !File.Exists(entry))
             {
