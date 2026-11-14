@@ -44,6 +44,41 @@ public sealed class SqliteGraphReader : IGraphReader
                 (p.flags IS NULL OR v.verdict = 'supported')))))
         """;
 
+    public GraphOverview Overview(GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        Validate(query, allowEdges: false);
+        if (query.Cursor is not null || query.EntityType is not null)
+        {
+            throw new ArgumentException("Overview accepts a source and collection scope, not a page or type filter.", nameof(query));
+        }
+
+        return database.Execute(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using SqliteCommand command = connection.CreateCommand($"""
+                SELECT kind, COUNT(*) AS count FROM (
+                    SELECT COALESCE({EffectiveType("e", query)}, 'other') AS kind
+                    FROM knowledge_entities e
+                    WHERE {NodeVisible("e", query)}
+                )
+                GROUP BY kind
+                ORDER BY count DESC, kind
+                """);
+            Scope(command, query);
+            List<GraphTypeCount> types = [];
+            int total = 0;
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int count = reader.GetInt32(1);
+                types.Add(new GraphTypeCount(reader.GetString(0), count));
+                total += count;
+            }
+            return new GraphOverview(total, types);
+        });
+    }
+
     public GraphPage Seeds(string? search, GraphQuery query, CancellationToken cancellationToken = default)
     {
         Validate(query, allowEdges: false);
