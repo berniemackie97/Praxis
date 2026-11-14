@@ -25,6 +25,8 @@ final class GraphScene: SKScene {
     private var highContrast = false
     private var toolbarZoomRevision = -1
     private var atlasFitScale: CGFloat = 1
+    private var highlightedNodeIds: Set<String> = []
+    private var recenterRevision = -1
     private var lastFrame: TimeInterval?
     private var draggingNode: String?
 
@@ -123,7 +125,26 @@ final class GraphScene: SKScene {
     func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
         guard toolbarZoomRevision != revision else { return }
         toolbarZoomRevision = revision
-        viewCamera.setScale(zoom * (focusId == nil ? atlasFitScale : 1))
+        if focusId == nil && zoom == 1 {
+            fitAtlas()
+        } else {
+            viewCamera.setScale(zoom * (focusId == nil ? atlasFitScale : 1))
+        }
+        updateVisibility()
+    }
+
+    func setHighlights(_ ids: Set<String>) {
+        guard highlightedNodeIds != ids else { return }
+        highlightedNodeIds = ids
+        updateAppearance(dark: dark, highContrast: highContrast)
+    }
+
+    func recenter(on id: String?, revision: Int) {
+        guard recenterRevision != revision else { return }
+        recenterRevision = revision
+        guard focusId == nil, let id, let point = layout.positions[id] else { return }
+        viewCamera.position = point
+        viewCamera.setScale(max(atlasFitScale * 0.35, 0.15))
         updateVisibility()
     }
 
@@ -140,7 +161,7 @@ final class GraphScene: SKScene {
         for node in graphNodes {
             guard let shape = nodeShapes[node.entityId] else { continue }
             let selected = node.entityId == selectedNodeId || node.entityId == focusId ||
-                node.entityId == hoveredNodeId
+                node.entityId == hoveredNodeId || highlightedNodeIds.contains(node.entityId)
             shape.fillColor = Self.color(for: node.entityType, suggested: node.status == "suggested")
             shape.strokeColor = selected ? .controlAccentColor :
                 (highContrast ? .labelColor : .separatorColor)
@@ -173,6 +194,7 @@ final class GraphScene: SKScene {
             for node in graphNodes {
                 nodeLabels[node.entityId]?.isHidden = !(
                     node.entityId == hoveredNodeId || node.entityId == selectedNodeId ||
+                    highlightedNodeIds.contains(node.entityId) ||
                     (detailed && node.mentions >= 8)
                 )
             }
