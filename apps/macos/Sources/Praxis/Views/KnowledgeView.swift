@@ -7,6 +7,7 @@ struct KnowledgeView: View {
     let collections: [SourceCollection]
     let sources: [LibraryItem]
     let explain: (String) -> Void
+    let openSource: (GraphEvidence) -> Bool
     @AppStorage("knowledgeViewMode") private var viewMode = "list"
 
     var body: some View {
@@ -25,7 +26,7 @@ struct KnowledgeView: View {
                                    inspect: { entityId in
                                        model.selectEntityId(entityId)
                                        viewMode = "list"
-                                   }, explain: explain)
+                                   }, explain: explain, openSource: openSource)
             } else {
                 listContent
             }
