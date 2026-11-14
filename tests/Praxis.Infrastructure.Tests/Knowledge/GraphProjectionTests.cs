@@ -229,11 +229,27 @@ public sealed class GraphProjectionTests : IDisposable
             response.RootElement.GetProperty("data").GetProperty("edges")[0]
                 .GetProperty("relationId").GetString());
 
+        string previewRequest = JsonSerializer.Serialize(new
+        {
+            requestId = "preview", action = "preview",
+            sourceId = captured.SourceId, itemId = captured.ItemId,
+            revision = captured.Revision, originalSha256 = captured.Sha256
+        });
+        using JsonDocument preview = JsonDocument.Parse(await protocol.HandleAsync(previewRequest));
+        Assert.True(preview.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Contains("C3Reader uses PHY.", preview.RootElement.GetProperty("data")
+            .GetProperty("content").GetString());
+
         Assert.True(catalog.Sources.Revoke(captured.SourceId));
         using JsonDocument denied = JsonDocument.Parse(await protocol.HandleAsync(request));
         Assert.True(denied.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal("unavailable", denied.RootElement.GetProperty("data").GetProperty("outcome").GetString());
         Assert.Empty(denied.RootElement.GetProperty("data").GetProperty("edges").EnumerateArray());
+
+        using JsonDocument revokedPreview = JsonDocument.Parse(await protocol.HandleAsync(previewRequest));
+        Assert.True(revokedPreview.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("unavailable", revokedPreview.RootElement.GetProperty("data")
+            .GetProperty("outcome").GetString());
     }
 
     [Fact]
