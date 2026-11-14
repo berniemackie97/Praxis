@@ -22,5 +22,6 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
         fields.OptionalText("predicate", 32, "The graph relation predicate is invalid."),
         fields.OptionalText("evidenceStatus", 32, "The graph evidence status is invalid."),
         fields.IntegerOrDefault("limit", 40, 1, 100),
-        fields.OptionalText("cursor", 256, "The graph cursor is invalid."));
+        fields.OptionalText("cursor", 256, "The graph cursor is invalid."),
+        fields.OptionalBoolean("includeSuggestions") ?? false);
 }
