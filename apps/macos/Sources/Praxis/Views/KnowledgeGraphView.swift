@@ -205,35 +205,35 @@ struct KnowledgeGraphView: View {
             if graph.focusId != nil {
                 Divider()
                 Text("Focused neighborhood").font(.subheadline.weight(.semibold))
-            List {
-                ForEach(graph.nodes) { node in
-                    Button { graph.selectNode(node.entityId) } label: {
-                        Label(node.label, systemImage: EntitySymbol.of(node.entityType))
+                List {
+                    ForEach(graph.nodes) { node in
+                        Button { graph.selectNode(node.entityId) } label: {
+                            Label(node.label, systemImage: EntitySymbol.of(node.entityType))
+                        }
+                        .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
                     }
-                    .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
-                }
-                ForEach(GraphRelationGroup.group(graph.edges)) { group in
-                    if let first = group.observations.first {
-                        if group.observations.count == 1 {
-                            Button { graph.selectEdge(first.relationId) } label: {
-                                Label(relationTitle(first), systemImage: "arrow.right")
-                            }
-                            .accessibilityLabel("\(relationTitle(first)), \(first.evidenceStatus)")
-                        } else {
-                            DisclosureGroup("\(relationTitle(first)) · \(group.observations.count) observations") {
-                                ForEach(group.observations) { edge in
-                                    Button { graph.selectEdge(edge.relationId) } label: {
-                                        Label(edge.evidence.map { "\(edge.evidenceStatus.capitalized) · revision \($0.revision)" }
-                                                  ?? "Owner assertion", systemImage: "doc.text.magnifyingglass")
+                    ForEach(GraphRelationGroup.group(graph.edges)) { group in
+                        if let first = group.observations.first {
+                            if group.observations.count == 1 {
+                                Button { graph.selectEdge(first.relationId) } label: {
+                                    Label(relationTitle(first), systemImage: "arrow.right")
+                                }
+                                .accessibilityLabel("\(relationTitle(first)), \(first.evidenceStatus)")
+                            } else {
+                                DisclosureGroup("\(relationTitle(first)) · \(group.observations.count) observations") {
+                                    ForEach(group.observations) { edge in
+                                        Button { graph.selectEdge(edge.relationId) } label: {
+                                            Label(edge.evidence.map { "\(edge.evidenceStatus.capitalized) · revision \($0.revision)" }
+                                                      ?? "Owner assertion", systemImage: "doc.text.magnifyingglass")
+                                        }
+                                        .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
                                     }
-                                    .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
                                 }
                             }
                         }
                     }
                 }
-            }
-            .listStyle(.plain)
+                .listStyle(.plain)
                 if graph.canLoadMore {
                     Button("Load more connections") { graph.loadMore() }
                         .disabled(graph.loading)
