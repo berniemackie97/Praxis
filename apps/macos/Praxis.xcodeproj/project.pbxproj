@@ -18,6 +18,7 @@
 		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
 		00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01B /* GraphAtlasLayout.swift */; };
 		00000000000000000000E01E /* GraphAtlasArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01D /* GraphAtlasArtwork.swift */; };
+		00000000000000000000E020 /* GraphEdgeArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01F /* GraphEdgeArtwork.swift */; };
 		00000000000000000000E008 /* GraphSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E007 /* GraphSceneView.swift */; };
 		00000000000000000000E00E /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00D /* GraphScene.swift */; };
 		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
@@ -106,6 +107,7 @@
 		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E01B /* GraphAtlasLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphAtlasLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E01D /* GraphAtlasArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphAtlasArtwork.swift; sourceTree = "<group>"; };
+		00000000000000000000E01F /* GraphEdgeArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphEdgeArtwork.swift; sourceTree = "<group>"; };
 		00000000000000000000E007 /* GraphSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphSceneView.swift; sourceTree = "<group>"; };
 		00000000000000000000E00D /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
 		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
@@ -268,6 +270,7 @@
 				00000000000000000000E005 /* GraphLayout.swift */,
 				00000000000000000000E01B /* GraphAtlasLayout.swift */,
 				00000000000000000000E01D /* GraphAtlasArtwork.swift */,
+				00000000000000000000E01F /* GraphEdgeArtwork.swift */,
 				00000000000000000000E007 /* GraphSceneView.swift */,
 		00000000000000000000E00D /* GraphScene.swift */,
 				00000000000000000000E009 /* KnowledgeGraphView.swift */,
@@ -475,6 +478,7 @@
 				00000000000000000000E006 /* GraphLayout.swift in Sources */,
 				00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */,
 				00000000000000000000E01E /* GraphAtlasArtwork.swift in Sources */,
+				00000000000000000000E020 /* GraphEdgeArtwork.swift in Sources */,
 				00000000000000000000E008 /* GraphSceneView.swift in Sources */,
 		00000000000000000000E00E /* GraphScene.swift in Sources */,
 				00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */,
