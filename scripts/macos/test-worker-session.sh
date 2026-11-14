@@ -21,7 +21,7 @@ if [[ -z "$dotnet" || ! -x "$dotnet" ]]; then
 fi
 
 PRAXIS_WORKER_DLL="$worker" PRAXIS_DOTNET="$dotnet" \
-  xcodebuild \
+  xcodebuild -quiet \
     -project "$PRAXIS_XCODE_PROJECT" \
     -scheme "$PRAXIS_XCODE_SCHEME" \
     -configuration Debug \
