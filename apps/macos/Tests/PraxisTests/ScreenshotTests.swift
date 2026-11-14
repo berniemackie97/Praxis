@@ -73,7 +73,7 @@ struct ScreenshotTests {
                              size: CGSize(width: 1100, height: 760),
                              name: "graph-synthetic\(dark ? "-dark" : "")", dark: dark, to: outputURL)
         }
-        try await render(SyntheticGraphPreview().environment(\.accessibilityReduceMotion, true),
+        try await render(SyntheticGraphPreview(forceReducedMotion: true),
                          size: CGSize(width: 780, height: 540),
                          name: "graph-synthetic-compact-reduced-motion", to: outputURL)
         for tab in [SettingsTab.general, .models, .privacy] {
@@ -139,6 +139,11 @@ private struct SyntheticGraphPreview: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var selectedNode: String? = "project"
     @State private var selectedEdge: String?
+    private let forceReducedMotion: Bool
+
+    init(forceReducedMotion: Bool = false) {
+        self.forceReducedMotion = forceReducedMotion
+    }
 
     private let nodes: [GraphNode] = [
         GraphNode(entityId: "project", label: "Praxis", entityType: "project", typeOrigin: "owner",
@@ -163,7 +168,7 @@ private struct SyntheticGraphPreview: View {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
-                           reduceMotion: reduceMotion, active: true,
+                           reduceMotion: reduceMotion || forceReducedMotion, active: true,
                            highContrast: contrast == .increased,
                            colorScheme: scheme, zoom: 1, zoomRevision: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
