@@ -20,6 +20,7 @@
 		00000000000000000000E00E /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00D /* GraphScene.swift */; };
 		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
 		00000000000000000000E018 /* KnowledgeOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E017 /* KnowledgeOverviewView.swift */; };
+		00000000000000000000E01A /* EntityRelationGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E019 /* EntityRelationGroup.swift */; };
 		00000000000000000000E00C /* GraphPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00B /* GraphPresentationTests.swift */; };
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
 		00000000000000000000D020 /* ModelsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01F /* ModelsSettingsView.swift */; };
@@ -106,6 +107,7 @@
 		00000000000000000000E00D /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
 		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
 		00000000000000000000E017 /* KnowledgeOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeOverviewView.swift; sourceTree = "<group>"; };
+		00000000000000000000E019 /* EntityRelationGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityRelationGroup.swift; sourceTree = "<group>"; };
 		00000000000000000000E00B /* GraphPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
 		00000000000000000000D01F /* ModelsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsSettingsView.swift; sourceTree = "<group>"; };
@@ -266,6 +268,7 @@
 		00000000000000000000E00D /* GraphScene.swift */,
 				00000000000000000000E009 /* KnowledgeGraphView.swift */,
 				00000000000000000000E017 /* KnowledgeOverviewView.swift */,
+				00000000000000000000E019 /* EntityRelationGroup.swift */,
 				00000000000000000000A02F /* LibraryView.swift */,
 				00000000000000000000A031 /* ProposalReviewView.swift */,
 				00000000000000000000A033 /* QuickNoteView.swift */,
@@ -471,6 +474,7 @@
 		00000000000000000000E00E /* GraphScene.swift in Sources */,
 				00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */,
 				00000000000000000000E018 /* KnowledgeOverviewView.swift in Sources */,
+				00000000000000000000E01A /* EntityRelationGroup.swift in Sources */,
 				00000000000000000000A030 /* LibraryView.swift in Sources */,
 				00000000000000000000A032 /* ProposalReviewView.swift in Sources */,
 				00000000000000000000A034 /* QuickNoteView.swift in Sources */,
