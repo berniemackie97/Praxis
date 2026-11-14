@@ -55,10 +55,6 @@ final class GraphWorkbenchModel: ObservableObject {
         guard !active else { return }
         active = true
         refresh()
-        if let requestedFocusId {
-            self.requestedFocusId = nil
-            focusValidated(requestedFocusId)
-        }
     }
 
     func deactivate() {
@@ -143,6 +139,10 @@ final class GraphWorkbenchModel: ObservableObject {
             }
             nextSeedCursor = seeds.count < GraphBudget.maximumNodes ? page.nextCursor : nil
             outcome = page.outcome
+            if let requestedFocusId {
+                self.requestedFocusId = nil
+                focusValidated(requestedFocusId)
+            }
         }
     }
 
