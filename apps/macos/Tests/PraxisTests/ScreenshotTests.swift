@@ -68,6 +68,14 @@ struct ScreenshotTests {
                            name: "\(section.rawValue)\(dark ? "-dark" : "")", dark: dark, to: outputURL)
             }
         }
+        for dark in [false, true] {
+            try await render(SyntheticGraphPreview(),
+                             size: CGSize(width: 1100, height: 760),
+                             name: "graph-synthetic\(dark ? "-dark" : "")", dark: dark, to: outputURL)
+        }
+        try await render(SyntheticGraphPreview().environment(\.accessibilityReduceMotion, true),
+                         size: CGSize(width: 780, height: 540),
+                         name: "graph-synthetic-compact-reduced-motion", to: outputURL)
         for tab in [SettingsTab.general, .models, .privacy] {
             await settle(model)
             UserDefaults.standard.set(tab.rawValue, forKey: SettingsTab.storageKey)
@@ -122,4 +130,39 @@ struct ScreenshotTests {
         ("Lisbon flights.eml", "From: Priya <priya@example.com>\r\nTo: owner@example.com\r\nSubject: Lisbon flights booked\r\nDate: Thu, 12 Nov 2026 09:30:00 -0800\r\n\r\nFlights are booked for March 3, 2026. Total EUR 412.50.\r\n"),
         ("Trip ideas.md", "# Trip ideas\n\nLisbon in spring. Ask Priya about the tram museum. Book flights before February for the invoice deadline.\n")
     ]
+}
+
+@MainActor
+private struct SyntheticGraphPreview: View {
+    @State private var selectedNode: String? = "project"
+    @State private var selectedEdge: String?
+
+    private let nodes: [GraphNode] = [
+        GraphNode(entityId: "project", label: "Praxis", entityType: "project", typeOrigin: "owner",
+                  status: "confirmed", mentions: 2, sources: 2, typeConflict: false, evidence: nil,
+                  actions: ["openEntity"]),
+        GraphNode(entityId: "reader", label: "Document Reader", entityType: "technology", typeOrigin: "verified",
+                  status: "confirmed", mentions: 1, sources: 1, typeConflict: false, evidence: nil,
+                  actions: ["openEntity"]),
+        GraphNode(entityId: "ledger", label: "Ledger", entityType: "concept", typeOrigin: "inferred",
+                  status: "suggested", mentions: 1, sources: 1, typeConflict: false, evidence: nil,
+                  actions: ["openEntity"])
+    ]
+    private let edges = [
+        GraphEdge(relationId: "e1", subjectId: "project", objectId: "reader", predicate: "uses",
+                  origin: "owner", evidenceStatus: "owner", evidence: nil, actions: ["inspectRelation"]),
+        GraphEdge(relationId: "e2", subjectId: "reader", objectId: "ledger", predicate: "produces",
+                  origin: "model", evidenceStatus: "suggested", evidence: nil, actions: ["inspectRelation"])
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
+            GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
+                           selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
+                           reduceMotion: false, highContrast: false, colorScheme: .dark, zoom: 1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(Spacing.l)
+    }
 }
