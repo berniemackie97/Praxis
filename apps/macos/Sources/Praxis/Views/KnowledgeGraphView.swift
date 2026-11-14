@@ -26,7 +26,10 @@ struct KnowledgeGraphView: View {
                     .frame(width: 225)
                 Divider()
                 ZStack {
-                    if graph.visibleNodes.isEmpty && !graph.atlasLoading && !graph.loading {
+                    if graph.focusId == nil, let atlasError = graph.atlasError {
+                        EmptyState(systemImage: "exclamationmark.triangle",
+                                   title: "Current brain graph unavailable", message: atlasError)
+                    } else if graph.visibleNodes.isEmpty && !graph.atlasLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
                                    title: "No current graph evidence",
                                    message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
