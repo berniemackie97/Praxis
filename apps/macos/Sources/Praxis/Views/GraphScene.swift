@@ -24,6 +24,7 @@ final class GraphScene: SKScene {
     private var dark = false
     private var highContrast = false
     private var toolbarZoomRevision = -1
+    private var atlasFitScale: CGFloat = 1
     private var lastFrame: TimeInterval?
     private var draggingNode: String?
 
@@ -53,14 +54,25 @@ final class GraphScene: SKScene {
         graphNodes = nodes
         graphEdges = edges
         focusId = focus
-        layout.configure(nodes: nodes, focus: focus)
+        if focus == nil {
+            layout.configureAtlas(nodes: nodes, edges: edges)
+        } else {
+            layout.configure(nodes: nodes, focus: focus)
+        }
         for shape in nodeShapes.values { shape.removeFromParent() }
         for label in nodeLabels.values { label.removeFromParent() }
         nodeShapes.removeAll(keepingCapacity: true)
         nodeLabels.removeAll(keepingCapacity: true)
 
+        let degree = edges.reduce(into: [String: Int]()) { counts, edge in
+            counts[edge.subjectId, default: 0] += 1
+            counts[edge.objectId, default: 0] += 1
+        }
         for node in nodes {
-            let shape = SKShapeNode(circleOfRadius: node.entityId == focus ? 15 : 11)
+            let radius: CGFloat = focus == nil
+                ? min(8, 2.5 + sqrt(CGFloat(degree[node.entityId, default: 0])) * 1.4)
+                : node.entityId == focus ? 15 : 11
+            let shape = SKShapeNode(circleOfRadius: radius)
             shape.name = "node:" + node.entityId
             shape.lineWidth = 2
             shape.zPosition = 2
@@ -77,8 +89,28 @@ final class GraphScene: SKScene {
             nodeLabels[node.entityId] = label
         }
         lastFrame = nil
+        if focus == nil { fitAtlas() }
+        toolbarZoomRevision = -1
         updateAppearance(dark: dark, highContrast: highContrast)
         updatePaths()
+    }
+
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        if focusId == nil { fitAtlas() }
+    }
+
+    private func fitAtlas() {
+        guard !layout.positions.isEmpty, size.width > 0, size.height > 0 else { return }
+        let points = Array(layout.positions.values)
+        let minX = points.map(\.x).min() ?? 0
+        let maxX = points.map(\.x).max() ?? 0
+        let minY = points.map(\.y).min() ?? 0
+        let maxY = points.map(\.y).max() ?? 0
+        atlasFitScale = max(1, (maxX - minX + 100) / (size.width * 0.82),
+                               (maxY - minY + 100) / (size.height * 0.82))
+        viewCamera.position = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+        viewCamera.setScale(atlasFitScale)
     }
 
     func setSelection(node: String?, edge: String?) {
@@ -91,7 +123,7 @@ final class GraphScene: SKScene {
     func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
         guard toolbarZoomRevision != revision else { return }
         toolbarZoomRevision = revision
-        viewCamera.setScale(zoom)
+        viewCamera.setScale(zoom * (focusId == nil ? atlasFitScale : 1))
         updateVisibility()
     }
 
@@ -136,6 +168,16 @@ final class GraphScene: SKScene {
     }
 
     private func updateVisibility() {
+        if focusId == nil {
+            let detailed = viewCamera.xScale < atlasFitScale * 0.38
+            for node in graphNodes {
+                nodeLabels[node.entityId]?.isHidden = !(
+                    node.entityId == hoveredNodeId || node.entityId == selectedNodeId ||
+                    (detailed && node.mentions >= 8)
+                )
+            }
+            return
+        }
         let expanded = viewCamera.xScale < 0.8
         for node in graphNodes {
             nodeLabels[node.entityId]?.isHidden = !(
@@ -164,12 +206,14 @@ final class GraphScene: SKScene {
             path.move(to: start)
             path.addLine(to: end)
             let wing = highContrast ? CGFloat(7) : 5
-            arrows.move(to: end)
-            arrows.addLine(to: CGPoint(x: end.x - ux * wing - uy * wing,
-                                       y: end.y - uy * wing + ux * wing))
-            arrows.move(to: end)
-            arrows.addLine(to: CGPoint(x: end.x - ux * wing + uy * wing,
-                                       y: end.y - uy * wing - ux * wing))
+            if focusId != nil {
+                arrows.move(to: end)
+                arrows.addLine(to: CGPoint(x: end.x - ux * wing - uy * wing,
+                                           y: end.y - uy * wing + ux * wing))
+                arrows.move(to: end)
+                arrows.addLine(to: CGPoint(x: end.x - ux * wing + uy * wing,
+                                           y: end.y - uy * wing - ux * wing))
+            }
             if edge.relationId == selectedEdgeId {
                 edgeLabel.text = KnowledgeVocabulary.label(edge.predicate)
                 edgeLabel.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 12)
@@ -189,7 +233,7 @@ final class GraphScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         defer { lastFrame = currentTime }
-        guard let lastFrame, currentTime - lastFrame >= 1.0 / 32.0,
+        guard focusId != nil, let lastFrame, currentTime - lastFrame >= 1.0 / 32.0,
               !reduceMotion, draggingNode == nil else { return }
         if layout.advance(nodes: graphNodes, edges: graphEdges, focus: focusId, reducedMotion: false) {
             updatePaths()
@@ -240,7 +284,8 @@ final class GraphScene: SKScene {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        let scale = min(2.5, max(0.35, viewCamera.xScale * exp(event.scrollingDeltaY * 0.008)))
+        let base = focusId == nil ? atlasFitScale : 1
+        let scale = min(base * 2.5, max(base * 0.12, viewCamera.xScale * exp(event.scrollingDeltaY * 0.008)))
         viewCamera.setScale(scale)
         updateVisibility()
     }
