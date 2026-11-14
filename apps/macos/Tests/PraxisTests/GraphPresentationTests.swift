@@ -75,7 +75,7 @@ struct GraphPresentationTests {
             _ = one.advance(nodes: nodes, edges: [edge("r", "a", "b")], focus: "a",
                             reducedMotion: false)
         }
-        #expect(one.positions["a"] == .zero)
+        #expect(one.positions["a"] == CGPoint.zero)
         #expect(one.positions.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
         #expect(two.positions["a"] == CGPoint.zero)
     }
