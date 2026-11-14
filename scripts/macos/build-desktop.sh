@@ -28,7 +28,7 @@ if [[ -e "$destination" || -L "$destination" ]]; then
   mv "$destination" "$archive/Praxis.app"
   echo "Preserved previous development app: $archive/Praxis.app"
 fi
-xcodebuild \
+xcodebuild -quiet \
   -project "$PRAXIS_XCODE_PROJECT" \
   -scheme "$PRAXIS_XCODE_SCHEME" \
   -configuration Release \
