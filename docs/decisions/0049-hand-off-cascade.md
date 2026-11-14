@@ -1,4 +1,4 @@
-# ADR 0048: Intake as one hand-off between tiers
+# ADR 0049: Intake as one hand-off between tiers
 
 **Status:** Accepted (lead-architect decision with owner, November 14, 2026). Schema v27. Refines the understand step of [ADR 0044](0044-generic-intake-engine.md); tiers, disclosure and verification rules are unchanged.
 

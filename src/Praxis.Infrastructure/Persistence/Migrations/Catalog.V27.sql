@@ -1,4 +1,4 @@
--- Hand-off cascade (ADR 0048): how each tier contributed to a document's understanding, as one
+-- Hand-off cascade (ADR 0049): how each tier contributed to a document's understanding, as one
 -- owner-facing line ("local drafted 12 → strong kept 9, removed 3, added 4 → 13 verified").
 CREATE TABLE IF NOT EXISTS intake_cascades (
     item_id TEXT NOT NULL,
