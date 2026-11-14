@@ -50,6 +50,18 @@ struct GraphPresentationTests {
         #expect(grouped.flatMap(\.observations).count == 3)
     }
 
+    @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
+        let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
+        let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
+        let first = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
+        let second = GraphAtlasLayout.positions(nodes: nodes.reversed(), edges: edges.reversed())
+        #expect(first == second)
+        #expect(first.count == 5)
+        #expect(first.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+        #expect(first["isolated"] != first["b"])
+        #expect(first["a"] != first["c"])
+    }
+
     @Test func workerGraphEnvelopeDecodesWithoutInventingMetadata() throws {
         let json = """
             {"outcome":"ready","focusId":"a","nextCursor":null,
