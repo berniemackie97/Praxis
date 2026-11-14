@@ -4,8 +4,33 @@ import SwiftUI
 struct KnowledgeView: View {
     @ObservedObject var model: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
+    let collections: [SourceCollection]
+    let sources: [LibraryItem]
+    @AppStorage("knowledgeViewMode") private var viewMode = "list"
 
     var body: some View {
+        VStack(spacing: 0) {
+            Picker("Knowledge view", selection: $viewMode) {
+                Label("Entities", systemImage: "list.bullet").tag("list")
+                Label("Graph", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 230)
+            .padding(.vertical, Spacing.s)
+            .accessibilityLabel("Knowledge view")
+            Divider()
+            if viewMode == "graph" {
+                KnowledgeGraphView(graph: model.graph, collections: collections, sources: sources) { entityId in
+                    model.selectEntityId(entityId)
+                    viewMode = "list"
+                }
+            } else {
+                listContent
+            }
+        }
+    }
+
+    private var listContent: some View {
         MasterDetail(listWidth: (260, 320, 440)) {
             List(selection: Binding<String?>(
                 get: { model.selected?.summary.entityId },
