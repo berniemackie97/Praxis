@@ -115,6 +115,26 @@ public sealed class ProjectUnderstander(
             : value is not null ? ProjectUnderstanding.PartiallyVerified
             : ProjectUnderstanding.MapOnly;
         RepositoryMap basis = result.Tier is { } usedTier && maps.TryGetValue(usedTier, out RepositoryMap? selected) ? selected : localMap;
+        if (result.Tier is { } completedTier && result.ProviderId is { } providerId)
+        {
+            bool stillAuthorized = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == completedTier)?.ProviderId == providerId &&
+                projects.ReadCurrentMembers(basis.Disclosed).Count == basis.Disclosed.Count &&
+                (providerId == VerificationProvider.Ollama || basis.Disclosed.All(member =>
+                {
+                    SourceCategory? category = policy.ReadCategory(member.SourceId);
+                    return category is { LocalOnly: false, Category: DataCategories.Code or DataCategories.Documents } &&
+                        gate.Decide(member.SourceId, providerId, false, DisclosurePurposes.Intake).Decision.Allowed;
+                }));
+            if (!stillAuthorized)
+            {
+                ProjectSource[] current = CurrentMembers();
+                RepositoryMap local = RepositoryMap.Build(project, current, ReadText);
+                return new ProjectUnderstanding(project.ProjectId, project.Root, project.Name, fingerprint, ProjectUnderstanding.MapOnly,
+                    "source_scope_changed", null, null, [], [], [], local.Dependencies.Order(StringComparer.OrdinalIgnoreCase).Take(300).ToArray(),
+                    local.Languages, current.Length, null, null, result.InputTokens, result.OutputTokens, clock.GetUtcNow());
+            }
+        }
+
         return new ProjectUnderstanding(project.ProjectId, project.Root, project.Name, fingerprint, status,
             status == ProjectUnderstanding.Understood ? null : result.Reason, value?.Purpose, value?.Summary, value?.Components ?? [],
             value?.EntryPoints ?? [], value?.BuildCommands ?? [], basis.Dependencies.Order(StringComparer.OrdinalIgnoreCase).Take(300).ToArray(),
