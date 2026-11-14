@@ -274,6 +274,35 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.NotEqual(second.SourceId, scoped.Evidence.SourceId);
     }
 
+    [Fact]
+    public async Task HighDegreePagesDoNotExpandBeyondTheRequestedLimit()
+    {
+        using SqliteCatalog catalog = Open();
+        Guid center = Guid.Empty;
+        for (int batch = 0; batch < 12; batch++)
+        {
+            string[] names = Enumerable.Range(batch * 10 + 1, 10)
+                .Select(index => $"Item{index:D3}").ToArray();
+            foreach (string name in names) types.Add(name, "concept");
+            CapturedOriginal source = await Enrich(catalog, $"batch{batch:D2}.md",
+                $"Client connects {string.Join(' ', names)}.");
+            await Accept(catalog, source);
+            center = Single(catalog, "Client").EntityId;
+            foreach (string name in names)
+                catalog.Knowledge.Relate(center, "references", Single(catalog, name).EntityId);
+        }
+
+        GraphPage first = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 100));
+        Assert.Equal(100, first.Edges.Count);
+        Assert.Equal(101, first.Nodes.Count);
+        Assert.NotNull(first.NextCursor);
+        GraphPage last = catalog.Graph.Neighborhood(center, new GraphQuery(Limit: 100, Cursor: first.NextCursor));
+        Assert.Equal(20, last.Edges.Count);
+        Assert.Null(last.NextCursor);
+        Assert.Equal(120, first.Edges.Concat(last.Edges)
+            .Select(edge => edge.RelationId).Distinct().Count());
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
