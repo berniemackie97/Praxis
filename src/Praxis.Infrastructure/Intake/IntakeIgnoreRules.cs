@@ -42,6 +42,23 @@ internal static class IntakeIgnoreRules
         || (name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(".example", StringComparison.OrdinalIgnoreCase)
             && !name.EndsWith(".sample", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(".template", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// True when a path under <paramref name="root"/> lies in a tool folder (such as <c>.git</c> or
+    /// <c>node_modules</c>) or is a secrets file: such sources were captured by older versions and
+    /// are retired.
+    /// </summary>
+    internal static bool IsAlwaysExcluded(string root, string path)
+    {
+        string relative = Path.GetRelativePath(root, path);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        {
+            return false;
+        }
+
+        string[] segments = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return segments[..^1].Any(ToolDirectories.Contains) || IsSecretFile(segments[^1]);
+    }
+
     /// <summary>Whether any applicable <c>.gitignore</c> (outermost first) excludes the path.</summary>
     internal static bool IsGitIgnored(IReadOnlyList<GitIgnoreRules> rules, string path, bool isDirectory)
     {

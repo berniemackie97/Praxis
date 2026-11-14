@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Infrastructure.FileSystem;
 
 namespace Praxis.Infrastructure.Persistence.Security.Registry;
 
@@ -81,6 +82,11 @@ public sealed class SecurityRegistry : IDisposable
         };
         foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             if (!permitted.Contains(Path.GetFileName(entry)) ||
                 (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0 ||
                 !File.Exists(entry))
