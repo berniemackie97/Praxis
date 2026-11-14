@@ -7,6 +7,7 @@ using Praxis.Application.Documents.Pdf;
 using Praxis.Application.Documents.Tables;
 using Praxis.Application.Enrichment;
 using Praxis.Application.Finance;
+using Praxis.Application.Media;
 using Praxis.Application.Policy;
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
@@ -29,7 +30,8 @@ public static class CatalogProcessing
     /// optional per-segment local enrichment. Disclosure policy governs every model call.
     /// </summary>
     public static IReadOnlyList<IProcessingHandler> CreateHandlers(
-        SqliteCatalog catalog, IVerifierModelFactory? models = null, TimeProvider? clock = null, IOcrEngine? ocr = null)
+        SqliteCatalog catalog, IVerifierModelFactory? models = null, TimeProvider? clock = null, IOcrEngine? ocr = null,
+        ITranscriptionEngine? transcriber = null)
     {
         TimeProvider time = clock ?? TimeProvider.System;
         IntakeLadder ladder = Ladder(catalog, models ?? new VerificationModelFactory(), time);
@@ -37,7 +39,7 @@ public static class CatalogProcessing
         DocumentReaders readers = Readers(ocr ?? new VisionOcrEngine());
         return
         [
-            new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, readers),
+            new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, readers, transcriber ?? new SpeechTranscriptionEngine()),
             new HeadingProposalHandler(catalog.Text, catalog.Proposals, catalog.Processing),
             new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing),
             new SemanticExtractionHandler(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals,

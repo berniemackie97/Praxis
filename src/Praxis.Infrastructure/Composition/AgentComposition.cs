@@ -4,7 +4,9 @@ using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Finance;
 using Praxis.Application.Inference;
+using Praxis.Application.Media;
 using Praxis.Application.Policy;
+using Praxis.Application.Search;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Documents;
 using Praxis.Infrastructure.Persistence;
@@ -19,16 +21,19 @@ public static class AgentComposition
     {
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
-        IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger)];
+        IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger), new RecordsDataset(catalog.Understanding)];
         TieredModels tiers = new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock);
         PdfPigTextReader pdf = new();
+        MediaMoments moments = new(catalog.Text, new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals, catalog.Collections));
+        KnowledgeRetriever retriever = new(catalog.Search, catalog.Embeddings, catalog.Models, embeddings);
         return
         [
             new KnowledgeSearchTool(catalog.Search, catalog.Embeddings, catalog.Models, embeddings, catalog.Knowledge, catalog.Policy),
-            new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf),
+            new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf, moments),
+            new MediaFindTool(retriever, moments, catalog.Sources),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
-            new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger),
+            new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),
             new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
             new DataDescribeTool(datasets),
             new DataQueryTool(datasets),

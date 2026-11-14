@@ -77,6 +77,8 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
             provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
         services.AddSingleton<MediaEvidence>();
+        services.AddSingleton(provider => new MediaPlayback(provider.GetRequiredService<ISourceRepository>(),
+            provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<MediaEvidence>()));
         services.AddSingleton<FinancialLedger>();
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));

@@ -1,19 +1,31 @@
-// praxis-vision: on-device text recognition for the Praxis worker.
+// praxis-vision: on-device text and speech recognition for the Praxis worker.
 //
 //   praxis-vision ocr --kind image|pdf --max-pages N <file>
+//   praxis-vision transcribe [--locale en-US] <file>
 //
-// Writes {"pages":["..."]} or {"error":"code"} to stdout. Uses Apple Vision (accurate
-// recognition, automatic language detection) and PDFKit to render PDF pages. Reads only the
-// given file, performs no network access and keeps nothing.
+// Writes {"pages":["..."]}, {"cues":[{"start":0.0,"end":1.6,"text":"..."}]} or {"error":"code"}
+// to stdout. OCR uses Apple Vision (accurate recognition, automatic language detection) and PDFKit
+// to render PDF pages. Transcription uses SpeechAnalyzer on macOS 26 and later, which runs on
+// device; the system installs its speech model once. Reads only the given file, sends none of it
+// anywhere and keeps nothing.
 
+import AVFoundation
 import CoreGraphics
 import Foundation
 import ImageIO
 import PDFKit
+import Speech
 import Vision
+
+struct Cue: Encodable {
+    var start: Double
+    var end: Double
+    var text: String
+}
 
 struct Output: Encodable {
     var pages: [String]?
+    var cues: [Cue]?
     var error: String?
 }
 
@@ -79,7 +91,74 @@ func render(_ page: PDFPage) -> CGImage? {
     return context.makeImage()
 }
 
+@available(macOS 26, *)
+func transcribe(_ url: URL, localeIdentifier: String) async -> Output {
+    guard SpeechTranscriber.isAvailable else { return Output(error: "transcription_unavailable") }
+    guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: localeIdentifier)) else {
+        return Output(error: "unsupported_locale")
+    }
+
+    let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [], attributeOptions: [.audioTimeRange])
+    do {
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await request.downloadAndInstall()
+        }
+    } catch {
+        return Output(error: "speech_model_unavailable")
+    }
+
+    let file: AVAudioFile
+    do {
+        file = try AVAudioFile(forReading: url)
+    } catch {
+        return Output(error: "media_unreadable")
+    }
+
+    let analyzer = SpeechAnalyzer(modules: [transcriber])
+    let collector = Task { () throws -> [Cue] in
+        var cues: [Cue] = []
+        for try await result in transcriber.results {
+            let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+            let start = result.range.start.seconds
+            let end = result.range.end.seconds
+            if !text.isEmpty, start.isFinite, end.isFinite, end >= start {
+                cues.append(Cue(start: start, end: end, text: text))
+            }
+        }
+        return cues
+    }
+
+    do {
+        if let last = try await analyzer.analyzeSequence(from: file) {
+            try await analyzer.finalizeAndFinish(through: last)
+        } else {
+            await analyzer.cancelAndFinishNow()
+        }
+        return Output(cues: try await collector.value)
+    } catch {
+        collector.cancel()
+        return Output(error: "transcription_failed")
+    }
+}
+
 let arguments = Array(CommandLine.arguments.dropFirst())
+if arguments.first == "transcribe" {
+    guard arguments.count == 2 || (arguments.count == 4 && arguments[1] == "--locale"), let path = arguments.last else {
+        finish(Output(error: "usage"))
+    }
+
+    let localeIdentifier = arguments.count == 4 ? arguments[2] : Locale.current.identifier
+    guard #available(macOS 26, *) else { finish(Output(error: "transcription_unavailable")) }
+    let done = DispatchSemaphore(value: 0)
+    var output = Output(error: "transcription_failed")
+    Task {
+        output = await transcribe(URL(fileURLWithPath: path), localeIdentifier: localeIdentifier)
+        done.signal()
+    }
+    done.wait()
+    finish(output)
+}
+
 guard arguments.first == "ocr", let path = arguments.last, arguments.count >= 2 else { finish(Output(error: "usage")) }
 var kind = "image"
 var maximumPages = 1

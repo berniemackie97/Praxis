@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 23;
+    internal const int CurrentVersion = 24;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -287,7 +287,8 @@ internal static class CatalogSchema
             ("table", "intake_documents"),
             ("table", "intake_records"),
             ("table", "intake_layouts"),
-            ("trigger", "intake_source_revoked")
+            ("trigger", "intake_source_revoked"),
+            ("table", "text_timings")
         })
         {
             using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type=$kind AND name=$name");

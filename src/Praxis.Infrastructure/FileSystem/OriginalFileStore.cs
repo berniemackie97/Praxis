@@ -256,6 +256,79 @@ internal sealed class OriginalFileStore
         return new FileStream(path, options);
     }
 
+    internal async Task<string> MaterializeAsync(OriginalObject original, string extension, CancellationToken cancellationToken)
+    {
+        if (extension.Length is < 2 or > 9 || extension[0] != '.' || !extension[1..].All(char.IsAsciiLetterOrDigit))
+        {
+            throw new ArgumentException("The extension is invalid.", nameof(extension));
+        }
+
+        await VerifyAsync(original, cancellationToken);
+        string root = Path.Combine(Path.GetTempPath(), "praxis-media");
+        Directory.CreateDirectory(root);
+        PruneMaterialized(root);
+        string directory = Path.Combine(root, Guid.NewGuid().ToString("N"));
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(directory);
+        }
+        else
+        {
+            Directory.CreateDirectory(directory, PrivateDirectoryMode);
+        }
+
+        // Objects are immutable once published, so a link to the verified object stays exact
+        // without copying gigabytes of video.
+        string path = Path.Combine(directory, "original" + extension.ToLowerInvariant());
+        File.CreateSymbolicLink(path, ExistingObjectPath(original.Digest));
+        return path;
+    }
+
+    internal static void ReleaseMaterialized(string path)
+    {
+        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "praxis-media"));
+        string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (directory is null || !string.Equals(Path.GetDirectoryName(directory), root, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The path was not materialized by the original store.", nameof(path));
+        }
+
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Pruned later.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Pruned later.
+        }
+    }
+
+    private static void PruneMaterialized(string root)
+    {
+        foreach (string directory in Directory.EnumerateDirectories(root))
+        {
+            try
+            {
+                if (Directory.GetCreationTimeUtc(directory) < TimeProvider.System.GetUtcNow().UtcDateTime.AddDays(-1))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+                // Another worker may be using or removing it.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Not ours.
+            }
+        }
+    }
+
     private string ExistingObjectPath(string digest)
     {
         string objects = CheckDirectory(Path.Combine(dataDirectory, "objects"));

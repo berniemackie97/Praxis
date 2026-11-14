@@ -34,6 +34,12 @@ public interface IUnderstandingRepository
 
     SourceUnderstanding? ReadCurrent(Guid sourceId);
 
+    /// <summary>
+    /// Verified records of current revisions of active sources, newest-dated first, optionally
+    /// limited to one kind. Callers apply the disclosure policy per source.
+    /// </summary>
+    IReadOnlyList<StoredRecord> ReadRecords(string? kind, int limit);
+
     /// <summary>A cached column mapping for a delimited layout, as JSON, or null.</summary>
     string? ReadLayout(string fingerprint);
 

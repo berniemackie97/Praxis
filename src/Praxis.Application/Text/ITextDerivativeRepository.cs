@@ -1,3 +1,4 @@
+using Praxis.Domain.Media;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
 using Praxis.Domain.Understanding;
@@ -30,11 +31,14 @@ public interface ITextDerivativeRepository
     /// Stores extracted text or an unsupported reason and finishes the leased job in one transaction;
     /// with text, also records how the document was read for the intake stages.
     /// </summary>
-    bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null);
+    bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null, IReadOnlyList<TimedSpan>? timings = null);
 
     /// <summary>
     /// Reopens one active, current source previously classified unsupported only because its
     /// extension had no decoder. Every other recorded outcome remains immutable.
     /// </summary>
     bool RequeueNewlySupported(IReadOnlyList<string> extensions);
+
+    /// <summary>Where each span of the revision's transcript is spoken, in order; empty when the text is not a transcript.</summary>
+    IReadOnlyList<TimedSpan> ReadTimings(Guid itemId, int revision);
 }

@@ -1,4 +1,9 @@
 using System.Text;
+using System.Text.Json;
+using Praxis.Application.Agents;
+using Praxis.Application.Agents.Data;
+using Praxis.Application.Agents.Tools;
+using Praxis.Application.Finance;
 using Praxis.Application.Inference;
 using Praxis.Application.Policy;
 using Praxis.Domain.Models;
@@ -8,6 +13,7 @@ using Praxis.Domain.Understanding;
 using Praxis.Domain.Verification;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Agents;
 using Praxis.Infrastructure.Tests.Documents;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
@@ -74,6 +80,17 @@ public sealed class IntakeEngineTests : IDisposable
         Assert.Equal("Notes on the kitchen renovation and the site visit.", understood.Summary);
         Assert.Contains(catalog.Knowledge.ListEntities(null, "Ortega Renovations", 10), entity => entity.EntityType == "organization");
         Assert.Contains(catalog.Policy.ReadInvocations(10), call => call.ProviderId == Local && !call.Remote);
+
+        // The agent can query the verified event and see it on the timeline, cited to its quote.
+        RecordsDataset records = new(catalog.Understanding);
+        DataRow row = Assert.Single(records.Snapshot(AgentPrimitivesTests.Context()).Rows);
+        Assert.Equal(("event", "Site visit", new DateOnly(2026, 11, 20), "14:30"), ((string)row.Values["kind"]!, (string)row.Values["title"]!,
+            (DateOnly)row.Values["date"]!, (string)row.Values["time"]!));
+        Assert.StartsWith("chars:", Assert.Single(row.Evidence).Locator, StringComparison.Ordinal);
+        Assert.Empty(records.Snapshot(AgentPrimitivesTests.Context(mayDisclose: _ => false)).Rows);
+        AgentToolOutput timeline = await new KnowledgeTimelineTool(catalog.Library, catalog.Sources, new FinancialLedger(catalog.Finance), catalog.Understanding)
+            .InvokeAsync(JsonDocument.Parse("""{"from":"2026-11-16","to":"2026-11-22"}""").RootElement, AgentPrimitivesTests.Context(), CancellationToken.None);
+        Assert.Contains("Site visit", timeline.Content, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -4,7 +4,7 @@ namespace Praxis.Application.Media;
 
 public static class TimedCaptionParser
 {
-    private const int MaximumCues = 2_000;
+    private const int MaximumCues = 20_000;
     private const int MaximumCueCharacters = 700;
     private const long MaximumCueMilliseconds = 120_000;
     private const long MaximumMediaMilliseconds = 86_400_000;

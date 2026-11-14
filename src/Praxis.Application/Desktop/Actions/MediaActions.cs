@@ -3,8 +3,8 @@ using Praxis.Application.Media;
 
 namespace Praxis.Application.Desktop.Actions;
 
-/// <summary>Caption cue search and verified video header inspection.</summary>
-public sealed class MediaActions(MediaEvidence media) : IDesktopActionGroup
+/// <summary>Caption cue search, verified video header inspection and playback of cited media.</summary>
+public sealed class MediaActions(MediaEvidence media, MediaPlayback playback) : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
     [
@@ -13,6 +13,8 @@ public sealed class MediaActions(MediaEvidence media) : IDesktopActionGroup
             fields.OptionalGuid("collectionId")))),
         DesktopAction.OfAsync("mediaInspection", async (fields, cancellationToken) =>
             new MediaInspectionResponse(await media.InspectAsync(fields.RequireGuid("sourceId"),
-                fields.OptionalInteger("revision", 1, int.MaxValue), cancellationToken)))
+                fields.OptionalInteger("revision", 1, int.MaxValue), cancellationToken))),
+        DesktopAction.OfAsync("mediaPlayback", async (fields, cancellationToken) =>
+            new MediaPlaybackResponse(await playback.ResolveAsync(fields.RequireGuid("sourceId"), cancellationToken)))
     ];
 }

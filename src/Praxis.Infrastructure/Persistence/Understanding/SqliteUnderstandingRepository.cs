@@ -261,6 +261,38 @@ public sealed class SqliteUnderstandingRepository : IUnderstandingRepository
             : null;
     });
 
+    public IReadOnlyList<StoredRecord> ReadRecords(string? kind, int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 20_000);
+        return database.ExecuteRead(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand("""
+                SELECT s.source_id, r.item_id, r.revision, s.locator, r.kind, r.fields, r.evidence, r.evidence_offset, r.evidence_length, r.sort_key, r.tier
+                FROM intake_records r
+                JOIN items i ON i.item_id = r.item_id
+                JOIN sources s ON s.source_id = i.source_id
+                WHERE s.status = 'active' AND ($kind IS NULL OR r.kind = $kind)
+                  AND r.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = r.item_id)
+                ORDER BY r.sort_key IS NULL, r.sort_key DESC, r.record_id
+                LIMIT $limit
+                """);
+            command.Parameters.AddWithValue("$kind", (object?)kind ?? DBNull.Value);
+            command.Parameters.AddWithValue("$limit", limit);
+            using SqliteDataReader reader = command.ExecuteReader();
+            List<StoredRecord> records = [];
+            while (reader.Read())
+            {
+                Dictionary<string, string> fields = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(5)) ?? [];
+                records.Add(new StoredRecord(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)), reader.GetInt32(2),
+                    Path.GetFileName(reader.GetString(3)), reader.GetString(4), fields, reader.GetString(6), reader.GetInt32(7), reader.GetInt32(8),
+                    Text(reader, 9), reader.GetString(10)));
+            }
+
+            return (IReadOnlyList<StoredRecord>)records;
+        });
+    }
+
     public string? ReadLayout(string fingerprint) => database.Execute(connection =>
     {
         using SqliteTransaction transaction = connection.BeginTransaction();

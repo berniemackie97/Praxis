@@ -265,6 +265,11 @@ public sealed class SqliteOriginalStore : IOriginalStore
     public Task<byte[]> ReadVerifiedPrefixAsync(OriginalObject original, int prefixBytes, long maxBytes, CancellationToken cancellationToken)
         => objects.ReadVerifiedPrefixAsync(original, prefixBytes, maxBytes, cancellationToken);
 
+    public Task<string> MaterializeAsync(OriginalObject original, string extension, CancellationToken cancellationToken)
+        => objects.MaterializeAsync(original, extension, cancellationToken);
+
+    public void ReleaseMaterialized(string path) => OriginalFileStore.ReleaseMaterialized(path);
+
     public async Task VerifyAsync(Guid itemId, CancellationToken cancellationToken = default)
     {
         if (itemId == Guid.Empty)

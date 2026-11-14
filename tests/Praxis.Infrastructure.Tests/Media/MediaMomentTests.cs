@@ -1,0 +1,170 @@
+using System.Text;
+using System.Text.Json;
+using Praxis.Application.Agents;
+using Praxis.Application.Agents.Tools;
+using Praxis.Application.Media;
+using Praxis.Application.Search;
+using Praxis.Application.Text;
+using Praxis.Domain.Media;
+using Praxis.Domain.Originals;
+using Praxis.Infrastructure.Composition;
+using Praxis.Infrastructure.Documents;
+using Praxis.Infrastructure.Inference.Ollama;
+using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Agents;
+using Praxis.Infrastructure.Tests.Support;
+using Xunit;
+
+namespace Praxis.Infrastructure.Tests.Media;
+
+public sealed class MediaMomentTests : IDisposable
+{
+    private static readonly TranscriptSegment[] Tutorial =
+    [
+        new(0, 1_620, "Welcome to the tutorial."),
+        new(1_620, 3_960, "First, we install the package."),
+        new(3_960, 6_780, "Then we configure the database connection string."),
+        new(6_780, 10_320, "Finally, we run the migrations and start the server."),
+        new(40_000, 44_000, "Questions about deployment come at the end.")
+    ];
+
+    private readonly string workspace = Path.Combine(TestPaths.Temp, "praxis-moments-" + Guid.NewGuid().ToString("N"));
+    private readonly string dataRoot;
+
+    public MediaMomentTests()
+    {
+        dataRoot = Path.Combine(workspace, "data");
+        Directory.CreateDirectory(dataRoot);
+        if (!OperatingSystem.IsWindows())
+        {
+            const UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            File.SetUnixFileMode(workspace, privateMode);
+            File.SetUnixFileMode(dataRoot, privateMode);
+        }
+    }
+
+    [Fact]
+    public void TranscriptIsReadableProseWithExactTiming()
+    {
+        (string text, IReadOnlyList<TimedSpan> timings) = TranscriptText.Compose(Tutorial);
+
+        Assert.StartsWith("Welcome to the tutorial. First, we install the package.", text, StringComparison.Ordinal);
+        Assert.Contains("start the server.\n\nQuestions about deployment", text, StringComparison.Ordinal);
+        Assert.Equal(Tutorial.Length, timings.Count);
+        Assert.All(timings.Zip(Tutorial), pair => Assert.Equal(pair.Second.Text, text.Substring(pair.First.Offset, pair.First.Length)));
+        Assert.Equal(3_960, timings[2].StartMilliseconds);
+    }
+
+    [Fact]
+    public void TimeLocatorsRoundTrip()
+    {
+        string locator = TimeLocator.Format(2_460, 11_320);
+        Assert.Equal("time:2.46-11.32", locator);
+        Assert.True(TimeLocator.TryParse(locator, out long start, out long end));
+        Assert.Equal((2_460L, 11_320L), (start, end));
+        Assert.False(TimeLocator.TryParse("time:5-2", out _, out _));
+        Assert.False(TimeLocator.TryParse("chars:1-2", out _, out _));
+    }
+
+    [Fact]
+    public async Task VideoIsTranscribedOnDeviceAndCutIntoCitableMoments()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal video = await Capture(catalog, "setup tutorial.mp4", "not really a video");
+        FakeTranscriber transcriber = new(TranscriptionResult.Recognized(Tutorial));
+        ProcessingDriver reader = new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing,
+            CatalogProcessing.Readers(new VisionOcrEngine()), transcriber));
+
+        Assert.True(await reader.ProcessNextAsync());
+
+        Assert.Equal(".mp4", Path.GetExtension(transcriber.Path));
+        Assert.False(File.Exists(transcriber.Path), "The materialized link is released after transcription.");
+        Assert.Equal(Tutorial.Length, catalog.Text.ReadTimings(video.ItemId, video.Revision).Count);
+        Assert.Equal("transcript", catalog.Understanding.ReadCurrent(video.SourceId)?.Format);
+
+        MediaMoments moments = new(catalog.Text);
+        MediaFindTool tool = new(new KnowledgeRetriever(catalog.Search, catalog.Embeddings, catalog.Models, new OllamaEmbeddingModelConnector()),
+            moments, catalog.Sources);
+        AgentToolOutput output = await tool.InvokeAsync(Json("""{"query":"configure database connection"}"""), AgentPrimitivesTests.Context(),
+            CancellationToken.None);
+
+        Praxis.Domain.Agents.AgentCitation citation = Assert.Single(output.Citations);
+        Assert.Equal(video.SourceId, citation.SourceId);
+        Assert.True(TimeLocator.TryParse(citation.Locator, out long start, out long end));
+        Assert.Equal(3_960 - MediaMoments.LeadInMilliseconds, start);
+        Assert.True(end - start >= MediaMoments.MinimumMilliseconds);
+        Assert.Contains("configure the database connection string", output.Content, StringComparison.Ordinal);
+
+        AgentToolOutput whole = await tool.InvokeAsync(Json($$"""{"sourceId":"{{video.SourceId}}"}"""), AgentPrimitivesTests.Context(), CancellationToken.None);
+        Assert.Equal(TimeLocator.Format(0, 44_000 + MediaMoments.TailMilliseconds), Assert.Single(whole.Citations).Locator);
+
+        KnowledgeOpenTool open = new(catalog.Text, catalog.Sources, catalog.Originals, new PdfPigTextReader(), moments);
+        AgentToolOutput opened = await open.InvokeAsync(Json($$"""{"sourceId":"{{video.SourceId}}","locator":"time:40-44"}"""),
+            AgentPrimitivesTests.Context(), CancellationToken.None);
+        Assert.StartsWith("Questions about deployment", JsonDocument.Parse(opened.Content).RootElement.GetProperty("text").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SilentRecordingIsReadWithoutTextAndUnavailableTranscriptionDefers()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal silent = await Capture(catalog, "ambient.m4a", "silence");
+        ProcessingDriver reader = new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing,
+            CatalogProcessing.Readers(new VisionOcrEngine()), new FakeTranscriber(TranscriptionResult.Recognized([]))));
+        Assert.True(await reader.ProcessNextAsync());
+        Assert.Equal("no_speech", catalog.Text.ReadCurrent(silent.ItemId, silent.Revision)?.ReasonCode);
+
+        CapturedOriginal pending = await Capture(catalog, "talk.mp3", "speech");
+        ProcessingDriver unavailable = new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing,
+            CatalogProcessing.Readers(new VisionOcrEngine()), new FakeTranscriber(TranscriptionResult.Failed("transcription_speech_model_unavailable"))));
+        await Assert.ThrowsAsync<Praxis.Application.Processing.ProcessorUnavailableException>(() => unavailable.ProcessNextAsync());
+        Assert.Null(catalog.Text.ReadCurrent(pending.ItemId, pending.Revision));
+    }
+
+    [Fact]
+    public async Task PlaybackResolvesTheVerifiedOriginalUnderItsContainerExtension()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal video = await Capture(catalog, "talk.mov", "movie bytes");
+        MediaPlayback playback = new(catalog.Sources, catalog.Originals, new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals));
+
+        MediaPlaybackReference reference = await playback.ResolveAsync(video.SourceId, CancellationToken.None);
+
+        Assert.Equal(("file", "video/quicktime", true), (reference.Kind, reference.MimeType, reference.IsVideo));
+        Assert.EndsWith(".mov", reference.Path, StringComparison.Ordinal);
+        Assert.Equal("movie bytes", await File.ReadAllTextAsync(reference.Path!));
+        catalog.Originals.ReleaseMaterialized(reference.Path!);
+        Assert.False(File.Exists(reference.Path));
+    }
+
+    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string filename, string contents)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(contents);
+        using MemoryStream source = new(bytes);
+        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", filename), source, bytes.Length + 1, filename);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(workspace))
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+
+    private sealed class FakeTranscriber(TranscriptionResult result) : ITranscriptionEngine
+    {
+        public string? Path { get; private set; }
+
+        public bool IsAvailable => true;
+
+        public Task<TranscriptionResult> TranscribeAsync(string path, TimeSpan budget, CancellationToken cancellationToken)
+        {
+            Path = path;
+            Assert.True(File.Exists(path));
+            return Task.FromResult(result);
+        }
+    }
+}
