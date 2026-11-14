@@ -142,11 +142,7 @@ final class GraphWorkbenchModel: ObservableObject {
     func recheckInspection() {
         guard active, !inspectingRelation, !reviewingRelation,
               let edge = inspectedEdge, selectedEdgeId == edge.relationId else { return }
-        var fields = scope()
-        fields["entityId"] = edge.subjectId
-        fields["relationId"] = edge.relationId
-        if !predicate.isEmpty { fields["predicate"] = predicate }
-        if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        let fields = relationFields(edge)
         channel.reset(watchScope)
         channel.send("graphRelation", fields, as: GraphPage.self, scope: watchScope,
                      failed: { [weak self] error in
@@ -257,11 +253,7 @@ final class GraphWorkbenchModel: ObservableObject {
         sourceExcerpt = nil
         inspectionMessage = nil
         inspectingRelation = true
-        var fields = scope()
-        fields["entityId"] = edge.subjectId
-        fields["relationId"] = edge.relationId
-        if !predicate.isEmpty { fields["predicate"] = predicate }
-        if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        let fields = relationFields(edge)
         channel.send("graphRelation", fields, as: GraphPage.self, scope: inspectionScope,
                      failed: { [weak self] error in
                          self?.inspectingRelation = false
@@ -349,6 +341,15 @@ final class GraphWorkbenchModel: ObservableObject {
                 message = "Showing a bounded neighborhood. Focus another entity to explore further."
             }
         }
+    }
+
+    private func relationFields(_ edge: GraphEdge) -> [String: Any] {
+        var fields = scope()
+        fields["entityId"] = edge.subjectId
+        fields["relationId"] = edge.relationId
+        if !predicate.isEmpty { fields["predicate"] = predicate }
+        if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        return fields
     }
 
     private func scope() -> [String: Any] {
