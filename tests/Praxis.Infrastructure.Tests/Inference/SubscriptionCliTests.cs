@@ -115,6 +115,10 @@ public sealed class SubscriptionCliTests : IDisposable
             Assert.Contains("--output-schema", lines);
             Assert.DoesNotContain("-m", lines);
             Assert.DoesNotContain("--dangerously-bypass-approvals-and-sandbox", lines);
+            // Codex's own agent prompt and tools are replaced and turned off to save input tokens.
+            Assert.Contains(lines, line => line.StartsWith("model_instructions_file=", StringComparison.Ordinal));
+            Assert.Contains("features.shell_tool=false", lines);
+            Assert.Contains("features.unified_exec=false", lines);
             Assert.Equal("-", lines[^2]);
             Assert.Equal("key:absent", lines[^1]);
         }

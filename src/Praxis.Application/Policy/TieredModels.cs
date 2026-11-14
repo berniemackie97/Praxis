@@ -60,7 +60,22 @@ public sealed class TieredModels(
                 return new TieredOutcome(TieredOutcome.NotConfigured, null, null, provider.ProviderId, null, "tier_changed");
             }
 
-            ChatResult result = await connection.Model.CompleteAsync(request.Request, cancellationToken);
+            using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (request.Deadline is { } limit)
+            {
+                deadline.CancelAfter(limit);
+            }
+
+            ChatResult result;
+            try
+            {
+                result = await connection.Model.CompleteAsync(request.Request, deadline.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new InferenceException(InferenceFailure.Timeout, "The model did not answer within the request's deadline.");
+            }
+
             Record(tier, provider, request, category, decision, identity.Model, result.InputTokens, result.OutputTokens, "completed", started);
             return new TieredOutcome(TieredOutcome.Completed, result.Content, identity, provider.ProviderId, decision, null, result.InputTokens, result.OutputTokens,
                 result.Duration);

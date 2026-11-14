@@ -45,7 +45,11 @@ public sealed class DocumentUnderstander(IntakeLadder ladder, RecordProfiles pro
             if (draftPolicy?.ShouldDraft(chunk.Length) ?? chunk.Length <= LocalDraftCharacters)
             {
                 (LadderCheck<UnderstandingDraft>? local, TieredOutcome localOutcome) = await ladder.DraftAsync(
-                    Request(lease, source, reading with { ContextTokens = LocalContextTokens, MaxOutputTokens = LocalOutputTokens }),
+                    Request(lease, source, reading with { ContextTokens = LocalContextTokens, MaxOutputTokens = LocalOutputTokens }) with
+                    {
+                        // A draft is only worth having within its budget; past twice the budget the strong tier reads alone.
+                        Deadline = (draftPolicy?.Budget ?? TimeSpan.FromSeconds(LocalDraftPolicy.DefaultBudgetSeconds)) * 2
+                    },
                     (content, tier) => UnderstandingVerifier.Check(content, text, chunk, profiles, kinds, tier, null) is { } draft
                         ? new LadderCheck<UnderstandingDraft>(draft, draft.Acceptable)
                         : null, cancellationToken);

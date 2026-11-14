@@ -164,9 +164,18 @@ public sealed class SqliteProjectRepository : IProjectRepository
     private static ProjectUnderstanding WithoutDerivedData(ProjectUnderstanding project) =>
         project with
         {
-            Status = ProjectUnderstanding.MapOnly, Reason = "source_scope_changed", Purpose = null, Summary = null,
-            Components = [], EntryPoints = [], BuildCommands = [], Dependencies = [],
-            Languages = new Dictionary<string, int>(), Tier = null, ProviderId = null, Sources = null
+            Status = ProjectUnderstanding.MapOnly,
+            Reason = "source_scope_changed",
+            Purpose = null,
+            Summary = null,
+            Components = [],
+            EntryPoints = [],
+            BuildCommands = [],
+            Dependencies = [],
+            Languages = new Dictionary<string, int>(),
+            Tier = null,
+            ProviderId = null,
+            Sources = null
         };
 
     private sealed record Details(

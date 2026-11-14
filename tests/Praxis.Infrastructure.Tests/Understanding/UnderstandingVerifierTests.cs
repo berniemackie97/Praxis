@@ -57,6 +57,16 @@ public sealed class UnderstandingVerifierTests
     }
 
     [Fact]
+    public void ManyVerifiedItemsAreAcceptableDespiteDroppedOnes()
+    {
+        UnderstandingDraft enough = new("Notes.", "notes", [], [], UnderstandingDraft.EnoughVerified, 20);
+        UnderstandingDraft few = new("Notes.", "notes", [], [], UnderstandingDraft.EnoughVerified - 1, 20);
+        Assert.True(enough.Acceptable);
+        Assert.False(few.Acceptable);
+        Assert.False((enough with { Summary = null }).Acceptable);
+    }
+
+    [Fact]
     public void MostlyUnverifiableAnswersAreNotAcceptable()
     {
         UnderstandingDraft draft = Check("""
