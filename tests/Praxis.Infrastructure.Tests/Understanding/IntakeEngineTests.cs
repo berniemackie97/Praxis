@@ -155,6 +155,29 @@ public sealed class IntakeEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task FilesBlockedByADailyLimitAreReadAgainTheNextDay()
+    {
+        using SqliteCatalog catalog = Open();
+        catalog.Verification.SaveProvider(new VerificationProvider(Strong, "/usr/bin/true", "sonnet", 10, 1, true));
+        catalog.Policy.SaveTier(ModelTiers.Strongest, null);
+        Grant(catalog, DataCategories.Documents, Strong);
+        catalog.Policy.RecordInvocation(new ModelInvocation(ModelTiers.Strong, Strong, true, DisclosurePurposes.Intake, DataCategories.Documents,
+            "allowed", null, null, null, "sonnet", 0, 0, "completed", clock.UtcNow));
+        ScriptedModelFactory models = Models(_ => GoodUnderstanding);
+        CapturedOriginal note = await Capture(catalog, "renovation.md", Encoding.UTF8.GetBytes(Notes));
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+        Assert.Equal(UnderstandingStatuses.IndexOnly, catalog.Understanding.ReadCurrent(note.SourceId)!.Status);
+
+        clock.UtcNow = clock.UtcNow.AddHours(2);
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+        Assert.Empty(models.Requests.GetValueOrDefault(Strong) ?? []);
+
+        clock.UtcNow = clock.UtcNow.AddDays(1);
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+        Assert.Equal(UnderstandingStatuses.Understood, catalog.Understanding.ReadCurrent(note.SourceId)!.Status);
+    }
+
+    [Fact]
     public async Task AnAnswerThatFailsVerificationIsCorrectedByTheStrongestTier()
     {
         using SqliteCatalog catalog = Open();

@@ -12,11 +12,21 @@ namespace Praxis.Infrastructure.Persistence.Search;
 /// </summary>
 public sealed class SqliteTextSearchIndex : ITextSearchIndex
 {
+    // A term in the file's name or path counts this many times a term in its text, so asking for a
+    // file by name finds that file first.
+    private const double NameWeight = 8.0;
+
     private readonly CatalogDatabase database;
 
     internal SqliteTextSearchIndex(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<SearchHit> Query(string query, int limit = 20, Guid? collectionId = null)
+    public IReadOnlyList<SearchHit> Query(string query, int limit = 20, Guid? collectionId = null) =>
+        Run(BuildTextQuery(query, " AND "), limit, collectionId);
+
+    public IReadOnlyList<SearchHit> QueryAny(string query, int limit = 20, Guid? collectionId = null) =>
+        Run(BuildTextQuery(query, " OR "), limit, collectionId);
+
+    private IReadOnlyList<SearchHit> Run(string expression, int limit, Guid? collectionId)
     {
         if (limit is < 1 or > 100)
         {
@@ -24,7 +34,6 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         }
 
         ValidateCollection(collectionId);
-        string expression = BuildTextQuery(query);
         return database.ExecuteRead(connection =>
         {
             using SqliteCommand command = connection.CreateCommand("""
@@ -55,7 +64,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                      AND v.revision = (
                                                                          SELECT MAX(latest.revision) FROM item_versions latest
                                                                          WHERE latest.item_id = v.item_id)
-                                                                   ORDER BY bm25(text_search), s.locator COLLATE BINARY,
+                                                                   ORDER BY bm25(text_search, $nameWeight, 1.0), s.locator COLLATE BINARY,
                                                                             v.item_id, v.revision
                                                                    LIMIT $limit
                                                                    """);
@@ -63,6 +72,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             command.Parameters.AddWithValue("$limit", limit);
+            command.Parameters.AddWithValue("$nameWeight", NameWeight);
             using SqliteDataReader reader = command.ExecuteReader();
             List<SearchHit> hits = new();
             while (reader.Read())
@@ -212,7 +222,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         }
     }
 
-    private static string BuildTextQuery(string query)
+    private static string BuildTextQuery(string query, string joiner)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         if (query.Length > 256 || query.Any(char.IsControl))
@@ -246,6 +256,6 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
 
         return terms.Count is < 1 or > 16
             ? throw new ArgumentException("Search queries must contain one to sixteen terms.", nameof(query))
-            : string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
+            : string.Join(joiner, terms.Select(term => "\"" + term + "\""));
     }
 }

@@ -13,7 +13,8 @@ namespace Praxis.Application.Policy;
 /// caller's explicit choice.
 /// </summary>
 public sealed class TieredModels(
-    IPolicyRepository policy, IVerificationRepository providers, IVerifierModelFactory factory, DisclosureGate gate, TimeProvider clock)
+    IPolicyRepository policy, IVerificationRepository providers, IVerifierModelFactory factory, DisclosureGate gate, TimeProvider clock,
+    ModelActivity? activity = null)
 {
     public bool IsConfigured(string tier) => Resolve(tier) is not null;
 
@@ -37,6 +38,7 @@ public sealed class TieredModels(
         }
 
         DateTimeOffset started = clock.GetUtcNow();
+        using IDisposable? running = activity?.Begin(new ActiveModelCall(tier, provider.ProviderId, provider.Model, request.Purpose, request.ItemId, started));
         try
         {
             using ModelConnection connection = factory.Create(provider);
@@ -73,5 +75,6 @@ public sealed class TieredModels(
     private void Record(string tier, VerificationProvider provider, TieredRequest request, string category, DisclosureDecision decision,
         string? model, int input, int output, string outcome, DateTimeOffset started) =>
         policy.RecordInvocation(new ModelInvocation(tier, provider.ProviderId, !provider.IsLocal, request.Purpose, category, decision.Reason,
-            request.ItemId, request.Revision, request.ProcessorKey, model, input, output, outcome, started));
+            request.ItemId, request.Revision, request.ProcessorKey, model, input, output, outcome, started,
+            (int)Math.Clamp((clock.GetUtcNow() - started).TotalMilliseconds, 0, int.MaxValue)));
 }

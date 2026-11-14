@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Praxis.Infrastructure.FileSystem;
+using Praxis.Infrastructure.Persistence.Activity;
 using Praxis.Infrastructure.Persistence.Agents;
 using Praxis.Infrastructure.Persistence.Collections;
 using Praxis.Infrastructure.Persistence.Enrichment;
@@ -61,6 +62,8 @@ public sealed class SqliteCatalog : IDisposable
 
     public SqliteSettingsStore Settings { get; }
 
+    public SqliteActivityReader Activity { get; }
+
     public SqliteProjectRepository Projects { get; }
 
     private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, SqliteConnection? reader, TimeProvider clock)
@@ -93,6 +96,7 @@ public sealed class SqliteCatalog : IDisposable
         Understanding = new SqliteUnderstandingRepository(database, clock);
         Links = new SqliteLinkRepository(database, clock);
         Settings = new SqliteSettingsStore(database, clock);
+        Activity = new SqliteActivityReader(database);
         Projects = new SqliteProjectRepository(database);
     }
 

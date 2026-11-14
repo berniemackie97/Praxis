@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Praxis.Application.Policy;
 
 /// <summary>
@@ -8,9 +10,13 @@ namespace Praxis.Application.Policy;
 public sealed class LocalPace
 {
     private const double Smoothing = 0.3;
+
+    // A probe that never reports back (the call failed another way) is retried after this long.
+    private static readonly TimeSpan ProbeExpiry = TimeSpan.FromMinutes(10);
     private readonly Lock gate = new();
     private double? secondsPerThousand;
     private int samples;
+    private long? probeStarted;
 
     /// <summary>Records one local call over <paramref name="characters"/> of input that took <paramref name="duration"/>.</summary>
     public void Observe(int characters, TimeSpan duration)
@@ -25,6 +31,25 @@ public sealed class LocalPace
         {
             secondsPerThousand = secondsPerThousand is { } current ? current + (Smoothing * (rate - current)) : rate;
             samples++;
+            probeStarted = null;
+        }
+    }
+
+    /// <summary>
+    /// Before any measurement, lets exactly one call through to learn the pace; concurrent workers
+    /// wait for its result instead of all trying the local model at once.
+    /// </summary>
+    public bool TryStartProbe()
+    {
+        lock (gate)
+        {
+            if (secondsPerThousand is not null || probeStarted is { } started && Stopwatch.GetElapsedTime(started) < ProbeExpiry)
+            {
+                return false;
+            }
+
+            probeStarted = Stopwatch.GetTimestamp();
+            return true;
         }
     }
 

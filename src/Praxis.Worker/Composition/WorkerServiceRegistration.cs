@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Praxis.Application.Activity;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Collections;
@@ -81,6 +82,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IModelToolDetector, ModelToolDetector>();
         services.AddSingleton<ISettingsStore>(provider => provider.GetRequiredService<SqliteCatalog>().Settings);
         services.AddSingleton(_ => CatalogProcessing.Pace);
+        services.AddSingleton(_ => CatalogProcessing.Activity);
+        services.AddSingleton<IActivityReader>(provider => provider.GetRequiredService<SqliteCatalog>().Activity);
         services.AddSingleton<ModelSetup>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
@@ -135,6 +138,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, UnderstandingActions>();
         services.AddSingleton<IDesktopActionGroup, PolicyActions>();
         services.AddSingleton<IDesktopActionGroup, AgentActions>();
+        services.AddSingleton<IDesktopActionGroup, ActivityActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();
 

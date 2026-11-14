@@ -60,6 +60,25 @@ public sealed class TextSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task FileNamesRankFirstAndPartialMatchesFindSourcesMissingSomeWords()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        await Capture(catalog, "protocol-notes.md",
+            "Packet parse notes: the create packet and parse order, packet by packet, parse by parse.", "notes");
+        CapturedOriginal named = await Capture(catalog, "create-packet-parse.json",
+            """{"opcode":1001,"fields":["name","body"]}""", "named");
+        ProcessingDriver worker = ProcessingDriver.Text(catalog);
+        Assert.True(await worker.ProcessNextAsync());
+        Assert.True(await worker.ProcessNextAsync());
+
+        Assert.Equal(named.ItemId, catalog.Search.Query("create-packet-parse.json")[0].ItemId);
+        Assert.Empty(catalog.Search.Query("create character packet conquer"));
+        IReadOnlyList<SearchHit> partial = catalog.Search.QueryAny("create character packet conquer", 20);
+        Assert.Equal(2, partial.Count);
+        Assert.Empty(catalog.Search.QueryAny("conquer character", 20));
+    }
+
+    [Fact]
     public async Task CanonicalEvidenceFenceRejectsForgedMetadataAndEarlierSourceRevisions()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);

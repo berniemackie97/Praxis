@@ -33,6 +33,7 @@ public sealed class ClaudeCodeSessionBackend(string executable, string model, Ag
         CliResult result = await CliProcess.RunAsync(executable,
         [
             "-p", "--output-format", "json", "--mcp-config", config, "--strict-mcp-config", "--tools", "", "--allowedTools", allowed,
+            "--setting-sources", "", "--disable-slash-commands",
             "--permission-mode", "dontAsk", "--no-session-persistence",
             .. (model == "default" ? Array.Empty<string>() : ["--model", model]),
             .. (effort is null ? Array.Empty<string>() : ["--effort", effort]), "--system-prompt", systemPrompt

@@ -75,6 +75,7 @@ struct WorkbenchSplitView: View {
         case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification,
                                            collections: model.collections, sources: model.items)
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
+        case .activity: ActivityView(model: model.activity)
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
             section = .library
@@ -104,7 +105,7 @@ private struct Sidebar: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            IntakeFooter()
+            IntakeFooter { selection = .activity }
         }
     }
 
@@ -117,36 +118,43 @@ private struct Sidebar: View {
     }
 }
 
-/// Intake health in one glance; opens the folder settings for detail.
+/// Intake health in one glance; opens Activity for what each model is doing, the gear opens folder settings.
 private struct IntakeFooter: View {
     @EnvironmentObject private var model: WorkbenchModel
+    let showActivity: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             Divider()
-            Button { SettingsOpener.open(.general) } label: {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    HStack(spacing: Spacing.s) {
+            HStack(alignment: .top, spacing: Spacing.s) {
+                Button(action: showActivity) {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
                         StatusPill(text: IntakeHealth.label(model), tone: IntakeHealth.tone(model))
-                        Spacer(minLength: 0)
-                        Image(systemName: "gearshape").foregroundStyle(.tertiary)
+                        if let backlog = model.intakeBacklog, backlog.queued + backlog.running + backlog.failed + (backlog.enrichmentPending ?? 0) > 0 {
+                            Text(IntakeHealth.backlog(backlog)).font(.meta).foregroundStyle(.secondary)
+                        }
+                        if !model.message.isEmpty {
+                            Text(model.message)
+                                .font(.meta).foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .help(model.message)
+                        }
                     }
-                    if let backlog = model.intakeBacklog, backlog.queued + backlog.running + backlog.failed + (backlog.enrichmentPending ?? 0) > 0 {
-                        Text(IntakeHealth.backlog(backlog)).font(.meta).foregroundStyle(.secondary)
-                    }
-                    if !model.message.isEmpty {
-                        Text(model.message)
-                            .font(.meta).foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .help(model.message)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("Show what each model is doing")
+                .accessibilityLabel("Intake status: \(IntakeHealth.label(model)). Opens Activity.")
+                Button { SettingsOpener.open(.general) } label: {
+                    Image(systemName: "gearshape").foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Folder settings")
+                .accessibilityLabel("Folder settings")
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, Spacing.m)
             .padding(.bottom, Spacing.m)
-            .accessibilityLabel("Intake status: \(IntakeHealth.label(model)). Opens folder settings.")
         }
     }
 }

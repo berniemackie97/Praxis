@@ -44,7 +44,12 @@ public sealed class SubscriptionCliTests : IDisposable
             var lines = File.ReadAllLines(record);
             Assert.Contains("--tools", lines);
             Assert.Equal("", lines[Array.IndexOf(lines, "--tools") + 1]);
-            Assert.Equal("*", lines[Array.IndexOf(lines, "--disallowedTools") + 1]);
+            // Structured output arrives through Claude Code's own StructuredOutput tool; nothing else is allowed,
+            // and none of the owner's own settings, hooks or plugins load.
+            Assert.Equal("StructuredOutput", lines[Array.IndexOf(lines, "--allowedTools") + 1]);
+            Assert.DoesNotContain("--disallowedTools", lines);
+            Assert.Equal("", lines[Array.IndexOf(lines, "--setting-sources") + 1]);
+            Assert.Contains("--disable-slash-commands", lines);
             Assert.Equal("sonnet", lines[Array.IndexOf(lines, "--model") + 1]);
             Assert.Equal("Verify strictly.", lines[Array.IndexOf(lines, "--system-prompt") + 1]);
             Assert.Contains("--no-session-persistence", lines);

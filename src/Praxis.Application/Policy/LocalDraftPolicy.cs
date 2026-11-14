@@ -3,7 +3,7 @@ namespace Praxis.Application.Policy;
 /// <summary>
 /// Decides per span whether the local tier drafts first. In <c>auto</c> mode a draft is asked for
 /// only when this Mac's measured pace says it finishes within the budget; before any measurement
-/// a short span is tried once so the pace can be learned.
+/// one span is tried at a time so the pace can be learned.
 /// </summary>
 public sealed class LocalDraftPolicy(ISettingsStore settings, LocalPace pace)
 {
@@ -11,7 +11,6 @@ public sealed class LocalDraftPolicy(ISettingsStore settings, LocalPace pace)
     public const string BudgetKey = "local_draft_budget_seconds";
     public const int DefaultBudgetSeconds = 20;
     public const int MaximumCharacters = 6_000;
-    private const int ProbeCharacters = 2_500;
 
     public string Mode => settings.Read(ModeKey) is { } mode && LocalDraftModes.IsValid(mode) ? mode : LocalDraftModes.Auto;
 
@@ -28,7 +27,7 @@ public sealed class LocalDraftPolicy(ISettingsStore settings, LocalPace pace)
         {
             LocalDraftModes.Off => false,
             LocalDraftModes.Always => true,
-            _ => pace.Estimate(characters) is { } estimate ? estimate <= Budget : characters <= ProbeCharacters
+            _ => pace.Estimate(characters) is { } estimate ? estimate <= Budget : pace.TryStartProbe()
         };
     }
 }
