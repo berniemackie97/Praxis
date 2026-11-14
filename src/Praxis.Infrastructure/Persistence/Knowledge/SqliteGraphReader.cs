@@ -262,10 +262,10 @@ public sealed class SqliteGraphReader : IGraphReader
             List<GraphNode> nodes = [];
             List<GraphEdge> edges = [];
             HashSet<Guid> known = [];
-            if (focusId is Guid rootId && root is not null)
+            if (focusId is Guid knownFocusId && root is not null)
             {
                 nodes.Add(root);
-                known.Add(rootId);
+                known.Add(knownFocusId);
             }
             foreach (EdgeRow row in rows)
             {
