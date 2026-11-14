@@ -7,6 +7,7 @@ struct KnowledgeGraphView: View {
     let sources: [LibraryItem]
     let inspect: (String) -> Void
     let explain: (String) -> Void
+    let openSource: (GraphEvidence) -> Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -256,7 +257,8 @@ struct KnowledgeGraphView: View {
                 if let evidence = edge.evidence {
                     evidenceSummary(evidence)
                     HStack {
-                        Button("Open current evidence") { graph.openSelectedEvidence() }
+                        Button("Open current source") { graph.openSelectedEvidence(openSource) }
+                            .help("Opens the current Library source when available; otherwise shows its verified text excerpt.")
                             .disabled(graph.reviewingRelation)
                         if evidence.status == "pending" {
                             Button("Accept") { graph.reviewSelectedRelation("accepted") }
