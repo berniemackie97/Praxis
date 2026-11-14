@@ -384,6 +384,26 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Empty(catalog.Graph.Neighborhood(center, new GraphQuery()).Edges);
     }
 
+    [Fact]
+    public async Task HistoricalOwnerAliasDoesNotLeakThroughScopedSearch()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal source = await Enrich(catalog, "reader.md", "C3Reader parses code.");
+        await Accept(catalog, source);
+        Guid id = Single(catalog, "C3Reader").EntityId;
+
+        Assert.True(catalog.Knowledge.Rename(id, "Retired Identifier"));
+        Assert.True(catalog.Knowledge.Rename(id, "Current Identifier"));
+
+        GraphQuery scoped = new(SourceId: source.SourceId);
+        Assert.Equal("empty", catalog.Graph.Seeds("Retired Identifier", scoped).Outcome);
+        Assert.Equal(id, Assert.Single(catalog.Graph.Seeds("Current Identifier", scoped).Nodes).EntityId);
+        Assert.Equal(id, Assert.Single(catalog.Graph.Seeds("C3Reader", scoped).Nodes).EntityId);
+
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+        Assert.Equal("empty", catalog.Graph.Seeds("Current Identifier", scoped).Outcome);
+    }
+
     private SqliteCatalog Open()
     {
         SqliteCatalog catalog = SqliteCatalog.Open(root);
