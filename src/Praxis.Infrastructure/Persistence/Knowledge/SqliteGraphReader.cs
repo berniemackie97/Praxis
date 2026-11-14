@@ -179,7 +179,7 @@ public sealed class SqliteGraphReader : IGraphReader
             string signature = Signature(focusId is null ? "atlas" : relationId is null ? "neighbors" : "relation",
                 focusId, relationId?.ToString("D"), query);
             string after = ReadCursor(query.Cursor, version, signature);
-            GraphNode? root = focusId is Guid id ? ReadNode(connection, id, query) : null;
+            GraphNode? root = focusId is Guid rootId ? ReadNode(connection, rootId, query) : null;
             if (focusId is not null && root is null)
             {
                 if (query.Cursor is not null)
@@ -265,12 +265,13 @@ public sealed class SqliteGraphReader : IGraphReader
             foreach (EdgeRow row in rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (Guid endpoint in new[] { row.SubjectId, row.ObjectId })
+                if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
                 {
-                    if (known.Add(endpoint) && ReadNode(connection, endpoint, query) is { } node)
-                    {
-                        nodes.Add(node);
-                    }
+                    nodes.Add(subject);
+                }
+                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objective)
+                {
+                    nodes.Add(objective);
                 }
 
                 edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
