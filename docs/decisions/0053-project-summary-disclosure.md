@@ -10,7 +10,7 @@ Before returning model-derived project details, validate that those source revis
 
 The `knowledge_project` tool additionally checks every contributing source against the **current recipient's chat disclosure policy**. Remote agents receive no cached project details or even project names from a summary when any contributing source is withheld. Local owner use remains available, but invalid model-derived details are not presented as current. Chat disclosure is re-evaluated for each tool call so permission revocation takes effect within an active turn.
 
-An unchanged file fingerprint no longer prevents regeneration after the persisted project scope has been invalidated. Regeneration may use only the sources now authorized for the selected provider. Revalidation does not grant remote access.
+A project also persists a fingerprint of the effective intake disclosure scope across its captured members and configured model tiers. File changes retain the existing debounce, but narrowing or widening source permission changes can trigger regeneration without a changed file fingerprint. Stable denied scopes do not repeatedly request model work. Regeneration may use only the sources now authorized for the selected provider. Revalidation does not grant remote access.
 
 ## Tradeoffs and limitations
 
