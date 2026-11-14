@@ -34,7 +34,7 @@ The macOS inspector performs a scoped `graphRelation` re-read before exposing a 
 
 An owner can accept or reject a currently eligible source-backed relation through the existing `topicReview` action. This action applies the repository's current-source eligibility and review history; graph gestures or agent output never mutate graph state. Owner-authored edges carry no proposal or invented citation and are not presented as reviewable proposals. Entity corrections remain in the Entities workspace. The explicit Ask Praxis action only prepares a draft of current, revalidated relation identifiers, with no source excerpt or automatic model call; the owner chooses the model and sends it through the existing chat/disclosure workflow.
 
-Selection changes, focus changes, scope changes, refresh and view deactivation invalidate scoped replies and visible inspection text. A newly unavailable relationship triggers a fresh graph projection. This is a current-read guard, not a continuous subscription to changes; the measured revocation-race and accessibility release gate remains #388.
+Selection changes, focus changes, scope changes, refresh and view deactivation invalidate scoped replies and visible inspection text. A newly unavailable relationship triggers a fresh graph projection. While the Knowledge workspace is visible, its existing refresh heartbeat also rechecks the selected relation (normally every 10 seconds, unless backlogged); a revoked or changed relation clears its evidence and obsolete text. This is not an instantaneous subscription or a substitute for the measured revocation-race gate in #388.
 
 ## Cursor and cancellation
 
