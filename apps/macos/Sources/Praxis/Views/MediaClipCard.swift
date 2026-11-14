@@ -138,27 +138,38 @@ private struct ClipPlayerView: NSViewRepresentable {
         item.forwardPlaybackEndTime = full ? .invalid : CMTime(seconds: range.end, preferredTimescale: 600)
     }
 
+    @MainActor
     final class Coordinator {
         private var observer: (any NSObjectProtocol)?
         private var rateObserver: NSKeyValueObservation?
+        private weak var player: AVPlayer?
+        private var start = CMTime.zero
         private var finished = false
 
         func attach(player: AVPlayer, range: MediaTimeRange) {
-            observer = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem,
-                                                              queue: .main) { [weak self] _ in
-                self?.finished = true
+            self.player = player
+            start = CMTime(seconds: range.start, preferredTimescale: 600)
+            observer = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
+                                                              object: player.currentItem, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.finished = true }
             }
-            // Play after the clip ended starts the clip over instead of doing nothing.
-            rateObserver = player.observe(\.rate, options: [.new]) { [weak self] player, change in
-                guard let self, change.newValue ?? 0 > 0, finished else { return }
-                finished = false
-                player.seek(to: CMTime(seconds: range.start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            rateObserver = player.observe(\.rate, options: [.new]) { [weak self] _, change in
+                guard change.newValue ?? 0 > 0 else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, finished, let player = self.player else { return }
+                    finished = false
+                    player.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero)
+                }
             }
         }
 
         func detach() {
             if let observer { NotificationCenter.default.removeObserver(observer) }
             rateObserver?.invalidate()
+            observer = nil
+            rateObserver = nil
+            player = nil
+            finished = false
         }
     }
 }
