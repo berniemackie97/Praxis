@@ -29,6 +29,10 @@ struct PayloadReviewTests {
         #expect(VerificationProviderDefault.choice(checkingProvider: VerificationProvider.claudeCode, providers: connected).isEmpty)
         #expect(VerificationProviderDefault.choice(checkingProvider: nil, providers: connected).isEmpty)
         #expect(VerificationProviderDefault.choice(checkingProvider: VerificationProvider.ollama, providers: connected).isEmpty)
+        #expect(VerificationProviderDefault.available(VerificationProvider.codex, providers: connected))
+        #expect(!VerificationProviderDefault.available(VerificationProvider.claudeCode, providers: connected))
+        #expect(VerificationProviderDefault.available("", providers: connected))
+        #expect(!VerificationProviderDefault.available("", providers: [provider(VerificationProvider.ollama, enabled: false)]))
     }
 
     @MainActor

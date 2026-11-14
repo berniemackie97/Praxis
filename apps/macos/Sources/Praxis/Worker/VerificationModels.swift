@@ -145,4 +145,9 @@ enum VerificationProviderDefault {
               providers.contains(where: { $0.providerId == checkingProvider && $0.enabled }) else { return "" }
         return checkingProvider == VerificationProvider.ollama ? "" : checkingProvider
     }
+
+    static func available(_ selection: String, providers: [VerificationProvider]) -> Bool {
+        let providerId = selection.isEmpty ? VerificationProvider.ollama : selection
+        return providers.contains { $0.providerId == providerId && $0.enabled }
+    }
 }

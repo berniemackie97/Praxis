@@ -125,6 +125,10 @@ private struct VerificationDetailView: View {
         !model.providerChoice.isEmpty && model.providerChoice != VerificationProvider.ollama
     }
 
+    private var selectedProviderAvailable: Bool {
+        VerificationProviderDefault.available(model.providerChoice, providers: providers)
+    }
+
     private var selectedExternalProvider: VerificationProvider? {
         providers.first { $0.providerId == model.providerChoice && $0.providerId != VerificationProvider.ollama }
     }
@@ -284,9 +288,7 @@ private struct VerificationDetailView: View {
                     Button("Decline") { model.decline() }
                     Button("Approve and Send") { model.approve() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(providers.isEmpty || model.excluded.count >= items.count ||
-                            (model.providerChoice.isEmpty &&
-                             !providers.contains(where: { $0.providerId == VerificationProvider.ollama })) ||
+                        .disabled(!selectedProviderAvailable || model.excluded.count >= items.count ||
                             (remoteSelected && (!model.remoteConsent || !remoteReady)))
                 }
                 if model.providerChoice == "" {
@@ -296,8 +298,8 @@ private struct VerificationDetailView: View {
                     Text("The configured Checking provider is suggested when available. External disclosure still requires each included source's permission and your explicit approval of the redacted payload.")
                         .font(.caption).foregroundColor(.orange)
                 }
-                if providers.isEmpty {
-                    Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
+                if !selectedProviderAvailable {
+                    Text("The selected verifier is not enabled. Choose an available provider under Send to, or connect one in Models.")
                         .font(.caption).foregroundColor(.orange)
                 }
             }
