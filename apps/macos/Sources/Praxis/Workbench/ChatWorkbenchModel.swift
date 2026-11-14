@@ -80,6 +80,15 @@ final class ChatWorkbenchModel: ObservableObject {
         channel.reset("conversation")
     }
 
+    func prepareDraft(_ text: String) -> Bool {
+        guard !running else {
+            error = "Finish or cancel the current response before preparing a graph question."
+            return false
+        }
+        draft = String(text.prefix(Self.maximumMessageCharacters))
+        return true
+    }
+
     func send() {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
