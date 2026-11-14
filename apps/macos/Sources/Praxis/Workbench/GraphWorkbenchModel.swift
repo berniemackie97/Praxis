@@ -32,6 +32,8 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var atlasLoading = false
     @Published private(set) var atlasTruncated = false
     @Published private(set) var atlasError: String?
+    @Published private(set) var recenterNodeId: String?
+    @Published private(set) var recenterRevision = 0
     @Published private(set) var nextSeedCursor: String?
     @Published private(set) var nodes: [GraphNode] = []
     @Published private(set) var edges: [GraphEdge] = []
@@ -59,6 +61,11 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     var visibleEdges: [GraphEdge] { focusId == nil ? atlasEdges : edges }
+
+    var highlightedNodeIds: Set<String> {
+        guard !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        return Set(seeds.map(\.entityId))
+    }
 
     var canLoadMore: Bool {
         nextCursor != nil && nodes.count < GraphBudget.maximumNodes && edges.count < GraphBudget.maximumEdges
@@ -170,6 +177,25 @@ final class GraphWorkbenchModel: ObservableObject {
         }
     }
 
+    func searchNames() {
+        guard active else { return }
+        channel.reset(seedScope)
+        seeds = []
+        nextSeedCursor = nil
+        loadSeeds(cursor: nil)
+    }
+
+    func highlightNode(_ id: String) {
+        guard focusId == nil, visibleNodes.contains(where: { $0.entityId == id }) else {
+            focus(id)
+            return
+        }
+        selectedNodeId = id
+        selectedEdgeId = nil
+        recenterNodeId = id
+        recenterRevision += 1
+    }
+
     func loadMoreSeeds() {
         guard active, let nextSeedCursor, !loading,
               seeds.count < GraphBudget.maximumNodes else { return }
@@ -178,6 +204,7 @@ final class GraphWorkbenchModel: ObservableObject {
 
     func showOverview() {
         requestedFocusId = nil
+        recenterNodeId = nil
         channel.reset(neighborhoodScope)
         clearInspection()
         focusId = nil
