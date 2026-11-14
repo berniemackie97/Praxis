@@ -39,7 +39,7 @@ public static class ProcessorKeys
     private static readonly IReadOnlyDictionary<string, string[]> Dependents =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            [SourceText] = [MarkdownHeadings, TextSegments, IntakeTriage, LinkFetch],
+            [SourceText] = [TextSegments, IntakeTriage, LinkFetch],
             [TextSegments] = [SemanticExtraction],
             [IntakeTriage] = [IntakeUnderstand]
         };

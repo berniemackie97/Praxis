@@ -167,6 +167,18 @@ final class WorkbenchModel: ObservableObject {
         send(.topicReview, payload)
     }
 
+    /// Accepts or dismisses every unconfirmed suggestion for the selected source at once.
+    func reviewAllSuggestions(_ decision: String) {
+        guard let item = selected else { return }
+        channel.send("topicReviewAll", ["sourceId": item.sourceId, "decision": decision], as: ReviewedCount.self,
+                     failed: { _ in }) { [weak self] data in
+            self?.message = decision == "accepted"
+                ? "\(data.reviewed) suggestions added to your knowledge."
+                : "\(data.reviewed) suggestions dismissed."
+            self?.refreshTopics(for: item)
+        }
+    }
+
     func addMembership() {
         guard let source = selected, !selectedMembershipId.isEmpty else { return }
         send(.collectionAdd, ["collectionId": selectedMembershipId,

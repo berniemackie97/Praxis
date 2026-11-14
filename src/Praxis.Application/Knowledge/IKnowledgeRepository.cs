@@ -6,7 +6,7 @@ namespace Praxis.Application.Knowledge;
 /// <summary>The owner-governed entity and relationship layer built from accepted evidence.</summary>
 public interface IKnowledgeRepository
 {
-    IReadOnlyList<EntitySummary> ListEntities(string? entityType, string? search, int limit);
+    IReadOnlyList<EntitySummary> ListEntities(string? entityType, string? search, int limit, bool includeSuggestions = false);
 
     EntityDetail? GetEntity(Guid entityId);
 

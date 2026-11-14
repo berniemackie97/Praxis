@@ -44,7 +44,6 @@ public static class CatalogProcessing
         return
         [
             new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, readers, transcriber ?? new SpeechTranscriptionEngine()),
-            new HeadingProposalHandler(catalog.Text, catalog.Proposals, catalog.Processing),
             new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing),
             new SemanticExtractionHandler(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals,
                 catalog.Knowledge, catalog.Processing, new OllamaChatModelConnector()),

@@ -132,20 +132,20 @@ public sealed class VerificationTests : IDisposable
 
         // Unsupported hides an ordinary mention; supported releases one withheld for its wording,
         // and a corrected type becomes the verified type of the entity.
-        Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
-        EntitySummary hackerEntity = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Hacker Inc");
+        Assert.DoesNotContain(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Alex Rivera");
+        EntitySummary hackerEntity = catalog.Knowledge.ListEntities(includeSuggestions: true).Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("person", "verified"), (hackerEntity.EntityType, hackerEntity.TypeOrigin));
 
         Guid alexProposal = catalog.Proposals.List(source.SourceId).Single(proposal => proposal.Value == "Alex Rivera").ProposalId;
         Assert.True(catalog.Proposals.Review(alexProposal, "accepted"));
-        Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
+        Assert.Contains(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Alex Rivera");
 
         Assert.True(catalog.Knowledge.SetType(hackerEntity.EntityId, "organization"));
         Guid second = catalog.Verification.RequestForEntity(hackerEntity.EntityId)!.Value;
         new VerificationApproval(catalog.Verification).Approve(second,
             providerId: VerificationProvider.Codex, remoteDisclosureApproved: true);
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ => Verdicts((1, "supported", "person")))).ProcessNextAsync());
-        EntitySummary owned = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Hacker Inc");
+        EntitySummary owned = catalog.Knowledge.ListEntities(includeSuggestions: true).Single(entity => entity.Name == "Hacker Inc");
         Assert.Equal(("organization", "owner"), (owned.EntityType, owned.TypeOrigin));
 
         string localPrompt = await NextLocalPrompt(catalog, "later.md", "# Later\nHacker Inc called again.");
@@ -203,7 +203,7 @@ public sealed class VerificationTests : IDisposable
         VerificationRequestView view = catalog.Verification.Get(request)!;
         Assert.Equal((status, code), (view.Status, view.FailureCode));
         Assert.DoesNotContain(reports, report => report.Contains("secrets", StringComparison.Ordinal));
-        Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
+        Assert.Contains(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Alex Rivera");
 
         if (status == "approved")
         {
@@ -232,8 +232,8 @@ public sealed class VerificationTests : IDisposable
         VerificationRequestView view = catalog.Verification.Get(request)!;
         Assert.Null(view.Items.Single(item => item.Ordinal == alex).Verdict);
         Assert.Equal("uncertain", view.Items.Single(item => item.Ordinal == hacker).Verdict);
-        Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
-        Assert.DoesNotContain(catalog.Knowledge.ListEntities(), entity => entity.Name == "Hacker Inc");
+        Assert.Contains(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Alex Rivera");
+        Assert.DoesNotContain(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Hacker Inc");
     }
 
     [Fact]
@@ -471,7 +471,7 @@ public sealed class VerificationTests : IDisposable
         VerificationRequestView failed = catalog.Verification.Get(request)!;
         Assert.Equal(("failed", "model_invalid_response"), (failed.Status, failed.FailureCode));
         Assert.All(failed.Items, item => Assert.Null(item.Verdict));
-        Assert.Contains(catalog.Knowledge.ListEntities(), entity => entity.Name == "Alex Rivera");
+        Assert.Contains(catalog.Knowledge.ListEntities(includeSuggestions: true), entity => entity.Name == "Alex Rivera");
         await catalog.Originals.VerifyAsync(source.ItemId);
     }
 
@@ -512,7 +512,7 @@ public sealed class VerificationTests : IDisposable
         Guid proposal = catalog.Proposals.List(source.SourceId)
             .Single(candidate => candidate.Value == "Alex Rivera").ProposalId;
         Assert.True(catalog.Proposals.Review(proposal, "accepted"));
-        EntitySummary restored = catalog.Knowledge.ListEntities().Single(entity => entity.Name == "Alex Rivera");
+        EntitySummary restored = catalog.Knowledge.ListEntities(includeSuggestions: true).Single(entity => entity.Name == "Alex Rivera");
         Assert.Equal("person", restored.EntityType);
         Assert.NotEqual("verified", restored.TypeOrigin);
     }
@@ -595,7 +595,7 @@ public sealed class VerificationTests : IDisposable
         }
 
         Assert.True(catalog.Sources.Revoke(first.SourceId));
-        Assert.Equal(1, catalog.Knowledge.ListEntities().Single(candidate =>
+        Assert.Equal(1, catalog.Knowledge.ListEntities(includeSuggestions: true).Single(candidate =>
             candidate.EntityId == entity).Sources);
         Assert.Throws<InvalidOperationException>(() =>
             new VerificationApproval(catalog.Verification).Approve(request,
@@ -619,7 +619,7 @@ public sealed class VerificationTests : IDisposable
             Path.Combine(workspace, "type-org.md"), replacement, 200_000, Guid.NewGuid().ToString("N"));
         Assert.Equal(first.SourceId, next.SourceId);
         Assert.Equal(first.Revision + 1, next.Revision);
-        Assert.Equal(1, catalog.Knowledge.ListEntities().Single(candidate =>
+        Assert.Equal(1, catalog.Knowledge.ListEntities(includeSuggestions: true).Single(candidate =>
             candidate.EntityId == entity).Sources);
 
         Assert.False(await Runner(catalog, _ => throw new Xunit.Sdk.XunitException(
@@ -662,7 +662,7 @@ public sealed class VerificationTests : IDisposable
         Assert.True(await Runner(catalog, _ => new ScriptedChatModel(_ =>
             VerdictsFor(catalog.Verification.Get(request)!))).ProcessNextAsync());
         Assert.Equal("completed", catalog.Verification.Get(request)!.Status);
-        Assert.Equal(2, catalog.Knowledge.ListEntities().Single(candidate =>
+        Assert.Equal(2, catalog.Knowledge.ListEntities(includeSuggestions: true).Single(candidate =>
             candidate.EntityId == entity).Sources);
     }
 
@@ -942,7 +942,7 @@ public sealed class VerificationTests : IDisposable
         types["OpenConquerClient"] = "project";
         CapturedOriginal second = await Enrich(catalog, "type-project.md",
             "# Software\nOpenConquerClient is a software project with a renderer.");
-        EntitySummary entity = catalog.Knowledge.ListEntities().Single(candidate =>
+        EntitySummary entity = catalog.Knowledge.ListEntities(includeSuggestions: true).Single(candidate =>
             candidate.Name == "OpenConquerClient");
         Assert.True(entity.TypeConflict);
         Assert.Equal(2, entity.Sources);

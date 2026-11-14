@@ -1,5 +1,7 @@
+using Praxis.Application.Inference;
 using Praxis.Application.Processing;
 using Praxis.Application.Text;
+using Praxis.Domain.Models;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Documents;
@@ -38,8 +40,40 @@ internal sealed class ProcessingDriver(SqliteCatalog catalog, IProcessingHandler
         }
     }
 
-    internal static ProcessingDriver Topics(SqliteCatalog catalog) =>
-        new(catalog, TestHandlers.HeadingProposals(catalog));
+    /// <summary>
+    /// Runs segmentation and local enrichment with a scripted local model that suggests every
+    /// Markdown heading as a topic: unconfirmed suggestions, as the local tier produces them.
+    /// </summary>
+    internal static async Task SuggestHeadingTopicsAsync(SqliteCatalog catalog)
+    {
+        if (catalog.Models.Get(ModelProfile.LocalEnrichment) is not { Enabled: true })
+        {
+            catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment, "ollama", "http://127.0.0.1:11434", "qwen:9b", 16_384, Enabled: true));
+        }
+
+        ScriptedChatModel model = new(request =>
+        {
+            string[] headings = ScriptedChatModel.Excerpt(request).Split('\n')
+                .Where(line => line.StartsWith("# ", StringComparison.Ordinal)).Select(line => line[2..].Trim()).ToArray();
+            return System.Text.Json.JsonSerializer.Serialize(new
+            {
+                topics = headings.Select(heading => new { name = heading, quote = heading }),
+                entities = Array.Empty<object>(),
+                relations = Array.Empty<object>()
+            });
+        });
+        ProcessingDriver[] drivers =
+        [
+            new(catalog, new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing)),
+            new(catalog, TestHandlers.SemanticExtraction(catalog, _ => new ModelConnection(model)))
+        ];
+        foreach (ProcessingDriver driver in drivers)
+        {
+            while (await driver.ProcessNextAsync())
+            {
+            }
+        }
+    }
 
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {

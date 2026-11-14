@@ -120,7 +120,7 @@ struct EntityDetailView: View {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
                             Text(mention.evidence).font(.callout).textSelection(.enabled)
                             Text([mention.sourceName, "as \(KnowledgeVocabulary.label(mention.mentionType))",
-                                  mention.status, mention.verdict.map { "verifier: \($0)" }]
+                                  MentionStatus.label(mention.status), mention.verdict.map { "verifier: \($0)" }]
                                 .compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption2).foregroundStyle(.tertiary)
                         }
@@ -167,5 +167,18 @@ struct EntityDetailView: View {
         guard !newName.trimmingCharacters(in: .whitespaces).isEmpty, newName.count <= 120 else { return }
         model.rename(to: newName)
         renaming = false
+    }
+}
+
+/// How a mention came to count: verified by intake, confirmed or renamed by the owner, or still a guess.
+enum MentionStatus {
+    static func label(_ status: String) -> String {
+        switch status {
+        case "verified": "verified by intake"
+        case "accepted": "confirmed by you"
+        case "corrected": "renamed by you"
+        case "pending": "unconfirmed guess"
+        default: status
+        }
     }
 }
