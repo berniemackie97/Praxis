@@ -133,6 +133,14 @@ struct WorkerSessionTests {
             throw Failure.unexpected("Unified overview did not decode an empty authorized catalog")
         }
 
+        var atlas: WorkerReply<GraphPage>?
+        try session.send("graphAtlas", fields: ["limit": 100], as: GraphPage.self) { atlas = $0 }
+        try await waitFor("global graph atlas") { atlas != nil }
+        guard atlas?.ok == true, atlas?.data?.outcome == "empty",
+              atlas?.data?.nodes.isEmpty == true, atlas?.data?.edges.isEmpty == true else {
+            throw Failure.unexpected("Empty global atlas exposed unrelated data")
+        }
+
         var graphSeeds: WorkerReply<GraphPage>?
         try session.send("graphSeeds", fields: ["limit": 10], as: GraphPage.self) {
             graphSeeds = $0
