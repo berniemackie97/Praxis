@@ -2,9 +2,13 @@
 
 **Status:** Product intent and acceptance direction. This document is not a list of shipped features.
 
-Praxis is a local-first **personal knowledge intelligence and agent platform** that works **without Obsidian, a cloud account, or an AI provider**. The product is not complete when it merely browses or searches files: it must progressively interpret supported knowledge, connect corroborating evidence across sources, investigate questions, and produce actionable, cited conclusions without inventing facts. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Obsidian remains an optional editor/source adapter.
+Praxis is a local-first **personal knowledge intelligence and agent platform** that works **without Obsidian, a cloud account, or an AI provider**. The product is not complete when it merely browses or searches files: it must progressively interpret supported knowledge, connect corroborating evidence across sources, investigate questions, and produce actionable, cited conclusions without inventing facts. It accepts owner-approved sources, keeps originals and source identity, makes supported content searchable, and lets the owner build meaningful connections across projects. Praxis is the primary workspace for exploring linked knowledge. Markdown/vault import and export remain optional portability paths (#57/#25/#171); the historical Obsidian plugin is not a required runtime.
 
 **Approved hosting and inference direction (November 11, 2026):** [ADR 0041](../decisions/0041-hybrid-local-first-deployment.md) specifies a hybrid local-first product: owner-local macOS first, optional owner-managed private host second, optional remote hosting later. Local installations remain offline-capable but may call individually authorized online LLMs and agents; local-data ownership, source security-space classification and remote model disclosure are separate decisions. This does not postpone the intelligent MVP behind remote sync or require local inference for every task.
+
+## November 13, 2026 — first-party Knowledge Graph decision
+
+The owner approved an animated, explorable, **source-verified native graph** as part of the Praxis Second Brain experience, replacing mandatory Obsidian Markdown projections. #383 is the feature; #384/#385 can proceed in parallel, #386/#387 deliver UI and evidence inspection, #388 gates real-device privacy, accessibility and performance. #170 depends on #388, **not #171**. Optional portable Markdown/vault import/export must remain independent, revocation-aware and safe for owner-authored files. The graph cannot grant tools, create canonical facts from layout positions or bypass source scopes.
 
 ## Actual product MVP: intelligent Second Brain
 
@@ -17,7 +21,7 @@ A representative set of owner workflows (all required at the supported MVP scope
 3. Build quality-evaluated lexical/semantic/structural retrieval, selective evidence expansion, reranking where measured useful, and tool-assisted bounded investigations. Ask a complex domain question; get a specific supported explanation, traceable source/version/span references and transparent disagreement/abstention, not a file list.
 4. Use a **persistent first-party Praxis assistant** to ask questions or request tasks. Inspect scope, plan, tool arguments, model/location, budget, progress, verification and audit; approve/revoke side effects. The model never grants itself permission.
 5. Operate with **local-first inference** (measured Ollama/Qwen where capable), cache/provenance/context budgets and explicitly approved escalation to supported stronger models. Evaluate official and terms-compliant routes for Claude, Codex, Gemini, Grok, DeepSeek and other providers. Never equate app subscriptions with unrestricted API access, or silently transmit source material to remote inference.
-6. Browse a **linked, provenance-aware derived Markdown representation in Obsidian**, and optionally export inspected, versioned, task-specific context packs for coding agents. Root/nested `AGENTS.md` and provider-specific context instructions are **reviewed projections**, not authority granted by imported source text; avoid floods of repetitive context.
+6. Explore the **native interactive, accessible, provenance-aware Praxis Knowledge Graph** (#383/#388): open source/relationship evidence, distinguish owner assertions from inferred or conflicting edges, and respect revision/revocation and privacy rules. Optional portable Markdown/vault export (#57/#171) and inspected, versioned context packs (#143) are interoperability features, **not MVP blockers**. Root/nested `AGENTS.md` and provider-specific instructions are reviewed projections, not authority granted by imported source text.
 7. Pass audited correctness, retrieval, prompt-injection, resource, backup/recovery, permission, privacy and real macOS workflows with concrete benchmark fixtures and reproducible run evidence. Production-grade is a testable engineering bar; no model can guarantee perfect understanding of arbitrary input.
 
 ### Cross-domain MVP proof — not technical-only
@@ -25,12 +29,12 @@ A representative set of owner workflows (all required at the supported MVP scope
 **Technical research** is one vertical slice, not the architecture's defining specialization. Two additional concrete, mandatory MVP experiences:
 
 - **Video / tutorial retrieval (#176/#177):** Praxis captures a supported local instructional video, builds time-aligned transcript and source-aware segments (and visual evidence only when implemented), and answers "Is there a tutorial on X?" with a relevant **inline playable segment in first-party chat**. Show accurate segment boundaries, the source's identity, and a jump to the full original video at the precise timestamp. A random frame, transcript-only link or invented timestamp does not pass.
-- **Owner-requested financial task (#176/#178):** Ask the assistant to create an editable monthly budget. It uses authorized Second Brain records and scoped MCP tools where needed, calculates totals deterministically, cites the underlying evidence and asks for missing inputs. The workflow runs through the same task interface as other requests.
+- **Owner-requested financial task (#176/#185):** Ask the assistant to create an editable monthly budget. It uses authorized Second Brain records and scoped MCP tools where needed, calculates totals deterministically, cites the underlying evidence and asks for missing inputs. The workflow runs through the same task interface as other requests.
 - **Shared evaluation (#179):** Test technical citations, video segment retrieval/playback and finance arithmetic as separate gold-standard workflows against the **same core evidence, permissions, versioning, routing, RAG and agent architecture**, with domain-specific extractors and output widgets only where warranted.
 
 The product must ultimately support many more types and sources—audio, images, email, calendars, social media, structured events—but the MVP proves **general-purpose extensibility by actually delivering these different workloads**, not by promising universal comprehension. Sensitive local financial data is never sent to remote inference without separately scoped explicit consent. Financial calculation is deterministic; probabilistic models may propose interpretations or budget scenarios, not fabricate totals.
 
-**Delivery ownership:** #170 cross-domain integrated acceptance; video and financial feature #176/#177/#178 and evaluation #179; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; Obsidian views #57/#171. Local foundation #130 remains its own prerequisite.
+**Delivery ownership:** #170 cross-domain integrated acceptance; video and financial feature #176/#177/#185 and evaluation #179; technical extraction #149/#152–#154; evidence/investigation #150/#155/#156; retrieval/evaluation #29/#172; models #31/#61; review/relationships #115/#116; grounded assistant #33; scoped task execution #32/#34/#173; safe tool proposals #160; context projection #143; **native evidence graph #383/#388**. Optional Markdown/vault interchange remains #57/#171, separate from release acceptance. Local foundation #130 remains its own prerequisite.
 
 **First release boundary:** one owner, one local machine, representative supported technical, video and financial corpora, a measured set of officially available inference/tool integrations and one functional approved task workflow. Broader bank/social connectors, universal binary comprehension and remote multi-device sync are separately gated; they do not weaken the intelligence/quality requirements above.
 
@@ -42,7 +46,7 @@ Each update should arrive as a typed, versioned, source-attributed event through
 
 Link financial entities and events to accounts, payees, recurring obligations, income sources, budget categories, owner notes, goals and relevant facts from other sources. Preserve the distinction between provider-provided metadata, deterministic rules, owner-reviewed classifications and model hypotheses; propagate corrections without silently rewriting original events. Use incremental processing to avoid needless model inference on already structured data. Privacy is independent of assistant prompts: only scoped approved connections and permitted data can be analyzed, synced or disclosed to a model, and no financial movement is authorized by ingestion.
 
-Provider feasibility, consent scope, rates, costs, refresh/webhooks and data protection are tracked in #162. The typed event contract is #157. The owner-facing financial reasoning and budget workflow is #178, and the complete agent/MVP acceptance remains #170. Live account updates depend on future connector and reconciliation work.
+Provider feasibility, consent scope, rates, costs, refresh/webhooks and data protection are tracked in #162. The typed event contract is #157. The owner-facing financial reasoning and budget workflow is #185, and the complete agent/MVP acceptance remains #170. Live account updates depend on future connector and reconciliation work.
 
 ## Core experience
 
@@ -121,9 +125,9 @@ Work items: #104, #111–#112.
 
 Work items: #117–#119, with #32 protecting write actions.
 
-### Obsidian and other connectors
+### Portable Markdown/vault interoperability and other connectors
 
-- Obsidian is an optional editor/capture adapter (#5/#57), not the start screen or source of truth.
+- Praxis owns the first-party Knowledge Graph (#383); optional Markdown/vault import/export (#57/#25/#171) may be consumed by Obsidian or other editors, but **no Obsidian plugin, live sync or exported vault graph is required for the MVP**. Unfinished plugin work #22/#23 is not planned; historical shipped code is not deleted by this product decision.
 - Later GitHub, calendar, email and document connectors (#30/#35) require specific scopes, retention and removal/refresh semantics.
 - Cross-device sync (#4) is a distinct capability, not a prerequisite for capturing and searching content locally.
 
@@ -167,10 +171,10 @@ Beyond note dictation (#109/#110), later first-party push-to-talk interaction (#
 6. Inspect and export/restore original bytes and metadata; distinguish full backups from a single-file restore.
 7. Prove no private content is transmitted to an external host and that unrelated processes or browser pages cannot read the local service.
 
-This demonstrates the local foundation, **not** the release-ready intelligent Second Brain. The complete product MVP is the integrated gate #170; agent-assisted knowledge, Obsidian views, model routing and task execution are not optional future aspirations. None may silently expand remote trust or promise universal file comprehension.
+This demonstrates the local foundation, **not** the release-ready intelligent Second Brain. The complete product MVP is the integrated gate #170; agent-assisted knowledge, native evidence graph exploration, model routing and task execution are required product outcomes; optional editor exports are not. None may silently expand remote trust or promise universal file comprehension.
 
 ## Not yet decided
 
-The exact catalog/database, parser runtimes, local service packaging, microphone/transcription engine, UI framework, web-extension browser support, MCP SDK/transport and optional model provider must be selected through bounded spikes and evidence. Avoid premature microservices, vector databases, complex graphs or broad plugin abstractions before a measured use case requires them. Remote trust/hosting, key custody, account sharing and recovery choices remain in #50.
+The exact catalog/database, parser runtimes, local service packaging, microphone/transcription engine, UI framework, web-extension browser support, MCP SDK/transport and optional model provider must be selected through bounded spikes and evidence. Avoid premature microservices, redundant graph databases or broad plugin abstractions. The approved native Knowledge Graph is a bounded **read projection of existing canonical entities and source evidence**, selected and measured under #384/#385, not a speculative second source of truth. Remote trust/hosting, key custody, account sharing and recovery choices remain in #50.
 
 The implementation order and slice acceptance are in [standalone MVP plan](../delivery/standalone-mvp.md). Milestone/issue hierarchy is defined in [roadmap](../roadmap.md) and the [declarative GitHub plan](../../scripts/github/roadmap.json).
