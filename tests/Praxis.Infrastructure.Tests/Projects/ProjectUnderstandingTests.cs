@@ -182,6 +182,108 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task ProjectMapsApplyMemberDisclosureSeparatelyToStrongAndStrongest()
+    {
+        using SqliteCatalog catalog = Open();
+        ScriptedModelFactory models = new ScriptedModelFactory()
+            .Answer(Local, _ => """{"category":"documents","documentType":"notes","language":"en","gist":"notes","recordKinds":[]}""")
+            .Answer(Strong, _ => """
+                {"purpose":"Project.","summary":"Review required.",
+                 "components":[{"name":"Invalid","path":"missing.ts","role":"missing"}],"entryPoints":[],"buildCommands":[]}
+                """)
+            .Answer(Strongest, _ => """
+                {"purpose":"Project.","summary":"Verified.",
+                 "components":[{"name":"Public","path":"src/public.ts","role":"entry"}],"entryPoints":[],"buildCommands":[]}
+                """);
+        CapturedOriginal marker = await Capture(catalog, "scoped/package.json", PackageJson);
+        CapturedOriginal allowed = await Capture(catalog, "scoped/src/public.ts", Server);
+        CapturedOriginal readme = await Capture(catalog, "scoped/README.md", Readme);
+        CapturedOriginal privateFile = await Capture(catalog, "scoped/src/localOnly.ts", "export class SecretLocal {}");
+        CapturedOriginal unknown = await Capture(catalog, "scoped/src/unknown.ts", "export class SecretUnknown {}");
+        CapturedOriginal revoked = await Capture(catalog, "scoped/src/revoked.ts", "export class SecretRevoked {}");
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(allowed.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(readme.SourceId, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(privateFile.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, true));
+        catalog.Policy.SaveCategory(new SourceCategory(unknown.SourceId, DataCategories.Unclassified, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(revoked.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        Grant(catalog, DataCategories.Code, Strongest);
+        Grant(catalog, DataCategories.Documents, Strongest);
+
+        ProjectCandidate captured = Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100)));
+        Assert.Contains(captured.Members, member => member.SourceId == revoked.SourceId);
+        Assert.True(catalog.Sources.Revoke(revoked.SourceId));
+
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        ProjectUnderstanding project = await understander.UnderstandAsync(captured, ProjectDetector.Fingerprint(captured), CancellationToken.None);
+        Assert.Equal((ProjectUnderstanding.Understood, ModelTiers.Strongest), (project.Status, project.Tier));
+
+        string strong = Assert.Single(models.Requests[Strong].Where(call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal)))
+            .Messages[^1].Content;
+        string strongest = Assert.Single(models.Requests[Strongest].Where(call => call.Messages[^1].Content.StartsWith("Project folder:", StringComparison.Ordinal)))
+            .Messages[^1].Content;
+        Assert.Contains("src/public.ts", strong, StringComparison.Ordinal);
+        Assert.DoesNotContain("README.md", strong, StringComparison.Ordinal);
+        Assert.Contains("README.md", strongest, StringComparison.Ordinal);
+        foreach (string withheld in new[] { "localOnly.ts", "unknown.ts", "revoked.ts", "SecretLocal", "SecretUnknown", "SecretRevoked" })
+        {
+            Assert.DoesNotContain(withheld, strong, StringComparison.Ordinal);
+            Assert.DoesNotContain(withheld, strongest, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectScopeRejectsDeniedOrChangedSourcesBeforeModelDispatch()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "protected/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "protected/src/private.ts", Server);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, true));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => "{}");
+        RepositoryMap map = RepositoryMap.Build(Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100))),
+            catalog.Projects.ReadActiveSources(100), _ => null);
+        TieredRequest request = new(marker.SourceId, null, null, ProjectUnderstander.ProcessorKey, DisclosurePurposes.Intake,
+            ProjectPrompt.Create(map), DisclosureSources: [marker.SourceId, member.SourceId], SourceScopeCurrent: () => true);
+        TieredModels tier = CatalogProcessing.Tiers(catalog, models, clock);
+
+        TieredOutcome denied = await tier.CompleteAsync(ModelTiers.Strong, request, CancellationToken.None);
+        Assert.Equal((TieredOutcome.Disallowed, DisclosureDecision.LocalOnlySpace), (denied.Status, denied.Decision!.Reason));
+        Assert.Equal(0, models.Count(Strong));
+
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        TieredOutcome stale = await tier.CompleteAsync(ModelTiers.Strong,
+            request with { SourceScopeCurrent = () => false }, CancellationToken.None);
+        Assert.Equal((TieredOutcome.Disallowed, DisclosureDecision.SourceChanged), (stale.Status, stale.Decision!.Reason));
+        Assert.Equal(0, models.Count(Strong));
+    }
+
+    [Fact]
+    public async Task ExpiredProjectDisclosureGrantDoesNotAuthorizeRemoteCall()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "expiring/package.json", PackageJson);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        new PolicyService(catalog.Policy).Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Code,
+            Strong, DisclosurePurposes.Intake, true, clock.UtcNow.AddMinutes(1))), PolicyActors.Owner);
+        clock.UtcNow = clock.UtcNow.AddMinutes(2);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => "{}");
+        RepositoryMap map = RepositoryMap.Build(Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100))),
+            catalog.Projects.ReadActiveSources(100), _ => null);
+        TieredRequest request = new(marker.SourceId, null, null, ProjectUnderstander.ProcessorKey, DisclosurePurposes.Intake,
+            ProjectPrompt.Create(map), DisclosureSources: [marker.SourceId], SourceScopeCurrent: () => true);
+
+        TieredOutcome outcome = await CatalogProcessing.Tiers(catalog, models, clock)
+            .CompleteAsync(ModelTiers.Strong, request, CancellationToken.None);
+        Assert.Equal(TieredOutcome.Disallowed, outcome.Status);
+        Assert.Equal(0, models.Count(Strong));
+    }
+
+    [Fact]
     public void VerifierDropsPathsAndCommandsTheProjectDoesNotHave()
     {
         ProjectCandidate project = new("p", "/r", "r", [Source("/r/package.json"), Source("/r/src/index.ts")]);
