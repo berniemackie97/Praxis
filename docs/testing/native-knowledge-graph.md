@@ -1,0 +1,47 @@
+# Native Knowledge Graph — #386
+
+## Product boundary
+
+The Knowledge workspace offers an **Entities / Graph** switch. The existing list/detail and verification views stay in place. The Graph view embeds a first-party SpriteKit scene inside SwiftUI; SwiftUI provides the seed search, collection/source/type/relation/evidence filters, bounded expansion controls and keyboard/VoiceOver entity/relationship list.
+
+The graph reads only the private desktop worker's `graphSeeds` and `graphNeighborhood` responses from #385. The .NET catalog remains the authority for entity identity, source visibility, revisions, review state, relation predicates and direction. The scene does not write the catalog, infer relationships from proximity, contact a model, or read user files directly. The separate #387 flow will handle full relationship review, citation jumps and corrections.
+
+## Interaction
+
+1. Open **Knowledge → Graph**. Confirmed entities load by default. Use search to choose a seed, or choose a result in the Explore list. The first eligible result is focused when loading completes.
+2. Only the current **one-hop** neighborhood loads. Click a node or select it from the accessible list. **Focus** replaces the current neighborhood with that node's own; **Expand neighbors** adds direct edges while respecting the visible budget.
+3. Pan by dragging empty space, drag a node to rearrange its view position, and zoom using the scroll wheel or the toolbar controls. Positions are never persisted as facts.
+4. Click an edge or select it from the SwiftUI list to inspect predicate, direction, trust status and exact available source excerpt. An owner assertion explicitly has **no invented citation**. Inactive or denied selections are removed when the projection is refreshed.
+5. Filter by active collection, active source, entity type, predicate and evidence status. **Suggestions** is an explicit opt-in; a suggestion is never labeled confirmed. A filter change invalidates outstanding replies and clears the old projection before requerying.
+6. Use **Refresh** after intake, approval or revocation changes. Leaving the graph clears the visible projection and detaches/pauses SpriteKit. No graph worker requests continue while that surface is inactive.
+
+## Presentation constraints
+
+- The scene accepts at most **120 nodes** and **120 edges**. Seed pages load at most 32 entities, neighbor pages at most 60 edges. These are conservative *initial UI safety limits*, not measured hardware maxima. The authoritative worker additionally limits each request to 100.
+- Nodes are colored by type, and proposed names are muted. Selection and evidence statuses are also expressed in text. Labels are shown for small graphs and focused/selected nodes, and expanded at closer zoom; dense neighborhoods do not label everything at once.
+- Layout starts from deterministic stable IDs, applies bounded repulsion, typed grouping and attraction only along **actual returned edges**, and stops after at most 180 simulation steps. Dragging only changes a local view position.
+- The scene is a visual surface, hidden from VoiceOver. The SwiftUI list and evidence panel expose the same currently authorized entity and relation identifiers via ordinary buttons, without requiring pointer input.
+- macOS Reduce Motion disables the simulation; increased contrast changes line and outline visibility. The screenshot fixture also exercises light/dark and compact window sizes.
+- The renderer uses bundled Apple frameworks (SpriteKit and SwiftUI), no remote assets or graph engine package. It remains inside the existing `NavigationSplitView`.
+
+## Verification
+
+**Owner-Mac build and tests, required before declaring #386 done:**
+
+```sh
+gh pr checkout <PR_NUMBER>
+dotnet restore Praxis.slnx --locked-mode
+dotnet build Praxis.slnx -c Release --no-restore
+dotnet test Praxis.slnx -c Release --no-build --no-restore
+dotnet format Praxis.slnx --verify-no-changes --no-restore
+bash scripts/macos/build-desktop.sh --archive-existing
+bash scripts/macos/test-worker-session.sh
+```
+
+The macOS app's Xcode test target contains graph decoder, merge budget, deterministic layout, Reduce Motion and SpriteKit scene setup/resize tests. Run the normal app-hosted tests and use `scripts/macos/capture-screenshots.sh` to capture synthetic graph layouts in light/dark and compact/reduced-motion conditions, not private catalog content.
+
+Manual checks: focused real knowledge, no edges, suggestions off/on, large/high-degree source, narrow window, resize, drag/zoom, selectable edge, keyboard/VoiceOver list, Reduce Motion, high contrast, leaving and returning to the graph, and revoked/revised sources. Use only approved local catalog data. Do not infer CPU/FPS/resource acceptance from the standalone synthetic benchmark. The formal measured, security and accessibility acceptance is #388.
+
+## Known delivery boundary
+
+The view exposes the existing source evidence metadata but does not implement cross-format evidence anchor jumps or relationship approval in the graph. Those belong to #387. Current data is refreshed when the owner opens the Graph view or explicitly refreshes/changes its filters; other running views can change the catalog in between queries. Every response is checked again by the worker; stale request replies are dropped client-side through scoped generations. #387 and #388 must revalidate selected evidence when performing an actionable source inspection or after revocation.
