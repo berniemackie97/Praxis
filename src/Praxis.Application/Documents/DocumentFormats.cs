@@ -15,4 +15,6 @@ public static class DocumentFormats
     public const string Email = "email";
     public const string Html = "html";
     public const string Image = "image";
+    public const string Link = "link";
+    public const string WebVideo = "web_video";
 }

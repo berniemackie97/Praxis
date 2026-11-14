@@ -75,7 +75,8 @@ public sealed class TextExtractionHandler(
             string? title = document.Title is { Length: > 0 } value
                 ? value.Length <= DocumentFacts.MaximumTitleLength ? value : value[..DocumentFacts.MaximumTitleLength]
                 : null;
-            derivatives.CommitResult(lease, document.Text, null, new DocumentFacts(document.Format, document.Pages, title, document.Truncated));
+            derivatives.CommitResult(lease, document.Text, null, new DocumentFacts(document.Format, document.Pages, title, document.Truncated),
+                document.Timings);
         }
         catch (InvalidDataException)
         {

@@ -22,7 +22,7 @@ public sealed class MediaPlayback(ISourceRepository sources, IOriginalStore orig
             return await ResolveAsync(video.Source.SourceId, cancellationToken);
         }
 
-        if (web?.Resolve(sourceId) is { } online)
+        if (web is not null && await web.ResolveAsync(sourceId, cancellationToken) is { } online)
         {
             return online;
         }

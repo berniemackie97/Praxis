@@ -90,6 +90,9 @@ struct PraxisCommands: Commands {
             Button("New Quick Note") { workspace = .quickNote }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!model.running)
+            Button("Save Link…") { model.links.presentingSave = true }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .disabled(!model.running)
         }
         CommandMenu("Go") {
             ForEach(AppSection.allCases) { section in

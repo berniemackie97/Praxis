@@ -26,13 +26,26 @@ public static class ProcessorKeys
     /// </summary>
     public const string IntakeUnderstand = "intake-understand-v1";
 
+    /// <summary>
+    /// Fetches what a saved link points to (owner intent only, through the safe fetcher) and captures
+    /// it as a new source, which then flows through the generic intake.
+    /// </summary>
+    public const string LinkFetch = "link-fetch-v1";
+
+    /// <summary>The read-stage format a dependent requires before it is scheduled at all.</summary>
+    private static readonly IReadOnlyDictionary<string, string> RequiredFormats =
+        new Dictionary<string, string>(StringComparer.Ordinal) { [LinkFetch] = "link" };
+
     private static readonly IReadOnlyDictionary<string, string[]> Dependents =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            [SourceText] = [MarkdownHeadings, TextSegments, IntakeTriage],
+            [SourceText] = [MarkdownHeadings, TextSegments, IntakeTriage, LinkFetch],
             [TextSegments] = [SemanticExtraction],
             [IntakeTriage] = [IntakeUnderstand]
         };
+
+    /// <summary>The document format a processor applies to, or null when it applies to every format.</summary>
+    public static string? RequiredFormat(string processorKey) => RequiredFormats.GetValueOrDefault(processorKey);
 
     /// <summary>Processors that consume the completed output of <paramref name="processorKey"/>.</summary>
     public static IReadOnlyList<string> DependentsOf(string processorKey) =>

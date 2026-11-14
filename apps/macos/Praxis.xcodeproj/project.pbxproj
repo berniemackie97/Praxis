@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
 		00000000000000000000D01A /* MediaClipCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D019 /* MediaClipCard.swift */; };
+		00000000000000000000D01C /* LinkSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01B /* LinkSettingsSection.swift */; };
+		00000000000000000000D01E /* LinkSettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01D /* LinkSettingsModel.swift */; };
 		00000000000000000000D016 /* UnderstandingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D015 /* UnderstandingModels.swift */; };
 		00000000000000000000D00C /* ScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D00B /* ScreenshotTests.swift */; };
 		00000000000000000000D004 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D003 /* SettingsView.swift */; };
@@ -78,6 +80,8 @@
 /* Begin PBXFileReference section */
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
 		00000000000000000000D019 /* MediaClipCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaClipCard.swift; sourceTree = "<group>"; };
+		00000000000000000000D01B /* LinkSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkSettingsSection.swift; sourceTree = "<group>"; };
+		00000000000000000000D01D /* LinkSettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkSettingsModel.swift; sourceTree = "<group>"; };
 		00000000000000000000D015 /* UnderstandingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnderstandingModels.swift; sourceTree = "<group>"; };
 		00000000000000000000D00B /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D003 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -228,6 +232,7 @@
 				00000000000000000000D003 /* SettingsView.swift */,
 				00000000000000000000D017 /* IntakePanel.swift */,
 				00000000000000000000D019 /* MediaClipCard.swift */,
+				00000000000000000000D01B /* LinkSettingsSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -245,6 +250,7 @@
 				00000000000000000000C009 /* ChatWorkbenchModel.swift */,
 				00000000000000000000C00B /* ApprovalsWorkbenchModel.swift */,
 				00000000000000000000C00D /* PrivacySettingsModel.swift */,
+				00000000000000000000D01D /* LinkSettingsModel.swift */,
 			);
 			path = Workbench;
 			sourceTree = "<group>";
@@ -414,6 +420,8 @@
 				00000000000000000000A03C /* VerificationView.swift in Sources */,
 				00000000000000000000D018 /* IntakePanel.swift in Sources */,
 				00000000000000000000D01A /* MediaClipCard.swift in Sources */,
+				00000000000000000000D01C /* LinkSettingsSection.swift in Sources */,
+				00000000000000000000D01E /* LinkSettingsModel.swift in Sources */,
 				00000000000000000000D016 /* UnderstandingModels.swift in Sources */,
 				00000000000000000000D004 /* SettingsView.swift in Sources */,
 				00000000000000000000D002 /* AppSection.swift in Sources */,

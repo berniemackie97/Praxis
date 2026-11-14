@@ -2,8 +2,8 @@ using Praxis.Domain.Media;
 
 namespace Praxis.Application.Media;
 
-/// <summary>Finds the online video a saved link source points to, for playback through its embed.</summary>
+/// <summary>Finds the online video a saved source points to, for playback through its embed.</summary>
 public interface IWebVideoResolver
 {
-    MediaPlaybackReference? Resolve(Guid sourceId);
+    Task<MediaPlaybackReference?> ResolveAsync(Guid sourceId, CancellationToken cancellationToken);
 }

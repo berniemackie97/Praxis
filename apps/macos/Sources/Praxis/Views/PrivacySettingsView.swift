@@ -25,6 +25,9 @@ struct PrivacySettingsView: View {
                     }
                 }
             }
+            if model.policy != nil {
+                LinkSettingsSection()
+            }
             if let policy = model.policy {
                 Section {
                     Picker("Remote processing", selection: Binding(get: { policy.mode }, set: { model.setMode($0) })) {

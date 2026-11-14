@@ -25,6 +25,7 @@ struct PraxisWindow: View {
             }
         }
         .focusedSceneValue(\.workspace, $section)
+        .modifier(SaveLinkPresenter(links: model.links))
         .onAppear {
             // The Xcode app-hosted test target must never auto-open an owner's saved catalog.
             guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {

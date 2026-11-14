@@ -4,6 +4,7 @@ using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Finance;
 using Praxis.Application.Inference;
+using Praxis.Application.Links;
 using Praxis.Application.Media;
 using Praxis.Application.Policy;
 using Praxis.Application.Search;
@@ -17,7 +18,8 @@ namespace Praxis.Infrastructure.Composition;
 public static class AgentComposition
 {
     public static IReadOnlyList<IAgentTool> Tools(
-        SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock)
+        SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock,
+        ISavedLinkWriter? links = null)
     {
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
@@ -33,6 +35,7 @@ public static class AgentComposition
             new MediaFindTool(retriever, moments, catalog.Sources),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
+            new KnowledgeProjectTool(catalog.Projects),
             new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),
             new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
             new DataDescribeTool(datasets),
@@ -43,6 +46,7 @@ public static class AgentComposition
             new MemoryRecallTool(catalog.Agents),
             new MemoryRememberTool(catalog.Agents),
             new IntakeStatusTool(catalog.Processing, catalog.Policy, ledger),
+            .. (links is null ? Array.Empty<IAgentTool>() : [new KnowledgeSaveLinkTool(links, catalog.Agents, catalog.Links)]),
             new IntakeReprocessTool(catalog.Processing),
             new SettingsReadTool(policy, catalog.Policy),
             new SettingsProposeTool(policy, clock),

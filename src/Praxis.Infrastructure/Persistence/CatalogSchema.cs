@@ -288,7 +288,10 @@ internal static class CatalogSchema
             ("table", "intake_records"),
             ("table", "intake_layouts"),
             ("trigger", "intake_source_revoked"),
-            ("table", "text_timings")
+            ("table", "text_timings"),
+            ("table", "link_snapshots"),
+            ("table", "link_settings"),
+            ("table", "intake_projects")
         })
         {
             using SqliteCommand command = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type=$kind AND name=$name");

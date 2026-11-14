@@ -462,16 +462,21 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
     {
         foreach (string dependent in ProcessorKeys.DependentsOf(completedProcessor))
         {
+            // A format-specific stage (such as link fetching) is scheduled only for that format.
             using SqliteCommand command = connection.CreateCommand("""
                                                                    INSERT INTO processing_jobs
                                                                        (item_id, revision, processor_key, state, attempt, total_attempts,
                                                                         created_utc, updated_utc)
-                                                                   VALUES ($item, $revision, $processor, 'queued', 0, 0, $now, $now)
+                                                                   SELECT $item, $revision, $processor, 'queued', 0, 0, $now, $now
+                                                                   WHERE $format IS NULL OR EXISTS (
+                                                                       SELECT 1 FROM intake_documents d
+                                                                       WHERE d.item_id = $item AND d.revision = $revision AND d.format = $format)
                                                                    ON CONFLICT(item_id, revision, processor_key) DO NOTHING
                                                                    """);
             command.Transaction = transaction;
             ProcessingJobParameters.Bind(command, itemId, revision, dependent);
             command.Parameters.AddWithValue("$now", utc);
+            command.Parameters.AddWithValue("$format", (object?)ProcessorKeys.RequiredFormat(dependent) ?? DBNull.Value);
             command.ExecuteNonQuery();
         }
     }

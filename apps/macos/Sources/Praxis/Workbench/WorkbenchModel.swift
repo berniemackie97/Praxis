@@ -38,6 +38,7 @@ final class WorkbenchModel: ObservableObject {
     let chat: ChatWorkbenchModel
     let approvals: ApprovalsWorkbenchModel
     let privacy: PrivacySettingsModel
+    let links: LinkSettingsModel
     private let worker: WorkerSession
     private let channel: WorkerChannel
     private var watchedInboxes: [URL] = []
@@ -56,6 +57,7 @@ final class WorkbenchModel: ObservableObject {
         chat = ChatWorkbenchModel(channel: channel)
         approvals = ApprovalsWorkbenchModel(channel: channel)
         privacy = PrivacySettingsModel(channel: channel)
+        links = LinkSettingsModel(channel: channel)
     }
 
     func start(dataRoot: String, inbox: String, additionalInboxes: String,
