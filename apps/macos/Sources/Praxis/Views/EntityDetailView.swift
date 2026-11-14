@@ -175,6 +175,7 @@ enum MentionStatus {
     static func label(_ status: String) -> String {
         switch status {
         case "verified": "verified by intake"
+        case "documented": "read directly from source"
         case "accepted": "confirmed by you"
         case "corrected": "renamed by you"
         case "pending": "unconfirmed guess"

@@ -38,6 +38,19 @@ public sealed class SemanticExtractionHandler(
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
+        LeasedText? input = derivatives.ReadLeasedInput(lease);
+        if (input is null)
+        {
+            return;
+        }
+
+        // Generated artifacts already have a dedicated parser. Do not run a model on every passage.
+        if (Understanding.TechnicalEvidence.IsArtifact(input.Locator, input.Content))
+        {
+            proposals.Commit(lease, input, []);
+            return;
+        }
+
         ModelProfile? profile = profiles.Get(ModelProfile.LocalEnrichment);
         if (profile is not { Enabled: true })
         {
@@ -46,12 +59,6 @@ public sealed class SemanticExtractionHandler(
 
         using ModelConnection connection = connector.Connect(profile);
         ModelIdentity identity = await DescribeAsync(connection.Model, cancellationToken);
-        LeasedText? input = derivatives.ReadLeasedInput(lease);
-        if (input is null)
-        {
-            return;
-        }
-
         IReadOnlyList<TextSegmentSpan> segments = segmentStore.ReadCompleted(lease.ItemId, lease.Revision);
         Dictionary<string, List<ProposalCandidate>> reusable = ReusableResults(proposals.ReadPrior(lease.ItemId, lease.Revision, ProcessorKey));
         IReadOnlyList<EntityHint> hints = knowledge.GoverningHints(MaximumHints);

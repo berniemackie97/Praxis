@@ -12,11 +12,12 @@ public static class ProjectDetector
 {
     public const int MaximumMembers = 5_000;
 
-    public static IReadOnlyList<ProjectCandidate> Detect(IReadOnlyList<ProjectSource> sources)
+    public static IReadOnlyList<ProjectCandidate> Detect(IReadOnlyList<ProjectSource> sources, IReadOnlyCollection<string>? gitRoots = null)
     {
         List<string> roots = sources
             .Where(source => ProjectMarkers.IsMarker(Path.GetFileName(source.Locator)))
             .Select(source => Path.GetDirectoryName(source.Locator)!)
+            .Concat(gitRoots ?? [])
             .Distinct(StringComparer.Ordinal)
             .OrderBy(root => root.Length)
             .ToList();
@@ -35,7 +36,7 @@ public static class ProjectDetector
                 .Take(MaximumMembers).ToArray();
             string id = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(root)))[..32];
             return new ProjectCandidate(id, root, Path.GetFileName(root), members);
-        }).ToArray();
+        }).Where(project => project.Members.Count > 0).ToArray();
     }
 
     /// <summary>A digest of member paths and contents: it changes exactly when the project's files change.</summary>

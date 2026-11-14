@@ -59,7 +59,8 @@ public sealed class TieredModels(
     {
         TierAssignment? assignment = policy.ReadTiers().FirstOrDefault(candidate => candidate.Tier == tier);
         VerificationProvider? provider = assignment is null ? null : providers.ListProviders().FirstOrDefault(candidate => candidate.ProviderId == assignment.ProviderId);
-        if (provider is not { Enabled: true } || !provider.WithinLimit(policy.InvocationsToday(provider.ProviderId, clock.GetUtcNow())))
+        if (provider is not { Enabled: true } || (provider.EffectiveDailyLimit != VerificationProvider.Unlimited &&
+            !provider.WithinLimit(policy.InvocationsToday(provider.ProviderId, clock.GetUtcNow()))))
         {
             return null;
         }

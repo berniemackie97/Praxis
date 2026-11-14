@@ -3,11 +3,11 @@ import Foundation
 /// The closed vocabularies the worker accepts for entity types and relation predicates.
 enum KnowledgeVocabulary {
     static let entityTypes = [
-        "person", "organization", "project", "technology", "concept", "place", "document", "event", "other"
+        "person", "organization", "project", "technology", "concept", "place", "document", "event", "other", "class", "function", "binary_module", "data_asset"
     ]
     static let predicates = [
         "uses", "part_of", "contains", "depends_on", "implements", "parses", "produces",
-        "created_by", "owned_by", "works_on", "member_of", "located_in", "pays", "references", "related_to"
+        "created_by", "owned_by", "works_on", "member_of", "located_in", "pays", "references", "related_to", "calls", "inherits_from"
     ]
 
     static func label(_ value: String?) -> String {

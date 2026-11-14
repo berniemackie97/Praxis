@@ -9,14 +9,21 @@ public static class KnowledgeVocabulary
 
     public static readonly IReadOnlySet<string> EntityTypes = new HashSet<string>(StringComparer.Ordinal)
     {
-        "person", "organization", "project", "technology", "concept", "place", "document", "event", "other"
+        "person", "organization", "project", "technology", "concept", "place", "document", "event", "other", "class", "function", "binary_module", "data_asset"
     };
+
+    public const string TechnicalTypeGuide = """
+        A class or struct is class; a callable routine or method is function; a compiled executable,
+        shared library or DLL is binary_module; a named runtime data or resource file is data_asset.
+        A source report or article is document. Project is a whole product, game, repository or initiative.
+        Do not label code symbols as people, organizations, projects, or technologies.
+        """;
 
     /// <summary>Directional predicates: "subject predicate object", e.g. C3Reader parses PHY.</summary>
     public static readonly IReadOnlySet<string> Predicates = new HashSet<string>(StringComparer.Ordinal)
     {
         "uses", "part_of", "contains", "depends_on", "implements", "parses", "produces",
-        "created_by", "owned_by", "works_on", "member_of", "located_in", "pays", "references", "related_to"
+        "created_by", "owned_by", "works_on", "member_of", "located_in", "pays", "references", "related_to", "calls", "inherits_from"
     };
 
     private static readonly char[] Enclosing = ['"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', '.', ',', ':', ';', '!', '?', '“', '”', '‘', '’'];

@@ -124,17 +124,14 @@ final class ModelSetupModel: ObservableObject {
              success: enabled ? "\(Self.name(toolId)) is connected for chat and intake." : "\(Self.name(toolId)) is turned off.")
     }
 
-    func connectOllama(endpoint: String, model: String, enabled: Bool = true, dailyLimit: Int? = nil) {
-        let limit = dailyLimit ?? provider(ModelTool.ollama)?.dailyLimit ?? VerificationProvider.unlimited
-        send("modelConnect", ["toolId": ModelTool.ollama, "endpoint": endpoint, "model": model, "enabled": enabled, "dailyLimit": limit],
+    func connectOllama(endpoint: String, model: String, enabled: Bool = true) {
+        send("modelConnect", ["toolId": ModelTool.ollama, "endpoint": endpoint, "model": model, "enabled": enabled],
              success: enabled ? "Ollama \(model) is connected." : "Ollama is turned off.")
     }
 
     func setDailyLimit(_ connection: String, _ limit: Int) {
         guard let provider = provider(connection) else { return }
-        if connection == ModelTool.ollama, let endpoint = provider.endpoint, let model = provider.model {
-            connectOllama(endpoint: endpoint, model: model, enabled: provider.enabled, dailyLimit: limit)
-        } else if let path = provider.executable {
+        if let path = provider.executable {
             connectCli(connection, path: path, enabled: provider.enabled, dailyLimit: limit)
         }
     }

@@ -58,7 +58,9 @@ public sealed class CodexChatModel : IChatModel
         [
             "exec", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules",
             "--skip-git-repo-check", "-C", workspace.Path, "--output-schema", schemaPath,
-            "-o", answerPath, "--json"
+            "-o", answerPath, "--json",
+            "-c", "mcp_servers={}", "-c", "web_search=\"disabled\"",
+            "--disable", "apps", "--disable", "shell_tool", "--disable", "memories"
         ];
         if (model is not null)
         {

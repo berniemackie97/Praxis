@@ -103,6 +103,10 @@ enum EntitySymbol {
         case "organization": "building.2"
         case "project": "hammer"
         case "technology": "cpu"
+        case "class": "square.stack.3d.up"
+        case "function": "function"
+        case "binary_module": "shippingbox"
+        case "data_asset": "doc.zipper"
         case "concept": "lightbulb"
         case "place": "mappin.and.ellipse"
         case "document": "doc.text"
@@ -123,6 +127,7 @@ enum TypeOrigin {
         switch origin {
         case "owner": "set by you"
         case "verified": "verified"
+        case "evidence": "source evidence"
         default: "local model"
         }
     }

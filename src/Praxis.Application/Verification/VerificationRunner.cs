@@ -100,7 +100,7 @@ public sealed class VerificationRunner(
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            IReadOnlyList<VerificationVerdict> verdicts = VerdictReader.Read(result.Content, claim.Ordinals);
+            IReadOnlyList<VerificationVerdict> verdicts = VerdictReader.Read(result.Content, claim.Ordinals, claim.Payload);
             if (repository.Complete(claim, identity, result, verdicts))
             {
                 report($"Verification completed: {verdicts.Count} of {claim.Ordinals.Count} item(s) judged.");

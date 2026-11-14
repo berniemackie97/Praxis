@@ -33,7 +33,7 @@ public sealed class ModelSetupActions(
             int limit = fields.IntegerOrDefault("dailyLimit", VerificationProvider.Unlimited, VerificationProvider.Unlimited, VerificationProvider.MaximumDailyLimit);
             bool enabled = fields.RequireBoolean("enabled");
             VerificationProvider saved = toolId == VerificationProvider.Ollama
-                ? setup.ConnectOllama(fields.RequireString("endpoint", 256), fields.RequireString("model", 100), enabled, limit)
+                ? setup.ConnectOllama(fields.RequireString("endpoint", 256), fields.RequireString("model", 100), enabled)
                 : setup.ConnectCli(toolId, fields.RequireString("executable", 1024), enabled, limit);
             runner?.Wake();
             // A new connection can make waiting files understandable now.

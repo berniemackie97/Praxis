@@ -99,7 +99,8 @@ public sealed class SqliteActivityReader : IActivityReader
                    SUM(m.started_utc >= $hour AND m.outcome <> 'completed'),
                    MAX(m.started_utc),
                    (SELECT latest.outcome FROM model_invocations latest
-                    WHERE latest.provider_id = m.provider_id ORDER BY latest.invocation_id DESC LIMIT 1)
+                    WHERE latest.provider_id = m.provider_id
+                    ORDER BY latest.started_utc DESC, latest.invocation_id DESC LIMIT 1)
             FROM model_invocations m
             WHERE m.started_utc >= $week
             GROUP BY m.provider_id
