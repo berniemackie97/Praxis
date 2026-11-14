@@ -8,6 +8,18 @@ struct CanvasGraphView: View {
     @State private var offset: CGSize = .zero
     @State private var dragOrigin: CGSize?
     @State private var zoomOrigin: CGFloat?
+    private let links: [(Int, Int)]
+
+    init(fixture: GraphFixture, animated: Bool, selection: Binding<String?>) {
+        self.fixture = fixture
+        self.animated = animated
+        self._selection = selection
+        let indices = Dictionary(uniqueKeysWithValues: fixture.nodes.enumerated().map { ($0.element.id, $0.offset) })
+        links = fixture.edges.compactMap { edge in
+            guard let source = indices[edge.sourceId], let target = indices[edge.targetId] else { return nil }
+            return (source, target)
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -19,10 +31,8 @@ struct CanvasGraphView: View {
                     context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(nsColor: .windowBackgroundColor)))
                     context.translateBy(x: offset.width, y: offset.height)
                     context.scaleBy(x: scale, y: scale)
-                    let indices = Dictionary(uniqueKeysWithValues: fixture.nodes.enumerated().map { ($0.element.id, $0.offset) })
                     var path = Path()
-                    for edge in fixture.edges {
-                        guard let source = indices[edge.sourceId], let target = indices[edge.targetId] else { continue }
+                    for (source, target) in links {
                         path.move(to: nodes[source])
                         path.addLine(to: nodes[target])
                     }
