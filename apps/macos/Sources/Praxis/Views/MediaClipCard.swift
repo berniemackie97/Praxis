@@ -145,18 +145,25 @@ private struct ClipPlayerView: NSViewRepresentable {
         private weak var player: AVPlayer?
         private var start = CMTime.zero
         private var finished = false
+        private var observationGeneration = UUID()
 
         func attach(player: AVPlayer, range: MediaTimeRange) {
             self.player = player
             start = CMTime(seconds: range.start, preferredTimescale: 600)
+            let generation = UUID()
+            observationGeneration = generation
             observer = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime,
                                                               object: player.currentItem, queue: .main) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.finished = true }
+                Task { @MainActor [weak self] in
+                    guard let self, observationGeneration == generation else { return }
+                    finished = true
+                }
             }
             rateObserver = player.observe(\.rate, options: [.new]) { [weak self] _, change in
                 guard change.newValue ?? 0 > 0 else { return }
                 Task { @MainActor [weak self] in
-                    guard let self, finished, let player = self.player else { return }
+                    guard let self, observationGeneration == generation, finished,
+                          let player = self.player else { return }
                     finished = false
                     player.seek(to: start, toleranceBefore: .zero, toleranceAfter: .zero)
                 }
@@ -164,6 +171,7 @@ private struct ClipPlayerView: NSViewRepresentable {
         }
 
         func detach() {
+            observationGeneration = UUID()
             if let observer { NotificationCenter.default.removeObserver(observer) }
             rateObserver?.invalidate()
             observer = nil
