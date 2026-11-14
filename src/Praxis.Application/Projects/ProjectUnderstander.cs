@@ -51,13 +51,7 @@ public sealed class ProjectUnderstander(
 
     public async Task<ProjectUnderstanding> UnderstandAsync(ProjectCandidate project, string fingerprint, CancellationToken cancellationToken)
     {
-        ProjectSource[] CurrentMembers()
-        {
-            var active = projects.ReadActiveSources(MaximumSources).ToDictionary(source => source.SourceId);
-            return project.Members.Where(member => active.TryGetValue(member.SourceId, out ProjectSource? current) &&
-                current.ItemId == member.ItemId && current.Revision == member.Revision &&
-                current.Digest == member.Digest && current.Locator == member.Locator).ToArray();
-        }
+        ProjectSource[] CurrentMembers() => [.. projects.ReadCurrentMembers(project.Members)];
 
         string? ReadText(ProjectSource member) =>
             texts.ReadCurrent(member.ItemId, member.Revision, expectedSourceId: member.SourceId, expectedSha256: member.Digest) is
@@ -98,11 +92,7 @@ public sealed class ProjectUnderstander(
 
             RepositoryMap map = RepositoryMap.Build(project, allowed, ReadText);
             maps[tier] = map;
-            bool ScopeCurrent()
-            {
-                var active = CurrentMembers().ToDictionary(member => member.SourceId);
-                return allowed.All(member => active.TryGetValue(member.SourceId, out ProjectSource? latest) && latest == member);
-            }
+            bool ScopeCurrent() => projects.ReadCurrentMembers(allowed).Count == allowed.Length;
 
             return new TieredRequest(anchor.SourceId, null, null, ProcessorKey, DisclosurePurposes.Intake,
                 ProjectPrompt.Create(map), DisclosureSources: allowed.Select(member => member.SourceId).ToArray(),
