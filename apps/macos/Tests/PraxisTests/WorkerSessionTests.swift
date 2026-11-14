@@ -125,6 +125,24 @@ struct WorkerSessionTests {
             throw Failure.unexpected("Knowledge or verification lists did not decode")
         }
 
+        var graphSeeds: WorkerReply<GraphPage>?
+        try session.send("graphSeeds", fields: ["limit": 10], as: GraphPage.self) {
+            graphSeeds = $0
+        }
+        try await waitFor("graph seed projection") { graphSeeds != nil }
+        guard graphSeeds?.ok == true, graphSeeds?.data?.outcome == "empty",
+              graphSeeds?.data?.nodes.isEmpty == true else {
+            throw Failure.unexpected("Graph seed action did not decode an empty catalog")
+        }
+
+        var graphNeighborhood: WorkerReply<GraphPage>?
+        try session.send("graphNeighborhood", fields: ["entityId": UUID().uuidString.lowercased()],
+                         as: GraphPage.self) { graphNeighborhood = $0 }
+        try await waitFor("graph neighborhood projection") { graphNeighborhood != nil }
+        guard graphNeighborhood?.ok == true, graphNeighborhood?.data?.outcome == "unavailable" else {
+            throw Failure.unexpected("Graph neighborhood did not deny an unknown entity")
+        }
+
         var rejected: WorkerReply<VerificationCreatedData>?
         try session.send("verificationApprove", fields: ["verificationId": UUID().uuidString.lowercased()],
                          as: VerificationCreatedData.self) { rejected = $0 }

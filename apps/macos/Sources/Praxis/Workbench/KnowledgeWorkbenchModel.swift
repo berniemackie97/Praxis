@@ -6,6 +6,7 @@ import Foundation
 final class KnowledgeWorkbenchModel: ObservableObject {
     private static let detailScope = "detail"
     private let channel: WorkerChannel
+    let graph: GraphWorkbenchModel
 
     @Published var search = ""
     @Published var typeFilter = ""
@@ -19,6 +20,7 @@ final class KnowledgeWorkbenchModel: ObservableObject {
 
     init(channel: WorkerChannel) {
         self.channel = channel
+        graph = GraphWorkbenchModel(channel: channel)
     }
 
     func refresh() {
@@ -46,8 +48,12 @@ final class KnowledgeWorkbenchModel: ObservableObject {
     }
 
     func select(_ entity: EntitySummary) {
+        selectEntityId(entity.entityId)
+    }
+
+    func selectEntityId(_ id: String) {
         selected = nil
-        load(entity.entityId)
+        load(id)
     }
 
     func rename(to name: String) { decide("entityRename", ["name": name], "Renamed.") }
