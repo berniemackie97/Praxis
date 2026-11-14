@@ -11,8 +11,10 @@ final class VerificationWorkbenchModel: ObservableObject {
     @Published private(set) var selectedId: String?
     @Published var excluded: Set<Int> = []
     @Published var redactions: [String] = []
-    @Published var providerChoice = "" { didSet { if providerChoice != oldValue { remoteConsent = false } } }
+    @Published private(set) var providerChoice = "" { didSet { if providerChoice != oldValue { remoteConsent = false } } }
     @Published var remoteConsent = false
+    private var preferredProvider = ""
+    private var manuallySelectedProvider = false
     @Published private(set) var disclosureSources: [VerificationDisclosureSource] = []
     @Published private(set) var disclosureAudit: [VerificationDisclosureEvent] = []
     /// The latest failure or confirmation; setting one clears the other.
@@ -46,11 +48,24 @@ final class VerificationWorkbenchModel: ObservableObject {
         selectedId = request.requestId
         excluded = []
         redactions = []
-        providerChoice = ""
+        manuallySelectedProvider = false
+        providerChoice = preferredProvider
         remoteConsent = false
         disclosureSources = []
         refreshAuthorization()
         notice = nil
+    }
+
+    /// Changes the default for the active request only until the owner explicitly chooses a provider.
+    func setPreferredProvider(_ providerId: String) {
+        guard preferredProvider != providerId else { return }
+        preferredProvider = providerId
+        if selectedId != nil && !manuallySelectedProvider { providerChoice = providerId }
+    }
+
+    func chooseProvider(_ providerId: String) {
+        manuallySelectedProvider = true
+        providerChoice = providerId
     }
 
     func toggle(_ ordinal: Int) {
