@@ -90,6 +90,10 @@ struct KnowledgeGraphView: View {
         }
         .onAppear { graph.activate() }
         .onDisappear { graph.deactivate() }
+        .onChange(of: graph.focusId) { _ in
+            zoom = 1
+            zoomRevision += 1
+        }
         .onChange(of: graph.selectedNodeId) { _ in graph.inspectSelectedNode() }
         .onChange(of: graph.selectedEdgeId) { _ in graph.inspectSelectedRelation() }
         .onChange(of: graph.entityType) { _ in graph.refresh() }
