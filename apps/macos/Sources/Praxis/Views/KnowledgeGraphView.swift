@@ -26,12 +26,15 @@ struct KnowledgeGraphView: View {
                     .frame(width: 250)
                 Divider()
                 ZStack {
-                    if graph.nodes.isEmpty {
+                    if graph.focusId == nil {
+                        KnowledgeOverviewView(overview: graph.overview, category: graph.entityType,
+                                              scopeDescription: scopeDescription) { graph.entityType = $0 }
+                    } else if graph.nodes.isEmpty {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
-                                   title: graph.loading ? "Loading connections" : "No visible connections",
+                                   title: graph.loading ? "Loading neighborhood" : "No visible connections",
                                    message: graph.outcome == "unavailable"
                                        ? "The selected entity is no longer available in this scope."
-                                       : "Search or choose a confirmed entity to explore its relationships.")
+                                       : "This focused entity has no current visible connections. Return to All knowledge to explore elsewhere.")
                     } else {
                         GraphSceneView(nodes: graph.nodes, edges: graph.edges, focusId: graph.focusId,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
@@ -95,6 +98,12 @@ struct KnowledgeGraphView: View {
 
     private var toolbar: some View {
         HStack(spacing: Spacing.s) {
+            if graph.focusId != nil {
+                Button { graph.showOverview() } label: {
+                    Label("All knowledge", systemImage: "arrow.left")
+                }
+                .help("Return to the full scoped knowledge overview")
+            }
             TextField("Search knowledge", text: $graph.search)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
@@ -108,12 +117,14 @@ struct KnowledgeGraphView: View {
             }
             .toggleStyle(.button)
             .help("Show unconfirmed model suggestions separately from confirmed knowledge")
-            Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
-                .accessibilityLabel("Zoom out")
-            Button { zoom = max(0.35, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
-                .accessibilityLabel("Zoom in")
-            Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
-                .accessibilityLabel("Reset zoom")
+            if graph.focusId != nil {
+                Button { zoom = min(2.5, zoom * 1.2); zoomRevision += 1 } label: { Image(systemName: "minus.magnifyingglass") }
+                    .accessibilityLabel("Zoom out")
+                Button { zoom = max(0.35, zoom / 1.2); zoomRevision += 1 } label: { Image(systemName: "plus.magnifyingglass") }
+                    .accessibilityLabel("Zoom in")
+                Button { zoom = 1; zoomRevision += 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
+                    .accessibilityLabel("Reset zoom")
+            }
             Button { graph.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
         }
         .buttonStyle(.borderless)
@@ -161,7 +172,9 @@ struct KnowledgeGraphView: View {
             }
             if !graph.seeds.isEmpty {
                 Divider()
-                Text("Results").font(.subheadline.weight(.semibold))
+                Text("Explore entities").font(.subheadline.weight(.semibold))
+                Text("Showing \(graph.seeds.count) current results in this scope. Search to find other names.")
+                    .font(.caption2).foregroundStyle(.secondary)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Spacing.xs) {
                         ForEach(graph.seeds) { entity in
@@ -183,10 +196,15 @@ struct KnowledgeGraphView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 150)
+                .frame(maxHeight: graph.focusId == nil ? .infinity : 200)
+                if graph.nextSeedCursor != nil {
+                    Button("More results") { graph.loadMoreSeeds() }
+                        .disabled(graph.loading)
+                }
             }
-            Divider()
-            Text("Visible nodes and relationships").font(.subheadline.weight(.semibold))
+            if graph.focusId != nil {
+                Divider()
+                Text("Focused neighborhood").font(.subheadline.weight(.semibold))
             List {
                 ForEach(graph.nodes) { node in
                     Button { graph.selectNode(node.entityId) } label: {
@@ -202,13 +220,25 @@ struct KnowledgeGraphView: View {
                 }
             }
             .listStyle(.plain)
-            if graph.canLoadMore {
-                Button("Load more connections") { graph.loadMore() }
-                    .disabled(graph.loading)
+                if graph.canLoadMore {
+                    Button("Load more connections") { graph.loadMore() }
+                        .disabled(graph.loading)
+                }
             }
         }
         .padding(Spacing.m)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var scopeDescription: String {
+        var parts: [String] = []
+        if let collection = collections.first(where: { $0.collectionId == graph.collectionId }) {
+            parts.append("Collection: \(collection.name)")
+        }
+        if let source = sources.first(where: { $0.sourceId == graph.sourceId && $0.sourceStatus == "active" }) {
+            parts.append("Source: \(source.title)")
+        }
+        return parts.isEmpty ? "All current sources and collections" : parts.joined(separator: " · ")
     }
 
     private var inspection: some View {
