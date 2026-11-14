@@ -29,6 +29,8 @@ cat > "$stage/Contents/Info.plist" <<'PLIST'
     <string>Praxis Graph Renderer Benchmark</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
     <key>CFBundleVersion</key>
