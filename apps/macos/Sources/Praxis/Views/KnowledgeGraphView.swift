@@ -215,7 +215,7 @@ struct KnowledgeGraphView: View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             if graph.inspectingNode {
                 ProgressView("Checking current entity")
-            } else if let node = graph.inspectedNode {
+            } else if let node = graph.inspectedNode, node.entityId == graph.selectedNodeId {
                 HStack {
                     Image(systemName: EntitySymbol.of(node.entityType))
                     Text(node.label).font(.headline).lineLimit(2)
@@ -235,7 +235,7 @@ struct KnowledgeGraphView: View {
                               graph.nodes.count >= GraphBudget.maximumNodes)
             } else if graph.inspectingRelation {
                 ProgressView("Checking current relationship")
-            } else if let edge = graph.inspectedEdge {
+            } else if let edge = graph.inspectedEdge, edge.relationId == graph.selectedEdgeId {
                 Text(relationTitle(edge)).font(.headline)
                 Text("Direction: subject → object · Origin: \(edge.origin)")
                     .font(.caption).foregroundStyle(.secondary)
