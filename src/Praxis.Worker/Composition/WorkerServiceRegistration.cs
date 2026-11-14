@@ -56,6 +56,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<ISemanticVectorStore>(provider => provider.GetRequiredService<SqliteCatalog>().Embeddings);
         services.AddSingleton<IProposalRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Proposals);
         services.AddSingleton<IKnowledgeRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Knowledge);
+        services.AddSingleton<IGraphReader>(provider => provider.GetRequiredService<SqliteCatalog>().Graph);
         services.AddSingleton<IVerificationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Verification);
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
@@ -124,6 +125,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, EnrichmentActions>();
         services.AddSingleton<IDesktopActionGroup, IntakeActions>();
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
+        services.AddSingleton<IDesktopActionGroup, GraphActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
         services.AddSingleton<IDesktopActionGroup, ModelSetupActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();

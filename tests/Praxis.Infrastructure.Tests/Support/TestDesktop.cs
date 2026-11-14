@@ -32,6 +32,7 @@ internal static class TestDesktop
             new EnrichmentActions(catalog.Proposals),
             new IntakeActions(intake, catalog.Processing, catalog.IntakeIncidents),
             new KnowledgeActions(catalog.Knowledge),
+            new GraphActions(catalog.Graph),
             new VerificationActions(catalog.Verification, new VerificationApproval(catalog.Verification),
                 new VerificationProviderConfiguration(catalog.Verification, verifierModels), verifierModels, verification),
             new ModelActions(catalog.Models, new OllamaModelDirectory(), processing)

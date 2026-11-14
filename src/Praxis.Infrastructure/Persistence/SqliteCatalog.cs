@@ -46,6 +46,7 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteSemanticVectorStore Embeddings { get; }
     public SqliteProposalRepository Proposals { get; }
     public SqliteKnowledgeRepository Knowledge { get; }
+    public SqliteGraphReader Graph { get; }
     public SqliteVerificationRepository Verification { get; }
     public SqliteCollectionRepository Collections { get; }
     public CatalogRecovery Recovery { get; }
@@ -78,6 +79,7 @@ public sealed class SqliteCatalog : IDisposable
         Embeddings = new SqliteSemanticVectorStore(database, clock);
         Proposals = new SqliteProposalRepository(database, clock);
         Knowledge = new SqliteKnowledgeRepository(database, clock);
+        Graph = new SqliteGraphReader(database);
         Verification = new SqliteVerificationRepository(database, clock);
         Collections = new SqliteCollectionRepository(database, clock);
         Recovery = new CatalogRecovery(database, objects, dataDirectory);
