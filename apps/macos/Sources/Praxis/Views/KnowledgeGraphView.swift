@@ -16,15 +16,18 @@ struct KnowledgeGraphView: View {
     @State private var zoom: CGFloat = 1
     @State private var zoomRevision = 0
     @State private var confirmRejection = false
+    @State private var showContexts = true
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             HStack(spacing: 0) {
-                discovery
-                    .frame(width: 225)
-                Divider()
+                if showContexts {
+                    discovery
+                        .frame(width: 225)
+                    Divider()
+                }
                 ZStack {
                     if graph.focusId == nil, let atlasError = graph.atlasError {
                         EmptyState(systemImage: "exclamationmark.triangle",
@@ -105,6 +108,10 @@ struct KnowledgeGraphView: View {
 
     private var toolbar: some View {
         HStack(spacing: Spacing.s) {
+            Button { showContexts.toggle() } label: {
+                Label(showContexts ? "Hide contexts" : "Show contexts", systemImage: "sidebar.left")
+            }
+            .accessibilityLabel(showContexts ? "Hide knowledge contexts" : "Show knowledge contexts")
             if graph.focusId != nil {
                 Button { graph.showOverview() } label: {
                     Label("All knowledge", systemImage: "arrow.left")
