@@ -70,14 +70,14 @@ struct GraphPresentationTests {
         one.configure(nodes: nodes, focus: "a")
         two.configure(nodes: nodes, focus: "a")
         #expect(one.positions == two.positions)
-        #expect(one.positions["a"] == .zero)
+        #expect(one.positions["a"] == CGPoint.zero)
         for _ in 0..<40 {
             _ = one.advance(nodes: nodes, edges: [edge("r", "a", "b")], focus: "a",
                             reducedMotion: false)
         }
         #expect(one.positions["a"] == .zero)
         #expect(one.positions.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
-        #expect(two.positions["a"] == .zero)
+        #expect(two.positions["a"] == CGPoint.zero)
     }
 
     @MainActor
