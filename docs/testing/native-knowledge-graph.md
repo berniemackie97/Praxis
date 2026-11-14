@@ -17,12 +17,14 @@ The graph reads the private desktop worker's `graphSeeds`, `graphNeighborhood` a
 
 ## Presentation constraints
 
-- The global atlas streams up to **600 actual relationships / 960 visible nodes** in 100-edge worker pages; its underlying authorized catalog may be much larger. It presents separate real connected components in one camera view and a truthful bounded-sample label. The focused graph retains its separate **120-node / 120-edge** safety cap, with 32 seed results and 60-edge neighbor pages. Each worker request is still limited to 100. These are engineering limits pending measured owner-Mac qualification, not claimed device maxima.
+- The global atlas streams up to **600 real relationships / 960 atlas endpoint nodes**, plus at most 32 eligible discoverable/search-result nodes in 100-edge worker pages; its underlying authorized catalog may be much larger. It presents separate real connected components in one camera view and a truthful bounded-sample label. The focused graph retains its separate **120-node / 120-edge** safety cap, with 32 seed results and 60-edge neighbor pages. Each worker request is still limited to 100. These are engineering limits pending measured owner-Mac qualification, not claimed device maxima.
 - Nodes are colored by type, and proposed names are muted. Selection and evidence statuses are also expressed in text. Labels are shown for small graphs and focused/selected nodes, and expanded at closer zoom; dense neighborhoods do not label everything at once.
 - At the global level, the renderer uses a deterministic non-simulated layout derived from **actual graph components**, with small degree-weighted nodes, subdued links, automatic fit-to-view, pan and zoom. No edges are inferred from spatial proximity. Focused neighborhoods retain bounded real-edge repulsion/springs (at most 180 steps); dragging changes only a view position.
 - The scene is a visual surface, hidden from VoiceOver. The SwiftUI list and evidence panel expose the same currently authorized entity and relation identifiers via ordinary buttons, without requiring pointer input.
 - macOS Reduce Motion disables the simulation; increased contrast changes line and outline visibility. The screenshot fixture also exercises light/dark and compact window sizes.
 - The renderer uses bundled Apple frameworks (SpriteKit and SwiftUI), no remote assets or graph engine package. It remains inside the existing `NavigationSplitView`.
+
+The atlas buffers its pages and only publishes the bounded snapshot once the current source/revision cursor is valid across the complete read. If ingestion changes the catalog mid-read, the UI fails closed with a visible refresh prompt rather than displaying an arbitrarily partial/possibly stale constellation. Search and recenter operate on the rendered graph without replacing the canvas. The context rail can be hidden to maximize graph space.
 
 ## Verification
 
