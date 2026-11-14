@@ -80,6 +80,21 @@ struct GraphPresentationTests {
         #expect(two.positions["a"] == .zero)
     }
 
+    @MainActor
+    @Test func spriteKitSceneCanPopulateResizeSelectAndClear() {
+        let scene = GraphScene()
+        let nodes = [node("a"), node("b", type: "project")]
+        scene.configure(nodes: nodes, edges: [edge("r", "a", "b")], focus: "a")
+        scene.size = CGSize(width: 460, height: 320)
+        scene.updateAppearance(dark: false, highContrast: true)
+        scene.setSelection(node: "a", edge: nil)
+        #expect(scene.nodes(at: .zero).contains { $0.name == "node:a" })
+
+        scene.configure(nodes: [], edges: [], focus: nil)
+        scene.size = CGSize(width: 900, height: 700)
+        #expect(!scene.children.contains { $0.name == "node:a" })
+    }
+
     @Test func reducedMotionPreservesStaticPositionsAndManualDragWorks() {
         let nodes = [node("a"), node("b")]
         var layout = GraphLayout()
