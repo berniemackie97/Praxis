@@ -233,7 +233,6 @@ final class GraphWorkbenchModel: ObservableObject {
         guard let edge = inspectedEdge, edge.evidence != nil else { return }
         validate(edge) { [weak self] current in
             guard let self, let evidence = current.evidence else { return }
-            if navigate(evidence) { return }
             channel.reset(previewScope)
             sourceExcerpt = nil
             inspectionMessage = nil
@@ -243,6 +242,11 @@ final class GraphWorkbenchModel: ObservableObject {
             ], as: GraphPreview.self, scope: previewScope,
                failed: { [weak self] message in self?.inspectionMessage = message }) { [weak self] result in
                 guard let self, active, selectedEdgeId == current.relationId else { return }
+                guard result.outcome != "unavailable" else {
+                    inspectionMessage = "The source revision is no longer available."
+                    return
+                }
+                if navigate(evidence) { return }
                 guard let content = result.content else {
                     inspectionMessage = "The current source has no readable text."
                     return
