@@ -289,11 +289,11 @@ struct KnowledgeGraphView: View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(evidence.text).font(.callout).lineLimit(4).textSelection(.enabled)
             Text("Source: \(evidence.locator) · revision \(evidence.revision) · \(evidence.status)")
+                .font(.caption2).foregroundStyle(.secondary)
             Text("Evidence offset: \(evidence.offset) · verifier: \(evidence.verdict ?? "not recorded")")
                 .font(.caption2).foregroundStyle(.secondary)
             Text("The source path is not a PDF page, row, or media timestamp.")
                 .font(.caption2).foregroundStyle(.tertiary)
-                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 
