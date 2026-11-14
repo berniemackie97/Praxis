@@ -4,19 +4,19 @@ Praxis is a local-first, independent Second Brain for preserving and using owner
 
 ## Current state
 
-**Merged on `main`:** a private owner-local SQLite catalog; verified immutable originals and revision/receipt history; supervised watched-folder intake with source-rename and path-alias handling; bounded text extraction and segmentation; FTS5 search; owner-authored collections and quick-note capture; original export; and explicit verified catalog backup/restore commands. Unsupported formats remain preserved without fabricated extraction.
+**Canonical owner-local foundation:** SQLite catalog and immutable originals with source identity/revision/receipt history; supervised watched-folder intake, bounded segmentation, FTS5/hybrid search, collections, owner corrections and verified export/backup/restore contracts. Obsidian is **not** required to ingest, explore, search or preserve knowledge.
 
-The first-party SwiftUI workbench is now a **checked-in Xcode macOS application**. It supervises the .NET 10 worker through private inherited pipes and exposes Inbox, Library, Search, Knowledge, Verification and Models workflows. The application build publishes the .NET worker into its bundle. Merged PRs #216–#220 address Xcode packaging, SwiftUI compilation and assembly-name collisions; **an actual successful owner-Mac Xcode build, window launch, worker session and first-run acceptance are still outstanding** (#215/#130).
+**Integrated intelligence:** [ADR 0044](docs/decisions/0044-generic-intake-engine.md) (merged #377) provides one bounded intake engine with format readers for supported text/code, Office files, PDFs, on-device OCR, HTML/email, delimited data and bank export formats. Local triage and explicitly governed strong/strongest understanding produce evidence-linked summaries, entities, relations and typed records. The financial projection and exact query/aggregate tools were delivered by #368/#377. Scripted tests do not prove universal format support or live provider quality.
 
-**Intelligence now implemented in bounded slices:** a loopback-only Ollama inference adapter; versioned, quote-checked topic/entity/relation proposals; cross-source entity identities and owner corrections; instruction-like evidence withholding; and owner-approved Codex/Claude CLI verification with inspectable, redactable requests. These are not evidence of perfect factual classification, unrestricted subscription APIs, general-purpose agent chat or autonomous tool authority. Source capture/search does not require a model. The .NET API currently exposes liveness rather than private knowledge over HTTP.
+**Agent and first-party macOS workbench:** #373 delivers persisted, bounded tool-calling conversations and a private authenticated CLI relay; #374/#376 deliver first-party Chat, Approvals, Privacy/Agents, Library, Search, Knowledge, Collections and settings navigation. Provider and source disclosure permissions are enforced outside model prompts. PRs #373/#377 report 929/958 passing .NET tests and #376/#377 report 33 Swift tests; actual owner-model quality and release acceptance remain #379/#170.
 
-**Model-tiered intake and disclosure policy ([ADR 0043](docs/decisions/0043-tiered-intake-disclosure-and-agent-runtime.md)).** Intake is model-driven: code reads bytes and published formats (OFX/QFX/QBO, QIF, PDF text, delimited rows), the local model only triages each source's data category, a configured strong tier (Claude Code, Codex or another provider) maps export layouts, transcribes statements and annotates merchants/categories, and code verifies every result (rows parse, running or statement balances reconcile, transcribed amounts are printed). The strongest tier is asked only when verification fails. Remote processing follows the owner's disclosure policy (modes, per-category grants/denials, local-only sources) with a fallback chain — verified local result, time-limited hold for an owner decision, or index-only — so nothing waits forever. Financial knowledge is exposed to the agent as generic, exact query tools; budgets and analyses are written by the agent, not built in.
+**Next native experience:** the owner approved an **interactive, animated, provenance-aware Praxis Knowledge Graph** as the primary way to navigate linked concepts and source evidence. It is **planned, not yet implemented**: #383 is the feature, #384/#385 the renderer/query prerequisites, #386/#387 the view and evidence inspector, and #388 the owner-Mac acceptance gate blocking #170. Obsidian desktop/mobile plugin extension work #22/#23 is not planned; safe Markdown/vault import and optional generated knowledge exports remain #25/#57/#171. Shipped archive/adapter code is retained as historical optional integration, not claimed complete editor parity.
 
 ## Product direction and delivery status
 
 The [product experience](docs/product/second-brain-experience.md) defines the intended first release; [foundation and intelligent MVP delivery](docs/delivery/standalone-mvp.md) tracks the independent acceptance gates.
 
-**Foundation #130 remains open** for verified macOS first run, mixed-source lifecycle, original recovery, denial/security and real device behavior. **Intelligent MVP #170 remains open** for evaluated cited technical answers, playable source-linked video excerpts, reconciled editable budgeting through the assistant, governed agent tasks, safe Obsidian knowledge projections and measured routing. Initial caption evidence, media-header inspection and single-source financial analysis are not substitutes for those complete workflows. URL/browser capture, speech, agent/MCP access, remote sync and production distribution remain separately gated.
+**Foundation #130 remains open** for verified macOS first run, mixed-source lifecycle, original recovery, denial/security and real device behavior. **Intelligent MVP #170 remains open** for evaluated cited technical answers, playable source-linked video excerpts, reconciled editable budgeting through the assistant, governed agent tasks, native evidence-graph exploration (#383/#388) and measured routing. Initial caption evidence, media-header inspection and single-source financial analysis are not substitutes for those complete workflows. URL/browser capture, speech, agent/MCP access, remote sync and production distribution remain separately gated.
 
 **Verification status:** targeted backend and model runs are documented in individual PRs; no current all-platform GitHub Actions success can be claimed while #137 has no provisioned runners. Merged code, local test evidence, first-party hardware acceptance and release readiness are distinct statuses. [Project #3](https://github.com/users/berniemackie97/projects/3) is the delivery board, with the [repository issue plan](scripts/github/roadmap.json) as its versioned reconciliation input.
 
@@ -66,7 +66,7 @@ The [note archive contract](docs/decisions/0004-portable-note-archive.md) and [a
 2. Provide authorized, versioned sync with offline edits and explicit conflict handling.
 3. Deliver an independent, local-only file/folder Inbox and first-party Praxis Library/Search interface—no Obsidian required.
 4. Add intentional voice dictation, browser capture, source-grounded enrichment and scoped MCP access.
-5. Validate remote sync, Obsidian desktop/mobile compatibility, broader clients and operational recovery separately, behind their security and device-test gates.
+5. Validate native evidence-graph interaction and source provenance (#383/#388) as part of integrated MVP; optional Markdown/vault export, multi-device sync, broader clients and operational recovery have their own independent gates.
 
 See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [engineering workflow](docs/engineering.md), and [tracking conventions](docs/tracking.md). GitHub [roadmap issue #1](https://github.com/berniemackie97/Praxis/issues/1) is the work-item index.
 
@@ -122,7 +122,9 @@ Unresolved or ambiguous supported embeds block publication. Disappearing tracked
 
 See [ADR 0009](docs/decisions/0009-local-vault-capture-restore.md) for size limits, filesystem failure boundaries and outstanding Obsidian integration work.
 
-## Obsidian desktop adapter (local preview)
+## Historical optional Obsidian desktop adapter
+
+Further full Obsidian desktop/mobile plugin parity is **not planned** (#22/#23); this prior integration remains described for owners who already use it. The first-party graph is #383. No archived plugin behavior is an MVP dependency.
 
 The first Obsidian desktop integration is under [`integrations/obsidian`](integrations/obsidian/README.md). It exposes explicit local archive capture/update and preview commands through Obsidian, tracking file renames into an external session ledger so the existing CLI can reconcile stable IDs. Its plugin manifest is desktop-only; it does not synchronize or rewrite notes. See [ADR 0013](docs/decisions/0013-obsidian-desktop-local-adapter.md).
 

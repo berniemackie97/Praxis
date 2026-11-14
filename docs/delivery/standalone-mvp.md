@@ -6,17 +6,21 @@
 
 The M0–M7 repository milestones remain **capability gates**, not mandatory chronological implementation order. Previously, a first usable app was effectively blocked on two-device sync and Obsidian integration. That is incompatible with the user's confirmed requirement: Praxis must be independently useful as a local Second Brain.
 
-Create a **local-owner foundational vertical slice across M4 and M6** now, followed by the integrated intelligence, Obsidian and governed task-release gate #170. Preserve M0/M1 content integrity and architecture constraints. Build remote synchronization (M2) and unrelated multi-device parity separately. **Obsidian knowledge visibility and verified local-first agent/model assistance are mandatory for #170**, with the full M3/M5 portfolio and later hosted operations still independently gated. Existing completed Obsidian archives remain useful recovery/interoperability evidence, not the entry point.
+Create an owner-local foundation across M4/M6, then verify the integrated intelligence, **native first-party evidence graph**, and governed task release gate #170. Preserve M0/M1 integrity and authorization, and build remote synchronization (M2) and unrelated device parity separately. **Native Knowledge Graph acceptance #388 and verified local-first agent/model assistance are mandatory for #170**. The M3 optional Markdown/vault feature #57/#171 and historical Obsidian archives remain independent interchange/recovery work, not an MVP release gate.
 
 Project priority is independent from milestone number. Owner-local processing must remain fully local until processing policy is approved. Any non-loopback service, public endpoint, remote inference, credentialed connector, or multi-owner access is blocked on #13/#15/#50 and its own controls. A local prototype is **not** evidence of encryption, data confidentiality against malware, or production deployment readiness.
+
+## November 13, 2026 — M3 native graph and optional portability
+
+The owner replaced the former Obsidian-dependent M3 goal with **native knowledge exploration and portable Markdown interchange**. [#5](https://github.com/berniemackie97/Praxis/issues/5) owns native graph feature #383 and optional interchange #57; #58/#24 move to first-party clients under #8/M6. #384 renderer and #385 bounded source-verified graph API can be planned concurrently; #386 visual exploration, #387 evidence/owner review and #388 verified macOS accessibility/performance/privacy complete the native graph gate. **#388 blocks #170; #171 does not.** The historical Obsidian desktop and mobile-plugin enhancement tails #22/#23 are not planned and should not be confused with completed portability or certified mobile clients. The graph visualizes canonical knowledge but neither stores another canonical graph nor grants unauthorized relationship edits.
 
 ## Two distinct gates — do not conflate them
 
 **L0 / #130:** Launch, capture, preserve, index, inspect, organize and recover local knowledge reliably. It must function offline without an LLM or Obsidian. This is essential engineering foundation but **not** a complete MVP.
 
-**Intelligent MVP / #170:** Take a representative **mixed technical, multimedia and financial corpus** from raw sources through trustworthy processing and relationships, retrieve and investigate complex questions with grounded answers (including timecoded video playback and a reconciled editable budget), run a bounded owner-approved task, expose knowledge safely in Obsidian and use measured local-first inference with opt-in external escalation. The deliverables are #149/#150, #29/#31/#33/#172, #143, #32/#34/#160/#173, and #57/#171. Reuse the same canonical storage, consent policy and user experience.
+**Intelligent MVP / #170:** Take a representative **mixed technical, multimedia and financial corpus** from raw sources through trustworthy processing and relationships, retrieve and investigate complex questions with grounded answers (including timecoded video playback and a reconciled editable budget), run a bounded owner-approved task, **explore source-verified relationships natively in Praxis** (#383/#388) and use measured local-first inference with opt-in external escalation. The deliverables are #149/#150, #29/#31/#33/#172, #143, #32/#34/#160/#173, and #383/#388; optional #57/#171 interchange does not gate #170. Reuse the same canonical storage, consent policy and user experience.
 
-Require three distinct validated question-to-artifact workflows for the same MVP #170: (1) cross-source technical synthesis, (2) tutorial video excerpt playable in chat with exact source/time range and full-file navigation (#177), (3) deterministic month budget computed from authorized structured bills, income and transactions with an editable output (#178). #176 owns domain processing and #179 the cross-domain gold fixtures. Local financial imports satisfy the first release without live banking API credentials; all private sources remain scoped and revocable.
+Require three distinct validated question-to-artifact workflows for the same MVP #170: (1) cross-source technical synthesis, (2) tutorial video excerpt playable in chat with exact source/time range and full-file navigation (#177), (3) deterministic month budget computed from authorized structured bills, income and transactions with an editable output (#185). #176 owns domain processing and #179 the cross-domain gold fixtures. Local financial imports satisfy the first release without live banking API credentials; all private sources remain scoped and revocable.
 
 Design validation on actual source/domain questions, not superficial generated summaries. Never declare production readiness without performance, grounding, redaction, revocation, no-answer, agent injection, failure/restart and owner hardware evidence.
 
@@ -44,7 +48,7 @@ These are separate issue-sized implementation reviews, not an instruction to int
 
 Merged #144–#220 have advanced the owner-local app, including bounded local Ollama enrichment (#205/#206), entity relations and owner governance (#207), owner-approved stronger CLI checks (#210) and first-party Knowledge/Verification/Models views (#212). The native Xcode project and follow-up packaging/compiler fixes (#216–#220) are on `main`, but #215 has no verified successful owner-Mac build/launch/worker session. No current GitHub Actions matrix has completed while #137 lacks runners. The local foundation #130 and intelligent MVP #170 remain separate, open acceptance gates.
 
-The first model-backed knowledge graph is an implemented **proposal and evidence** layer, not an independently proven answer engine. The full MVP still requires cited cross-domain chat, playable video moments, typed financial reconciliation and editable budget outputs, approved tasks, Obsidian projections and measured provider selection.
+The first model-backed knowledge graph is an implemented **proposal and evidence** layer, not an independently proven answer engine. The full MVP still requires cited cross-domain chat, playable video moments, typed financial reconciliation and editable budget outputs, approved tasks, native evidence graph exploration (#383/#388) and measured provider selection.
 
 ## Next capture experiences
 
@@ -68,7 +72,7 @@ Voice, extension and URL fetch are not prerequisites for the initial S6 acceptan
 | MCP read-only | #118 | Authorized search/fetch from an external agent with bounded citations and revocation |
 | MCP capture/write | #119 | Separate explicit grants, approval when required, durable idempotent receipts; cannot be enabled on the strength of read-only tests alone |
 
-Do not treat agent access as ordinary browser/UI access or grant tools by prompt instruction. Do not build a vector database or knowledge graph engine in anticipation of features that do not yet have measured workloads.
+Do not treat agent access as ordinary browser/UI access or grant tools by prompt instruction. Build #383 over existing evidence and relation records via a bounded read projection (#385), not an unnecessary second graph database. Validate renderer and real workloads under #384/#388.
 
 ## Cross-cutting obligations
 
@@ -121,7 +125,7 @@ The first local deliverable intentionally stops short of autonomous technical re
 - **Cost policy:** deterministic extraction/event classification before model inference; measured local Ollama/Qwen path first; Claude/Codex only through supported, explicitly consented invocation with input/cost disclosure; no assumption that user subscriptions include API use.
 - **Security gate:** model output never grants authority. Provider accounts, local session histories and command execution require distinct, narrow, revocable consent. Sensitive financial and social account access remains a research decision, not a scheduled or implemented connector.
 
-Do not create a graph database, broad tool runtime, uncontrolled session monitor, provider marketplace or autonomous background agent before a measured vertical slice justifies it. The owner can use L0 entirely offline with no AI provider; L4/L5 only exit when proven against real authorized cases.
+Do not create a redundant graph database, uncontrolled session monitor, provider marketplace or autonomous background agent. The native graph is an explicitly approved, measured first-party read projection with no new privileged writes (#383/#388). The owner can use L0 entirely offline with no AI provider; L4/L5 only exit when proven against real authorized cases.
 
  
 ## Reviewable enrichment checkpoint (#115)
@@ -148,4 +152,4 @@ Merged #169 preserves source identity only for observed in-scope file renames fo
 
 ## Cross-domain evidence
 
-Merged #187 added timecoded caption cue evidence and a bounded, source-cited one-CSV financial summary; #188 added hypothetical owner-controlled spending targets; #193 added narrow digest-verified media header inspection. These are read-only evidence facilities, not finished media comprehension, chat playback, multi-source typed financial history or an approved editable budget workflow. #181/#184 and #177/#178 remain open, with #179/#170 owning independent cross-domain acceptance.
+Merged #187 added timecoded caption cue evidence and a bounded, source-cited one-CSV financial summary; #188 added hypothetical owner-controlled spending targets; #193 added narrow digest-verified media header inspection. These are read-only evidence facilities, not finished media comprehension, chat playback, multi-source typed financial history or an approved editable budget workflow. #181/#184 and #177/#185 remain open, with #179/#170 owning independent cross-domain acceptance.

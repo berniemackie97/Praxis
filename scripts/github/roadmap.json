@@ -22,8 +22,8 @@
     },
     {
       "stage": "M3",
-      "title": "M3 — Obsidian device integration",
-      "description": "Obsidian interoperability and separately authorized projections of Praxis knowledge, grounded relationships and sources into a navigable owner-controlled vault; no second canonical store. Independent mobile parity remains separately verified."
+      "title": "M3 — Native knowledge exploration and portability",
+      "description": "First-party, permission-filtered and provenance-aware interactive knowledge graph with real owner-Mac evidence/navigation acceptance; optional portable Markdown/vault exchange, with no Obsidian runtime or mobile plugin requirement. Exit: #388 native graph acceptance; optional #57 remains independently gated."
     },
     {
       "stage": "M4",
@@ -65,7 +65,7 @@
     {
       "issue": 5,
       "stage": "M3",
-      "area": "obsidian"
+      "area": "knowledge"
     },
     {
       "issue": 6,
@@ -150,9 +150,8 @@
     {
       "issue": 57,
       "epic": 5,
-      "area": "obsidian",
+      "area": "knowledge",
       "children": [
-        22,
         25,
         92,
         94,
@@ -161,10 +160,9 @@
     },
     {
       "issue": 58,
-      "epic": 5,
-      "area": "obsidian",
+      "epic": 8,
+      "area": "clients",
       "children": [
-        23,
         24
       ]
     },
@@ -210,7 +208,8 @@
         33,
         170,
         172,
-        369
+        369,
+        379
       ]
     },
     {
@@ -249,7 +248,8 @@
         161,
         166,
         215,
-        370
+        370,
+        380
       ]
     },
     {
@@ -338,7 +338,7 @@
       "area": "intelligence",
       "children": [
         177,
-        178,
+        185,
         179,
         181,
         184,
@@ -367,7 +367,8 @@
         310,
         311,
         312,
-        313
+        313,
+        381
       ]
     },
     {
@@ -480,6 +481,18 @@
         352,
         353
       ]
+    },
+    {
+      "issue": 383,
+      "epic": 5,
+      "area": "clients",
+      "children": [
+        384,
+        385,
+        386,
+        387,
+        388
+      ]
     }
   ],
   "direct_work": [
@@ -514,6 +527,10 @@
     {
       "issue": 219,
       "epic": 2
+    },
+    {
+      "issue": 382,
+      "epic": 2
     }
   ],
   "dependencies": {
@@ -543,10 +560,6 @@
       40,
       41
     ],
-    "247": [
-      15,
-      17
-    ],
     "20": [
       16,
       17
@@ -554,20 +567,12 @@
     "21": [
       17
     ],
-    "22": [
-      18,
-      19,
-      92
-    ],
-    "23": [
-      22
-    ],
     "24": [
-      23
+      18,
+      39
     ],
     "25": [
-      16,
-      22
+      16
     ],
     "26": [
       101,
@@ -821,18 +826,15 @@
       143,
       149,
       150,
-      171,
       172,
       173,
       176,
-      179
+      179,
+      388
     ],
     "171": [
-      22,
       25,
-      116,
-      143,
-      149
+      116
     ],
     "172": [
       29,
@@ -860,18 +862,9 @@
       166,
       181
     ],
-    "178": [
-      31,
-      32,
-      33,
-      103,
-      115,
-      173,
-      184
-    ],
     "179": [
       177,
-      178,
+      185,
       156,
       29
     ],
@@ -885,8 +878,21 @@
       103,
       129
     ],
+    "185": [
+      31,
+      32,
+      33,
+      103,
+      115,
+      173,
+      184
+    ],
     "215": [
       108
+    ],
+    "247": [
+      15,
+      17
     ],
     "303": [
       31
@@ -912,7 +918,8 @@
       115
     ],
     "310": [
-      184
+      184,
+      381
     ],
     "311": [
       29,
@@ -1055,6 +1062,9 @@
       348,
       304
     ],
+    "350": [
+      33
+    ],
     "351": [
       321,
       320,
@@ -1063,9 +1073,6 @@
     "352": [
       34,
       310
-    ],
-    "350": [
-      33
     ],
     "362": [
       184,
@@ -1080,6 +1087,39 @@
     ],
     "370": [
       369
+    ],
+    "379": [
+      369,
+      370,
+      184
+    ],
+    "380": [
+      369,
+      370
+    ],
+    "381": [
+      369,
+      184
+    ],
+    "384": [
+      108
+    ],
+    "385": [
+      106,
+      108
+    ],
+    "386": [
+      384,
+      385
+    ],
+    "387": [
+      385,
+      386
+    ],
+    "388": [
+      385,
+      386,
+      387
     ]
   },
   "priorities": {
@@ -1093,14 +1133,13 @@
     "M7": "P2"
   },
   "priority_overrides": {
+    "5": "P1",
     "6": "P1",
     "8": "P1",
     "13": "P0",
     "15": "P0",
     "16": "P0",
     "17": "P0",
-    "22": "P1",
-    "25": "P1",
     "26": "P1",
     "27": "P1",
     "29": "P1",
@@ -1114,7 +1153,6 @@
     "50": "P0",
     "53": "P0",
     "55": "P0",
-    "57": "P1",
     "59": "P1",
     "60": "P1",
     "61": "P1",
@@ -1171,15 +1209,14 @@
     "162": "P3",
     "166": "P1",
     "170": "P1",
-    "171": "P1",
     "172": "P1",
     "173": "P1",
     "176": "P1",
     "177": "P1",
-    "178": "P1",
     "179": "P1",
     "181": "P1",
     "184": "P1",
+    "185": "P1",
     "215": "P1",
     "219": "P2",
     "287": "P1",
@@ -1218,9 +1255,19 @@
     "353": "P3",
     "362": "P1",
     "369": "P1",
-    "370": "P1"
+    "370": "P1",
+    "379": "P1",
+    "381": "P1",
+    "383": "P1",
+    "384": "P1",
+    "385": "P1",
+    "386": "P1",
+    "387": "P1",
+    "388": "P1"
   },
   "area_overrides": {
+    "24": "clients",
+    "25": "knowledge",
     "99": "knowledge",
     "100": "knowledge",
     "112": "security",
@@ -1230,6 +1277,7 @@
     "128": "knowledge",
     "129": "security",
     "136": "knowledge",
+    "171": "knowledge",
     "177": "clients",
     "181": "retrieval",
     "184": "knowledge",
@@ -1246,7 +1294,8 @@
     "349": "intelligence",
     "352": "automation",
     "353": "knowledge",
-    "362": "knowledge"
+    "362": "knowledge",
+    "385": "knowledge"
   },
   "decision_queue": [
     30,
@@ -1257,17 +1306,12 @@
     172,
     308,
     313,
-    338
+    338,
+    384
   ],
   "dependency_removals": {
-    "26": [
-      22
-    ],
     "27": [
       15
-    ],
-    "36": [
-      23
     ],
     "108": [
       101,
@@ -1278,9 +1322,20 @@
     ],
     "130": [
       107
+    ],
+    "170": [
+      171
+    ],
+    "171": [
+      143,
+      149
     ]
   },
   "priority_migrations": {
+    "5": {
+      "from": "P2",
+      "to": "P1"
+    },
     "6": {
       "from": "P2",
       "to": "P1"
@@ -1289,13 +1344,9 @@
       "from": "P3",
       "to": "P1"
     },
-    "22": {
-      "from": "P2",
-      "to": "P1"
-    },
     "25": {
-      "from": "P2",
-      "to": "P1"
+      "from": "P1",
+      "to": "P2"
     },
     "26": {
       "from": "P2",
@@ -1330,8 +1381,8 @@
       "to": "P1"
     },
     "57": {
-      "from": "P2",
-      "to": "P1"
+      "from": "P1",
+      "to": "P2"
     },
     "59": {
       "from": "P2",
@@ -1410,8 +1461,8 @@
       "to": "P1"
     },
     "171": {
-      "from": "P2",
-      "to": "P1"
+      "from": "P1",
+      "to": "P2"
     },
     "172": {
       "from": "P2",
@@ -1495,7 +1546,8 @@
         155,
         156,
         181,
-        184
+        184,
+        381
       ],
       "exit": "Given owner-approved technical, captioned video and structured financial sources, build versioned evidence, retrieve explicit source/text/time/record selectors, and perform bounded cited investigations or abstain. Validate changes, revocation, privacy, no fabricated timestamps or amounts and measured resource limits."
     },
@@ -1521,21 +1573,22 @@
         32,
         33,
         34,
-        57,
         61,
         62,
         98,
         143,
         170,
-        171,
         172,
         173,
         176,
         177,
-        178,
-        179
+        185,
+        179,
+        379,
+        383,
+        388
       ],
-      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate semantic/structural retrieval and agentic investigation, provenance, reviewable knowledge, approved task execution, Obsidian views, efficient agent contexts, measured, consented local-or-remote model and agent routing with provider outage/denial tests, and reliability/privacy/revocation/cost tests."
+      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate secure, accessible native interactive knowledge graph with exact source/relation provenance (#383/#388), semantic/structural retrieval, bounded agent investigation, approved actions, efficient contexts, measured local-or-consented-remote model routing, provider outage/denial and privacy/revocation/cost tests. Optional Obsidian/Markdown portability #57/#171 is not a release gate."
     }
   ]
 }
