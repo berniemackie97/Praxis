@@ -287,6 +287,33 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task ProjectSummaryIsNotPublishedAfterAMemberIsRevokedDuringInference()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "volatile/package.json", PackageJson);
+        CapturedOriginal member = await Capture(catalog, "volatile/src/public.ts", Server);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Policy.SaveCategory(new SourceCategory(member.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        Grant(catalog, DataCategories.Code, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ =>
+        {
+            Assert.True(catalog.Sources.Revoke(member.SourceId));
+            return """
+                {"purpose":"A service.","summary":"Uses the source file.",
+                 "components":[{"name":"Entry","path":"src/public.ts","role":"entry"}],"entryPoints":[],"buildCommands":[]}
+                """;
+        });
+        ProjectCandidate project = Assert.Single(ProjectDetector.Detect(catalog.Projects.ReadActiveSources(100)));
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+
+        ProjectUnderstanding result = await understander.UnderstandAsync(project, ProjectDetector.Fingerprint(project), CancellationToken.None);
+        Assert.Equal((ProjectUnderstanding.MapOnly, "source_scope_changed"), (result.Status, result.Reason));
+        Assert.Null(result.Summary);
+        Assert.Empty(result.Components);
+        Assert.Equal(1, models.Count(Strong));
+    }
+
+    [Fact]
     public async Task ExpiredProjectDisclosureGrantDoesNotAuthorizeRemoteCall()
     {
         using SqliteCatalog catalog = Open();
