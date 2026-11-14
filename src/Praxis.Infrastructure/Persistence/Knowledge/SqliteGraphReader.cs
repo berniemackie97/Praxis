@@ -289,7 +289,9 @@ public sealed class SqliteGraphReader : IGraphReader
             JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
             JOIN sources s ON s.source_id = m.source_id
             WHERE m.entity_id = $id {ScopeFilter("m")}
-            ORDER BY m.source_id, m.proposal_id LIMIT 1
+            ORDER BY CASE WHEN EXISTS (
+                SELECT 1 FROM confirmed_entity_mentions confirmed WHERE confirmed.proposal_id = m.proposal_id)
+                THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
             """);
         Scope(command, query);
         command.Parameters.AddWithValue("$id", id.ToString("D"));
