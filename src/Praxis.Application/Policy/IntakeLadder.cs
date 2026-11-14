@@ -45,11 +45,22 @@ public sealed class IntakeLadder(TieredModels models, IPolicyRepository policy, 
     /// when already verified, is what the "verified local answer" fallback uses instead of asking
     /// the local tier again.
     /// </summary>
-    public async Task<LadderResult<T>> RunAsync<T>(
+    public Task<LadderResult<T>> RunAsync<T>(
         TieredRequest request, Func<string, string, LadderCheck<T>?> check, Func<LadderCheck<T>, TieredRequest>? escalate,
-        LadderResult<T>? localDraft, CancellationToken cancellationToken) where T : class
+        LadderResult<T>? localDraft, CancellationToken cancellationToken) where T : class =>
+        RunCoreAsync(_ => request, check, escalate, localDraft, cancellationToken);
+
+    /// <summary>Builds an independently scoped request for each provider tier.</summary>
+    public Task<LadderResult<T>> RunAsync<T>(
+        Func<string, TieredRequest?> requestForTier, Func<string, string, LadderCheck<T>?> check,
+        CancellationToken cancellationToken) where T : class =>
+        RunCoreAsync(requestForTier, check, null, null, cancellationToken);
+
+    private async Task<LadderResult<T>> RunCoreAsync<T>(
+        Func<string, TieredRequest?> requestForTier, Func<string, string, LadderCheck<T>?> check,
+        Func<LadderCheck<T>, TieredRequest>? escalate, LadderResult<T>? localDraft, CancellationToken cancellationToken) where T : class
     {
-        TieredRequest current = request;
+        TieredRequest? escalated = null;
         TieredOutcome? blocked = null;
         bool ranUnverified = false;
         LadderResult<T>? partial = null;
@@ -57,6 +68,13 @@ public sealed class IntakeLadder(TieredModels models, IPolicyRepository policy, 
         int output = 0;
         foreach (string tier in new[] { ModelTiers.Strong, ModelTiers.Strongest })
         {
+            TieredRequest? current = escalated ?? requestForTier(tier);
+            escalated = null;
+            if (current is null)
+            {
+                continue;
+            }
+
             TieredOutcome outcome = await models.CompleteAsync(tier, current, cancellationToken);
             input += outcome.InputTokens;
             output += outcome.OutputTokens;
@@ -83,7 +101,7 @@ public sealed class IntakeLadder(TieredModels models, IPolicyRepository policy, 
                 partial = new LadderResult<T>(LadderResult<T>.Partial, checkedAnswer.Value, tier, outcome.ProviderId, outcome.Identity, "partially_verified");
                 if (escalate is not null)
                 {
-                    current = escalate(checkedAnswer);
+                    escalated = escalate(checkedAnswer);
                 }
             }
         }
@@ -95,7 +113,9 @@ public sealed class IntakeLadder(TieredModels models, IPolicyRepository policy, 
 
         LadderResult<T> result = ranUnverified
             ? new LadderResult<T>(LadderResult<T>.Unverified, null, null, null, null, "verification_failed")
-            : await FallbackAsync(request, blocked, null, check, localDraft, cancellationToken);
+            : requestForTier(ModelTiers.Local) is { } fallback
+                ? await FallbackAsync(fallback, blocked, null, check, localDraft, cancellationToken)
+                : new LadderResult<T>(LadderResult<T>.IndexOnly, null, null, null, null, "tier_unavailable");
         return result with { InputTokens = result.InputTokens + input, OutputTokens = result.OutputTokens + output };
     }
 

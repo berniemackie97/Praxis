@@ -12,7 +12,23 @@ public sealed class SqliteProjectRepository : IProjectRepository
 
     internal SqliteProjectRepository(CatalogDatabase database) => this.database = database;
 
-    public IReadOnlyList<ProjectSource> ReadActiveSources(int limit) => database.ExecuteRead(connection =>
+    public IReadOnlyList<ProjectSource> ReadActiveSources(int limit) =>
+        database.ExecuteRead(connection => ActiveSources(connection, limit, null));
+
+    public IReadOnlyList<ProjectSource> ReadCurrentMembers(IReadOnlyList<ProjectSource> expected)
+    {
+        if (expected.Count == 0)
+        {
+            return [];
+        }
+
+        var byId = expected.ToDictionary(member => member.SourceId);
+        string ids = JsonSerializer.Serialize(byId.Keys.Select(id => id.ToString("D")));
+        IReadOnlyList<ProjectSource> active = database.ExecuteRead(connection => ActiveSources(connection, expected.Count, ids));
+        return active.Where(member => byId.TryGetValue(member.SourceId, out ProjectSource? prior) && member == prior).ToArray();
+    }
+
+    private static IReadOnlyList<ProjectSource> ActiveSources(SqliteConnection connection, int limit, string? ids)
     {
         using SqliteCommand command = connection.CreateCommand("""
             SELECT s.source_id, i.item_id, v.revision, s.locator, v.digest
@@ -20,20 +36,23 @@ public sealed class SqliteProjectRepository : IProjectRepository
             JOIN items i ON i.source_id = s.source_id
             JOIN item_versions v ON v.item_id = i.item_id
             WHERE s.status = 'active' AND s.source_kind = 'file'
+              AND ($ids IS NULL OR s.source_id IN (SELECT value FROM json_each($ids)))
               AND v.revision = (SELECT MAX(latest.revision) FROM item_versions latest WHERE latest.item_id = i.item_id)
             ORDER BY s.locator
             LIMIT $limit
             """);
         command.Parameters.AddWithValue("$limit", limit);
+        command.Parameters.AddWithValue("$ids", (object?)ids ?? DBNull.Value);
         using SqliteDataReader reader = command.ExecuteReader();
         List<ProjectSource> sources = [];
         while (reader.Read())
         {
-            sources.Add(new ProjectSource(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)), reader.GetInt32(2), reader.GetString(3), reader.GetString(4)));
+            sources.Add(new ProjectSource(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)), reader.GetInt32(2),
+                reader.GetString(3), reader.GetString(4)));
         }
 
-        return (IReadOnlyList<ProjectSource>)sources;
-    });
+        return sources;
+    }
 
     public ProjectUnderstanding? Read(string projectId) => Query("WHERE project_id = $id", ("$id", projectId)).SingleOrDefault();
 
