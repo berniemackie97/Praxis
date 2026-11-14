@@ -102,19 +102,24 @@ enum GraphBudget {
     static let maximumEdges = 120
     static let seedCount = 32
     static let neighborhoodPageSize = 60
+    static let atlasNodes = 960
+    static let atlasEdges = 600
+    static let atlasPageSize = 100
 }
 
 /// A page merge never fabricates an edge or substitutes an unverified node.
 enum GraphProjection {
-    static func merge(nodes: [GraphNode], edges: [GraphEdge], page: GraphPage) -> (nodes: [GraphNode], edges: [GraphEdge]) {
+    static func merge(nodes: [GraphNode], edges: [GraphEdge], page: GraphPage,
+                      maximumNodes: Int = GraphBudget.maximumNodes,
+                      maximumEdges: Int = GraphBudget.maximumEdges) -> (nodes: [GraphNode], edges: [GraphEdge]) {
         var knownNodes = Dictionary(uniqueKeysWithValues: nodes.map { ($0.entityId, $0) })
         for node in page.nodes {
-            if knownNodes[node.entityId] == nil && knownNodes.count >= GraphBudget.maximumNodes { break }
+            if knownNodes[node.entityId] == nil && knownNodes.count >= maximumNodes { break }
             knownNodes[node.entityId] = node
         }
         var knownEdges = Dictionary(uniqueKeysWithValues: edges.map { ($0.relationId, $0) })
         for edge in page.edges {
-            guard knownEdges.count < GraphBudget.maximumEdges,
+            guard knownEdges.count < maximumEdges,
                   knownNodes[edge.subjectId] != nil, knownNodes[edge.objectId] != nil else { continue }
             knownEdges[edge.relationId] = edge
         }
