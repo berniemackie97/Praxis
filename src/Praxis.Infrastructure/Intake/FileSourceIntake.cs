@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Praxis.Application.Originals;
+using Praxis.Application.Projects;
 using Praxis.Domain.Common;
 using Praxis.Domain.Intake;
 using Praxis.Domain.Originals;
@@ -152,10 +153,10 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
     private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth, CancellationToken cancellationToken)
     {
         List<string> result = new();
-        Stack<(string Directory, int Depth)> stack = new();
-        stack.Push((directory, 0));
+        Stack<(string Directory, int Depth, bool InsideProject, IReadOnlyList<GitIgnoreRules> Rules)> stack = new();
+        stack.Push((directory, 0, false, []));
         int remainingEntries = checked(maxFiles * 4);
-        while (stack.TryPop(out (string Directory, int Depth) pending))
+        while (stack.TryPop(out (string Directory, int Depth, bool InsideProject, IReadOnlyList<GitIgnoreRules> Rules) pending))
         {
             cancellationToken.ThrowIfCancellationRequested();
             List<string> entries = new();
@@ -171,23 +172,35 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
             }
 
             entries.Sort(StringComparer.Ordinal);
+            bool insideProject = pending.InsideProject || entries.Any(entry => ProjectMarkers.IsMarker(Path.GetFileName(entry)));
+            IReadOnlyList<GitIgnoreRules> rules = GitIgnoreRules.Load(pending.Directory) is { } local ? [.. pending.Rules, local] : pending.Rules;
             for (int index = entries.Count - 1; index >= 0; index--)
             {
                 string path = entries[index];
+                string name = Path.GetFileName(path);
                 FileAttributes attributes = File.GetAttributes(path);
+                bool isDirectory = (attributes & FileAttributes.Directory) != 0;
+                // Dependency and build output, version-control internals and secrets are never
+                // sources; skipping them before any other check keeps their links and size out of scope.
+                if ((isDirectory ? IntakeIgnoreRules.IsIgnoredDirectory(name, insideProject) : IntakeIgnoreRules.IsSecretFile(name))
+                    || IntakeIgnoreRules.IsGitIgnored(rules, path, isDirectory))
+                {
+                    continue;
+                }
+
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     throw new InvalidDataException("Folder imports cannot follow symbolic links.");
                 }
 
-                if ((attributes & FileAttributes.Directory) != 0)
+                if (isDirectory)
                 {
                     if (pending.Depth == maxDepth)
                     {
                         throw new InvalidDataException("The folder nesting depth exceeds the limit.");
                     }
 
-                    stack.Push((ValidateSourcePath(path, expectDirectory: true), pending.Depth + 1));
+                    stack.Push((ValidateSourcePath(path, expectDirectory: true), pending.Depth + 1, insideProject, rules));
                     continue;
                 }
 

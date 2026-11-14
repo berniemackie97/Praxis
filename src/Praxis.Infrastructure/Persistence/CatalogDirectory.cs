@@ -1,3 +1,4 @@
+using Praxis.Infrastructure.FileSystem;
 namespace Praxis.Infrastructure.Persistence;
 
 /// <summary>Layout and access rules for the private catalog data directory.</summary>
@@ -35,6 +36,11 @@ internal static class CatalogDirectory
 
         foreach (string entry in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(entry))
+            {
+                continue;
+            }
+
             string name = Path.GetFileName(entry);
             if (!AllowedEntries.Contains(name) || (File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
             {

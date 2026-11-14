@@ -26,6 +26,47 @@ public sealed class FileSourceIntakeTests : IDisposable
     }
 
     [Fact]
+    public void ScanSkipsDependenciesBuildOutputGitIgnoredFilesAndSecrets()
+    {
+        string root = Path.Combine(workspace, "watched");
+        string project = Path.Combine(root, "app");
+        string notes = Path.Combine(root, "Build");
+        foreach (string folder in new[]
+                 {
+                     Path.Combine(project, ".git", "objects"), Path.Combine(project, "node_modules", "left-pad"), Path.Combine(project, "bin", "Debug"),
+                     Path.Combine(project, "src"), Path.Combine(project, "generated"), Path.Combine(project, "logs"), notes
+                 })
+        {
+            Directory.CreateDirectory(folder);
+        }
+
+        File.WriteAllText(Path.Combine(project, "package.json"), "{}");
+        File.WriteAllText(Path.Combine(project, ".gitignore"), "# build output\ngenerated/\n*.log\n!keep.log\n/secret-notes.md\n");
+        File.WriteAllText(Path.Combine(project, ".git", "objects", "ab"), "blob");
+        File.WriteAllText(Path.Combine(project, "node_modules", "left-pad", "index.js"), "module.exports = 1;");
+        File.WriteAllText(Path.Combine(project, "bin", "Debug", "app.dll"), "binary");
+        File.WriteAllText(Path.Combine(project, "src", "index.ts"), "export const a = 1;");
+        File.WriteAllText(Path.Combine(project, "src", "secret-notes.md"), "not anchored, kept");
+        File.WriteAllText(Path.Combine(project, "secret-notes.md"), "anchored, ignored");
+        File.WriteAllText(Path.Combine(project, "generated", "types.ts"), "generated");
+        File.WriteAllText(Path.Combine(project, "logs", "run.log"), "log");
+        File.WriteAllText(Path.Combine(project, "logs", "keep.log"), "kept by negation");
+        File.WriteAllText(Path.Combine(project, ".env"), "API_KEY=secret");
+        File.WriteAllText(Path.Combine(project, ".env.example"), "API_KEY=");
+        File.WriteAllText(Path.Combine(project, "deploy.pem"), "key");
+        File.WriteAllText(Path.Combine(notes, "ideas.md"), "A folder called Build outside a project is the owner's.");
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        string[] found = new FileSourceIntake(catalog.Originals, catalog.DataDirectory).InspectFolder(root, 100, 8, 1 << 20)
+            .Select(file => Path.GetRelativePath(root, file.SourcePath).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(
+        [
+            "Build/ideas.md", "app/.env.example", "app/.gitignore", "app/logs/keep.log", "app/package.json", "app/src/index.ts", "app/src/secret-notes.md"
+        ], found);
+    }
+
+    [Fact]
     public async Task SelectedFolderPreservesNestedOriginalsAndStableSourceVersions()
     {
         string selected = Path.Combine(workspace, "selected");

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Praxis.Domain.Security;
+using Praxis.Infrastructure.FileSystem;
 using Praxis.Infrastructure.Persistence.Security.Registry;
 
 namespace Praxis.Infrastructure.Persistence.Security.ClientTrust;
@@ -75,6 +76,11 @@ public sealed partial class ClientDeviceTrustStore : IDisposable
         };
         foreach (string path in Directory.EnumerateFileSystemEntries(root))
         {
+            if (FinderMetadata.IsBenign(path))
+            {
+                continue;
+            }
+
             if (!expected.Contains(Path.GetFileName(path)) ||
                 !File.Exists(path) ||
                 (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
