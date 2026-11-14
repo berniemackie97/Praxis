@@ -274,6 +274,11 @@ struct KnowledgeGraphView: View {
                     Text("Owner assertion. No source citation is attached; this is not a documented source claim.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                HStack {
+                    Button("Inspect subject") { inspect(edge.subjectId) }
+                    Button("Inspect object") { inspect(edge.objectId) }
+                }
+                .help("Open canonical entity details for owner-managed names, types and relationships.")
                 Button("Ask Praxis…") { graph.prepareExplanation(explain) }
                     .help("Prepare a draft using revalidated relation identifiers. Review the model and text before sending.")
                 if let excerpt = graph.sourceExcerpt {
