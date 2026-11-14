@@ -48,6 +48,16 @@ struct GraphPage: Decodable {
     let nextCursor: String?
 }
 
+struct GraphPreview: Decodable {
+    let outcome: String
+    let content: String?
+    let reasonCode: String?
+}
+
+struct GraphReviewOutcome: Decodable {
+    let reviewed: Bool
+}
+
 /// Explicit bounds for the visible scene, independent of the catalog's query limits.
 enum GraphBudget {
     static let maximumNodes = 120
