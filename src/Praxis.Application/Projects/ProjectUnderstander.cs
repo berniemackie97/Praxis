@@ -40,8 +40,9 @@ public sealed class ProjectUnderstander(
             string fingerprint = ProjectDetector.Fingerprint(candidate);
             string disclosureFingerprint = DisclosureFingerprint(candidate);
             ProjectUnderstanding? existing = projects.Read(candidate.ProjectId);
-            if (existing?.Reason != "source_scope_changed" && existing?.DisclosureFingerprint == disclosureFingerprint &&
-                (existing.Fingerprint == fingerprint || clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval))
+            if (existing is not null && existing.Reason != "source_scope_changed" &&
+                ((existing.Fingerprint == fingerprint && existing.DisclosureFingerprint == disclosureFingerprint) ||
+                 (existing.Fingerprint != fingerprint && clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval)))
             {
                 continue;
             }
