@@ -67,7 +67,7 @@ Use the in-window renderer selector to compare Canvas and SpriteKit with the sam
 
 **Limits of this initial prototype:** Both implementations redraw synthetic moving positions; this **does not implement a force-directed solver** and cannot measure real query or layout cost. Canvas currently includes an initial pointer-select, pan and zoom interaction; SpriteKit includes node selection but does not yet have equivalent pan, zoom and drag behavior. Therefore, this build supports an early **drawing and animation comparison**, not a complete interaction or accessibility decision. Do not record interaction parity as passed.
 
-The owner ran the fixture tests (2 passed) and compiled the initial unbundled Swift executable successfully on macOS. Four SpriteKit actor-isolation warnings were observed, and no visible window was confirmed. A follow-up package/actor correction is in PR #391. **A successful build is not a confirmed launched window or a measured renderer result.** Run the bundled app, verify visible controls and collect measurements before closing #384.
+The owner ran the fixture tests (2 passed) and compiled the initial unbundled Swift executable successfully on macOS. Four SpriteKit actor-isolation warnings were observed, and no visible window was confirmed. A follow-up package/actor correction is in PR #395. **A successful build is not a confirmed launched window or a measured renderer result.** Run the bundled app, verify visible controls and collect measurements before closing #384.
 
 ## Same-task comparison
 
