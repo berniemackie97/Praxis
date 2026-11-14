@@ -29,7 +29,9 @@ public sealed class UnderstandHandler(
     public TimeSpan LeaseDuration => TimeSpan.FromMinutes(20);
     public int MaxConcurrency => 2;
 
-    public bool TryReopenWork() => policy.ExpireHolds(clock.GetUtcNow()) > 0;
+    // Expired holds continue down their fallback chain; files left index-only because no model was
+    // set up are understood once one is.
+    public bool TryReopenWork() => policy.ExpireHolds(clock.GetUtcNow()) > 0 | repository.RequeueAwaitingModels() > 0;
 
     public async Task ProcessAsync(ProcessingLease lease, CancellationToken cancellationToken)
     {
@@ -83,7 +85,7 @@ public sealed class UnderstandHandler(
             outcome, reason, knowledge.Summary ?? profile.Gist, knowledge.DocumentType ?? profile.DocumentType,
             knowledge.Tier ?? money.Tier, knowledge.ProviderId ?? money.ProviderId, knowledge.Identity ?? money.Identity,
             knowledge.Candidates, knowledge.Records, money.Document, money.Annotations, money.Tier, money.Identity,
-            knowledge.Verified + (money.Document?.Transactions.Count ?? 0), knowledge.Rejected, inputTokens, outputTokens));
+            knowledge.Verified + (money.Document?.Transactions.Count ?? 0), knowledge.Rejected, inputTokens, outputTokens, knowledge.Cascade));
     }
 
     private static string Closed(string ladderStatus) => ladderStatus switch

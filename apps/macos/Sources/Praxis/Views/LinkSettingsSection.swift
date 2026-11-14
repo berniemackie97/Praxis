@@ -32,7 +32,7 @@ struct LinkSettingsSection: View {
                     .disabled(model.settings == nil || !changed)
             }
         } header: {
-            Text("Saved links")
+            Text("Saved links").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading)
         } footer: {
             Text("Praxis fetches only links you save (.webloc or .url files, Save Link…, or a link you paste in chat and ask to save) — never links inside emails or documents. It connects only to public addresses, keeps no cookies, and saves what it read in “Praxis Web” in your intake folder. YouTube links keep their captions so chat can show clips.")
                 .font(.meta).foregroundStyle(.secondary)

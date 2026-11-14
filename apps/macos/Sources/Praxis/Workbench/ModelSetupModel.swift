@@ -37,9 +37,12 @@ final class ModelSetupModel: ObservableObject {
 
     /// Connections a role can use: enabled intake providers for tiers, enabled chat backends for chat.
     func connections(for role: String) -> [String] {
-        role == "chat"
-            ? backends.filter(\.enabled).map(\.backendId)
-            : providers.filter(\.enabled).map(\.providerId)
+        let connected = providers.filter(\.enabled).map(\.providerId)
+        guard role == "chat" else { return connected }
+        // Chat can also use API keys; local Ollama and plan CLIs come from their connections.
+        let apis = backends.filter { $0.enabled && ($0.kind == "anthropic" || $0.kind == "openai_compatible") && $0.backendId != ModelTool.ollama }
+            .map(\.backendId)
+        return connected + apis
     }
 
     /// The models a connection offers (catalog for plan CLIs, installed models for Ollama, the configured model for APIs).
@@ -133,24 +136,29 @@ final class ModelSetupModel: ObservableObject {
         let claude = provider(ModelTool.claudeCode)?.enabled == true && tool(ModelTool.claudeCode)?.signedIn == true
         let codex = provider(ModelTool.codex)?.enabled == true && tool(ModelTool.codex)?.signedIn == true
         let ollama = provider(ModelTool.ollama)?.enabled == true
-        let codexBest = tool(ModelTool.codex)?.models.first { $0.id != "default" }?.id
+        // Spend where it pays: intake reads every file, so it runs the efficient models at low effort;
+        // checking only runs on failures and gets one step more. Flagship models stay a manual choice.
+        let codexModels = tool(ModelTool.codex)?.models.map(\.id) ?? []
+        let codexEfficient = ["luna", "sol"].lazy.compactMap { tier in codexModels.first { $0.contains(tier) } }.first ?? "default"
         if claude {
-            setRole("chat", connection: ModelTool.claudeCode, model: "opus", effort: "high")
-            setRole("strong", connection: ModelTool.claudeCode, model: "sonnet", effort: "medium")
+            setRole("chat", connection: ModelTool.claudeCode, model: "sonnet", effort: "medium")
+            setRole("strong", connection: ModelTool.claudeCode, model: "sonnet", effort: "low")
         } else if codex {
-            setRole("chat", connection: ModelTool.codex, model: codexBest, effort: "high")
-            setRole("strong", connection: ModelTool.codex, model: codexBest, effort: "medium")
+            setRole("chat", connection: ModelTool.codex, model: codexEfficient, effort: "medium")
+            setRole("strong", connection: ModelTool.codex, model: codexEfficient, effort: "low")
         }
         // A different vendor checks the strong tier's work when both plans are connected.
         if codex && claude {
-            setRole("strongest", connection: ModelTool.codex, model: codexBest, effort: "high")
+            setRole("strongest", connection: ModelTool.codex, model: codexEfficient, effort: "medium")
         } else if claude {
-            setRole("strongest", connection: ModelTool.claudeCode, model: "opus", effort: "high")
+            setRole("strongest", connection: ModelTool.claudeCode, model: "sonnet", effort: "high")
         } else if codex {
-            setRole("strongest", connection: ModelTool.codex, model: codexBest, effort: "xhigh")
+            setRole("strongest", connection: ModelTool.codex, model: codexEfficient, effort: "high")
         }
         if ollama { setRole("local", connection: ModelTool.ollama, model: nil, effort: nil) }
-        notice = claude || codex ? "Recommended models applied. Adjust any role below." : "Connect Claude Code or Codex first."
+        notice = claude || codex
+            ? "Applied efficient defaults: Sonnet or the lighter Codex models at low to medium effort. Pick Opus or a flagship model per role if you want it."
+            : "Connect Claude Code or Codex first."
     }
 
     /// Inspects a CLI the owner picked and connects it when it responds.

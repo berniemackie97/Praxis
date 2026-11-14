@@ -14,7 +14,7 @@ public sealed record UnderstandingCommit(
     string? Tier, string? ProviderId, ModelIdentity? Identity,
     IReadOnlyList<ProposalCandidate> Candidates, IReadOnlyList<IntakeRecord> Records,
     FinancialDocument? Ledger, IReadOnlyList<TransactionAnnotation> Annotations, string? LedgerTier, ModelIdentity? LedgerModel,
-    int VerifiedItems, int RejectedItems, int InputTokens, int OutputTokens)
+    int VerifiedItems, int RejectedItems, int InputTokens, int OutputTokens, string Cascade = "")
 {
     public const int MaximumSummaryLength = 1_200;
 }

@@ -130,7 +130,7 @@ private struct IntakeFooter: View {
                         Spacer(minLength: 0)
                         Image(systemName: "gearshape").foregroundStyle(.tertiary)
                     }
-                    if let backlog = model.intakeBacklog, backlog.queued + backlog.running + backlog.failed > 0 {
+                    if let backlog = model.intakeBacklog, backlog.queued + backlog.running + backlog.failed + (backlog.enrichmentPending ?? 0) > 0 {
                         Text(IntakeHealth.backlog(backlog)).font(.meta).foregroundStyle(.secondary)
                     }
                     if !model.message.isEmpty {
@@ -178,6 +178,8 @@ enum IntakeHealth {
         if backlog.running > 0 { parts.append("\(backlog.running) processing") }
         if backlog.queued > 0 { parts.append("\(backlog.queued) queued") }
         if backlog.failed > 0 { parts.append("\(backlog.failed) failed") }
+        if parts.isEmpty { parts.append("Intake up to date") }
+        if let enrichment = backlog.enrichmentPending, enrichment > 0 { parts.append("local enrichment: \(enrichment) left") }
         return parts.joined(separator: " · ")
     }
 }

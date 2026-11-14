@@ -129,6 +129,24 @@ public sealed class ModelSetupTests : IDisposable
     }
 
     [Fact]
+    public void EveryConnectedModelCanChatIncludingLocalOllama()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(data);
+        DelegatingVerifierModelFactory factory = new(_ => new ScriptedChatModel(_ => "{}"));
+        ModelSetup setup = new(catalog.Verification, new VerificationProviderConfiguration(catalog.Verification, factory), catalog.Agents, catalog.Policy);
+        // Connected the old way, before chat was wired to connections.
+        catalog.Verification.SaveProvider(new VerificationProvider(VerificationProvider.Ollama, null, "qwen3:9b", 0, 0, true, "http://127.0.0.1:11434/"));
+
+        Assert.Equal(1, setup.EnsureChatBackends());
+        AgentBackendProfile local = Assert.Single(catalog.Agents.ReadBackends());
+        Assert.Equal((VerificationProvider.Ollama, "http://127.0.0.1:11434/v1", "qwen3:9b", true), (local.BackendId, local.Endpoint, local.Model, local.IsLocal));
+        Assert.Equal(0, setup.EnsureChatBackends());
+
+        setup.AssignRole(ModelRoles.Chat, VerificationProvider.Ollama, "llama3:8b", "high");
+        Assert.Equal(("llama3:8b", null), (catalog.Agents.ReadBackends().Single().Model, catalog.Agents.ReadBackends().Single().Effort));
+    }
+
+    [Fact]
     public async Task PlanCommandsReceiveTheChosenEffortAndPlanDefaultSkipsTheModelFlag()
     {
         if (OperatingSystem.IsWindows())

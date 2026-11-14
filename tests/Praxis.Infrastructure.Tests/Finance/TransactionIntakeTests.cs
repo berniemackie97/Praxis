@@ -77,9 +77,10 @@ public sealed class TransactionIntakeTests : IDisposable
         await Capture(catalog, "card-october.pdf", StatementFixtures.Pdf(StatementFixtures.CreditCard));
         await ProcessAll(catalog, models);
 
-        // The OFX export is triaged by its format; only the CSV and the PDF need the local tier, once each.
-        Assert.Equal(2, models.Count(Local));
-        Assert.All(models.Requests[Local], request => Assert.True(Is(request, "recordKinds")));
+        // The OFX export is triaged by its format; only the CSV and the PDF need local triage. The local
+        // tier also drafts each document's knowledge for the strong tier to review.
+        Assert.Equal(2, models.Requests[Local].Count(request => Is(request, "recordKinds")));
+        Assert.All(models.Requests[Local], request => Assert.True(Is(request, "recordKinds") || Is(request, "entities")));
         Assert.Equal(0, models.Count(Strongest));
         Assert.Equal(3, models.Requests[Strong].Count(request => Is(request, "entities")));
         Assert.Single(models.Requests[Strong], request => Is(request, "headerRow"));

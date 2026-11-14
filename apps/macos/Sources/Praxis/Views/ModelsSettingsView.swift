@@ -10,20 +10,45 @@ struct ModelsSettingsView: View {
     @State private var editingAPI: BackendDraft?
 
     var body: some View {
-        Form {
-            // Ollama being stopped is shown on its row, not as a page-level error.
-            if let error = setup.error ?? privacy.error {
-                Banner(text: error, tone: .warning, systemImage: "exclamationmark.triangle.fill")
-            } else if let notice = setup.notice {
-                Banner(text: notice, tone: .accent, systemImage: "checkmark.circle.fill")
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.xxl) {
+                // Ollama being stopped is shown on its row, not as a page-level error.
+                if let error = setup.error ?? privacy.error {
+                    Banner(text: error, tone: .warning, systemImage: "exclamationmark.triangle.fill")
+                } else if let notice = setup.notice {
+                    Banner(text: notice, tone: .accent, systemImage: "checkmark.circle.fill")
+                }
+                FlatSection("Connections",
+                            footer: "Praxis finds these tools on this Mac and uses your plans' own sign-in; it never asks for their passwords. Plans see only what your privacy settings allow.") {
+                    HStack(spacing: Spacing.s) {
+                        if setup.detecting { ProgressView().controlSize(.small) }
+                        Button("Check Again") { setup.refresh() }.disabled(setup.detecting)
+                    }
+                } content: {
+                    ToolRow(setup: setup, toolId: ModelTool.claudeCode, summary: "Your Claude plan, through Claude Code.",
+                            install: "https://docs.anthropic.com/en/docs/claude-code/setup")
+                    Divider()
+                    ToolRow(setup: setup, toolId: ModelTool.codex, summary: "Your ChatGPT plan, through Codex.",
+                            install: "https://developers.openai.com/codex/cli")
+                    Divider()
+                    OllamaRow(setup: setup, intelligence: intelligence)
+                }
+                FlatSection("What each model does",
+                            footer: "Triage runs on every new file, so a local model keeps it private and free. Reading does the heavy work, so it runs an efficient model. Checking runs only when a result fails verification. Chat sub-agents use the triage model.") {
+                    Button("Use Recommended") { setup.applyRecommended() }
+                } content: {
+                    ForEach(Array(ModelSetupModel.roles.enumerated()), id: \.element) { index, role in
+                        if index > 0 { Divider() }
+                        RoleRow(setup: setup, role: role, installed: intelligence.installedModels)
+                    }
+                }
+                apiConnections
+                LocalModelsSection(intelligence: intelligence)
+                ActivitySection(privacy: privacy)
             }
-            connections
-            roles
-            apiConnections
-            LocalModelsSection(intelligence: intelligence)
-            ActivitySection(privacy: privacy)
+            .padding(.horizontal, Spacing.xl)
+            .padding(.vertical, Spacing.l)
         }
-        .formStyle(.grouped)
         .sheet(item: $editingAPI) { draft in
             BackendEditor(draft: draft, storedKeys: privacy.storedKeys, removeKey: { privacy.removeKey(account: $0) }) { profile, key in
                 privacy.saveBackend(profile, apiKey: key)
@@ -39,48 +64,19 @@ struct ModelsSettingsView: View {
         }
     }
 
-    private var connections: some View {
-        Section {
-            ToolRow(setup: setup, toolId: ModelTool.claudeCode, summary: "Your Claude plan, through Claude Code.",
-                    install: "https://docs.anthropic.com/en/docs/claude-code/setup")
-            ToolRow(setup: setup, toolId: ModelTool.codex, summary: "Your ChatGPT plan, through Codex.",
-                    install: "https://developers.openai.com/codex/cli")
-            OllamaRow(setup: setup, intelligence: intelligence)
-        } header: {
-            HStack {
-                Text("Connections")
-                Spacer()
-                if setup.detecting { ProgressView().controlSize(.small) }
-                Button("Check Again") { setup.refresh() }.controlSize(.small).disabled(setup.detecting)
-            }
-        } footer: {
-            Text("Praxis finds these tools on this Mac and uses your plans' own sign-in; it never asks for their passwords. Plans see only what your privacy settings allow.")
-                .font(.meta).foregroundStyle(.secondary)
-        }
-    }
-
-    private var roles: some View {
-        Section {
-            ForEach(ModelSetupModel.roles, id: \.self) { role in
-                RoleRow(setup: setup, role: role, installed: intelligence.installedModels)
-            }
-        } header: {
-            HStack {
-                Text("What each model does")
-                Spacer()
-                Button("Use Recommended") { setup.applyRecommended() }.controlSize(.small)
-            }
-        } footer: {
-            Text("Triage runs on every new file, so a local model keeps it private and free. Reading does the heavy work. Checking runs only when a result fails verification; a different vendor catches different mistakes. Chat sub-agents use the triage model.")
-                .font(.meta).foregroundStyle(.secondary)
-        }
-    }
-
     private var apiConnections: some View {
-        Section {
-            ForEach(setup.backends.filter { $0.kind == "openai_compatible" || $0.kind == "anthropic" }.filter { $0.backendId != ModelTool.ollama }) { backend in
+        FlatSection("API keys",
+                    footer: "Optional, for chat with Anthropic, OpenAI, OpenRouter, DeepSeek, Gemini or a local OpenAI-compatible server. Keys stay in your login Keychain.") {
+            Button("Add API Key…") { editingAPI = BackendDraft(nil) }
+        } content: {
+            let apis = setup.backends.filter { ($0.kind == "openai_compatible" || $0.kind == "anthropic") && $0.backendId != ModelTool.ollama }
+            if apis.isEmpty {
+                Text("None added.").foregroundStyle(.secondary).padding(.vertical, Spacing.xs)
+            }
+            ForEach(Array(apis.enumerated()), id: \.element.id) { index, backend in
+                if index > 0 { Divider() }
                 HStack(spacing: Spacing.m) {
-                    Image(systemName: backend.isLocal ? "desktopcomputer" : "cloud").foregroundStyle(.secondary).frame(width: 20)
+                    Image(systemName: backend.isLocal ? "desktopcomputer" : "cloud").foregroundStyle(.secondary).frame(width: 24)
                     VStack(alignment: .leading, spacing: Spacing.xxs) {
                         Text(backend.backendId).font(.rowTitle)
                         Text("\(backend.kindLabel) · \(backend.model)").font(.meta).foregroundStyle(.secondary)
@@ -90,15 +86,42 @@ struct ModelsSettingsView: View {
                         StatusPill(text: privacy.storedKeys.contains(account) ? "Key stored" : "No key",
                                    tone: privacy.storedKeys.contains(account) ? .positive : .warning)
                     }
-                    Button("Edit…") { editingAPI = BackendDraft(backend) }.controlSize(.small)
+                    Button("Edit…") { editingAPI = BackendDraft(backend) }
                 }
+                .padding(.vertical, Spacing.xs)
             }
-            Button("Add API Key…") { editingAPI = BackendDraft(nil) }
-        } header: {
-            Text("API keys")
-        } footer: {
-            Text("Optional, for chat with Anthropic, OpenAI, OpenRouter, DeepSeek, Gemini or a local OpenAI-compatible server. Keys stay in your login Keychain.")
-                .font(.meta).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A settings section without a card: a header with an optional action, rows separated by hairlines
+/// on the window background, and a short footnote.
+private struct FlatSection<Trailing: View, Content: View>: View {
+    let title: String
+    let footer: String?
+    @ViewBuilder let trailing: Trailing
+    @ViewBuilder let content: Content
+
+    init(_ title: String, footer: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.footer = footer
+        self.trailing = trailing()
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.sectionTitle)
+                Spacer()
+                trailing.controlSize(.small)
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: Spacing.s) { content }
+            if let footer {
+                Text(footer).font(.meta).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Spacing.xxs)
+            }
         }
     }
 }
@@ -273,7 +296,12 @@ private struct RoleRow: View {
     }
 
     var body: some View {
-        LabeledContent {
+        HStack(alignment: .center, spacing: Spacing.m) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                Text(Self.title(role))
+                Text(Self.subtitle(role)).font(.meta).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: Spacing.m)
             HStack(spacing: Spacing.s) {
                 Picker("Connection", selection: Binding(get: { current.connection }, set: { connection in
                     let first = setup.models(for: connection, installed: installed).first?.id
@@ -306,12 +334,8 @@ private struct RoleRow: View {
                     }
                 }
             }
-        } label: {
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text(Self.title(role))
-                Text(Self.subtitle(role)).font(.meta).foregroundStyle(.secondary)
-            }
         }
+        .padding(.vertical, Spacing.xxs)
     }
 
     static func title(_ role: String) -> String {
@@ -379,64 +403,90 @@ private struct DailyLimitMenu: View {
 /// Local enrichment and semantic search, both on this Mac through Ollama.
 private struct LocalModelsSection: View {
     @ObservedObject var intelligence: IntelligenceSettingsModel
-    @State private var enrichment = ""
-    @State private var embedding = ""
 
     var body: some View {
-        Section {
-            Picker("Background enrichment", selection: Binding(get: { intelligence.profile?.enabled == true ? intelligence.profile?.model ?? "" : "" }, set: { model in
-                let endpoint = intelligence.profile?.endpoint ?? "http://127.0.0.1:11434"
-                if model.isEmpty, let profile = intelligence.profile {
-                    intelligence.saveProfile(endpoint: profile.endpoint, model: profile.model, contextTokens: profile.contextTokens, enabled: false)
-                } else if !model.isEmpty {
-                    intelligence.saveProfile(endpoint: endpoint, model: model, contextTokens: intelligence.profile?.contextTokens ?? 8_192, enabled: true)
+        FlatSection("On this Mac",
+                    footer: "Semantic search finds passages by meaning. Background enrichment adds the local model's guesses as suggestions; with a Reading model connected you can leave it off. Both run in your Ollama and never leave the Mac.") {
+            EmptyView()
+        } content: {
+            LabeledContent("Semantic search") {
+                Picker("Semantic search", selection: Binding(get: { intelligence.embeddingProfile?.enabled == true ? intelligence.embeddingProfile?.model ?? "" : "" }, set: { model in
+                    let endpoint = intelligence.embeddingProfile?.endpoint ?? "http://127.0.0.1:11434"
+                    if model.isEmpty, let profile = intelligence.embeddingProfile {
+                        intelligence.saveEmbeddingProfile(endpoint: profile.endpoint, model: profile.model, enabled: false)
+                    } else if !model.isEmpty {
+                        intelligence.saveEmbeddingProfile(endpoint: endpoint, model: model, enabled: true)
+                    }
+                })) {
+                    Text("Off (keyword search)").tag("")
+                    ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
                 }
-            })) {
-                Text("Off").tag("")
-                ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
+                .labelsHidden().fixedSize()
             }
-            Picker("Semantic search", selection: Binding(get: { intelligence.embeddingProfile?.enabled == true ? intelligence.embeddingProfile?.model ?? "" : "" }, set: { model in
-                let endpoint = intelligence.embeddingProfile?.endpoint ?? "http://127.0.0.1:11434"
-                if model.isEmpty, let profile = intelligence.embeddingProfile {
-                    intelligence.saveEmbeddingProfile(endpoint: profile.endpoint, model: profile.model, enabled: false)
-                } else if !model.isEmpty {
-                    intelligence.saveEmbeddingProfile(endpoint: endpoint, model: model, enabled: true)
+            Divider()
+            LabeledContent("Background enrichment") {
+                Picker("Background enrichment", selection: Binding(get: { intelligence.profile?.enabled == true ? intelligence.profile?.model ?? "" : "" }, set: { model in
+                    let endpoint = intelligence.profile?.endpoint ?? "http://127.0.0.1:11434"
+                    if model.isEmpty, let profile = intelligence.profile {
+                        intelligence.saveProfile(endpoint: profile.endpoint, model: profile.model, contextTokens: profile.contextTokens, enabled: false)
+                    } else if !model.isEmpty {
+                        intelligence.saveProfile(endpoint: endpoint, model: model, contextTokens: intelligence.profile?.contextTokens ?? 8_192, enabled: true)
+                    }
+                })) {
+                    Text("Off").tag("")
+                    ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
                 }
-            })) {
-                Text("Off (keyword search)").tag("")
-                ForEach(intelligence.installedModels) { Text($0.name).tag($0.name) }
+                .labelsHidden().fixedSize()
             }
-        } header: {
-            Text("On this Mac")
-        } footer: {
-            Text("Enrichment suggests topics and people for new text; semantic search finds passages by meaning. Both run in your Ollama and never leave the Mac.")
-                .font(.meta).foregroundStyle(.secondary)
         }
     }
 }
 
-/// The latest model calls, for checking what ran where.
+/// The latest model calls, repeats folded together, for checking what ran where.
 private struct ActivitySection: View {
     @ObservedObject var privacy: PrivacySettingsModel
     @State private var expanded = false
 
+    private struct Line: Identifiable {
+        let id: Int
+        let call: ModelInvocation
+        var count: Int
+    }
+
+    /// Consecutive calls with the same provider, role, purpose and outcome fold into one line.
+    private var lines: [Line] {
+        var result: [Line] = []
+        for (index, call) in privacy.invocations.enumerated() {
+            if let last = result.last, last.call.providerId == call.providerId, last.call.tier == call.tier,
+               last.call.purpose == call.purpose, last.call.outcome == call.outcome {
+                result[result.count - 1].count += 1
+            } else {
+                result.append(Line(id: index, call: call, count: 1))
+            }
+        }
+        return result
+    }
+
     var body: some View {
-        Section {
-            DisclosureGroup("Recent model calls (\(privacy.invocations.count))", isExpanded: $expanded) {
-                if privacy.invocations.isEmpty {
-                    Text("No model calls recorded yet.").foregroundStyle(.secondary)
+        FlatSection("Recent model calls") {
+            if lines.count > 6 {
+                Button(expanded ? "Show Less" : "Show All") { expanded.toggle() }
+            }
+        } content: {
+            if lines.isEmpty {
+                Text("No model calls yet.").foregroundStyle(.secondary)
+            }
+            ForEach(expanded ? lines : Array(lines.prefix(6))) { line in
+                HStack(spacing: Spacing.s) {
+                    Image(systemName: line.call.remote ? "cloud" : "desktopcomputer").foregroundStyle(.secondary).frame(width: 18)
+                    Text("\(ModelSetupModel.name(line.call.providerId)) · \(RoleRow.title(line.call.tier))").font(.callout)
+                    if line.count > 1 { Text("×\(line.count)").font(.meta.monospacedDigit()).foregroundStyle(.secondary) }
+                    Text(line.call.outcome.replacingOccurrences(of: "_", with: " "))
+                        .font(.meta).foregroundStyle(line.call.outcome == "completed" ? Color.secondary : Color.orange)
+                    Spacer()
+                    Text(DateText.relative(line.call.startedUtc)).font(.meta).foregroundStyle(.tertiary)
                 }
-                ForEach(privacy.invocations.prefix(25)) { call in
-                    HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
-                        Image(systemName: call.remote ? "cloud" : "desktopcomputer").foregroundStyle(.secondary).frame(width: 16)
-                        VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            Text("\(ModelSetupModel.name(call.providerId)) · \(RoleRow.title(call.tier)) · \(call.purpose)").font(.callout)
-                            Text("\(PolicyLabels.category(call.category)) · \(call.outcome) · \(DateText.relative(call.startedUtc))")
-                                .font(.meta).foregroundStyle(.secondary)
-                        }
-                    }
-                    .textSelection(.enabled)
-                }
+                .textSelection(.enabled)
             }
         }
     }

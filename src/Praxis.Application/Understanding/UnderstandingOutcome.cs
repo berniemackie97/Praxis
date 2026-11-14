@@ -9,7 +9,9 @@ namespace Praxis.Application.Understanding;
 public sealed record UnderstandingOutcome(
     string Status, string Reason, string? Summary, string? DocumentType,
     IReadOnlyList<ProposalCandidate> Candidates, IReadOnlyList<IntakeRecord> Records, int Verified, int Rejected,
-    string? Tier, string? ProviderId, ModelIdentity? Identity, int InputTokens, int OutputTokens, bool Complete)
+    string? Tier, string? ProviderId, ModelIdentity? Identity, int InputTokens, int OutputTokens, bool Complete, string Cascade = "")
 {
+    public const int MaximumCascadeLength = 400;
+
     public bool HasResult => Status is LadderResult<UnderstandingDraft>.Accepted or LadderResult<UnderstandingDraft>.Partial;
 }

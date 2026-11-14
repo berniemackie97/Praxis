@@ -22,9 +22,7 @@ struct ChatView: View {
                 if model.selectedId == nil && !model.backends.isEmpty {
                     Picker("Model", selection: $model.backendChoice) {
                         ForEach(model.backends.filter(\.enabled)) { backend in
-                            Label("\(backend.backendId) · \(backend.kindLabel)",
-                                  systemImage: backend.isLocal ? "desktopcomputer" : "cloud")
-                                .tag(backend.backendId)
+                            Text(ChatBackendLabel.of(backend)).tag(backend.backendId)
                         }
                     }
                     .help("Model for the new conversation. Remote models see only what your disclosure policy grants for chat.")
@@ -334,5 +332,19 @@ enum AnswerCheckText {
         }
         if check.missingCitations { parts.append("Some claims are not cited.") }
         return (check.repaired ? "Still flagged after one correction: " : "Answer check: ") + parts.joined(separator: " ")
+    }
+}
+
+/// How a chat model reads in the picker: provider and model, never a bare icon.
+enum ChatBackendLabel {
+    static func of(_ backend: AgentBackendProfile) -> String {
+        let provider = switch backend.kind {
+        case "claude_code": "Claude Code"
+        case "codex": "Codex"
+        case "anthropic": "Anthropic"
+        default: backend.isLocal ? "Local" : backend.backendId
+        }
+        let model = backend.model == "default" ? "plan default" : backend.model
+        return "\(provider) · \(model)"
     }
 }

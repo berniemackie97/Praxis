@@ -69,18 +69,22 @@ struct ProposalReviewView: View {
         }
     }
 
+    /// Follows the file's intake state, not the proposal producer, so a file that was only indexed never claims to be "still reading".
     private var caption: String {
-        switch model.topicOutcome {
-        case "generated": "Understood and verified automatically"
-        case "pending", "queued", "running": "Intake is still reading this file"
-        default: confirmed.isEmpty ? "Nothing verified yet" : "Verified automatically"
+        switch model.understanding?.status {
+        case "understood", "partially_verified": "Understood and verified automatically"
+        case "read", "triaged", nil: "Intake is still reading this file"
+        case "held": "Waiting for your approval"
+        default: "Not understood yet"
         }
     }
 
     private var emptyText: String {
-        ["pending", "queued", "running"].contains(model.topicOutcome)
-            ? "Intake is still reading this file."
-            : "No people, organizations, topics or relations were found that could be verified."
+        switch model.understanding?.status {
+        case "read", "triaged", nil: "Intake is still reading this file."
+        case "index_only", "failed", "skipped", "held": "Nothing has been found yet; see Intake above for why."
+        default: "No people, organizations, topics or relations were found that could be verified."
+        }
     }
 
     private var groups: [(title: String, items: [TopicProposal])] {

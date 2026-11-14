@@ -24,6 +24,8 @@ struct SourceUnderstanding: Decodable, Equatable {
     let transactions: Int
     let inputTokens: Int
     let outputTokens: Int
+    /// How the tiers handed the document along, e.g. "local drafted 12 → strong kept 9, removed 3, added 4 → 13 verified".
+    let cascade: String?
 }
 
 struct SourceUnderstandingData: Decodable { let understanding: SourceUnderstanding? }
@@ -53,7 +55,8 @@ enum UnderstandingText {
         case "verification_failed": "No model answer passed verification against the document."
         case "partially_verified": "Only the parts that matched the document were kept."
         case "document_longer_than_understood": "The document is longer than one pass covers; the rest is searchable."
-        case "tier_unavailable", "not_configured": "No models are set up yet. Add them in Settings → Models and Agents to have intake understand this."
+        case "tier_unavailable", "not_configured", "model_unavailable", "model_timeout", "model_unauthenticated", "model_quota_exhausted":
+            "No model could read this when it arrived. Praxis reads it again on its own as soon as a Reading model is connected in Settings → Models."
         case "statement_too_long": "The statement is too long to transcribe in one pass."
         case let other?: other.replacingOccurrences(of: "_", with: " ").capitalized
         }
