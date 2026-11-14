@@ -89,6 +89,22 @@ struct GraphPresentationTests {
         #expect(!evidence.matchesCurrent(other))
     }
 
+    @Test func evidenceExcerptRequiresTheExactCurrentUTF16Offset() {
+        let content = "😀 C3Reader parses PHY."
+        let evidence = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                     revision: 1, sourceDigest: "sha", locator: "reader.md",
+                                     text: "C3Reader parses PHY.", offset: 3,
+                                     status: "accepted", verdict: nil)
+        #expect(evidence.excerpt(in: content) == content)
+
+        let wrongOffset = GraphEvidence(proposalId: "p", sourceId: "s", itemId: "i",
+                                        revision: 1, sourceDigest: "sha", locator: "reader.md",
+                                        text: "C3Reader parses PHY.", offset: 2,
+                                        status: "accepted", verdict: nil)
+        #expect(wrongOffset.excerpt(in: content) == nil)
+        #expect(evidence.excerpt(in: "C3Reader parses PHY.") == nil)
+    }
+
     @Test func repeatedPageIsIdempotentAndStable() {
         let page = GraphPage(outcome: "ready", focusId: "a", nodes: [node("b"), node("a")],
                              edges: [edge("r", "a", "b")], nextCursor: nil)
