@@ -8,13 +8,13 @@ struct KnowledgeView: View {
     let sources: [LibraryItem]
     let explain: (String) -> Void
     let openSource: (GraphEvidence) -> Bool
-    @AppStorage("knowledgeViewMode") private var viewMode = "list"
+    @AppStorage("knowledgeViewModeV2") private var viewMode = "graph"
 
     var body: some View {
         VStack(spacing: 0) {
             Picker("Knowledge view", selection: $viewMode) {
-                Label("Browse", systemImage: "list.bullet").tag("list")
-                Label("Connections", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
+                Label("Brain", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
+                Label("Entities", systemImage: "list.bullet").tag("list")
             }
             .pickerStyle(.segmented)
             .frame(width: 230)
