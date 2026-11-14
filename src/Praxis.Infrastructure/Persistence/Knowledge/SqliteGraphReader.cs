@@ -19,8 +19,8 @@ public sealed class SqliteGraphReader : IGraphReader
 
     private const string RelationStatus = """
         CASE WHEN r.origin = 'owner' THEN 'owner'
-             WHEN v.verdict = 'unsupported' THEN 'contradicted'
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
+             WHEN v.verdict = 'unsupported' THEN 'contradicted'
              WHEN v.verdict = 'supported' THEN 'verified'
              WHEN p.processor_key = 'intake-understand-v1' AND EXISTS (
                   SELECT 1 FROM intake_documents d WHERE d.item_id = p.item_id
@@ -166,9 +166,10 @@ public sealed class SqliteGraphReader : IGraphReader
                   AND r.relation_id > $after
                   AND ({ConfirmedRelation} OR ($suggestions = 1
                       AND r.origin = 'model' AND p.proposal_id IS NOT NULL
-                      AND p.status <> 'rejected' AND (v.verdict = 'unsupported' OR
-                          (p.status = 'pending' AND p.flags IS NULL
-                           AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
+                      AND p.status <> 'rejected' AND p.flags IS NULL
+                      AND (v.verdict = 'unsupported' OR
+                           (p.status = 'pending'
+                            AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
                   AND {NodeVisible("subject", query)}
                   AND {NodeVisible("object", query)}
                   AND ($predicate IS NULL OR r.predicate = $predicate)
