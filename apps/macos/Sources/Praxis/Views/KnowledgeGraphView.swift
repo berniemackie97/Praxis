@@ -212,11 +212,25 @@ struct KnowledgeGraphView: View {
                     }
                     .accessibilityLabel("\(node.label), \(node.status), \(node.mentions) mentions")
                 }
-                ForEach(graph.edges) { edge in
-                    Button { graph.selectEdge(edge.relationId) } label: {
-                        Label(relationTitle(edge), systemImage: "arrow.right")
+                ForEach(GraphRelationGroup.group(graph.edges)) { group in
+                    if let first = group.observations.first {
+                        if group.observations.count == 1 {
+                            Button { graph.selectEdge(first.relationId) } label: {
+                                Label(relationTitle(first), systemImage: "arrow.right")
+                            }
+                            .accessibilityLabel("\(relationTitle(first)), \(first.evidenceStatus)")
+                        } else {
+                            DisclosureGroup("\(relationTitle(first)) · \(group.observations.count) observations") {
+                                ForEach(group.observations) { edge in
+                                    Button { graph.selectEdge(edge.relationId) } label: {
+                                        Label("\(edge.evidenceStatus.capitalized) · \(edge.evidence?.locator ?? "Owner assertion")",
+                                              systemImage: "doc.text.magnifyingglass")
+                                    }
+                                    .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
+                                }
+                            }
+                        }
                     }
-                    .accessibilityLabel("\(relationTitle(edge)), \(edge.evidenceStatus)")
                 }
             }
             .listStyle(.plain)
