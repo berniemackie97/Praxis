@@ -23,7 +23,7 @@ final class GraphScene: SKScene {
     private let viewCamera = SKCameraNode()
     private var dark = false
     private var highContrast = false
-    private var toolbarZoom: CGFloat = 1
+    private var toolbarZoomRevision = -1
     private var lastFrame: TimeInterval?
     private var draggingNode: String?
 
@@ -88,9 +88,9 @@ final class GraphScene: SKScene {
         updateAppearance(dark: dark, highContrast: highContrast)
     }
 
-    func setToolbarZoom(_ zoom: CGFloat) {
-        guard toolbarZoom != zoom else { return }
-        toolbarZoom = zoom
+    func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
+        guard toolbarZoomRevision != revision else { return }
+        toolbarZoomRevision = revision
         viewCamera.setScale(zoom)
         updateVisibility()
     }
