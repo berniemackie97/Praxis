@@ -6,6 +6,7 @@ import Foundation
 final class GraphWorkbenchModel: ObservableObject {
     private let channel: WorkerChannel
     private let seedScope = "graph-seeds"
+    private let overviewScope = "graph-overview"
     private let neighborhoodScope = "graph-neighborhood"
     private let inspectionScope = "graph-inspection"
     private let previewScope = "graph-preview"
@@ -23,6 +24,8 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published var sourceId = ""
     @Published var includeSuggestions = false
     @Published private(set) var seeds: [GraphNode] = []
+    @Published private(set) var overview: GraphOverview?
+    @Published private(set) var nextSeedCursor: String?
     @Published private(set) var nodes: [GraphNode] = []
     @Published private(set) var edges: [GraphEdge] = []
     @Published private(set) var focusId: String?
@@ -57,8 +60,11 @@ final class GraphWorkbenchModel: ObservableObject {
         guard active else { return }
         active = false
         channel.reset(seedScope)
+        channel.reset(overviewScope)
         channel.reset(neighborhoodScope)
         clearInspection()
+        overview = nil
+        nextSeedCursor = nil
         seeds = []
         nodes = []
         edges = []
@@ -74,8 +80,11 @@ final class GraphWorkbenchModel: ObservableObject {
     func refresh() {
         guard active else { return }
         channel.reset(seedScope)
+        channel.reset(overviewScope)
         channel.reset(neighborhoodScope)
         clearInspection()
+        overview = nil
+        nextSeedCursor = nil
         seeds = []
         nodes = []
         edges = []
@@ -88,17 +97,47 @@ final class GraphWorkbenchModel: ObservableObject {
         message = nil
         loading = true
 
+        var overviewFields: [String: Any] = [:]
+        if !collectionId.isEmpty { overviewFields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { overviewFields["sourceId"] = sourceId }
+        if includeSuggestions { overviewFields["includeSuggestions"] = true }
+        channel.send("graphOverview", overviewFields, as: GraphOverview.self, scope: overviewScope,
+                     failed: { [weak self] error in self?.error = error }) { [weak self] summary in
+            guard let self, active else { return }
+            overview = summary
+        }
+        loadSeeds(cursor: nil)
+    }
+
+    func loadMoreSeeds() {
+        guard active, let nextSeedCursor, !loading,
+              seeds.count < GraphBudget.maximumNodes else { return }
+        loadSeeds(cursor: nextSeedCursor)
+    }
+
+    func showOverview() {
+        refresh()
+    }
+
+    private func loadSeeds(cursor: String?) {
+        loading = true
         var fields = scope()
         let text = search.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { fields["search"] = String(text.prefix(120)) }
-        fields["limit"] = GraphBudget.seedCount
+        fields["limit"] = min(GraphBudget.seedCount, GraphBudget.maximumNodes - seeds.count)
+        if let cursor { fields["cursor"] = cursor }
         channel.send("graphSeeds", fields, as: GraphPage.self, scope: seedScope,
                      failed: { [weak self] error in self?.fail(error) }) { [weak self] page in
             guard let self, active else { return }
             loading = false
-            seeds = page.nodes
+            if cursor == nil {
+                seeds = page.nodes
+            } else {
+                let known = Set(seeds.map(\.entityId))
+                seeds += page.nodes.filter { !known.contains($0.entityId) }
+            }
+            nextSeedCursor = seeds.count < GraphBudget.maximumNodes ? page.nextCursor : nil
             outcome = page.outcome
-            if let first = seeds.first { focus(first.entityId) }
         }
     }
 
