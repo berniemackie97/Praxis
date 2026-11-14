@@ -514,16 +514,17 @@ public sealed class ProjectUnderstandingTests : IDisposable
         ProjectUnderstanding saved = Assert.Single(catalog.Projects.List());
         Assert.Equal(ProjectUnderstanding.Understood, saved.Status);
 
-        await Capture(catalog, "revised/package.json", """{"name":"changed"}""", "revision-2");
-        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
-
-        catalog.Projects.Save(saved);
         catalog.Policy.SaveTier(ModelTiers.Strong, Strongest);
         Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
 
         catalog.Policy.SaveTier(ModelTiers.Strong, Strong);
         catalog.Projects.Save(saved);
         catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, true));
+        Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
+
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        catalog.Projects.Save(saved);
+        await Capture(catalog, "revised/package.json", """{"name":"changed"}""", "revision-2");
         Assert.Equal("source_scope_changed", Assert.Single(catalog.Projects.List()).Reason);
     }
 
