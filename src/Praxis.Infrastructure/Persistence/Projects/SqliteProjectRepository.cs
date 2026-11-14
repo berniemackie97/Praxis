@@ -72,7 +72,7 @@ public sealed class SqliteProjectRepository : IProjectRepository
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
         string details = JsonSerializer.Serialize(new Details(project.Purpose, project.Summary, project.Components, project.EntryPoints, project.BuildCommands,
-            project.Dependencies, project.Languages, project.Sources));
+            project.Dependencies, project.Languages, project.Sources, project.DisclosureFingerprint));
         connection.Run(transaction, """
             INSERT INTO intake_projects (project_id, root, name, fingerprint, status, reason, details, members, tier, provider_id, input_tokens, output_tokens, updated_utc)
             VALUES ($id, $root, $name, $fingerprint, $status, $reason, $details, $members, $tier, $provider, $input, $output, $now)
@@ -117,7 +117,7 @@ public sealed class SqliteProjectRepository : IProjectRepository
                 reader.IsDBNull(5) ? null : reader.GetString(5), details.Purpose, details.Summary, details.Components, details.EntryPoints, details.BuildCommands,
                 details.Dependencies, details.Languages, reader.GetInt32(7), reader.IsDBNull(8) ? null : reader.GetString(8),
                 reader.IsDBNull(9) ? null : reader.GetString(9), reader.GetInt64(10), reader.GetInt64(11), CatalogValues.ParseTimestamp(reader.GetString(12)),
-                details.Sources));
+                details.Sources, details.DisclosureFingerprint));
         }
 
         return (IReadOnlyList<ProjectUnderstanding>)projects;
@@ -172,5 +172,5 @@ public sealed class SqliteProjectRepository : IProjectRepository
     private sealed record Details(
         string? Purpose, string? Summary, IReadOnlyList<ProjectComponent> Components, IReadOnlyList<string> EntryPoints, IReadOnlyList<string> BuildCommands,
         IReadOnlyList<string> Dependencies, IReadOnlyDictionary<string, int> Languages,
-        IReadOnlyList<ProjectSummarySource>? Sources = null);
+        IReadOnlyList<ProjectSummarySource>? Sources = null, string? DisclosureFingerprint = null);
 }

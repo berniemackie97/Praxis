@@ -529,6 +529,41 @@ public sealed class ProjectUnderstandingTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoringProjectDisclosureRebuildsAnUnchangedMapOnlyProject()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal marker = await Capture(catalog, "regrant/package.json", PackageJson);
+        catalog.Policy.SaveCategory(new SourceCategory(marker.SourceId, DataCategories.Code, SourceCategory.OwnerOrigin, false));
+        DisclosureRule grant = new(Guid.NewGuid(), DataCategories.Code, Strong, DisclosurePurposes.Intake, true, null);
+        PolicyService service = new(catalog.Policy);
+        service.Request(new PolicyChange(AddRule: grant), PolicyActors.Owner);
+        ScriptedModelFactory models = new ScriptedModelFactory().Answer(Strong, _ => """
+            {"purpose":"A restorable project.","summary":"Current source metadata.",
+             "components":[{"name":"Manifest","path":"package.json","role":"project"}],
+             "entryPoints":[],"buildCommands":[]}
+            """);
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding original = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, original.Status);
+        Assert.NotNull(original.DisclosureFingerprint);
+
+        service.Request(new PolicyChange(RemoveRuleId: grant.RuleId), PolicyActors.Owner);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding denied = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.MapOnly, denied.Status);
+        Assert.Equal(1, models.Count(Strong));
+        Assert.Equal(0, await understander.RunAsync(CancellationToken.None));
+
+        service.Request(new PolicyChange(AddRule: grant with { RuleId = Guid.NewGuid() }), PolicyActors.Owner);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+        ProjectUnderstanding restored = Assert.Single(catalog.Projects.List());
+        Assert.Equal(ProjectUnderstanding.Understood, restored.Status);
+        Assert.Equal(original.Fingerprint, restored.Fingerprint);
+        Assert.Equal(2, models.Count(Strong));
+    }
+
+    [Fact]
     public async Task ChatDisclosureReflectsRevocationInsideTheSameTurn()
     {
         using SqliteCatalog catalog = Open();

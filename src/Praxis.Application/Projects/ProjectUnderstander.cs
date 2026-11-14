@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Praxis.Application.Policy;
 using Praxis.Application.Text;
 using Praxis.Domain.Models;
@@ -36,18 +38,51 @@ public sealed class ProjectUnderstander(
             }
 
             string fingerprint = ProjectDetector.Fingerprint(candidate);
+            string disclosureFingerprint = DisclosureFingerprint(candidate);
             ProjectUnderstanding? existing = projects.Read(candidate.ProjectId);
-            if (existing?.Reason != "source_scope_changed" &&
-                (existing?.Fingerprint == fingerprint || (existing is not null && clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval)))
+            if (existing?.Reason != "source_scope_changed" && existing?.DisclosureFingerprint == disclosureFingerprint &&
+                (existing.Fingerprint == fingerprint || clock.GetUtcNow() - existing.UpdatedUtc < MinimumInterval))
             {
                 continue;
             }
 
-            projects.Save(await UnderstandAsync(candidate, fingerprint, cancellationToken));
+            ProjectUnderstanding understanding = await UnderstandAsync(candidate, fingerprint, cancellationToken);
+            projects.Save(understanding with { DisclosureFingerprint = disclosureFingerprint });
             done++;
         }
 
         return done;
+    }
+
+    private string DisclosureFingerprint(ProjectCandidate project)
+    {
+        DisclosurePolicy settings = policy.ReadPolicy();
+        TierAssignment[] tiers = policy.ReadTiers().Where(tier => tier.Tier is ModelTiers.Strong or ModelTiers.Strongest or ModelTiers.Local)
+            .OrderBy(tier => tier.Tier, StringComparer.Ordinal).ToArray();
+        StringBuilder state = new();
+        foreach (TierAssignment tier in tiers)
+        {
+            state.Append(tier.Tier).Append('\0').Append(tier.ProviderId).Append('\0').Append(tier.Model).Append('\0').Append(tier.Effort).Append('\n');
+        }
+
+        DateTimeOffset now = clock.GetUtcNow();
+        foreach (ProjectSource member in project.Members)
+        {
+            SourceCategory? category = policy.ReadCategory(member.SourceId);
+            string kind = category?.Category ?? DataCategories.Unclassified;
+            bool localOnly = category?.LocalOnly ?? false;
+            state.Append(member.SourceId).Append('\0').Append(kind).Append('\0').Append(localOnly).Append(':');
+            foreach (TierAssignment tier in tiers)
+            {
+                bool local = tier.ProviderId == VerificationProvider.Ollama;
+                DisclosureDecision decision = DisclosureEvaluator.Decide(settings, kind, tier.ProviderId, local, DisclosurePurposes.Intake, localOnly, now);
+                state.Append(decision.Allowed ? '1' : '0');
+            }
+
+            state.Append('\n');
+        }
+
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(state.ToString())));
     }
 
     public async Task<ProjectUnderstanding> UnderstandAsync(ProjectCandidate project, string fingerprint, CancellationToken cancellationToken)
