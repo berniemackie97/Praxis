@@ -371,7 +371,7 @@ public sealed class SqliteGraphReader : IGraphReader
         }
         if (query.EvidenceStatus is not null && (!allowEdges ||
             query.EvidenceStatus is not ("owner" or "accepted" or "verified" or "documented" or "suggested" or "contradicted") ||
-            (query.EvidenceStatus is "suggested" or "contradicted" && !query.IncludeSuggestions)))
+            ((query.EvidenceStatus is "suggested" or "contradicted") && !query.IncludeSuggestions)))
         {
             throw new ArgumentException("The graph evidence filter is invalid.", nameof(query));
         }
