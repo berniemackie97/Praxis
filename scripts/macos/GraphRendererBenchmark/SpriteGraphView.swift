@@ -48,11 +48,15 @@ struct SpriteGraphView: NSViewRepresentable {
         private var circles: [SKShapeNode] = []
         private var labels: [SKLabelNode] = []
         private let lines = SKShapeNode()
-        private let indices: [String: Int]
+        private let links: [(Int, Int)]
 
         init(fixture: GraphFixture) {
             self.fixture = fixture
-            self.indices = Dictionary(uniqueKeysWithValues: fixture.nodes.enumerated().map { ($0.element.id, $0.offset) })
+            let indices = Dictionary(uniqueKeysWithValues: fixture.nodes.enumerated().map { ($0.element.id, $0.offset) })
+            self.links = fixture.edges.compactMap { edge in
+                guard let source = indices[edge.sourceId], let target = indices[edge.targetId] else { return nil }
+                return (source, target)
+            }
             super.init(size: CGSize(width: 900, height: 600))
             lines.strokeColor = .secondaryLabelColor
             lines.lineWidth = 0.75
@@ -110,8 +114,7 @@ struct SpriteGraphView: NSViewRepresentable {
                 }
             }
             let path = CGMutablePath()
-            for edge in fixture.edges {
-                guard let source = indices[edge.sourceId], let target = indices[edge.targetId] else { continue }
+            for (source, target) in links {
                 path.move(to: CGPoint(x: positions[source].x, y: size.height - positions[source].y))
                 path.addLine(to: CGPoint(x: positions[target].x, y: size.height - positions[target].y))
             }
