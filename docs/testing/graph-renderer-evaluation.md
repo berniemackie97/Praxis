@@ -1,6 +1,6 @@
 # Knowledge graph renderer evaluation — #384
 
-**Status:** Research and repeatable fixture generation complete. Native renderer benchmarks and the final technology decision are pending. Do not close #384 from this document alone.
+**Status:** Architecture decision completed in [ADR 0048](../decisions/0048-native-knowledge-graph-spritekit.md): use SpriteKit in the native SwiftUI Knowledge workspace. This document preserves the earlier research, synthetic fixtures and owner Mac findings. The cross-renderer benchmark plan below is historical guidance, **not an outstanding prerequisite**. Production performance and accessibility acceptance remain mandatory under #386 and #388.
 
 ## Existing application contract
 
@@ -89,7 +89,7 @@ open -n -a "$PWD/.artifacts/GraphRendererBenchmark.app" --args "$fixture_dir/spa
 
 The new native smoke test creates and resizes a SpriteKit scene for each synthetic graph and checks its child count. It is **not yet executed on the owner's Mac**. After it passes, also select SpriteKit in the graphical comparison app and test the graph and window resizing; the smoke test does not cover the full SwiftUI integration. Leave #384 open until this regression and the renderer selection acceptance both pass.
 
-## Same-task comparison
+## Historical comparison plan (not a delivery requirement)
 
 Use a disposable host inside the existing Xcode application test target or a short-lived isolated experiment. Compare at least two runnable candidates. Include the third if either of the first two fails a required behavior or if measured results make the choice unclear.
 
@@ -102,7 +102,7 @@ Use a disposable host inside the existing Xcode application test target or a sho
 
 **Measurement guidance:** On a 60 Hz display, one refresh interval is about 16.7 ms. This is a reference for interpreting frame pacing, **not a measured result or a guaranteed pass threshold**. Record 50th/95th percentile frame time and observed missed frames. Add a justified performance budget to the final decision after the native baseline is measured. If dense content does not meet it, test focused views or visible-node caps before escalating rendering complexity.
 
-## Decision record evidence required
+## Historical comparison checklist (unmeasured)
 
 | Test | Canvas | SpriteKit | WKWebView |
 | --- | --- | --- | --- |
@@ -114,6 +114,8 @@ Use a disposable host inside the existing Xcode application test target or a sho
 | Keyboard and VoiceOver path | Not tested | Not tested | Not tested |
 | Offline bundle / security review | Built-in API only | Built-in API only | Native WebKit; JS contents unselected |
 
-The **provisional candidate to prototype first is SpriteKit**, because its 2D scene and pause support align with a force-directed graph. That is an engineering hypothesis, not a selected technology. Test Canvas as a simple native comparison. Keep WebKit in scope if the measured interaction and accessibility costs justify it.
+## Decision and remaining acceptance
 
-After measurements, write a concise accepted ADR with the selected renderer, rejected alternatives, limits, accessibility design and exact #386 boundaries. Then update the #384 acceptance checklist. Until that evidence exists, #384 remains open and continues to block #386.
+[ADR 0048](../decisions/0048-native-knowledge-graph-spritekit.md) selects **SpriteKit** for native graph rendering, with SwiftUI for the surrounding interface and accessible evidence navigation. The selection is grounded in supported framework behavior and Praxis architecture, not an asserted performance ranking. The owner's 200/800-node demonstrations ran smoothly but their visual design was poor; the comparison did not control presentation or produce profiling measurements.
+
+This is a decision spike, not a release-qualification exercise. Do **not** build a duplicate Canvas renderer or a WKWebView prototype simply to create a comparison. The reproduction fixtures and smoke tests remain useful for #386. Implement read-only, bounded scene updates and meaningful focus; then measure the **selected implementation** under #388. Frame pacing, CPU/memory/energy, accessibility, keyboard navigation, Reduce Motion and source revocation must still pass. Reopen the renderer decision only if that evidence identifies a concrete blocker.
