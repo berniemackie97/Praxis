@@ -117,6 +117,7 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func showOverview() {
+        requestedFocusId = nil
         refresh()
     }
 
