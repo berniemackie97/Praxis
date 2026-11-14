@@ -69,6 +69,26 @@ Use the in-window renderer selector to compare Canvas and SpriteKit with the sam
 
 The owner ran the fixture tests (2 passed) and compiled the initial unbundled Swift executable successfully on macOS. Four SpriteKit actor-isolation warnings were observed, and no visible window was confirmed. A follow-up package/actor correction is in PR #395. **A successful build is not a confirmed launched window or a measured renderer result.** Run the bundled app, verify visible controls and collect measurements before closing #384.
 
+## Owner-Mac SpriteKit crash — November 13, 2026
+
+The owner's new macOS application bundle compiled without the earlier actor-isolation warnings and launched a visible graph window. Selecting SpriteKit caused a crash on macOS 26.6.2, Apple Silicon (crash report dated 2026-11-13 21:44:43 -0500).
+
+The stack traces `GraphScene.init(fixture:)` → SpriteKit `-[SKScene initWithSize:]` → `didChangeSize` → `updatePositions(at:)`, ending in a main-thread Swift trap. SpriteKit invokes the size-change override while the superclass initializer is still executing. At that time the benchmark has not appended its circle nodes. The first `circles[index]` access is therefore invalid.
+
+The regression fix makes `didChangeSize` skip the premature layout until the number of circle nodes equals the fixture node count. Initial layout still happens at the end of the scene initializer; subsequent real size changes still update the scene.
+
+**Reproduce and verify on owner macOS:**
+
+```sh
+fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/praxis-graph-384.XXXXXX")"
+python3 scripts/macos/graph_renderer_fixtures.py "$fixture_dir"
+bash scripts/macos/GraphRendererBenchmark/test-spritekit-startup.sh "$fixture_dir"/*.json
+bash scripts/macos/GraphRendererBenchmark/build-graph-benchmark.sh
+open -n -a "$PWD/.artifacts/GraphRendererBenchmark.app" --args "$fixture_dir/sparse.json"
+```
+
+The new native smoke test creates and resizes a SpriteKit scene for each synthetic graph and checks its child count. It is **not yet executed on the owner's Mac**. After it passes, also select SpriteKit in the graphical comparison app and test the graph and window resizing; the smoke test does not cover the full SwiftUI integration. Leave #384 open until this regression and the renderer selection acceptance both pass.
+
 ## Same-task comparison
 
 Use a disposable host inside the existing Xcode application test target or a short-lived isolated experiment. Compare at least two runnable candidates. Include the third if either of the first two fails a required behavior or if measured results make the choice unclear.
