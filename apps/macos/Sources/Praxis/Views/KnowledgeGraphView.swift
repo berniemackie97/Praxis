@@ -37,7 +37,7 @@ struct KnowledgeGraphView: View {
                                        colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
-                                Text("\(graph.nodes.count) nodes  ·  \(graph.edges.count) source-backed or owner relations")
+                                Text("\(graph.nodes.count) nodes  ·  \(graph.edges.count) relationships")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .padding(Spacing.s)
@@ -243,7 +243,7 @@ struct KnowledgeGraphView: View {
     private func evidenceSummary(_ evidence: GraphEvidence) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(evidence.text).font(.callout).lineLimit(4).textSelection(.enabled)
-            Text("\(URL(fileURLWithPath: evidence.locator).lastPathComponent) · revision \(evidence.revision) · \(evidence.status)")
+            Text("Source: \(evidence.locator) · revision \(evidence.revision) · \(evidence.status)")
                 .font(.caption2).foregroundStyle(.secondary)
         }
     }
