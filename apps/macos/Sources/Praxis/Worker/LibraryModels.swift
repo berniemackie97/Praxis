@@ -45,6 +45,8 @@ struct SourceCollection: Decodable, Identifiable {
 }
 
 /// A source-grounded proposal: a topic, a typed entity, or a relation between two entities.
+struct ReviewedCount: Decodable { let reviewed: Int }
+
 struct TopicProposal: Decodable, Identifiable {
     let proposalId: String
     let sourceId: String
@@ -62,6 +64,9 @@ struct TopicProposal: Decodable, Identifiable {
     let relationSubject: String?
     let relationObject: String?
     let flags: String?
+    /// Counts as knowledge: accepted by the owner, supported by a verifier, or verified intake output.
+    let confirmed: Bool?
+    var isConfirmed: Bool { confirmed == true }
     var id: String { proposalId }
 
     var instructionLike: Bool { flags == "instruction_like" }

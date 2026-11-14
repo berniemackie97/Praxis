@@ -5,7 +5,6 @@ using Praxis.Application.Models;
 using Praxis.Application.Policy;
 using Praxis.Application.Search;
 using Praxis.Domain.Agents;
-using Praxis.Domain.Models;
 using Praxis.Domain.Policy;
 using Praxis.Domain.Search;
 
@@ -54,7 +53,7 @@ public sealed class KnowledgeSearchTool(
         int offset = args.Integer("offset", 0, 0, 200);
         bool full = args.Choice("detail", ["concise", "full"], "concise") == "full";
 
-        (IReadOnlyList<SearchHit> hits, string mode) = await SearchAsync(query, collection, cancellationToken);
+        (IReadOnlyList<SearchHit> hits, string mode) = await new KnowledgeRetriever(lexical, vectors, profiles, embeddings).SearchAsync(query, 100, collection, cancellationToken);
         HashSet<Guid>? entitySources = entity is { } id
             ? (knowledge.GetEntity(id) ?? throw new ArgumentException("No entity with that entityId.")).Mentions.Select(mention => mention.SourceId).ToHashSet()
             : null;
@@ -82,25 +81,6 @@ public sealed class KnowledgeSearchTool(
         withheld > 0 ? [new WithheldNotice(withheld, WithheldNotice.DisclosurePolicy)] : null);
     }
 
-    private async Task<(IReadOnlyList<SearchHit>, string)> SearchAsync(string query, Guid? collection, CancellationToken cancellationToken)
-    {
-        if (profiles.Get(ModelProfile.LocalEmbedding) is { Enabled: true } profile)
-        {
-            try
-            {
-                using EmbeddingModelConnection connection = embeddings.Connect(profile, TimeSpan.FromSeconds(20));
-                HybridSearchResults hybrid = await new HybridSearch(lexical, new SemanticRetriever(vectors)).QueryAsync(query, connection.Model, 100, cancellationToken, collection);
-                return (hybrid.Hits, hybrid.UsedEmbeddings ? "hybrid" : "keyword");
-            }
-            catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
-            {
-                // Fall back to keyword search; the mode tells the agent.
-            }
-        }
-
-        return (lexical.RetainCurrent(lexical.Query(query, 100, collection), collection), "keyword");
-    }
-
     private static bool KindMatches(string kind, string locator)
     {
         string extension = Path.GetExtension(locator).ToLowerInvariant();
@@ -109,7 +89,7 @@ public sealed class KnowledgeSearchTool(
             "note" => extension is ".md" or ".markdown" or ".txt",
             "document" => extension is ".pdf" or ".docx" or ".rtf" or ".html",
             "code" => extension is ".cs" or ".fs" or ".c" or ".h" or ".cpp" or ".hpp" or ".asm" or ".s" or ".lst" or ".swift" or ".py" or ".js" or ".ts",
-            "media" => extension is ".vtt" or ".srt" or ".mp4" or ".mov" or ".mp3" or ".m4a" or ".wav",
+            "media" => extension is ".vtt" or ".srt" or ".webm" or ".mkv" || Media.MediaFormats.IsTranscribable(extension),
             "financial" => extension is ".ofx" or ".qfx" or ".qbo" or ".qif",
             "data" => extension is ".csv" or ".tsv" or ".json",
             _ => true

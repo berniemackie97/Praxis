@@ -15,13 +15,16 @@ public sealed class ClaudeCodeChatModel : IChatModel
 {
     public const string ProviderName = "claude-code";
     private readonly string executable;
-    private readonly string model;
+    private readonly string? model;
+    private readonly string? effort;
     private readonly TimeSpan timeout;
 
-    public ClaudeCodeChatModel(string executable, string model, TimeSpan? timeout = null)
+    public ClaudeCodeChatModel(string executable, string? model, TimeSpan? timeout = null, string? effort = null)
     {
         this.executable = SubscriptionCli.ValidateExecutable(executable);
-        this.model = SubscriptionCli.ValidateModel(model);
+        // No model (or "default") runs the plan's default model.
+        this.model = model is null or "default" ? null : SubscriptionCli.ValidateModel(model);
+        this.effort = SubscriptionCli.ValidateEffort(effort);
         this.timeout = timeout ?? SubscriptionCli.DefaultTimeout;
     }
 
@@ -36,7 +39,7 @@ public sealed class ClaudeCodeChatModel : IChatModel
             throw new InferenceException(InferenceFailure.Unavailable, "Claude Code did not report its version.");
         }
 
-        return new ModelIdentity(ProviderName, model, version, "claude", null, null);
+        return new ModelIdentity(ProviderName, model ?? "default", version, "claude", null, null);
     }
 
     public async Task<ChatResult> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)
@@ -54,7 +57,8 @@ public sealed class ClaudeCodeChatModel : IChatModel
             "--permission-mode", "dontAsk",
             "--no-session-persistence",
             "--strict-mcp-config",
-            "--model", model,
+            .. (model is null ? Array.Empty<string>() : ["--model", model]),
+            .. (effort is null ? Array.Empty<string>() : ["--effort", effort]),
             "--system-prompt", SubscriptionCli.System(request)
         ], SubscriptionCli.User(request), workspace.Path, timeout, cancellationToken);
         return Parse(result);

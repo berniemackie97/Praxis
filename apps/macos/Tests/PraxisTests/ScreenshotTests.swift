@@ -68,10 +68,10 @@ struct ScreenshotTests {
                            name: "\(section.rawValue)\(dark ? "-dark" : "")", dark: dark, to: outputURL)
             }
         }
-        for tab in [SettingsTab.general, .models, .privacy, .agents] {
+        for tab in [SettingsTab.general, .models, .privacy] {
             await settle(model)
             UserDefaults.standard.set(tab.rawValue, forKey: SettingsTab.storageKey)
-            try await render(SettingsView().environmentObject(model), size: CGSize(width: 680, height: 620),
+            try await render(SettingsView().environmentObject(model), size: CGSize(width: 760, height: 680),
                        name: "settings-\(tab.rawValue)", wait: 1.5, to: outputURL)
         }
         try await render(SectionHost(section: .library).environmentObject(model), size: CGSize(width: 780, height: 560),

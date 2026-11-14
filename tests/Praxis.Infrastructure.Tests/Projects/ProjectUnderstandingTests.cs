@@ -1,0 +1,201 @@
+using System.Text;
+using System.Text.Json;
+using Praxis.Application.Agents;
+using Praxis.Application.Agents.Tools;
+using Praxis.Application.Policy;
+using Praxis.Application.Projects;
+using Praxis.Domain.Models;
+using Praxis.Domain.Originals;
+using Praxis.Domain.Policy;
+using Praxis.Domain.Projects;
+using Praxis.Domain.Understanding;
+using Praxis.Domain.Verification;
+using Praxis.Infrastructure.Composition;
+using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Agents;
+using Praxis.Infrastructure.Tests.Support;
+using Xunit;
+
+namespace Praxis.Infrastructure.Tests.Projects;
+
+/// <summary>Code projects are understood as a whole from a repository map, verified in code; code files cost no per-file model call.</summary>
+public sealed class ProjectUnderstandingTests : IDisposable
+{
+    private const string Local = VerificationProvider.Ollama;
+    private const string Strong = VerificationProvider.ClaudeCode;
+    private const string Strongest = VerificationProvider.Codex;
+
+    private const string PackageJson = """
+        {"name":"invoice-api","scripts":{"dev":"tsx src/server.ts","test":"vitest"},
+         "dependencies":{"express":"^4.19.0","pg":"^8.11.0"},"devDependencies":{"vitest":"^1.6.0"}}
+        """;
+
+    private const string Readme = """
+        # Invoice API
+        A small service that stores invoices in Postgres and serves them over HTTP.
+        Run `npm run dev` for development and `docker compose up` for the database.
+        """;
+
+    private const string Server = """
+        import express from "express";
+        export async function startServer(port: number) { }
+        export class InvoiceRoutes { }
+        """;
+
+    private readonly string workspace = Path.Combine(TestPaths.Temp, "praxis-projects-" + Guid.NewGuid().ToString("N"));
+    private readonly ManualTimeProvider clock = new(new DateTimeOffset(2026, 11, 13, 12, 0, 0, TimeSpan.Zero));
+
+    public ProjectUnderstandingTests()
+    {
+        Directory.CreateDirectory(Path.Combine(workspace, "store"));
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(workspace, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(Path.Combine(workspace, "store"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Theory]
+    [InlineData(".cs", "public sealed class Ledger\n{\n    public async Task<int> PostAsync() { }\n}\ninternal record Entry(int Id);", "public sealed class Ledger")]
+    [InlineData(".ts", "export async function startServer(port: number) {\n}\nexport class Routes {}", "export async function startServer(port: number)")]
+    [InlineData(".py", "class Importer:\n    def run(self):\n        pass\ndef main():\n    pass", "class Importer")]
+    [InlineData(".swift", "struct ContentView: View {\n    func load() {}\n}", "struct ContentView: View")]
+    [InlineData(".go", "func (s *Server) Start() error {\n}\ntype Server struct {}", "func (s *Server) Start() error")]
+    public void OutlinesNameWhatAFileDefines(string extension, string code, string expected) =>
+        Assert.Contains(expected, CodeOutline.Extract(code, extension));
+
+    [Fact]
+    public void ManifestsDeclareDependenciesAndCommands()
+    {
+        Assert.Equal(["express", "pg", "vitest"], ProjectManifests.Dependencies("package.json", PackageJson).Order());
+        Assert.Contains("npm run dev", ProjectManifests.Commands("package.json", PackageJson));
+        Assert.Equal(["Serilog"], ProjectManifests.Dependencies("App.csproj", """<ItemGroup><PackageReference Include="Serilog" Version="3.1.1" /></ItemGroup>"""));
+        Assert.Equal(["serde", "tokio"], ProjectManifests.Dependencies("Cargo.toml", "[package]\nname=\"x\"\n[dependencies]\nserde = \"1\"\ntokio = { version = \"1\" }\n").Order());
+        Assert.Equal(["github.com/go-chi/chi/v5"], ProjectManifests.Dependencies("go.mod", "module x\nrequire (\n\tgithub.com/go-chi/chi/v5 v5.0.12\n)\n"));
+        Assert.Contains("dotnet test", ProjectManifests.Commands("App.csproj", string.Empty));
+    }
+
+    [Fact]
+    public void NestedMarkersBelongToTheOutermostProject()
+    {
+        string root = Path.Combine(workspace, "repo");
+        ProjectSource[] sources =
+        [
+            Source(Path.Combine(root, "Repo.sln")), Source(Path.Combine(root, "src", "App", "App.csproj")), Source(Path.Combine(root, "src", "App", "Program.cs")),
+            Source(Path.Combine(workspace, "notes", "todo.md"))
+        ];
+
+        ProjectCandidate project = Assert.Single(ProjectDetector.Detect(sources));
+
+        Assert.Equal(root, project.Root);
+        Assert.Equal(3, project.Members.Count);
+        Assert.Equal("src/App/Program.cs", project.Relative(project.Members.Single(member => member.Locator.EndsWith(".cs", StringComparison.Ordinal))));
+        string before = ProjectDetector.Fingerprint(project);
+        Assert.NotEqual(before, ProjectDetector.Fingerprint(project with { Members = [.. project.Members.SkipLast(1)] }));
+    }
+
+    [Fact]
+    public async Task AProjectIsUnderstoodOnceFromItsMapAndUnverifiedClaimsAreDropped()
+    {
+        using SqliteCatalog catalog = Open();
+        Grant(catalog, DataCategories.Code, Strong);
+        Grant(catalog, DataCategories.Documents, Strong);
+        ScriptedModelFactory models = new ScriptedModelFactory()
+            .Answer(Local, _ => """{"category":"documents","documentType":"readme","language":"en","gist":"Project readme.","recordKinds":[]}""")
+            .Answer(Strong, request => request.Messages[^1].Content.Contains("Declared dependencies", StringComparison.Ordinal)
+                ? """
+                  {"purpose":"An HTTP service that stores invoices in Postgres.","summary":"Express routes over a pg pool.",
+                   "components":[{"name":"Server","path":"src/server.ts","role":"HTTP entry"},{"name":"Billing","path":"src/billing/","role":"invented"},
+                                 {"name":"Sources","path":"src/","role":"application code"},{"name":"Docs","path":"README.md","role":"overview"}],
+                   "entryPoints":["src/server.ts"],
+                   "buildCommands":["npm run dev","docker compose up"]}
+                  """
+                : """{"summary":"Readme.","documentType":"readme","topics":[],"entities":[],"relations":[],"records":[]}""");
+        await Capture(catalog, "invoice-api/package.json", PackageJson);
+        await Capture(catalog, "invoice-api/README.md", Readme);
+        CapturedOriginal server = await Capture(catalog, "invoice-api/src/server.ts", Server);
+        await Capture(catalog, "notes/groceries.md", "milk");
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, models, clock));
+
+        SourceUnderstanding code = catalog.Understanding.ReadCurrent(server.SourceId)!;
+        Assert.Equal((UnderstandingStatuses.IndexOnly, "project_level", 0L), (code.Status, code.Reason, code.InputTokens));
+        int strongBefore = models.Count(Strong);
+
+        ProjectUnderstander understander = new(catalog.Projects, catalog.Text, CatalogProcessing.Ladder(catalog, models, clock), catalog.Policy, clock);
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+
+        Assert.Equal(strongBefore + 1, models.Count(Strong));
+        Assert.Equal(0, models.Count(Strongest));
+        ProjectUnderstanding project = Assert.Single(catalog.Projects.List());
+        Assert.Equal(("invoice-api", ProjectUnderstanding.Understood, ModelTiers.Strong), (project.Name, project.Status, project.Tier));
+        Assert.Equal(["src/server.ts", "src/", "README.md"], project.Components.Select(component => component.Path));
+        Assert.Equal(["npm run dev", "docker compose up"], project.BuildCommands);
+        Assert.Equal(["express", "pg", "vitest"], project.Dependencies);
+        Assert.Equal(3, project.Members);
+
+        // Unchanged files: no new call. Changed files inside the interval: still none.
+        Assert.Equal(0, await understander.RunAsync(CancellationToken.None));
+        await Capture(catalog, "invoice-api/src/db.ts", "export const pool = 1;");
+        Assert.Equal(0, await understander.RunAsync(CancellationToken.None));
+        clock.UtcNow += ProjectUnderstander.MinimumInterval;
+        Assert.Equal(1, await understander.RunAsync(CancellationToken.None));
+
+        AgentToolOutput listed = await new KnowledgeProjectTool(catalog.Projects).InvokeAsync(JsonDocument.Parse("{}").RootElement, AgentPrimitivesTests.Context(),
+            CancellationToken.None);
+        Assert.Contains("An HTTP service that stores invoices in Postgres.", listed.Content, StringComparison.Ordinal);
+        AgentToolOutput opened = await new KnowledgeProjectTool(catalog.Projects).InvokeAsync(
+            JsonDocument.Parse("""{"name":"invoice-api"}""").RootElement, AgentPrimitivesTests.Context(), CancellationToken.None);
+        Assert.Contains("npm run dev", opened.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifierDropsPathsAndCommandsTheProjectDoesNotHave()
+    {
+        ProjectCandidate project = new("p", "/r", "r", [Source("/r/package.json"), Source("/r/src/index.ts")]);
+        RepositoryMap map = RepositoryMap.Build(project, project.Members, member => member.Locator.EndsWith(".json", StringComparison.Ordinal) ? PackageJson : Server);
+
+        ProjectDraft draft = ProjectVerifier.Verify("""
+            {"purpose":"x","summary":"y","components":[{"name":"a","path":"lib/","role":"r"}],"entryPoints":["src/index.ts","main.py"],
+             "buildCommands":["npm test","rm -rf /"]}
+            """, map)!;
+
+        Assert.Equal(["src/index.ts"], draft.EntryPoints);
+        Assert.Equal(["npm test"], draft.BuildCommands);
+        Assert.Empty(draft.Components);
+        Assert.False(draft.Acceptable);
+        Assert.Equal(3, draft.Problems.Count);
+    }
+
+    private static ProjectSource Source(string path) => new(Guid.NewGuid(), Guid.NewGuid(), 1, path, new string('a', 64));
+
+    private SqliteCatalog Open()
+    {
+        SqliteCatalog catalog = SqliteCatalog.Open(Path.Combine(workspace, "store"), clock);
+        catalog.Verification.SaveProvider(new VerificationProvider(Local, null, "qwen:9b", 0, 500, true, "http://127.0.0.1:11434"));
+        catalog.Verification.SaveProvider(new VerificationProvider(Strong, "/usr/bin/true", "sonnet", 10, 500, true));
+        catalog.Verification.SaveProvider(new VerificationProvider(Strongest, "/usr/bin/true", "gpt", 20, 500, true));
+        catalog.Policy.SaveTier(ModelTiers.Local, Local);
+        catalog.Policy.SaveTier(ModelTiers.Strong, Strong);
+        catalog.Policy.SaveTier(ModelTiers.Strongest, Strongest);
+        return catalog;
+    }
+
+    private static void Grant(SqliteCatalog catalog, string category, string provider) =>
+        new PolicyService(catalog.Policy).Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), category, provider,
+            DisclosurePurposes.Intake, true, null)), PolicyActors.Owner);
+
+    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string name, string text)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
+        using MemoryStream input = new(bytes);
+        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", name), input, bytes.Length, name);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(workspace))
+        {
+            Directory.Delete(workspace, true);
+        }
+    }
+}

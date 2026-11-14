@@ -21,6 +21,16 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         LEFT JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
         """ + "\n";
 
+    // Knowledge is what the owner confirmed, a verifier supported, or the strong tiers verified;
+    // local-model guesses are suggestions until then.
+    private const string ConfirmedSummary = """
+        SELECT e.entity_id, e.display_name, e.entity_type, e.type_origin, e.status,
+               COUNT(m.proposal_id), COUNT(DISTINCT m.source_id),
+               e.type_origin = 'inferred' AND COUNT(DISTINCT m.entity_type) > 1
+        FROM knowledge_entities e
+        LEFT JOIN confirmed_entity_mentions m ON m.entity_id = e.entity_id
+        """ + "\n";
+
     private readonly CatalogDatabase database;
 
     private readonly TimeProvider clock;
@@ -31,8 +41,11 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         this.clock = clock;
     }
 
-    /// <summary>Active entities with visible evidence or an owner decision, most mentioned first.</summary>
-    public IReadOnlyList<EntitySummary> ListEntities(string? entityType = null, string? search = null, int limit = 100)
+    /// <summary>
+    /// Active entities with confirmed evidence (or, with <paramref name="includeSuggestions"/>, any
+    /// visible evidence) or an owner decision, most mentioned first.
+    /// </summary>
+    public IReadOnlyList<EntitySummary> ListEntities(string? entityType = null, string? search = null, int limit = 100, bool includeSuggestions = false)
     {
         if (limit is < 1 or > 500)
         {
@@ -47,7 +60,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         string? key = search is null ? null : KnowledgeVocabulary.NameKey(search);
         return database.ExecuteRead(connection =>
         {
-            using SqliteCommand query = connection.CreateCommand(Summary + """
+            using SqliteCommand query = connection.CreateCommand((includeSuggestions ? Summary : ConfirmedSummary) + """
                                                                            WHERE e.status = 'active'
                                                                              AND ($type IS NULL OR e.entity_type = $type)
                                                                              AND ($search IS NULL OR EXISTS (SELECT 1 FROM entity_aliases a
@@ -297,8 +310,11 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
     {
         using SqliteCommand query = connection.CreateCommand("""
                                                              SELECT m.proposal_id, m.source_id, m.item_id, m.revision, m.entity_type, m.evidence,
-                                                                    m.evidence_offset, m.status, s.locator, m.verdict
+                                                                    m.evidence_offset,
+                                                                    CASE WHEN m.status = 'pending' AND c.proposal_id IS NOT NULL THEN 'verified' ELSE m.status END,
+                                                                    s.locator, m.verdict
                                                              FROM visible_entity_mentions m JOIN sources s ON s.source_id = m.source_id
+                                                             LEFT JOIN confirmed_entity_mentions c ON c.proposal_id = m.proposal_id
                                                              WHERE m.entity_id = $entity
                                                              ORDER BY s.locator, m.evidence_offset LIMIT 200
                                                              """);

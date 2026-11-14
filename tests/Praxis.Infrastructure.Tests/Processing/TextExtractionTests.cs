@@ -59,9 +59,9 @@ public sealed class TextExtractionTests : IDisposable
             IReadOnlyList<ProcessingJob> jobs = catalog.Processing.List();
             Assert.All(jobs.Where(job => job.ProcessorKey == ProcessorKeys.SourceText),
                 job => Assert.Equal("completed", job.State));
-            // Completed extraction schedules exactly one downstream heading job per revision.
+            // Completed extraction schedules exactly one downstream segmentation job per revision.
             Assert.Equal(2, jobs.Count(job =>
-                job.ProcessorKey == ProcessorKeys.MarkdownHeadings && job.State == "queued"));
+                job.ProcessorKey == ProcessorKeys.TextSegments && job.State == "queued"));
         }
 
         using SqliteCatalog reopened = SqliteCatalog.Open(root);
@@ -323,7 +323,7 @@ public sealed class TextExtractionTests : IDisposable
             Assert.Equal(1, reopened.Processing.List()
                 .Single(job => job.ProcessorKey == ProcessorKeys.SourceText).TotalAttempts);
             Assert.Equal("queued", reopened.Processing.List()
-                .Single(job => job.ProcessorKey == ProcessorKeys.MarkdownHeadings).State);
+                .Single(job => job.ProcessorKey == ProcessorKeys.TextSegments).State);
             await reopened.Originals.VerifyAsync(source.ItemId);
         }
 

@@ -1,3 +1,4 @@
+using Praxis.Domain.Media;
 namespace Praxis.Application.Documents;
 
 /// <summary>
@@ -46,7 +47,8 @@ public sealed class DocumentReaders
 
         // Text the owner wrote is kept byte-for-byte (spans and citations point into it); text a
         // reader derived from a richer format is normalized.
-        bool verbatim = VerbatimFormats.Contains(document.Format);
+        // Timed text is verbatim too: its timing points into it by character.
+        bool verbatim = VerbatimFormats.Contains(document.Format) || document.Timings is { Count: > 0 };
         string text = verbatim ? document.Text : TextShape.Tidy(document.Text);
         if (!verbatim && text.Length == 0)
         {
@@ -54,6 +56,7 @@ public sealed class DocumentReaders
         }
 
         (string bounded, bool truncated) = TextShape.Bound(text, DocumentLimits.MaximumTextBytes);
-        return ReadOutcome.Read(document with { Text = bounded, Truncated = document.Truncated || truncated });
+        IReadOnlyList<TimedSpan>? timings = document.Timings?.Where(span => span.Offset + span.Length <= bounded.Length).ToArray();
+        return ReadOutcome.Read(document with { Text = bounded, Truncated = document.Truncated || truncated, Timings = timings });
     }
 }

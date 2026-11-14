@@ -11,11 +11,13 @@ using Praxis.Application.Inference;
 using Praxis.Application.Intake;
 using Praxis.Application.Knowledge;
 using Praxis.Application.Library;
+using Praxis.Application.Links;
 using Praxis.Application.Media;
 using Praxis.Application.Models;
 using Praxis.Application.Originals;
 using Praxis.Application.Policy;
 using Praxis.Application.Processing;
+using Praxis.Application.Projects;
 using Praxis.Application.Search;
 using Praxis.Application.Sources;
 using Praxis.Application.Text;
@@ -26,6 +28,7 @@ using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Inference;
 using Praxis.Infrastructure.Inference.Ollama;
 using Praxis.Infrastructure.Intake;
+using Praxis.Infrastructure.Links;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Worker.Desktop;
 using Praxis.Worker.Hosting;
@@ -70,24 +73,33 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<SqliteCatalog>(),
             status: Report(provider, "Praxis.Processing"),
             clock: provider.GetRequiredService<TimeProvider>(),
-            models: provider.GetRequiredService<IVerifierModelFactory>()));
+            models: provider.GetRequiredService<IVerifierModelFactory>(),
+            linkSnapshots: new LinkSnapshotWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot)));
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
+        services.AddSingleton<IModelToolDetector, ModelToolDetector>();
+        services.AddSingleton<ModelSetup>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
             provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
         services.AddSingleton<MediaEvidence>();
+        services.AddSingleton(provider => new MediaPlayback(provider.GetRequiredService<ISourceRepository>(),
+            provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<MediaEvidence>(),
+            new WebVideoPlayback(provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>())));
         services.AddSingleton<FinancialLedger>();
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
         services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
+        services.AddSingleton<ISavedLinkWriter>(provider => new SavedLinkWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
+        services.AddSingleton<ILinkRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Links);
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
             provider.GetRequiredService<ISecretStore>(), RelayCommand(), Path.GetTempPath()));
         services.AddSingleton(provider => AgentComposition.Runtime(provider.GetRequiredService<SqliteCatalog>(),
             AgentComposition.Tools(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IEmbeddingModelConnector>(),
-                provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>()),
+                provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ISavedLinkWriter>()),
             provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<AgentRunCoordinator>();
         services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>()));
@@ -107,11 +119,13 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, CollectionActions>();
         services.AddSingleton<IDesktopActionGroup, SearchActions>();
         services.AddSingleton<IDesktopActionGroup, MediaActions>();
+        services.AddSingleton<IDesktopActionGroup, LinkActions>();
         services.AddSingleton<IDesktopActionGroup, CaptureActions>();
         services.AddSingleton<IDesktopActionGroup, EnrichmentActions>();
         services.AddSingleton<IDesktopActionGroup, IntakeActions>();
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
+        services.AddSingleton<IDesktopActionGroup, ModelSetupActions>();
         services.AddSingleton<IDesktopActionGroup, ModelActions>();
         services.AddSingleton<IDesktopActionGroup, FinanceActions>();
         services.AddSingleton<IDesktopActionGroup, UnderstandingActions>();
@@ -121,6 +135,12 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<DesktopStdioSession>();
 
         services.AddHostedService<WorkerSupervisor>();
+        services.AddSingleton(provider => new ProjectUnderstander(provider.GetRequiredService<SqliteCatalog>().Projects,
+            provider.GetRequiredService<SqliteCatalog>().Text,
+            CatalogProcessing.Ladder(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IVerifierModelFactory>(),
+                provider.GetRequiredService<TimeProvider>()),
+            provider.GetRequiredService<IPolicyRepository>(), provider.GetRequiredService<TimeProvider>()));
+        services.AddHostedService<ProjectUnderstandingService>();
         return services;
     }
 

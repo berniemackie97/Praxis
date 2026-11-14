@@ -49,6 +49,8 @@ struct PendingPolicyChange: Decodable, Identifiable, Equatable {
 struct TierAssignment: Decodable, Equatable {
     let tier: String
     let providerId: String
+    var model: String?
+    var effort: String?
 }
 
 struct DisclosureHold: Decodable, Identifiable, Equatable {

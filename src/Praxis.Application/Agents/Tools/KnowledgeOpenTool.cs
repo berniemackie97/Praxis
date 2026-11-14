@@ -3,10 +3,12 @@ using System.Text.Json;
 using Praxis.Application.Documents;
 using Praxis.Application.Documents.Pdf;
 using Praxis.Application.Finance;
+using Praxis.Application.Media;
 using Praxis.Application.Originals;
 using Praxis.Application.Sources;
 using Praxis.Application.Text;
 using Praxis.Domain.Agents;
+using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
 
@@ -17,7 +19,8 @@ namespace Praxis.Application.Agents.Tools;
 /// text, a PDF page, a delimited row, a line of a statement export, or a phrase. Reads only the
 /// current revision of an active source and never more than a bounded window.
 /// </summary>
-public sealed class KnowledgeOpenTool(ITextDerivativeRepository text, ISourceRepository sources, IOriginalStore originals, IPdfTextReader pdf) : IAgentTool
+public sealed class KnowledgeOpenTool(
+    ITextDerivativeRepository text, ISourceRepository sources, IOriginalStore originals, IPdfTextReader pdf, MediaMoments? moments = null) : IAgentTool
 {
     private const int Window = 6_000;
     private const int MaximumOriginalBytes = 32 * 1024 * 1024;
@@ -25,7 +28,7 @@ public sealed class KnowledgeOpenTool(ITextDerivativeRepository text, ISourceRep
     public AgentToolDefinition Definition { get; } = new("knowledge_open",
         """
         Open a source to read it, using sourceId (or itemId+revision) from another tool's result. Optional locator from a citation:
-        chars:START-END, page:N[:line:M], row:N, line:N, stmttrn:N. Optional 'around' centres on a phrase. Returns up to 6000 characters
+        chars:START-END, page:N[:line:M], row:N, line:N, stmttrn:N, time:START-END (seconds, media). Optional 'around' centres on a phrase. Returns up to 6000 characters
         with offsets so you can page with 'offset'.
         """,
         ToolArguments.Schema("""
@@ -49,7 +52,7 @@ public sealed class KnowledgeOpenTool(ITextDerivativeRepository text, ISourceRep
         (string body, string unit) = await ReadAsync(current, locator, cancellationToken);
         int start = around is not null && body.IndexOf(around, StringComparison.OrdinalIgnoreCase) is var found and >= 0
             ? Math.Max(0, found - Window / 4)
-            : LocatorStart(body, locator, unit) ?? Math.Min(body.Length, args.Integer("offset", 0, 0, int.MaxValue));
+            : TimeStart(sourceId, current, locator) ?? LocatorStart(body, locator, unit) ?? Math.Min(body.Length, args.Integer("offset", 0, 0, int.MaxValue));
         string excerpt = body.Substring(start, Math.Min(Window, body.Length - start));
         string name = Path.GetFileName(current.Locator);
         return AgentToolOutput.Of(new
@@ -105,6 +108,13 @@ public sealed class KnowledgeOpenTool(ITextDerivativeRepository text, ISourceRep
 
         return (TextDecoder.Decode(bytes) ?? throw new InvalidOperationException("This source is binary and has no readable text."), "lines");
     }
+
+    /// <summary>Where a <c>time:</c> locator's start is spoken in a transcript, if the source has timing.</summary>
+    private int? TimeStart(Guid sourceId, CurrentFileVersion current, string? locator) =>
+        TimeLocator.TryParse(locator, out long start, out long _) &&
+        moments?.OffsetAt(sourceId, current.ItemId, current.Revision, current.Locator, start) is { } offset
+            ? offset
+            : null;
 
     /// <summary>Where a citation locator points inside the opened body, if it can be resolved.</summary>
     private static int? LocatorStart(string body, string? locator, string unit)

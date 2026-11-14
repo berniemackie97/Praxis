@@ -168,20 +168,22 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
 
     public IReadOnlyList<TierAssignment> ReadTiers() => database.ExecuteRead(connection =>
     {
-        using SqliteCommand command = connection.CreateCommand("SELECT tier, provider_id FROM model_tiers ORDER BY tier");
+        using SqliteCommand command = connection.CreateCommand("SELECT tier, provider_id, model, effort FROM model_tiers ORDER BY tier");
         using SqliteDataReader reader = command.ExecuteReader();
         List<TierAssignment> tiers = [];
         while (reader.Read())
         {
-            tiers.Add(new TierAssignment(reader.GetString(0), reader.GetString(1)));
+            tiers.Add(new TierAssignment(reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
         }
 
         return tiers;
     });
 
-    public void SaveTier(string tier, string? providerId)
+    public void SaveTier(string tier, string? providerId, string? model = null, string? effort = null)
     {
-        if (!ModelTiers.All.Contains(tier, StringComparer.Ordinal) || providerId?.Length is 0 or > 64)
+        if (!ModelTiers.All.Contains(tier, StringComparer.Ordinal) || providerId?.Length is 0 or > 64 || model?.Length is 0 or > 100 ||
+            !ModelEffort.IsValid(effort))
         {
             throw new ArgumentException("The tier assignment is invalid.");
         }
@@ -196,9 +198,10 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
             else
             {
                 connection.Run(transaction, """
-                    INSERT INTO model_tiers (tier, provider_id, updated_utc) VALUES ($tier, $provider, $now)
-                    ON CONFLICT(tier) DO UPDATE SET provider_id = excluded.provider_id, updated_utc = excluded.updated_utc
-                    """, ("$tier", tier), ("$provider", providerId), ("$now", Now()));
+                    INSERT INTO model_tiers (tier, provider_id, model, effort, updated_utc) VALUES ($tier, $provider, $model, $effort, $now)
+                    ON CONFLICT(tier) DO UPDATE SET provider_id = excluded.provider_id, model = excluded.model, effort = excluded.effort,
+                        updated_utc = excluded.updated_utc
+                    """, ("$tier", tier), ("$provider", providerId), ("$model", model), ("$effort", effort), ("$now", Now()));
             }
 
             transaction.Commit();

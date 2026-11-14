@@ -10,7 +10,8 @@ namespace Praxis.Infrastructure.Agents;
 /// Codex (signed in with the owner's ChatGPT plan) as a session agent: read-only sandbox,
 /// ephemeral, no user config or rules, with the Praxis relay as its only MCP server.
 /// </summary>
-public sealed class CodexSessionBackend(string executable, string model, AgentRelayCommand relay, string socketParent) : ISessionAgentBackend
+public sealed class CodexSessionBackend(string executable, string model, AgentRelayCommand relay, string socketParent, string? effort = null)
+    : ISessionAgentBackend
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(15);
 
@@ -25,7 +26,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
         [
             "exec", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
             "-c", $"mcp_servers.praxis.command={JsonSerializer.Serialize(relay.Executable)}", "-c", $"mcp_servers.praxis.args={arguments}",
-            "-m", model, "-o", answer, "-"
+            .. (model == "default" ? Array.Empty<string>() : ["-m", model]), .. (effort is null ? Array.Empty<string>() : ["-c", $"model_reasoning_effort=\"{effort}\""]), "-o", answer, "-"
         ], systemPrompt + "\n\n" + CliTranscript.Render(transcript), workspace.Path, Deadline, cancellationToken);
         if (result.ExitCode != 0 || !File.Exists(answer))
         {

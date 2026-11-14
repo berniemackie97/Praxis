@@ -11,7 +11,8 @@ namespace Praxis.Infrastructure.Agents;
 /// only the Praxis MCP tools are allowed, reached through the relay and executed by Praxis. Runs
 /// in an empty private directory with no user settings, hooks, sessions or API-key variables.
 /// </summary>
-public sealed class ClaudeCodeSessionBackend(string executable, string model, AgentRelayCommand relay, string socketParent) : ISessionAgentBackend
+public sealed class ClaudeCodeSessionBackend(string executable, string model, AgentRelayCommand relay, string socketParent, string? effort = null)
+    : ISessionAgentBackend
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(15);
 
@@ -32,7 +33,9 @@ public sealed class ClaudeCodeSessionBackend(string executable, string model, Ag
         CliResult result = await CliProcess.RunAsync(executable,
         [
             "-p", "--output-format", "json", "--mcp-config", config, "--strict-mcp-config", "--tools", "", "--allowedTools", allowed,
-            "--permission-mode", "dontAsk", "--no-session-persistence", "--model", model, "--system-prompt", systemPrompt
+            "--permission-mode", "dontAsk", "--no-session-persistence",
+            .. (model == "default" ? Array.Empty<string>() : ["--model", model]),
+            .. (effort is null ? Array.Empty<string>() : ["--effort", effort]), "--system-prompt", systemPrompt
         ], CliTranscript.Render(transcript), workspace.Path, Deadline, cancellationToken);
         return Parse(result);
     }

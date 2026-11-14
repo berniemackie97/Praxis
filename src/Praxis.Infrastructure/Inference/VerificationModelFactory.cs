@@ -22,9 +22,9 @@ public sealed class VerificationModelFactory : IVerifierModelFactory
                     new ModelProfile(ModelProfile.LocalEnrichment, ModelProfile.OllamaProvider,
                         provider.Endpoint!, provider.Model!, 32_768, true).Normalized()),
                 VerificationProvider.Codex => new ModelConnection(
-                    new CodexChatModel(provider.Executable!, provider.Model)),
+                    new CodexChatModel(provider.Executable!, provider.Model, effort: provider.Effort)),
                 VerificationProvider.ClaudeCode => new ModelConnection(
-                    new ClaudeCodeChatModel(provider.Executable!, provider.Model ?? "sonnet")),
+                    new ClaudeCodeChatModel(provider.Executable!, provider.Model, effort: provider.Effort)),
                 _ => throw new NotSupportedException("The verification provider is not supported.")
             };
         }
@@ -38,20 +38,13 @@ public sealed class VerificationModelFactory : IVerifierModelFactory
     public IReadOnlyDictionary<string, string> DiscoverExecutables()
     {
         Dictionary<string, string> found = new(StringComparer.Ordinal);
-        IEnumerable<string> directories = (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Where(Path.IsPathFullyQualified);
+        // The worker's PATH is minimal when the app starts it; look where installers put the CLIs too.
         foreach ((string provider, string command) in new[] {
             (VerificationProvider.Codex, "codex"), (VerificationProvider.ClaudeCode, "claude") })
         {
-            foreach (string directory in directories)
+            if (ModelToolDetector.DefaultCandidates(command).FirstOrDefault(File.Exists) is { } candidate)
             {
-                string candidate = Path.Combine(directory, command);
-                if (File.Exists(candidate))
-                {
-                    found[provider] = candidate;
-                    break;
-                }
+                found[provider] = candidate;
             }
         }
 

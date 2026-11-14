@@ -272,7 +272,7 @@ public sealed class DesktopProtocolTests : IDisposable
         CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
             Path.Combine(root, "topic.md"), stream, 4_096, "topic");
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-        Assert.True(ProcessingDriver.Topics(catalog).ProcessNext());
+        await ProcessingDriver.SuggestHeadingTopicsAsync(catalog);
         DesktopProtocol protocol = TestDesktop.Protocol(catalog);
 
         using JsonDocument listing = await Send(protocol,
@@ -282,9 +282,10 @@ public sealed class DesktopProtocolTests : IDisposable
         string id = proposal.GetProperty("proposalId").GetString()!;
         Assert.Equal("Evidence Topic", proposal.GetProperty("value").GetString());
         Assert.Equal(captured.Sha256, proposal.GetProperty("sourceSha256").GetString());
-        Assert.Equal("markdown-heading-v1", proposal.GetProperty("producer").GetString());
+        Assert.Equal("semantic-extract-v2", proposal.GetProperty("producer").GetString());
+        Assert.False(proposal.GetProperty("confirmed").GetBoolean());
         Assert.Equal("generated", listing.RootElement.GetProperty("data")
-            .GetProperty("outcome").GetString());
+            .GetProperty("semanticOutcome").GetString());
 
         using JsonDocument approved = await Send(protocol,
             $$"""{"requestId":"approved","action":"topicReview","proposalId":"{{id}}","decision":"accepted"}""");

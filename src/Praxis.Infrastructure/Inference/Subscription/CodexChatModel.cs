@@ -16,15 +16,18 @@ public sealed class CodexChatModel : IChatModel
     public const string ProviderName = "codex";
     private readonly string executable;
     private readonly string? model;
+    private readonly string? effort;
     private readonly TimeSpan timeout;
 
     /// <param name="executable">Absolute path of the owner's Codex CLI.</param>
     /// <param name="model">A specific model, or null for the plan's default Codex model.</param>
     /// <param name="timeout">Deadline for one call.</param>
-    public CodexChatModel(string executable, string? model = null, TimeSpan? timeout = null)
+    /// <param name="effort">Reasoning effort from the model's catalog, or null for the model default.</param>
+    public CodexChatModel(string executable, string? model = null, TimeSpan? timeout = null, string? effort = null)
     {
         this.executable = SubscriptionCli.ValidateExecutable(executable);
         this.model = model is null ? null : SubscriptionCli.ValidateModel(model);
+        this.effort = SubscriptionCli.ValidateEffort(effort);
         this.timeout = timeout ?? SubscriptionCli.DefaultTimeout;
     }
 
@@ -59,6 +62,11 @@ public sealed class CodexChatModel : IChatModel
         if (model is not null)
         {
             arguments.AddRange(["-m", model]);
+        }
+
+        if (effort is not null)
+        {
+            arguments.AddRange(["-c", $"model_reasoning_effort=\"{effort}\""]);
         }
 
         arguments.Add("-");

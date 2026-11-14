@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Text;
+using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Processing;
 using Praxis.Domain.Text;
@@ -146,7 +147,7 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
         });
     }
 
-    public bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null)
+    public bool CommitResult(ProcessingLease lease, string? content, string? reasonCode, DocumentFacts? facts = null, IReadOnlyList<TimedSpan>? timings = null)
     {
         ProcessingJobKey.Validate(lease.ItemId, lease.Revision, lease.ProcessorKey);
         if ((content is null) == (reasonCode is null))
@@ -209,6 +210,10 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
             {
                 IntakeDocumentRows.UpsertRead(connection, transaction, lease.ItemId, lease.Revision, sourceDigest,
                     facts ?? new DocumentFacts("text", null, null, false), now);
+                if (timings is { Count: > 0 })
+                {
+                    WriteTimings(connection, transaction, lease, content.Length, timings);
+                }
             }
 
             using SqliteCommand finish = connection.CreateCommand("""
@@ -243,6 +248,65 @@ public sealed class SqliteTextDerivativeRepository : ITextDerivativeRepository
     /// Reopens one active, current source previously classified unsupported only because its
     /// extension had no decoder. Every other recorded outcome remains immutable.
     /// </summary>
+    /// <summary>Stores where each span of a transcript is spoken, validated against the text it indexes.</summary>
+    private static void WriteTimings(SqliteConnection connection, SqliteTransaction transaction, ProcessingLease lease, int textLength, IReadOnlyList<TimedSpan> timings)
+    {
+        if (timings.Count > TimedSpan.MaximumSpans)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timings));
+        }
+
+        connection.Run(transaction, "DELETE FROM text_timings WHERE item_id = $item AND revision = $revision AND processor_key = $processor",
+            ("$item", lease.ItemId.ToString("D")), ("$revision", lease.Revision), ("$processor", lease.ProcessorKey));
+        using SqliteCommand insert = connection.CreateCommand("""
+            INSERT INTO text_timings (item_id, revision, processor_key, ordinal, char_offset, char_length, start_ms, end_ms)
+            VALUES ($item, $revision, $processor, $ordinal, $offset, $length, $start, $end)
+            """);
+        insert.Transaction = transaction;
+        ProcessingJobParameters.Bind(insert, lease.ItemId, lease.Revision, lease.ProcessorKey);
+        SqliteParameter ordinal = insert.Parameters.Add("$ordinal", SqliteType.Integer);
+        SqliteParameter offset = insert.Parameters.Add("$offset", SqliteType.Integer);
+        SqliteParameter length = insert.Parameters.Add("$length", SqliteType.Integer);
+        SqliteParameter start = insert.Parameters.Add("$start", SqliteType.Integer);
+        SqliteParameter end = insert.Parameters.Add("$end", SqliteType.Integer);
+        long previousStart = -1;
+        for (int index = 0; index < timings.Count; index++)
+        {
+            TimedSpan span = timings[index];
+            if (span.Offset < 0 || span.Length < 1 || span.Offset + span.Length > textLength || span.StartMilliseconds < previousStart
+                || span.EndMilliseconds < span.StartMilliseconds)
+            {
+                throw new ArgumentException("A transcript timing does not fit its text.", nameof(timings));
+            }
+
+            previousStart = span.StartMilliseconds;
+            ordinal.Value = index;
+            offset.Value = span.Offset;
+            length.Value = span.Length;
+            start.Value = span.StartMilliseconds;
+            end.Value = span.EndMilliseconds;
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    public IReadOnlyList<TimedSpan> ReadTimings(Guid itemId, int revision) => database.ExecuteRead(connection =>
+    {
+        using SqliteCommand command = connection.CreateCommand("""
+            SELECT char_offset, char_length, start_ms, end_ms FROM text_timings
+            WHERE item_id = $item AND revision = $revision AND processor_key = $processor
+            ORDER BY ordinal
+            """);
+        ProcessingJobParameters.Bind(command, itemId, revision, ProcessorKeys.SourceText);
+        using SqliteDataReader reader = command.ExecuteReader();
+        List<TimedSpan> timings = [];
+        while (reader.Read())
+        {
+            timings.Add(new TimedSpan(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt64(2), reader.GetInt64(3)));
+        }
+
+        return (IReadOnlyList<TimedSpan>)timings;
+    });
+
     public bool RequeueNewlySupported(IReadOnlyList<string> extensions)
     {
         if (extensions.Count == 0)

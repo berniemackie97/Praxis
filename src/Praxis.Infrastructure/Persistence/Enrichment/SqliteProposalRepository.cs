@@ -207,12 +207,18 @@ public sealed class SqliteProposalRepository : IProposalRepository
         return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand("""
-                                                                 SELECT proposal_id, source_id, item_id, revision,
-                                                                        source_digest, processor_key, kind, entity_type, value, evidence,
-                                                                        evidence_offset, status, correction, relation_subject, relation_object, flags
-                                                                 FROM eligible_enrichment_proposals
-                                                                 WHERE source_id = $source
-                                                                 ORDER BY evidence_offset, proposal_id LIMIT $limit
+                                                                 SELECT p.proposal_id, p.source_id, p.item_id, p.revision,
+                                                                        p.source_digest, p.processor_key, p.kind, p.entity_type, p.value, p.evidence,
+                                                                        p.evidence_offset, p.status, p.correction, p.relation_subject, p.relation_object, p.flags,
+                                                                        CASE WHEN p.status IN ('accepted', 'corrected') OR COALESCE(v.verdict, '') = 'supported'
+                                                                            OR (p.processor_key = 'intake-understand-v1' AND EXISTS (
+                                                                                SELECT 1 FROM intake_documents d WHERE d.item_id = p.item_id AND d.revision = p.revision
+                                                                                  AND d.tier IN ('strong', 'strongest', 'reused'))) THEN 1 ELSE 0 END
+                                                                 FROM eligible_enrichment_proposals p
+                                                                 LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
+                                                                 WHERE p.source_id = $source AND p.status <> 'rejected'
+                                                                   AND p.processor_key <> 'markdown-heading-v1'
+                                                                 ORDER BY 17 DESC, p.evidence_offset, p.proposal_id LIMIT $limit
                                                                  """);
             query.Parameters.AddWithValue("$source", sourceId.ToString("D"));
             query.Parameters.AddWithValue("$limit", limit);
@@ -229,7 +235,7 @@ public sealed class SqliteProposalRepository : IProposalRepository
                     reader.IsDBNull(12) ? null : reader.GetString(12),
                     reader.IsDBNull(13) ? null : reader.GetString(13),
                     reader.IsDBNull(14) ? null : reader.GetString(14),
-                    reader.IsDBNull(15) ? null : reader.GetString(15)));
+                    reader.IsDBNull(15) ? null : reader.GetString(15), reader.GetInt64(16) == 1));
             }
 
             return result;
@@ -334,7 +340,7 @@ public sealed class SqliteProposalRepository : IProposalRepository
     /// A producer's state for the source's current revision: unavailable, pending,
     /// unsupported, failed, or the recorded run outcome (generated / abstained).
     /// </summary>
-    public string Outcome(Guid sourceId, string producer = ProcessorKeys.MarkdownHeadings)
+    public string Outcome(Guid sourceId, string producer = ProcessorKeys.SemanticExtraction)
     {
         ProcessingJobKey.ValidateProcessor(producer);
         if (sourceId == Guid.Empty)

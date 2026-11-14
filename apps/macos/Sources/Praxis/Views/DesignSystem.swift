@@ -366,14 +366,46 @@ enum SourceSymbol {
 }
 
 /// Opens the app's Settings window at a tab on macOS 13 and later.
+///
+/// macOS 14 ignores the `showSettingsWindow:` action for SwiftUI `Settings` scenes and only honors
+/// the `openSettings` environment action, so the main window registers that action here through
+/// `settingsOpenerBridge()`; macOS 13 keeps the responder-chain action.
 enum SettingsOpener {
+    @MainActor static var handler: (() -> Void)?
+
     @MainActor
     static func open(_ tab: SettingsTab = .general) {
         UserDefaults.standard.set(tab.rawValue, forKey: SettingsTab.storageKey)
-        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+        NSApp.activate(ignoringOtherApps: true)
+        if let handler {
+            handler()
+        } else if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
             NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
-        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+@available(macOS 14, *)
+private struct SettingsOpenerBridge: ViewModifier {
+    @Environment(\.openSettings) private var openSettings
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            let action = openSettings
+            SettingsOpener.handler = { action() }
+        }
+    }
+}
+
+extension View {
+    /// Lets `SettingsOpener` open the Settings scene on macOS 14 and later.
+    @ViewBuilder
+    func settingsOpenerBridge() -> some View {
+        if #available(macOS 14, *) {
+            modifier(SettingsOpenerBridge())
+        } else {
+            self
+        }
     }
 }
 

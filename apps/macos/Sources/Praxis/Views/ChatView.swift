@@ -105,7 +105,7 @@ private struct Transcript: View {
                     if model.running {
                         Thinking(model: model).id("thinking")
                     } else if let reply = model.latestReply, !model.transcript.isEmpty {
-                        ReplyDetails(reply: reply, openAgentSettings: openAgentSettings)
+                        ReplyDetails(reply: reply, model: model, openAgentSettings: openAgentSettings)
                     }
                     FeedbackLine(error: model.error, notice: model.notice)
                 }
@@ -224,14 +224,25 @@ private struct Thinking: View {
 
 private struct ReplyDetails: View {
     let reply: AgentReply
+    @ObservedObject var model: ChatWorkbenchModel
     let openAgentSettings: () -> Void
+
+    /// Cited clips, played inline; the first few are shown as players, all stay listed as chips.
+    private var clips: [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
+        Array(reply.citations.enumerated().compactMap { index, citation in
+            MediaTimeRange(locator: citation.locator).map { (index + 1, citation, $0) }
+        }.prefix(3))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
+            ForEach(clips, id: \.citation.id) { clip in
+                MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
+            }
             if !reply.citations.isEmpty {
                 FlowLayout(spacing: Spacing.xs) {
                     ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, citation in
-                        Chip(text: "\(index + 1)  \(citation.sourceName)", systemImage: SourceSymbol.of(citation.sourceName))
+                        Chip(text: chipText(index, citation), systemImage: SourceSymbol.of(citation.sourceName))
                             .help("[\(index + 1)] \(citation.sourceName) · \(citation.locator)")
                     }
                 }
@@ -249,6 +260,11 @@ private struct ReplyDetails: View {
             }
         }
         .padding(.leading, 34)
+    }
+
+    private func chipText(_ index: Int, _ citation: AgentCitation) -> String {
+        let range = MediaTimeRange(locator: citation.locator).map { " · \($0.label)" } ?? ""
+        return "\(index + 1)  \(citation.sourceName)\(range)"
     }
 }
 

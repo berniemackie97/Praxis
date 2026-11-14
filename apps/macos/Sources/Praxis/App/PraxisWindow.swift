@@ -25,6 +25,7 @@ struct PraxisWindow: View {
             }
         }
         .focusedSceneValue(\.workspace, $section)
+        .modifier(SaveLinkPresenter(links: model.links))
         .onAppear {
             // The Xcode app-hosted test target must never auto-open an owner's saved catalog.
             guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
@@ -66,7 +67,7 @@ struct WorkbenchSplitView: View {
     @ViewBuilder
     private var workspace: some View {
         switch section {
-        case .chat: ChatView(model: model.chat) { SettingsOpener.open(.agents) }
+        case .chat: ChatView(model: model.chat) { SettingsOpener.open(.models) }
         case .approvals: ApprovalsView(model: model.approvals)
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()

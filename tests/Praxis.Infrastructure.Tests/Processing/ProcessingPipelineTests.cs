@@ -33,7 +33,7 @@ public sealed class ProcessingPipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task BackgroundPipelineExtractsAndProposesWithoutAnIntakeScan()
+    public async Task BackgroundPipelineExtractsAndTriagesWithoutAnIntakeScan()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         ProcessingPipeline pipeline = CatalogProcessing.CreatePipeline(catalog, TimeSpan.FromMilliseconds(50));
@@ -42,9 +42,11 @@ public sealed class ProcessingPipelineTests : IDisposable
 
         CapturedOriginal captured = await Capture(catalog, "plan.md", "# Architecture\nBody", "plan");
         pipeline.Wake();
-        await WaitForAsync(() => catalog.Proposals.Outcome(captured.SourceId) == "generated");
+        // Without models, intake still reads, indexes and triages from format hints; headings are
+        // document structure, not suggestions.
+        await WaitForAsync(() => catalog.Understanding.ReadCurrent(captured.SourceId)?.Status is not (null or "read"));
 
-        Assert.Equal("Architecture", Assert.Single(catalog.Proposals.List(captured.SourceId)).Value);
+        Assert.Empty(catalog.Proposals.List(captured.SourceId));
         Assert.Single(catalog.Search.Query("Architecture"));
         await cancellation.CancelAsync();
         await running;

@@ -7,10 +7,12 @@ using Praxis.Infrastructure.Persistence.Finance;
 using Praxis.Infrastructure.Persistence.Intake;
 using Praxis.Infrastructure.Persistence.Knowledge;
 using Praxis.Infrastructure.Persistence.Library;
+using Praxis.Infrastructure.Persistence.Links;
 using Praxis.Infrastructure.Persistence.Models;
 using Praxis.Infrastructure.Persistence.Originals;
 using Praxis.Infrastructure.Persistence.Policy;
 using Praxis.Infrastructure.Persistence.Processing;
+using Praxis.Infrastructure.Persistence.Projects;
 using Praxis.Infrastructure.Persistence.Recovery;
 using Praxis.Infrastructure.Persistence.Search;
 using Praxis.Infrastructure.Persistence.Sources;
@@ -53,6 +55,10 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteAgentRepository Agents { get; }
     public SqliteUnderstandingRepository Understanding { get; }
 
+    public SqliteLinkRepository Links { get; }
+
+    public SqliteProjectRepository Projects { get; }
+
     private SqliteCatalog(string dataDirectory, FileStream lockFile, SqliteConnection connection, SqliteConnection? reader, TimeProvider clock)
     {
         DataDirectory = dataDirectory;
@@ -80,6 +86,8 @@ public sealed class SqliteCatalog : IDisposable
         Policy = new SqlitePolicyRepository(database, clock);
         Agents = new SqliteAgentRepository(database, clock);
         Understanding = new SqliteUnderstandingRepository(database, clock);
+        Links = new SqliteLinkRepository(database, clock);
+        Projects = new SqliteProjectRepository(database);
     }
 
     public static SqliteCatalog Open(string dataDirectory, TimeProvider? clock = null) =>

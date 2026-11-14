@@ -25,6 +25,16 @@ public interface IOriginalStore
     /// </summary>
     Task<byte[]> ReadVerifiedPrefixAsync(OriginalObject original, int prefixBytes, long maxBytes, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Verifies an original and returns a read-only path to it that ends in
+    /// <paramref name="extension"/>, for on-device tools and players that identify a container by
+    /// its name. The path lives in a private temporary folder that is pruned after a day.
+    /// </summary>
+    Task<string> MaterializeAsync(OriginalObject original, string extension, CancellationToken cancellationToken);
+
+    /// <summary>Removes a path returned by <see cref="MaterializeAsync"/>; the original is untouched.</summary>
+    void ReleaseMaterialized(string path);
+
     /// <summary>Verifies the latest stored revision of an item against its recorded digest.</summary>
     Task VerifyAsync(Guid itemId, CancellationToken cancellationToken);
 

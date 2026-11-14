@@ -12,9 +12,6 @@ internal static class TestHandlers
         new(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals, catalog.Knowledge, catalog.Processing,
             new DelegatingChatModelConnector(connect));
 
-    internal static HeadingProposalHandler HeadingProposals(SqliteCatalog catalog) =>
-        new(catalog.Text, catalog.Proposals, catalog.Processing);
-
     private sealed class DelegatingChatModelConnector(Func<ModelProfile, ModelConnection> connect) : IChatModelConnector
     {
         public ModelConnection Connect(ModelProfile profile) => connect(profile);

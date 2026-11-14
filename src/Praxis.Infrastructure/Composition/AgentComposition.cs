@@ -4,7 +4,10 @@ using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Finance;
 using Praxis.Application.Inference;
+using Praxis.Application.Links;
+using Praxis.Application.Media;
 using Praxis.Application.Policy;
+using Praxis.Application.Search;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Documents;
 using Praxis.Infrastructure.Persistence;
@@ -15,20 +18,25 @@ namespace Praxis.Infrastructure.Composition;
 public static class AgentComposition
 {
     public static IReadOnlyList<IAgentTool> Tools(
-        SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock)
+        SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock,
+        ISavedLinkWriter? links = null)
     {
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
-        IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger)];
+        IDataset[] datasets = [new TransactionsDataset(ledger), new AccountsDataset(ledger), new FinancialDocumentsDataset(ledger), new RecordsDataset(catalog.Understanding)];
         TieredModels tiers = new(catalog.Policy, catalog.Verification, models, new DisclosureGate(catalog.Policy, clock), clock);
         PdfPigTextReader pdf = new();
+        MediaMoments moments = new(catalog.Text, new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals, catalog.Collections));
+        KnowledgeRetriever retriever = new(catalog.Search, catalog.Embeddings, catalog.Models, embeddings);
         return
         [
             new KnowledgeSearchTool(catalog.Search, catalog.Embeddings, catalog.Models, embeddings, catalog.Knowledge, catalog.Policy),
-            new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf),
+            new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf, moments),
+            new MediaFindTool(retriever, moments, catalog.Sources),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
-            new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger),
+            new KnowledgeProjectTool(catalog.Projects),
+            new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),
             new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
             new DataDescribeTool(datasets),
             new DataQueryTool(datasets),
@@ -38,6 +46,7 @@ public static class AgentComposition
             new MemoryRecallTool(catalog.Agents),
             new MemoryRememberTool(catalog.Agents),
             new IntakeStatusTool(catalog.Processing, catalog.Policy, ledger),
+            .. (links is null ? Array.Empty<IAgentTool>() : [new KnowledgeSaveLinkTool(links, catalog.Agents, catalog.Links)]),
             new IntakeReprocessTool(catalog.Processing),
             new SettingsReadTool(policy, catalog.Policy),
             new SettingsProposeTool(policy, clock),

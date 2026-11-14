@@ -39,6 +39,9 @@ internal static class SubscriptionCli
         return model;
     }
 
+    internal static string? ValidateEffort(string? effort) =>
+        Praxis.Domain.Models.ModelEffort.IsValid(effort) ? effort : throw new ArgumentException("The reasoning effort is invalid.", nameof(effort));
+
     internal static string System(ChatRequest request) => Join(request, ChatRole.System);
 
     internal static string User(ChatRequest request) => Join(request, ChatRole.User);

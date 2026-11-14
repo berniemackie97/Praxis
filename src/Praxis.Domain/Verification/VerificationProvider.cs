@@ -2,16 +2,25 @@ using Praxis.Domain.Models;
 
 namespace Praxis.Domain.Verification;
 
-/// <summary>Owner-configured verifier. CLI executables and loopback model endpoints are distinct.</summary>
+/// <summary>
+/// Owner-configured model provider for intake and verification. CLI executables and loopback model
+/// endpoints are distinct. A daily limit of <see cref="Unlimited"/> means no cap.
+/// </summary>
 public sealed record VerificationProvider(
     string ProviderId, string? Executable, string? Model, int CostWeight, int DailyLimit, bool Enabled,
-    string? Endpoint = null, int Revision = 1)
+    string? Endpoint = null, int Revision = 1, string? Effort = null)
 {
+    public const int Unlimited = 0;
+    public const int MaximumDailyLimit = 100_000;
+
     public const string Ollama = "ollama";
     public const string Codex = "codex";
     public const string ClaudeCode = "claude-code";
 
     public bool IsLocal => ProviderId == Ollama;
+
+    /// <summary>True while <paramref name="startedToday"/> attempts leave room under the daily limit.</summary>
+    public bool WithinLimit(int startedToday) => DailyLimit == Unlimited || startedToday < DailyLimit;
 
     public void EnsureValid()
     {
@@ -20,9 +29,14 @@ public sealed record VerificationProvider(
             throw new ArgumentException("The verification provider is not supported.", nameof(ProviderId));
         }
 
-        if (Revision < 1 || CostWeight is < 0 or > 1000 || DailyLimit is < 1 or > 500)
+        if (Revision < 1 || CostWeight is < 0 or > 1000 || DailyLimit is < Unlimited or > MaximumDailyLimit)
         {
-            throw new ArgumentOutOfRangeException(nameof(CostWeight), "Weights are 0–1000 and daily limits 1–500.");
+            throw new ArgumentOutOfRangeException(nameof(CostWeight), "Weights are 0–1000 and daily limits 0 (unlimited) to 100,000.");
+        }
+
+        if (!ModelEffort.IsValid(Effort))
+        {
+            throw new ArgumentException("The reasoning effort is invalid.", nameof(Effort));
         }
 
         if (IsLocal)

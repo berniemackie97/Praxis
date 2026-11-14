@@ -25,8 +25,8 @@ public sealed class AgentBackendFactory(HttpClient http, ISecretStore secrets, A
         profile.Validate();
         return profile.Kind switch
         {
-            AgentBackendKinds.ClaudeCode => new ClaudeCodeSessionBackend(profile.Executable!, profile.Model, relay, socketParent),
-            AgentBackendKinds.Codex => new CodexSessionBackend(profile.Executable!, profile.Model, relay, socketParent),
+            AgentBackendKinds.ClaudeCode => new ClaudeCodeSessionBackend(profile.Executable!, profile.Model, relay, socketParent, profile.Effort),
+            AgentBackendKinds.Codex => new CodexSessionBackend(profile.Executable!, profile.Model, relay, socketParent, profile.Effort),
             _ => null
         };
     }

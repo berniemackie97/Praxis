@@ -30,7 +30,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
     public IReadOnlyList<VerificationProvider> ListProviders() => database.ExecuteRead(connection =>
     {
         using var query = connection.CreateCommand("""
-            SELECT provider_id, executable, model, cost_weight, daily_limit, enabled, endpoint, config_revision
+            SELECT provider_id, executable, model, cost_weight, daily_limit, enabled, endpoint, config_revision, effort
             FROM verification_providers ORDER BY cost_weight, provider_id
             """);
         using var reader = query.ExecuteReader();
@@ -40,7 +40,8 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
             providers.Add(new VerificationProvider(reader.GetString(0),
                 reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4),
-                reader.GetInt64(5) == 1, reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7)));
+                reader.GetInt64(5) == 1, reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
 
         return providers;
@@ -56,17 +57,18 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
             using var transaction = connection.BeginTransaction();
             connection.Run(transaction, """
                 INSERT INTO verification_providers
-                    (provider_id, executable, endpoint, model, cost_weight, daily_limit, enabled, updated_utc)
-                VALUES ($id, $executable, $endpoint, $model, $weight, $limit, $enabled, $now)
+                    (provider_id, executable, endpoint, model, cost_weight, daily_limit, enabled, updated_utc, effort)
+                VALUES ($id, $executable, $endpoint, $model, $weight, $limit, $enabled, $now, $effort)
                 ON CONFLICT(provider_id) DO UPDATE SET
                     config_revision = verification_providers.config_revision + CASE WHEN
                         verification_providers.executable IS NOT excluded.executable OR
                         verification_providers.endpoint IS NOT excluded.endpoint OR
-                        verification_providers.model IS NOT excluded.model THEN 1 ELSE 0 END,
+                        verification_providers.model IS NOT excluded.model OR
+                        verification_providers.effort IS NOT excluded.effort THEN 1 ELSE 0 END,
                     executable = excluded.executable, endpoint = excluded.endpoint, model = excluded.model,
                     cost_weight = excluded.cost_weight, daily_limit = excluded.daily_limit,
-                    enabled = excluded.enabled, updated_utc = excluded.updated_utc
-                """, ("$id", provider.ProviderId), ("$executable", provider.Executable),
+                    enabled = excluded.enabled, updated_utc = excluded.updated_utc, effort = excluded.effort
+                """, ("$id", provider.ProviderId), ("$effort", provider.Effort), ("$executable", provider.Executable),
                 ("$endpoint", provider.Endpoint), ("$model", provider.Model),
                 ("$weight", provider.CostWeight), ("$limit", provider.DailyLimit),
                 ("$enabled", provider.Enabled ? 1 : 0), ("$now", now));
@@ -109,7 +111,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
         {
             using var transaction = connection.BeginTransaction();
             using var query = connection.CreateCommand("""
-                SELECT provider_id, executable, model, cost_weight, daily_limit, endpoint, config_revision
+                SELECT provider_id, executable, model, cost_weight, daily_limit, endpoint, config_revision, effort
                 FROM verification_providers WHERE enabled = 1 ORDER BY cost_weight, provider_id
                 """);
             query.Transaction = transaction;
@@ -121,7 +123,8 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                     providers.Add(new VerificationProvider(reader.GetString(0),
                         reader.IsDBNull(1) ? null : reader.GetString(1),
                         reader.IsDBNull(2) ? null : reader.GetString(2), reader.GetInt32(3), reader.GetInt32(4),
-                        true, reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetInt32(6)));
+                        true, reader.IsDBNull(5) ? null : reader.GetString(5), reader.GetInt32(6),
+                        reader.IsDBNull(7) ? null : reader.GetString(7)));
                 }
             }
 
@@ -348,7 +351,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
         using var transaction = connection.BeginTransaction();
         using var query = connection.CreateCommand("""
             SELECT r.request_id, r.payload, p.provider_id, p.executable, p.model, p.cost_weight,
-                   p.daily_limit, p.endpoint, p.config_revision
+                   p.daily_limit, p.endpoint, p.config_revision, p.effort
             FROM verification_requests r
             JOIN verification_providers p ON p.provider_id = r.provider_id AND p.enabled = 1
                 AND p.config_revision = r.approved_provider_revision
@@ -367,7 +370,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                     reader.IsDBNull(3) ? null : reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetInt32(5),
                     reader.GetInt32(6), true, reader.IsDBNull(7) ? null : reader.GetString(7),
-                    reader.GetInt32(8))));
+                    reader.GetInt32(8), reader.IsDBNull(9) ? null : reader.GetString(9))));
             }
         }
 
@@ -388,8 +391,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                 continue;
             }
 
-            if (StartedToday(connection, transaction, candidate.Provider.ProviderId, now) <
-                candidate.Provider.DailyLimit)
+            if (candidate.Provider.WithinLimit(StartedToday(connection, transaction, candidate.Provider.ProviderId, now)))
             {
                 next = candidate;
                 break;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the praxis-vision OCR helper into the app's Resources for every target architecture.
+# Builds the praxis-vision OCR and transcription helper into the app's Resources for every target architecture.
 set -euo pipefail
 
 : "${SRCROOT:?The build must run from the Praxis Xcode app target.}"
@@ -20,7 +20,7 @@ fi
 slices=()
 for arch in ${ARCHS:-$(uname -m)}; do
   xcrun --sdk macosx swiftc -O -whole-module-optimization -target "$arch-apple-macos$deployment" \
-    -framework Vision -framework PDFKit -o "$work/praxis-vision-$arch" "$source"
+    -framework Vision -framework PDFKit -framework Speech -framework AVFoundation -o "$work/praxis-vision-$arch" "$source"
   slices+=("$work/praxis-vision-$arch")
 done
 xcrun lipo -create "${slices[@]}" -output "$output"

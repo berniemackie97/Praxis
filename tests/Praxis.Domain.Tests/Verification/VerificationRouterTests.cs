@@ -34,8 +34,8 @@ public sealed class VerificationRouterTests
     [Theory]
     [InlineData("other", 10, 5)]
     [InlineData(VerificationProvider.Codex, -1, 5)]
-    [InlineData(VerificationProvider.Codex, 10, 0)]
-    [InlineData(VerificationProvider.Codex, 10, 501)]
+    [InlineData(VerificationProvider.Codex, 10, -1)]
+    [InlineData(VerificationProvider.Codex, 10, 100_001)]
     public void RejectsUnsupportedProvidersAndOutOfRangeLimits(string provider, int weight, int dailyLimit) =>
         Assert.ThrowsAny<ArgumentException>(() =>
             new VerificationProvider(provider, "/bin/x", null, weight, dailyLimit, true).EnsureValid());

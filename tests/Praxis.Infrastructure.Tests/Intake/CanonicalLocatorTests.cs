@@ -94,9 +94,11 @@ public sealed class CanonicalLocatorTests : IDisposable
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         CapturedOriginal alias = await Capture(catalog, Path.Combine(aliasInbox, "arch.md"), text);
         CapturedOriginal canonical = await Capture(catalog, file, text);
-        while (await ProcessingDriver.Text(catalog).ProcessNextAsync() | await ProcessingDriver.Topics(catalog).ProcessNextAsync())
+        while (await ProcessingDriver.Text(catalog).ProcessNextAsync())
         {
         }
+
+        await ProcessingDriver.SuggestHeadingTopicsAsync(catalog);
 
         Guid collection = catalog.Collections.Create("Design").CollectionId;
         Assert.True(catalog.Collections.AddSource(collection, alias.SourceId));

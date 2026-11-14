@@ -26,9 +26,9 @@ struct KnowledgeView: View {
             }
             .overlay {
                 if model.entities.isEmpty {
-                    EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No entities yet",
+                    EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No knowledge yet",
                                message: model.search.isEmpty && model.typeFilter.isEmpty
-                                   ? "People, projects and ideas appear once the local model has read your captured text."
+                                   ? "People, organizations, projects and ideas appear here once intake has understood and verified your files. Set up a Reading model in Settings → Models for the best results."
                                    : "Nothing matches this filter.")
                 }
             }
@@ -56,6 +56,11 @@ struct KnowledgeView: View {
                                    FilterOption(value: $0, title: KnowledgeVocabulary.label($0).capitalized, systemImage: EntitySymbol.of($0))
                                },
                            selection: Binding(get: { model.typeFilter }, set: { model.setTypeFilter($0) }))
+                Toggle(isOn: Binding(get: { model.includeSuggestions }, set: { model.setIncludeSuggestions($0) })) {
+                    Label("Show Unconfirmed", systemImage: "questionmark.circle")
+                }
+                .toggleStyle(.button)
+                .help("Also show names only the local model has guessed")
                 Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }

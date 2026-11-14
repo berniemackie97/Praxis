@@ -54,9 +54,15 @@ public sealed class TieredModels(
 
     private VerificationProvider? Resolve(string tier)
     {
-        string? providerId = policy.ReadTiers().FirstOrDefault(assignment => assignment.Tier == tier)?.ProviderId;
-        VerificationProvider? provider = providerId is null ? null : providers.ListProviders().FirstOrDefault(candidate => candidate.ProviderId == providerId);
-        return provider is { Enabled: true } && policy.InvocationsToday(provider.ProviderId, clock.GetUtcNow()) < provider.DailyLimit ? provider : null;
+        TierAssignment? assignment = policy.ReadTiers().FirstOrDefault(candidate => candidate.Tier == tier);
+        VerificationProvider? provider = assignment is null ? null : providers.ListProviders().FirstOrDefault(candidate => candidate.ProviderId == assignment.ProviderId);
+        if (provider is not { Enabled: true } || !provider.WithinLimit(policy.InvocationsToday(provider.ProviderId, clock.GetUtcNow())))
+        {
+            return null;
+        }
+
+        // A tier may run the provider with its own model and effort (one plan, two tiers).
+        return provider with { Model = assignment!.Model ?? provider.Model, Effort = assignment.Effort ?? provider.Effort };
     }
 
     private bool ApprovedOnce(TieredRequest request, VerificationProvider provider) =>

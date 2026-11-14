@@ -35,9 +35,11 @@ final class WorkbenchModel: ObservableObject {
     let knowledge: KnowledgeWorkbenchModel
     let verification: VerificationWorkbenchModel
     let intelligence: IntelligenceSettingsModel
+    let modelSetup: ModelSetupModel
     let chat: ChatWorkbenchModel
     let approvals: ApprovalsWorkbenchModel
     let privacy: PrivacySettingsModel
+    let links: LinkSettingsModel
     private let worker: WorkerSession
     private let channel: WorkerChannel
     private var watchedInboxes: [URL] = []
@@ -53,9 +55,11 @@ final class WorkbenchModel: ObservableObject {
         knowledge = KnowledgeWorkbenchModel(channel: channel)
         verification = VerificationWorkbenchModel(channel: channel)
         intelligence = IntelligenceSettingsModel(channel: channel)
+        modelSetup = ModelSetupModel(channel: channel)
         chat = ChatWorkbenchModel(channel: channel)
         approvals = ApprovalsWorkbenchModel(channel: channel)
         privacy = PrivacySettingsModel(channel: channel)
+        links = LinkSettingsModel(channel: channel)
     }
 
     func start(dataRoot: String, inbox: String, additionalInboxes: String,
@@ -163,6 +167,18 @@ final class WorkbenchModel: ObservableObject {
                                       "decision": decision]
         if let correction { payload["correction"] = correction }
         send(.topicReview, payload)
+    }
+
+    /// Accepts or dismisses every unconfirmed suggestion for the selected source at once.
+    func reviewAllSuggestions(_ decision: String) {
+        guard let item = selected else { return }
+        channel.send("topicReviewAll", ["sourceId": item.sourceId, "decision": decision], as: ReviewedCount.self,
+                     failed: { _ in }) { [weak self] data in
+            self?.message = decision == "accepted"
+                ? "\(data.reviewed) suggestions added to your knowledge."
+                : "\(data.reviewed) suggestions dismissed."
+            self?.refreshTopics(for: item)
+        }
     }
 
     func addMembership() {

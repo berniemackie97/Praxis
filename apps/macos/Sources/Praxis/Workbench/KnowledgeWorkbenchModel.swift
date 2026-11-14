@@ -9,6 +9,8 @@ final class KnowledgeWorkbenchModel: ObservableObject {
 
     @Published var search = ""
     @Published var typeFilter = ""
+    /// Also list names only the local model has guessed (unconfirmed).
+    @Published var includeSuggestions = false
     @Published private(set) var entities: [EntitySummary] = []
     @Published private(set) var selected: EntityDetail?
     /// The latest failure or confirmation; setting one clears the other.
@@ -24,10 +26,17 @@ final class KnowledgeWorkbenchModel: ObservableObject {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
         if !term.isEmpty { fields["search"] = String(term.prefix(120)) }
         if !typeFilter.isEmpty { fields["entityType"] = typeFilter }
+        if includeSuggestions { fields["includeSuggestions"] = true }
         channel.send("entities", fields, as: EntityListData.self, scope: "list", failed: report) { [weak self] data in
             self?.entities = data.entities
         }
         if let selected { load(selected.summary.entityId) }
+    }
+
+    func setIncludeSuggestions(_ include: Bool) {
+        guard includeSuggestions != include else { return }
+        includeSuggestions = include
+        refresh()
     }
 
     func setTypeFilter(_ filter: String) {

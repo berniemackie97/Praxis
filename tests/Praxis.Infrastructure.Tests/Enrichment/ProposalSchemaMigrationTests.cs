@@ -1,5 +1,4 @@
 using Microsoft.Data.Sqlite;
-using Praxis.Domain.Enrichment;
 using Praxis.Domain.Processing;
 using Praxis.Infrastructure.Persistence;
 using Praxis.Infrastructure.Tests.Support;
@@ -40,12 +39,20 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
 
-        EnrichmentProposal migrated = Assert.Single(catalog.Proposals.List(source));
-        Assert.Equal(proposal, migrated.ProposalId);
-        Assert.Equal("topic", migrated.Kind);
-        Assert.Null(migrated.EntityType);
-        Assert.Equal("corrected", migrated.Status);
-        Assert.Equal("Architecture overview", migrated.Correction);
+        // Heading topics are document structure now and no longer listed, but the migrated
+        // proposal and its review survive intact.
+        Assert.Empty(catalog.Proposals.List(source));
+        using (SqliteConnection check = Connect())
+        {
+            using SqliteCommand command = check.CreateCommand();
+            command.CommandText = "SELECT kind, entity_type IS NULL, status, correction FROM eligible_enrichment_proposals WHERE proposal_id = $id";
+            command.Parameters.AddWithValue("$id", proposal.ToString("D"));
+            using SqliteDataReader reader = command.ExecuteReader();
+            Assert.True(reader.Read());
+            Assert.Equal(("topic", true, "corrected", "Architecture overview"),
+                (reader.GetString(0), reader.GetInt64(1) == 1, reader.GetString(2), reader.GetString(3)));
+        }
+
         Assert.Equal("queued", catalog.Processing.List().Single(job =>
             job.ProcessorKey == ProcessorKeys.SemanticExtraction).State);
 
@@ -94,7 +101,7 @@ public sealed class ProposalSchemaMigrationTests : IDisposable
 
         using SqliteCatalog replaced = SqliteCatalog.Open(root);
         Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == "semantic-extract-v1");
-        Assert.Contains(replaced.Proposals.List(source), proposal => proposal.Producer == ProcessorKeys.MarkdownHeadings);
+        Assert.DoesNotContain(replaced.Proposals.List(source), proposal => proposal.Producer == ProcessorKeys.MarkdownHeadings);
     }
 
     [Fact]

@@ -40,6 +40,14 @@ public sealed class UnderstandHandler(
             return;
         }
 
+        // Code is understood per project from a repository map, never one model call per file; the
+        // file stays searchable and openable. See ProjectUnderstander.
+        if (source.Facts.Format == DocumentFormats.Code)
+        {
+            repository.CloseUnderstanding(lease, input.Digest, UnderstandingStatuses.IndexOnly, "project_level", 0, 0);
+            return;
+        }
+
         DocumentProfile profile = source.Profile ?? FormatHints.Unknown(policy.ReadCategory(source.SourceId)?.Category);
         ReadDocument? structure = StructuredFormats.Contains(source.Facts.Format) ? await ReadStructureAsync(source, cancellationToken) : null;
         DocumentProfile knowledgeProfile = profile with { RecordKinds = profile.RecordKinds.Where(kind => kind != RecordKinds.Transaction).ToArray() };

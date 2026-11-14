@@ -21,7 +21,8 @@ public sealed class AgentActions(IAgentConversationRepository repository, AgentR
             repository.SaveBackend(new AgentBackendProfile(fields.RequireString("backendId", 64), fields.RequireString("kind", 32),
                 fields.OptionalText("endpoint", 512, "The endpoint field is invalid."), fields.RequireString("model", 200),
                 fields.OptionalText("keyAccount", 128, "The keyAccount field is invalid."),
-                fields.OptionalText("executable", 1024, "The executable field is invalid."), fields.RequireBoolean("enabled")));
+                fields.OptionalText("executable", 1024, "The executable field is invalid."), fields.RequireBoolean("enabled"),
+                fields.OptionalText("effort", 16, "The effort field is invalid.")));
             return new ChangedResponse(true);
         }),
         // Keys arrive from the owner's Keychain through the private pipe and stay in worker memory only.

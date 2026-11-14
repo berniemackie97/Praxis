@@ -40,6 +40,15 @@ final class ChatWorkbenchModel: ObservableObject {
     /// The transcript as the owner reads it: their messages and the agent's answers; tool traffic is summarized.
     var transcript: [ChatLine] { ChatLine.lines(messages) }
 
+    /// Asks the worker how to play a cited media source; the reply arrives on the main actor.
+    func playback(for sourceId: String, completion: @escaping (Result<MediaPlayback, MediaPlaybackError>) -> Void) {
+        let sent = channel.send("mediaPlayback", ["sourceId": sourceId], as: MediaPlaybackData.self,
+                                failed: { message in completion(.failure(MediaPlaybackError(message: message))) }) { data in
+            completion(.success(data.playback))
+        }
+        if !sent { completion(.failure(MediaPlaybackError(message: "The worker is not running."))) }
+    }
+
     func refresh() {
         channel.send("agentBackends", as: AgentBackendsData.self, failed: report) { [weak self] data in
             guard let self else { return }

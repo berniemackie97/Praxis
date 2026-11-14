@@ -25,6 +25,9 @@ struct PrivacySettingsView: View {
                     }
                 }
             }
+            if model.policy != nil {
+                LinkSettingsSection()
+            }
             if let policy = model.policy {
                 Section {
                     Picker("Remote processing", selection: Binding(get: { policy.mode }, set: { model.setMode($0) })) {
@@ -147,100 +150,13 @@ private struct RuleEditor: View {
 }
 
 /// Intake model tiers, chat models and the record of recent model calls.
-struct AgentSettingsView: View {
-    @ObservedObject var model: PrivacySettingsModel
-    @ObservedObject var intelligence: IntelligenceSettingsModel
-    @State private var editing: BackendDraft?
-
-    var body: some View {
-        Form {
-            if let error = model.error ?? model.notice {
-                Banner(text: error, tone: model.error == nil ? .accent : .warning,
-                       systemImage: model.error == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            }
-            Section {
-                if model.backends.isEmpty {
-                    Text("No chat models yet. Add a local model, an API, or your Claude Code or Codex plan.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(model.backends) { backend in
-                    HStack(spacing: Spacing.m) {
-                        Image(systemName: backend.isLocal ? "desktopcomputer" : backend.kind == "claude_code" || backend.kind == "codex" ? "terminal" : "cloud")
-                            .foregroundStyle(.secondary).frame(width: 20)
-                        VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            Text(backend.backendId).font(.rowTitle)
-                            Text("\(backend.kindLabel) · \(backend.model)").font(.meta).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if !backend.enabled { StatusPill(text: "Off", tone: .neutral) }
-                        if let account = backend.keyAccount {
-                            StatusPill(text: model.storedKeys.contains(account) ? "Key stored" : "No key",
-                                       tone: model.storedKeys.contains(account) ? .positive : .warning)
-                        }
-                        Button("Edit…") { editing = BackendDraft(backend) }.controlSize(.small)
-                    }
-                }
-                Button("Add Chat Model…") { editing = BackendDraft(nil) }
-            } header: {
-                Text("Chat models")
-            } footer: {
-                Text("API keys go to your login Keychain (service “Praxis”), never to the catalog.").font(.meta).foregroundStyle(.secondary)
-            }
-
-            Section {
-                ForEach(PrivacySettingsModel.tiers, id: \.self) { tier in
-                    Picker(tier.capitalized, selection: Binding(get: { model.provider(for: tier) }, set: { model.setTier(tier, providerId: $0) })) {
-                        Text("Off").tag("")
-                        ForEach(intelligence.providers.filter(\.enabled)) { Text(VerificationProvider.displayName($0.providerId)).tag($0.providerId) }
-                    }
-                }
-            } header: {
-                Text("Intake model tiers")
-            } footer: {
-                Text("Local triages only. Strong does the heavy reading. Strongest is asked only when a result fails verification. Providers are set up under Models.")
-                    .font(.meta).foregroundStyle(.secondary)
-            }
-
-            Section {
-                if model.invocations.isEmpty {
-                    Text("No model calls recorded yet.").foregroundStyle(.secondary)
-                }
-                ForEach(model.invocations.prefix(25)) { call in
-                    HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
-                        Image(systemName: call.remote ? "cloud" : "desktopcomputer").foregroundStyle(.secondary).frame(width: 16)
-                        VStack(alignment: .leading, spacing: Spacing.xxs) {
-                            Text("\(call.providerId) · \(call.tier) · \(call.purpose)").font(.callout)
-                            Text("\(PolicyLabels.category(call.category)) · \(call.outcome) · \(DateText.relative(call.startedUtc))")
-                                .font(.meta).foregroundStyle(.secondary)
-                        }
-                    }
-                    .textSelection(.enabled)
-                }
-            } header: {
-                Text("Recent model calls")
-            }
-        }
-        .formStyle(.grouped)
-        .sheet(item: $editing) { draft in
-            BackendEditor(draft: draft, storedKeys: model.storedKeys, removeKey: { model.removeKey(account: $0) }) { profile, key in
-                model.saveBackend(profile, apiKey: key)
-                editing = nil
-            } cancel: { editing = nil }
-        }
-        .onAppear {
-            model.refresh()
-            intelligence.refresh()
-        }
-    }
-}
-
-private struct BackendDraft: Identifiable {
+struct BackendDraft: Identifiable {
     let existing: AgentBackendProfile?
     var id: String { existing?.backendId ?? "new" }
     init(_ existing: AgentBackendProfile?) { self.existing = existing }
 }
 
-private struct BackendEditor: View {
+struct BackendEditor: View {
     let draft: BackendDraft
     let storedKeys: Set<String>
     let removeKey: (String) -> Void

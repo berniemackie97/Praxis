@@ -171,6 +171,9 @@ public sealed class MediaEvidence
         return results;
     }
 
+    /// <summary>The active video a caption file is bound to by digest, or null.</summary>
+    public (SourceFileVersion Source, string Locator)? PairedVideo(string captionPath) => FindPairedVideo(captionPath);
+
     private (SourceFileVersion Source, string Locator)? FindPairedVideo(string captionPath)
     {
         // The sidecar must name the exact preserved video's SHA-256, not only its

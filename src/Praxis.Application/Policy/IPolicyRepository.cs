@@ -28,8 +28,11 @@ public interface IPolicyRepository
 
     IReadOnlyList<TierAssignment> ReadTiers();
 
-    /// <summary>Assigns a provider to a tier, or clears the tier when <paramref name="providerId"/> is null.</summary>
-    void SaveTier(string tier, string? providerId);
+    /// <summary>
+    /// Assigns a provider to a tier (with an optional model and effort for that tier only), or clears
+    /// the tier when <paramref name="providerId"/> is null.
+    /// </summary>
+    void SaveTier(string tier, string? providerId, string? model = null, string? effort = null);
 
     /// <summary>The hold for this job and provider, if any (latest first).</summary>
     DisclosureHold? ReadHold(Guid itemId, int revision, string processorKey, string providerId);

@@ -11,6 +11,7 @@ struct AgentBackendProfile: Codable, Identifiable, Equatable {
     let keyAccount: String?
     let executable: String?
     let enabled: Bool
+    var effort: String?
     var id: String { backendId }
 
     /// Mirrors the worker: only a loopback OpenAI-compatible endpoint keeps content on this Mac.
