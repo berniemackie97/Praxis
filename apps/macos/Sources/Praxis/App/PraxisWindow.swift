@@ -73,9 +73,21 @@ struct WorkbenchSplitView: View {
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)
         case .knowledge: KnowledgeView(model: model.knowledge, verification: model.verification,
-                                        collections: model.collections, sources: model.items) { prompt in
-            if model.chat.prepareDraft(prompt) { section = .chat }
-        }
+                                        collections: model.collections, sources: model.items,
+                                        explain: { prompt in
+                                            if model.chat.prepareDraft(prompt) { section = .chat }
+                                        }, openSource: { evidence in
+                                            guard let current = model.items.first(where: {
+                                                $0.sourceId == evidence.sourceId &&
+                                                $0.itemId == evidence.itemId &&
+                                                $0.revision == evidence.revision &&
+                                                $0.sha256 == evidence.sourceDigest &&
+                                                $0.sourceStatus == "active"
+                                            }) else { return false }
+                                            model.select(current)
+                                            section = .library
+                                            return true
+                                        })
         case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
