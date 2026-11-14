@@ -100,8 +100,9 @@ struct GraphPresentationTests {
         var layout = GraphLayout()
         layout.configure(nodes: nodes, focus: "a")
         let before = layout.positions
-        #expect(!layout.advance(nodes: nodes, edges: [edge("r", "a", "b")],
-                                focus: "a", reducedMotion: true))
+        let didAdvance = layout.advance(nodes: nodes, edges: [edge("r", "a", "b")],
+                                        focus: "a", reducedMotion: true)
+        #expect(!didAdvance)
         #expect(layout.positions == before)
         layout.move("b", to: CGPoint(x: 50, y: 25))
         #expect(layout.positions["b"] == CGPoint(x: 50, y: 25))
