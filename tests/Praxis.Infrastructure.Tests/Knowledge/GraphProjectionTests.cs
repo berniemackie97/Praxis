@@ -102,7 +102,9 @@ public sealed class GraphProjectionTests : IDisposable
         DesktopProtocol desktop = TestDesktop.Protocol(catalog);
         string request = JsonSerializer.Serialize(new
         {
-            requestId = "overview", action = "graphOverview", sourceId = captured.SourceId
+            requestId = "overview",
+            action = "graphOverview",
+            sourceId = captured.SourceId
         });
         using JsonDocument result = JsonDocument.Parse(await desktop.HandleAsync(request));
         Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
