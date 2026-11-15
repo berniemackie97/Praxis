@@ -69,7 +69,8 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             attachment.rgbBlendOperation = .add
             attachment.alphaBlendOperation = .add
             attachment.sourceRGBBlendFactor = .sourceAlpha
-            attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            // Additive light: overlapping stars and gas brighten like real exposure.
+            attachment.destinationRGBBlendFactor = .one
             attachment.sourceAlphaBlendFactor = .one
             attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
             return try? device.makeRenderPipelineState(descriptor: descriptor)
@@ -154,7 +155,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             detailLines = Batch()
             detailOpacity = 0
             camera.desiredCenter = .zero
-            camera.desiredDistance = 420
+            camera.desiredDistance = 560
             return
         }
         let visibleRegion = focusId.flatMap { id in
@@ -176,7 +177,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if reposition {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 420 : 157
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 560 : 157
         } else if focusWasMissing, let focusId, let point = placement.nodeCenters[focusId] {
             camera.desiredCenter = point
         }
@@ -207,8 +208,8 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             if let anchor = placement.zoneCenters[zone] {
                 camera.desiredCenter += (anchor - camera.desiredCenter) * 0.16
             }
-            if camera.desiredDistance < 260 { onEnterZone?(zone) }
-        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 340 {
+            if camera.desiredDistance < 340 { onEnterZone?(zone) }
+        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 450 {
             onReturnToZones?()
         }
         invalidate()
@@ -222,7 +223,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if zoom == 1 {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 420 : 157
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 560 : 157
             invalidate()
         } else {
             self.zoom(by: ratio, at: nil)

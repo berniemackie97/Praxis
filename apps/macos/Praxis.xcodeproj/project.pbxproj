@@ -17,6 +17,7 @@
 		00000000000000000000E004 /* GraphWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E003 /* GraphWorkbenchModel.swift */; };
 		00000000000000000000E006 /* GraphLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E005 /* GraphLayout.swift */; };
 		00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01B /* GraphAtlasLayout.swift */; };
+		00000000000000000000E059 /* GraphCellInterior.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E058 /* GraphCellInterior.swift */; };
 		00000000000000000000E01E /* GraphAtlasArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01D /* GraphAtlasArtwork.swift */; };
 		00000000000000000000E020 /* GraphEdgeArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E01F /* GraphEdgeArtwork.swift */; };
 		00000000000000000000E022 /* GraphZoneLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E021 /* GraphZoneLayout.swift */; };
@@ -99,6 +100,7 @@
 		00000000000000000000E053 /* LivingCortexHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E052 /* LivingCortexHUD.swift */; };
 		00000000000000000000E02C /* NeuralNebulaRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02B /* NeuralNebulaRenderer.swift */; };
 		00000000000000000000E02E /* NeuralNebulaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02D /* NeuralNebulaView.swift */; };
+		00000000000000000000E057 /* NeuralNebulaGalaxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E056 /* NeuralNebulaGalaxy.swift */; };
 		00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02F /* NeuralNebulaGeometry.swift */; };
 		00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E031 /* NeuralNebulaCamera.swift */; };
 		00000000000000000000E043 /* GraphRegionMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E042 /* GraphRegionMap.swift */; };
@@ -129,6 +131,7 @@
 		00000000000000000000E003 /* GraphWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000E005 /* GraphLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E01B /* GraphAtlasLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphAtlasLayout.swift; sourceTree = "<group>"; };
+		00000000000000000000E058 /* GraphCellInterior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphCellInterior.swift; sourceTree = "<group>"; };
 		00000000000000000000E01D /* GraphAtlasArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphAtlasArtwork.swift; sourceTree = "<group>"; };
 		00000000000000000000E01F /* GraphEdgeArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphEdgeArtwork.swift; sourceTree = "<group>"; };
 		00000000000000000000E021 /* GraphZoneLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphZoneLayout.swift; sourceTree = "<group>"; };
@@ -213,6 +216,7 @@
 		00000000000000000000E052 /* LivingCortexHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexHUD.swift; sourceTree = "<group>"; };
 		00000000000000000000E02B /* NeuralNebulaRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaRenderer.swift; sourceTree = "<group>"; };
 		00000000000000000000E02D /* NeuralNebulaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaView.swift; sourceTree = "<group>"; };
+		00000000000000000000E056 /* NeuralNebulaGalaxy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaGalaxy.swift; sourceTree = "<group>"; };
 		00000000000000000000E02F /* NeuralNebulaGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaGeometry.swift; sourceTree = "<group>"; };
 		00000000000000000000E031 /* NeuralNebulaCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaCamera.swift; sourceTree = "<group>"; };
 		00000000000000000000E042 /* GraphRegionMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphRegionMap.swift; sourceTree = "<group>"; };
@@ -316,6 +320,7 @@
 				00000000000000000000A02D /* KnowledgeView.swift */,
 				00000000000000000000E005 /* GraphLayout.swift */,
 				00000000000000000000E01B /* GraphAtlasLayout.swift */,
+				00000000000000000000E058 /* GraphCellInterior.swift */,
 				00000000000000000000E01D /* GraphAtlasArtwork.swift */,
 				00000000000000000000E01F /* GraphEdgeArtwork.swift */,
 				00000000000000000000E021 /* GraphZoneLayout.swift */,
@@ -327,6 +332,7 @@
 				00000000000000000000E035 /* KnowledgeRegionSection.swift */,
 				00000000000000000000E040 /* KnowledgeRevisionsView.swift */,
 				00000000000000000000E027 /* NeuralNebulaLayout.swift */,
+				00000000000000000000E056 /* NeuralNebulaGalaxy.swift */,
 				00000000000000000000E02F /* NeuralNebulaGeometry.swift */,
 				00000000000000000000E031 /* NeuralNebulaCamera.swift */,
 				00000000000000000000E029 /* NeuralNebula.metal */,
@@ -546,6 +552,7 @@
 				00000000000000000000A02E /* KnowledgeView.swift in Sources */,
 				00000000000000000000E006 /* GraphLayout.swift in Sources */,
 				00000000000000000000E01C /* GraphAtlasLayout.swift in Sources */,
+				00000000000000000000E059 /* GraphCellInterior.swift in Sources */,
 				00000000000000000000E01E /* GraphAtlasArtwork.swift in Sources */,
 				00000000000000000000E020 /* GraphEdgeArtwork.swift in Sources */,
 				00000000000000000000E022 /* GraphZoneLayout.swift in Sources */,
@@ -557,6 +564,7 @@
 				00000000000000000000E036 /* KnowledgeRegionSection.swift in Sources */,
 				00000000000000000000E041 /* KnowledgeRevisionsView.swift in Sources */,
 				00000000000000000000E028 /* NeuralNebulaLayout.swift in Sources */,
+				00000000000000000000E057 /* NeuralNebulaGalaxy.swift in Sources */,
 				00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */,
 				00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */,
 				00000000000000000000E02A /* NeuralNebula.metal in Sources */,

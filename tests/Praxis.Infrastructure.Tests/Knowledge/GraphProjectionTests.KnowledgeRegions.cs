@@ -39,13 +39,15 @@ public sealed partial class GraphProjectionTests
         ILookup<string?, GraphKnowledgeRegion> byParent = map.Regions.ToLookup(region => region.ParentId);
         GraphKnowledgeRegion group = Assert.Single(byParent[null], region => region.Kind == "group");
         Assert.Equal("Engine", group.Label);
-        Assert.Equal(["EngineClient", "notes"], byParent[group.RegionId].Select(region => region.Label).Order(StringComparer.Ordinal));
-        GraphKnowledgeRegion notes = byParent[group.RegionId].Single(region => region.Label == "notes");
+        Assert.Equal(["Engine Client", "Notes"], byParent[group.RegionId].Select(region => region.Label).Order(StringComparer.Ordinal));
+        GraphKnowledgeRegion notes = byParent[group.RegionId].Single(region => region.Label == "Notes");
         Assert.Equal(["Network", "Rendering"], byParent[notes.RegionId].Select(region => region.Label).Order(StringComparer.Ordinal));
-        GraphKnowledgeRegion client = byParent[group.RegionId].Single(region => region.Label == "EngineClient");
+        GraphKnowledgeRegion client = byParent[group.RegionId].Single(region => region.Label == "Engine Client");
         Assert.Equal(["Engine.Net"], byParent[client.RegionId].Select(region => region.Label));
-        Assert.Contains(byParent[null], region => region.Label == "business" && region.Kind == "folder");
-        Assert.Contains(byParent[null], region => region.Kind == "loose" && region.Label == "Loose files in Inbox");
+        Assert.Contains(byParent[null], region => region.Label == "Business" && region.Kind == "folder");
+        // Loose files never form a "loose files" region: this one is about Alex Rivera.
+        Assert.DoesNotContain(map.Regions, region => region.Kind == "loose" || region.Label.StartsWith("Loose files", StringComparison.Ordinal));
+        Assert.Contains(byParent[null], region => region.Kind == "theme" && region.Label == "Alex Rivera");
         Assert.Contains(map.Regions, region => region.Label == "Banking");
         Assert.Equal(0, map.UnplacedEntities);
         Assert.Equal(1, notes.Relations);
@@ -78,14 +80,14 @@ public sealed partial class GraphProjectionTests
         CapturedOriginal drop = await Enrich(catalog, "beta/two.md", "Alex Rivera.", inbox);
         await Accept(catalog, keep);
         await Accept(catalog, drop);
-        Assert.Equal(["alpha", "beta"], catalog.Graph.KnowledgeRegions(new GraphQuery()).Regions
+        Assert.Equal(["Alpha", "Beta"], catalog.Graph.KnowledgeRegions(new GraphQuery()).Regions
             .Where(region => region.ParentId is null).Select(region => region.Label).Order(StringComparer.Ordinal));
 
-        Assert.Equal(["alpha"], catalog.Graph.KnowledgeRegions(new GraphQuery(SourceId: keep.SourceId)).Regions
+        Assert.Equal(["Alpha"], catalog.Graph.KnowledgeRegions(new GraphQuery(SourceId: keep.SourceId)).Regions
             .Where(region => region.Entities > 0).Select(region => region.Label));
         Assert.True(catalog.Sources.Revoke(drop.SourceId));
         GraphRegionMap after = catalog.Graph.KnowledgeRegions(new GraphQuery());
-        Assert.DoesNotContain(after.Regions, region => region.Label == "beta");
+        Assert.DoesNotContain(after.Regions, region => region.Label == "Beta");
         Assert.DoesNotContain(after.Regions.SelectMany(region => region.Hubs), node => node.Label == "Alex Rivera");
     }
 }

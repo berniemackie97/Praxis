@@ -239,7 +239,7 @@ final class LivingCortexRenderer: NSObject, MTKViewDelegate {
 
     private var sway: Float {
         guard !reduceMotion, openId == nil else { return 0 }
-        return 0.45 * sin(Float(CACurrentMediaTime() - started) * 0.13)
+        return 0.95 * sin(Float(CACurrentMediaTime() - started) * 0.11)
     }
 
     private func projected(_ point: SIMD3<Float>, size: CGSize) -> CGPoint? {
@@ -292,7 +292,7 @@ final class LivingCortexRenderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         let elapsed = Float(min(0.05, now - (lastDrawTime ?? now)))
         lastDrawTime = now
-        advance(weight: reduceMotion ? 1 : 1 - exp(-elapsed * 4.2))
+        advance(weight: reduceMotion ? 1 : 1 - exp(-elapsed * 2.4))
         guard let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let command = queue.makeCommandBuffer(),
               let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return }
@@ -306,7 +306,8 @@ final class LivingCortexRenderer: NSObject, MTKViewDelegate {
     private func advance(weight: Float) {
         camera.settle(weight: weight)
         let target: Float = openId != nil && !nodes.isEmpty ? 1 : 0
-        neuronOpacity += (target - neuronOpacity) * weight
+        // Neurons fade more slowly than the camera moves, so the territory resolves as it is approached.
+        neuronOpacity += (target - neuronOpacity) * weight * 0.7
     }
 
     private func encode(_ encoder: any MTLRenderCommandEncoder, size: CGSize, time: Float) {

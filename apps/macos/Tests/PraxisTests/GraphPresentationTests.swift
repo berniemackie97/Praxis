@@ -201,8 +201,8 @@ struct GraphPresentationTests {
         #expect(geometry.zoneLines.count == 3 * 18 * 2)
         #expect(geometry.detailLines.count == 2)
         #expect(geometry.detailPoints.count == 2)
-        // Two galaxies (core, glow and at most 300 stars each) plus bounded ornamental sky.
-        #expect(geometry.zonePoints.count <= 2 * 302 + 900 + 9)
+        // Two galaxies (glows, bulge, disc, knots, haze, each bounded) plus bounded ornamental sky.
+        #expect(geometry.zonePoints.count <= 2 * (2 + 420 + 1_600 + 32 + 28) + 1_500 + 1_200 + 9)
         let disconnected = NeuralNebulaGeometry.build(
             overview: GraphVisualOverview(regions: zones.regions),
             placement: placement, nodes: nodes, edges: [],
