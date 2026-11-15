@@ -114,39 +114,53 @@ struct CortexShell {
 }
 
 enum LivingCortexLayout {
-    /// Anatomical sites, largest lobe first: parietal, frontal, occipital, temporal, motor strip,
-    /// premotor, temporo-occipital, prefrontal, insula, superior temporal, temporal pole, cingulate.
-    /// The cerebellum is kept for a root's loose files (small, practical notes).
-    static let sites: [SIMD2<Float>] = [
-        [-0.30, 0.50], [0.66, 0.20], [-0.78, 0.10], [0.14, -0.30], [0.16, 0.52], [0.46, 0.44],
-        [-0.56, -0.16], [0.88, -0.06], [0.40, -0.04], [-0.16, -0.08], [0.62, -0.26], [-0.05, 0.28],
-        [-0.55, 0.30], [0.35, 0.18], [-0.30, 0.10], [0.80, 0.30]
+    /// Cortical sites along one continuous path over a hemisphere: frontal pole, prefrontal,
+    /// premotor, motor, parietal, posterior parietal, occipital, temporo-occipital, superior
+    /// temporal, temporal, temporal pole, insula. The path runs over the right hemisphere and back
+    /// over the left, so consecutive sites are neighbours and both hemispheres fill.
+    static let path: [SIMD2<Float>] = [
+        [0.88, -0.06], [0.75, 0.25], [0.46, 0.44], [0.16, 0.55], [-0.22, 0.55], [-0.55, 0.32],
+        [-0.82, 0.08], [-0.56, -0.16], [-0.16, -0.06], [0.14, -0.30], [0.55, -0.26], [0.38, 0.02]
     ]
     static let cerebellum: SIMD2<Float> = [-0.60, -0.50]
 
+    /// Territories in families: a family (one top region and its children) takes consecutive sites,
+    /// so related knowledge sits on neighbouring cortex; families follow one another along the
+    /// path across both hemispheres. Themes from loose files sit on the cerebellum first.
     static func territories(_ regions: [GraphKnowledgeRegion], map: GraphRegionMap?) -> [CortexTerritory] {
         let largest = Float(max(1, regions.map(\.entities).max() ?? 1))
-        var siteIndex = 0
-        var usedCerebellum = false
-        return regions.sorted { $0.entities == $1.entities ? $0.regionId < $1.regionId : $0.entities > $1.entities }
-            .map { region in
-                var unit: SIMD2<Float>
-                var mirrored = false
-                if region.kind == "loose" && !usedCerebellum {
-                    unit = cerebellum
-                    usedCerebellum = true
-                } else {
-                    unit = sites[siteIndex % sites.count]
-                    mirrored = siteIndex >= sites.count
-                    siteIndex += 1
-                }
-                var position = LivingCortexShape.surface(unit.x, unit.y)
-                if mirrored { position.z = -position.z }
-                let radius: Float = region.forming ? 0.14 : 0.10 + 0.22 * sqrt(Float(region.entities) / largest)
-                return CortexTerritory(id: region.regionId, label: region.label, entities: region.entities,
-                                       forming: region.forming, unit: unit, position: position, radius: radius,
-                                       color: BrainPalette.rgb(for: region, in: map))
+        let families = Dictionary(grouping: regions) { region in map.map { BrainTerritories.family(of: region, in: $0) } ?? region.regionId }
+        let ordered = families.values
+            .sorted { lhs, rhs in
+                let a = lhs.reduce(0) { $0 + $1.entities }, b = rhs.reduce(0) { $0 + $1.entities }
+                return a == b ? lhs[0].regionId < rhs[0].regionId : a > b
             }
+            .flatMap { family in family.sorted { $0.entities == $1.entities ? $0.regionId < $1.regionId : $0.entities > $1.entities } }
+        var siteIndex = 0
+        var cerebellumUses = 0
+        return ordered.map { region in
+            var unit: SIMD2<Float>
+            var left = false
+            if region.kind == "theme" && cerebellumUses < 2 {
+                unit = cerebellum
+                left = cerebellumUses == 1
+                cerebellumUses += 1
+            } else {
+                let lap = siteIndex / path.count
+                let step = siteIndex % path.count
+                // Right hemisphere forward along the path, left hemisphere back along it.
+                unit = lap % 2 == 0 ? path[step] : path[path.count - 1 - step]
+                left = lap % 2 == 1
+                if lap >= 2 { unit += SIMD2<Float>(0.06, -0.05) * Float(lap / 2) }
+                siteIndex += 1
+            }
+            var position = LivingCortexShape.surface(unit.x, unit.y)
+            if left { position.z = -position.z }
+            let radius: Float = region.forming ? 0.14 : 0.10 + 0.20 * sqrt(Float(region.entities) / largest)
+            return CortexTerritory(id: region.regionId, label: region.label, entities: region.entities,
+                                   forming: region.forming, unit: unit, position: position, radius: radius,
+                                   color: BrainPalette.rgb(for: region, in: map))
+        }
     }
 
     static func shellPoints(_ shell: CortexShell, territories: [CortexTerritory], highContrast: Bool) -> [CortexVertex] {
@@ -227,14 +241,19 @@ enum LivingCortexLayout {
         return vertices
     }
 
-    /// Neuron positions for an open territory's members: a disc facing the viewer at the site.
+    /// Neuron positions for an open territory's members: a disc facing the viewer at the site. Each
+    /// neuron's place depends only on its own identity and mentions (better-known nearer the centre),
+    /// so a preview of hubs grows into the full page without anything jumping.
     static func neuronPositions(_ nodes: [GraphNode], territory: CortexTerritory) -> [String: SIMD3<Float>] {
         let radius = max(18, territory.radius * LivingCortexShape.scale * 0.95)
         let facing: Float = territory.position.z >= 0 ? 1 : -1
+        let most = Float(max(1, nodes.map(\.mentions).max() ?? 1))
         var positions: [String: SIMD3<Float>] = [:]
-        for (index, node) in nodes.enumerated() {
-            let angle = Float(index) * 2.399_96
-            let distance = radius * sqrt((Float(index) + 0.5) / Float(max(1, nodes.count)))
+        for node in nodes {
+            let hash = GraphRegionIdentity.hash(node.entityId)
+            let angle = Float(hash % 10_000) / 10_000 * 6.283
+            let standing = log2(Float(max(1, node.mentions)) + 1) / log2(max(2, most) + 1)
+            let distance = radius * (0.15 + 0.85 * (1 - standing) * (0.55 + 0.45 * Float((hash >> 20) % 1000) / 1000))
             let lift = Float(GraphRegionIdentity.hash(node.entityId) % 100) / 100 * 3
             positions[node.entityId] = territory.position + SIMD3<Float>(cos(angle) * distance, sin(angle) * distance, facing * (6 + lift))
         }
@@ -294,7 +313,7 @@ enum LivingCortexLayout {
     private static func nearest(_ territories: [CortexTerritory], unit: SIMD2<Float>, side: Float) -> CortexTerritory? {
         var best: CortexTerritory?
         var bestDistance = Float.greatestFiniteMagnitude
-        for territory in territories where territory.position.z >= 0 || side < 0 {
+        for territory in territories where (territory.position.z >= 0) == (side >= 0) {
             let distance = simd_length(territory.unit - unit)
             if distance < territory.radius * 1.35 && distance < bestDistance {
                 best = territory

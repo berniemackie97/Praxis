@@ -15,9 +15,9 @@ public sealed class RegionPathsTests
     [Fact]
     public void TopFoldersAreRegionsAndSubfoldersAreChildren()
     {
-        Assert.Equal(new RegionPlacement("Inbox/20_notes", "notes", false, "Inbox/20_notes/Game_Map", "Game Map"),
+        Assert.Equal(new RegionPlacement("Inbox/20_notes", "Notes", false, "Inbox/20_notes/Game_Map", "Game Map"),
             RegionPaths.Place("/Inbox/20_notes/Game_Map/01_overview.md", ["/Inbox"]));
-        Assert.Equal(new RegionPlacement("Inbox/20_notes", "notes", false, null, null),
+        Assert.Equal(new RegionPlacement("Inbox/20_notes", "Notes", false, null, null),
             RegionPaths.Place("/Inbox/20_notes/README.md", ["/Inbox"]));
     }
 
@@ -41,10 +41,19 @@ public sealed class RegionPathsTests
 
     [Theory]
     [InlineData("01_Formation_and_Governance", "Formation and Governance")]
-    [InlineData("bradenton_resale_business_package", "bradenton resale business package")]
+    [InlineData("bradenton_resale_business_package", "Bradenton Resale Business Package")]
+    [InlineData("OpenConquerClient", "OpenConquer Client")]
+    [InlineData("docs", "Docs")]
     [InlineData("2026", "2026")]
     [InlineData("OpenConquer.Client", "OpenConquer.Client")]
     public void LabelsReadLikeNames(string folder, string label) => Assert.Equal(label, RegionPaths.Label(folder));
+
+    [Theory]
+    [InlineData("docs", "OpenConquer Client", "Client docs")]
+    [InlineData("tests", "OpenConquer Server", "Server tests")]
+    [InlineData("Game Map", "Notes", "Game Map")]
+    public void GenericChildFoldersNameTheirParent(string child, string parent, string label) =>
+        Assert.Equal(label, RegionPaths.Qualify(child, parent));
 
     [Fact]
     public void IdsAreStableAndOpaque()
