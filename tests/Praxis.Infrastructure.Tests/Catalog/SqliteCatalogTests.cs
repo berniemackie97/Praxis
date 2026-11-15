@@ -340,6 +340,42 @@ public sealed class SqliteCatalogTests : IDisposable
     }
 
     [Fact]
+    public void VersionThirtyFourChatMemoryUpgradesToSkillsWithoutLosingExistingData()
+    {
+        CreateLegacyCatalog(34);
+        Guid chat = Guid.NewGuid();
+        using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
+        {
+            Execute(connection, $"""
+                INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc)
+                VALUES ('{chat:D}', 'ollama', 'prior conversation', '2026-11-15T12:00:00Z', '2026-11-15T12:00:00Z');
+                INSERT INTO agent_chat_recaps (conversation_id, pending_through, reviewed_through, recap, retry_utc)
+                VALUES ('{chat:D}', 2, 1, 'Keep the reviewed summary.', '2026-11-15T12:01:00Z');
+                INSERT INTO agent_identity (singleton, display_name) VALUES (1, 'Praxis');
+                """);
+        }
+
+        using (SqliteCatalog upgraded = SqliteCatalog.Open(root))
+        {
+            Assert.Equal(35, upgraded.SchemaVersion);
+            Assert.Empty(upgraded.Skills.Installed());
+            using SqliteConnection checkedCatalog = Connect(upgraded.DatabasePath);
+            Assert.Equal(35L, Scalar(checkedCatalog, "PRAGMA user_version"));
+            Assert.Equal("Keep the reviewed summary.", Scalar(checkedCatalog,
+                "SELECT recap FROM agent_chat_recaps WHERE conversation_id = '" + chat.ToString("D") + "'"));
+            Assert.Equal("Praxis", Scalar(checkedCatalog, "SELECT display_name FROM agent_identity WHERE singleton = 1"));
+            Assert.Equal(3L, Scalar(checkedCatalog, """
+                SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN
+                ('agent_skill_revisions', 'agent_skill_installs', 'agent_skill_disabled')
+                """));
+        }
+
+        using SqliteCatalog reopened = SqliteCatalog.Open(root);
+        Assert.Equal(35, reopened.SchemaVersion);
+        Assert.Equal("Praxis", reopened.ChatMemory.ReadName());
+    }
+
+    [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
         CreateLegacyCatalog(1);
@@ -509,7 +545,7 @@ public sealed class SqliteCatalogTests : IDisposable
 
     private void CreateLegacyCatalog(int version)
     {
-        if (version is < 1 or > 30)
+        if (version is < 1 or > 34)
         {
             throw new ArgumentOutOfRangeException(nameof(version));
         }

@@ -1,4 +1,5 @@
 using Praxis.Application.Agents;
+using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Desktop.Contracts;
 using Praxis.Application.Models;
@@ -12,7 +13,8 @@ namespace Praxis.Application.Desktop.Actions;
 /// proposals and memories. Reachable only through the owner's private pipe.
 /// </summary>
 public sealed class AgentActions(
-    IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets, ModelSetup? setup = null)
+    IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets, ModelSetup? setup = null,
+    IChatMemoryStore? memory = null)
     : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
@@ -63,6 +65,7 @@ public sealed class AgentActions(
             return new AgentConversationResponse(repository.Read(id) ?? throw new ArgumentException("Unknown conversation."),
                 repository.ReadMessages(id), repository.ReadToolCalls(id, 200));
         }),
+        DesktopAction.Of("agentRecap", fields => new AgentRecapResponse(memory?.ReadRecap(fields.RequireGuid("conversationId")))),
         DesktopAction.Of("agentSend", fields => new AgentRunStartedResponse(runs.Start(fields.RequireGuid("conversationId"),
             fields.RequireString("message", 32_000), fields.OptionalBoolean("useTools") ?? true))),
         DesktopAction.Of("agentRun", fields => runs.Status(fields.RequireGuid("runId"), fields.IntegerOrDefault("after", 0, 0, int.MaxValue))

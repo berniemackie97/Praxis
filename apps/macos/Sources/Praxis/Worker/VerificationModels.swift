@@ -23,6 +23,8 @@ struct VerificationRequest: Decodable, Identifiable {
     let outputTokens: Int?
     let payload: String
     let items: [VerificationItem]
+    var itemCount: Int? = nil
+    var displayedItemCount: Int { itemCount ?? items.count }
     var id: String { requestId }
 
     var reasonLabel: String {
@@ -105,6 +107,7 @@ enum PayloadPreview {
     }
 }
 
+struct VerificationBatchApprovalData: Decodable { let queued: [String]; let skipped: [String] }
 struct VerificationListData: Decodable { let requests: [VerificationRequest] }
 struct VerificationData: Decodable { let request: VerificationRequest? }
 struct VerificationCreatedData: Decodable { let verificationId: String? }
@@ -137,17 +140,3 @@ struct VerificationDisclosureSourcesData: Decodable { let sources: [Verification
 struct VerificationDisclosurePolicyData: Decodable { let changed: Bool }
 struct VerificationDisclosureRevokedData: Decodable { let revoked: Bool }
 struct VerificationDisclosureAuditData: Decodable { let events: [VerificationDisclosureEvent] }
-
-enum VerificationProviderDefault {
-    /// The Checking tier suggests an enabled provider. Local Ollama retains its existing empty fallback choice.
-    static func choice(checkingProvider: String?, providers: [VerificationProvider]) -> String {
-        guard let checkingProvider,
-              providers.contains(where: { $0.providerId == checkingProvider && $0.enabled }) else { return "" }
-        return checkingProvider == VerificationProvider.ollama ? "" : checkingProvider
-    }
-
-    static func available(_ selection: String, providers: [VerificationProvider]) -> Bool {
-        let providerId = selection.isEmpty ? VerificationProvider.ollama : selection
-        return providers.contains { $0.providerId == providerId && $0.enabled }
-    }
-}

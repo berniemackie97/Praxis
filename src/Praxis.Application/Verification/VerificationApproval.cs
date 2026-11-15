@@ -12,7 +12,7 @@ public sealed class VerificationApproval(IVerificationRepository repository)
 
     public VerificationRequestView Approve(
         Guid requestId, string? providerId = null, IReadOnlyCollection<int>? excludedOrdinals = null,
-        IReadOnlyCollection<string>? redactions = null, bool remoteDisclosureApproved = false)
+        IReadOnlyCollection<string>? redactions = null, bool remoteDisclosureApproved = false, int? expectedProviderRevision = null)
     {
         if (requestId == Guid.Empty)
         {
@@ -25,8 +25,18 @@ public sealed class VerificationApproval(IVerificationRepository repository)
             ?? throw new InvalidOperationException(providerId is null
                 ? "Enable a local Ollama verifier or explicitly select an external provider."
                 : "The selected verifier is disabled or has reached its daily limit.");
+        if (expectedProviderRevision is { } expected && provider.Revision != expected)
+        {
+            throw new InvalidOperationException("The verifier configuration changed. Review the destination again before approving.");
+        }
+
         (string narrowed, IReadOnlySet<int> kept) = VerificationPayload.Narrow(payload, excludedOrdinals ?? [], redactions ?? []);
+        if (VerificationBudget.For(narrowed, kept.Count) is null)
+        {
+            throw new InvalidOperationException("The selected evidence exceeds the verification budget. Uncheck some items before approving.");
+        }
+
         return repository.Approve(requestId, payload, provider.ProviderId, provider.Revision, narrowed, kept, remoteDisclosureApproved)
-            ?? throw new InvalidOperationException(NotAwaitingApproval);
+            ?? throw new InvalidOperationException("This request, its evidence, or the selected provider changed. Refresh before approving.");
     }
 }

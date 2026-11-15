@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Praxis.Application.Activity;
 using Praxis.Application.Agents;
+using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Skills;
 using Praxis.Application.Collections;
@@ -98,10 +99,16 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<MediaEvidence>(),
             new WebVideoPlayback(provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>())));
         services.AddSingleton<FinancialLedger>();
+        services.AddSingleton<IChatMemoryStore>(provider => provider.GetRequiredService<SqliteCatalog>().ChatMemory);
+        services.AddSingleton<IChatMemoryNotes>(provider => new ChatMemoryNotes(
+            provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<ITextSearchIndex>(),
+            provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<IPolicyRepository>(),
+            provider.GetRequiredService<IIntakeSupervisor>(), options.DataRoot, options.PrimaryIntakeRoot));
+        services.AddSingleton<ChatMemoryMaintenance>();
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
-        services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
+        services.AddSingleton(_ => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) });
         services.AddSingleton<ISavedLinkWriter>(provider => new SavedLinkWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<ILinkRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Links);
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
@@ -111,8 +118,10 @@ internal static class WorkerServiceRegistration
         services.AddSingleton(provider => AgentComposition.Runtime(provider.GetRequiredService<SqliteCatalog>(),
             AgentComposition.Tools(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IEmbeddingModelConnector>(),
                 provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>(),
-                provider.GetRequiredService<ISavedLinkWriter>(), provider.GetRequiredService<SkillLibrary>()),
-            provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<SkillLibrary>()));
+                provider.GetRequiredService<ISavedLinkWriter>(), provider.GetRequiredService<IChatMemoryNotes>(),
+                provider.GetRequiredService<SkillLibrary>()),
+            provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<SkillLibrary>()));
         services.AddSingleton<AgentRunCoordinator>();
         services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>()));
 
@@ -151,6 +160,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<DesktopStdioSession>();
 
         services.AddHostedService<WorkerSupervisor>();
+        services.AddHostedService<ChatMemoryService>();
         services.AddSingleton(provider => new ProjectUnderstander(provider.GetRequiredService<SqliteCatalog>().Projects,
             provider.GetRequiredService<SqliteCatalog>().Text,
             CatalogProcessing.Ladder(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IVerifierModelFactory>(),

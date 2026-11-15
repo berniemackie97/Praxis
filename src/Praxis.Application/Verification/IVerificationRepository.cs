@@ -34,7 +34,7 @@ public interface IVerificationRepository
     /// <summary>Requests that a stronger model settle an entity's type.</summary>
     Guid? RequestForEntity(Guid entityId);
 
-    IReadOnlyList<VerificationRequestView> List(int limit);
+    IReadOnlyList<VerificationRequestView> List(int limit, bool summariesOnly = false);
 
     VerificationRequestView? Get(Guid requestId);
 

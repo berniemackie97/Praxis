@@ -1,33 +1,16 @@
--- Owner-reviewed, text-only procedural memory. All revisions are retained unchanged.
-CREATE TABLE agent_skill_revisions (
-    revision_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 64),
-    description TEXT NOT NULL CHECK (length(description) BETWEEN 1 AND 1024),
-    markdown TEXT NOT NULL CHECK (length(markdown) BETWEEN 1 AND 6000),
-    digest TEXT NOT NULL CHECK (length(digest) = 64),
-    base_revision_id TEXT,
-    conversation_id TEXT,
-    origin TEXT NOT NULL CHECK (origin IN ('chat', 'import')),
-    rationale TEXT NOT NULL CHECK (length(rationale) BETWEEN 1 AND 1000),
-    state TEXT NOT NULL CHECK (state IN ('pending', 'accepted', 'rejected')),
-    created_utc TEXT NOT NULL,
-    decided_utc TEXT,
-    UNIQUE (name, revision_id),
-    FOREIGN KEY (name, base_revision_id) REFERENCES agent_skill_revisions (name, revision_id),
-    CHECK ((state = 'pending') = (decided_utc IS NULL))
-) STRICT;
-CREATE INDEX agent_skill_revisions_state ON agent_skill_revisions (state, created_utc DESC);
-CREATE INDEX agent_skill_revisions_history ON agent_skill_revisions (name, created_utc DESC);
-
-CREATE TABLE agent_skill_installs (
-    name TEXT PRIMARY KEY,
-    revision_id TEXT NOT NULL,
-    FOREIGN KEY (name, revision_id) REFERENCES agent_skill_revisions (name, revision_id)
+CREATE TABLE agent_chat_recaps (
+    conversation_id TEXT PRIMARY KEY REFERENCES agent_conversations(conversation_id) ON DELETE CASCADE,
+    pending_through INTEGER NOT NULL CHECK (pending_through > 0),
+    reviewed_through INTEGER NOT NULL DEFAULT 0 CHECK (reviewed_through >= 0 AND reviewed_through <= pending_through),
+    recap TEXT,
+    retry_utc TEXT NOT NULL
 ) STRICT;
 
--- Also supports disabling application-owned skills.
-CREATE TABLE agent_skill_disabled (
-    name TEXT PRIMARY KEY CHECK (length(name) BETWEEN 1 AND 64)
+CREATE INDEX agent_chat_recaps_due ON agent_chat_recaps(retry_utc) WHERE reviewed_through < pending_through;
+
+CREATE TABLE agent_identity (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 48)
 ) STRICT;
 
 PRAGMA user_version = 34;

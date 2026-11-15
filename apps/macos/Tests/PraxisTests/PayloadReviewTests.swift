@@ -17,47 +17,40 @@ struct PayloadReviewTests {
         ]}
         """
 
-    @Test func verificationUsesEnabledCheckingProviderButNeverInventsARemoteDefault() {
-        func provider(_ id: String, enabled: Bool = true) -> VerificationProvider {
-            VerificationProvider(providerId: id, executable: nil, endpoint: nil, model: nil,
-                                 revision: 1, costWeight: 1, dailyLimit: 0, enabled: enabled, effort: nil)
+    @MainActor
+    @Test func remoteDestinationAndConsentNeverCarryToAnotherRequest() throws {
+        let workbench = VerificationWorkbenchModel(channel: WorkerChannel(worker: WorkerSession()))
+        func row(_ id: String) throws -> VerificationRequest {
+            let json = """
+                {"requestId":"\(id)","reason":"owner_request","status":"awaiting_approval","createdUtc":"",
+                 "payload":"","items":[],"itemCount":4}
+                """
+            return try JSONDecoder().decode(VerificationRequest.self, from: Data(json.utf8))
         }
-        let connected = [provider(VerificationProvider.ollama),
-                         provider(VerificationProvider.codex),
-                         provider(VerificationProvider.claudeCode, enabled: false)]
-        #expect(VerificationProviderDefault.choice(checkingProvider: VerificationProvider.codex, providers: connected) == VerificationProvider.codex)
-        #expect(VerificationProviderDefault.choice(checkingProvider: VerificationProvider.claudeCode, providers: connected).isEmpty)
-        #expect(VerificationProviderDefault.choice(checkingProvider: nil, providers: connected).isEmpty)
-        #expect(VerificationProviderDefault.choice(checkingProvider: VerificationProvider.ollama, providers: connected).isEmpty)
-        #expect(VerificationProviderDefault.available(VerificationProvider.codex, providers: connected))
-        #expect(!VerificationProviderDefault.available(VerificationProvider.claudeCode, providers: connected))
-        #expect(VerificationProviderDefault.available("", providers: connected))
-        #expect(!VerificationProviderDefault.available("", providers: [provider(VerificationProvider.ollama, enabled: false)]))
+        workbench.select(try row("one"))
+        #expect(workbench.providerChoice == VerificationProvider.ollama)
+        workbench.chooseProvider(VerificationProvider.codex)
+        workbench.remoteConsent = true
+        workbench.select(try row("two"))
+        #expect(workbench.providerChoice == VerificationProvider.ollama)
+        #expect(!workbench.remoteConsent)
     }
 
     @MainActor
-    @Test func verificationRetainsManualChoiceWhenCheckingSettingsRefresh() {
-        let workbench = VerificationWorkbenchModel(channel: WorkerChannel(worker: WorkerSession()))
-        let first = VerificationRequest(requestId: "one", reason: "manual", status: "awaiting_approval",
-                                        providerId: nil, createdUtc: "", failureCode: nil, modelName: nil,
-                                        inputTokens: nil, outputTokens: nil, payload: "{}", items: [])
-        let second = VerificationRequest(requestId: "two", reason: "manual", status: "awaiting_approval",
-                                         providerId: nil, createdUtc: "", failureCode: nil, modelName: nil,
-                                         inputTokens: nil, outputTokens: nil, payload: "{}", items: [])
-        workbench.setPreferredProvider(VerificationProvider.codex)
-        workbench.select(first)
-        #expect(workbench.providerChoice == VerificationProvider.codex)
-        #expect(!workbench.remoteConsent)
-
-        workbench.chooseProvider("")
-        workbench.setPreferredProvider(VerificationProvider.claudeCode)
-        #expect(workbench.providerChoice.isEmpty)
-        workbench.select(second)
-        #expect(workbench.providerChoice == VerificationProvider.claudeCode)
-
-        workbench.setPreferredProvider(VerificationProvider.codex)
-        #expect(workbench.providerChoice == VerificationProvider.codex)
-        #expect(!workbench.remoteConsent)
+    @Test func editingEvidenceInvalidatesConsentAndQueueRowsNeedNoPayload() throws {
+        let model = VerificationWorkbenchModel(channel: WorkerChannel(worker: WorkerSession()))
+        model.remoteConsent = true
+        model.toggle(1)
+        #expect(!model.remoteConsent)
+        model.remoteConsent = true
+        model.addRedaction("name")
+        #expect(!model.remoteConsent)
+        let summary = """
+            {"requestId":"one","reason":"owner_request","status":"awaiting_approval","createdUtc":"",
+             "payload":"","items":[],"itemCount":4}
+            """
+        let row = try JSONDecoder().decode(VerificationRequest.self, from: Data(summary.utf8))
+        #expect(row.displayedItemCount == 4)
     }
 
     @Test func excludedItemsAreRemovedAndOthersKept() throws {

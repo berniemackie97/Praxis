@@ -108,6 +108,14 @@ struct ChatView: View {
                 } else {
                     configuration
                     Divider()
+                    if let recap = model.recap {
+                        DisclosureGroup("Chat recap") {
+                            Text(recap).textSelection(.enabled)
+                        }
+                        .font(.callout)
+                        .padding(.horizontal, Spacing.l)
+                        .padding(.vertical, Spacing.s)
+                    }
                     Transcript(model: model, openAgentSettings: openAgentSettings)
                     Composer(model: model, supportsChat: supportsChat, supportsTools: supportsTools)
                 }
@@ -179,7 +187,7 @@ private struct ConversationList: View {
                 deleting = nil
             }
         } message: {
-            Text("The conversation and its tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
+            Text("The conversation, recap and tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
         }
         .safeAreaInset(edge: .bottom) {
             if let error = model.listError {
@@ -337,6 +345,7 @@ private struct ReplyDetails: View {
     @ObservedObject var model: ChatWorkbenchModel
     let openAgentSettings: () -> Void
     @State private var showingSources = false
+    @State private var showingSaveNote = false
 
     /// Cited clips, played inline; the first few are shown as players, all stay listed as chips.
     private var clips: [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
@@ -347,6 +356,16 @@ private struct ReplyDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
+            Button {
+                showingSaveNote = true
+            } label: {
+                Label("Save as Topic Note…", systemImage: "square.and.pencil")
+            }
+            .buttonStyle(.link)
+            .font(.meta)
+            .sheet(isPresented: $showingSaveNote) {
+                ChatNoteSheet(model: model, draft: reply.text)
+            }
             if !reply.citations.isEmpty {
                 DisclosureGroup(Count.label(reply.citations.count, "citation"), isExpanded: $showingSources) {
                     VStack(alignment: .leading, spacing: Spacing.s) {
@@ -364,7 +383,7 @@ private struct ReplyDetails: View {
                 .font(.callout)
             }
             if reply.toolsUnavailable == true {
-                Text("This model replied without library tools.")
+                Text(reply.citations.isEmpty ? "This model replied without library tools." : "Answered from read-only brain context.")
                     .font(.meta).foregroundStyle(.secondary)
             }
             if reply.inputTokens > 0 || reply.outputTokens > 0 {
@@ -434,14 +453,14 @@ private struct Composer: View {
             HStack {
                 if !supportsChat {
                     Text("Choose a model that supports chat.")
-                } else if !supportsTools {
-                    Text("Plain chat · library tools unavailable")
-                } else {
-                    Toggle("Use Praxis tools", isOn: $model.useTools)
+                } else if supportsTools || model.activeBackendId == ModelTool.ollama {
+                    Toggle(supportsTools ? "Use library and tools" : "Use local library context", isOn: $model.useTools)
                         .toggleStyle(.checkbox)
                         .controlSize(.small)
                         .disabled(model.busy)
                         .help("Turn off for general questions. Recent conversation text still goes to the selected model.")
+                } else {
+                    Text("Plain chat · library tools unavailable")
                 }
                 if model.activeBackend?.isLocal == false {
                     Text("Messages go to \(model.activeBackendId).")
@@ -459,6 +478,53 @@ private struct Composer: View {
         .padding(.bottom, Spacing.l)
         .frame(maxWidth: .infinity)
         .onAppear { focused = true }
+    }
+}
+
+private struct ChatNoteSheet: View {
+    let model: ChatWorkbenchModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var text: String
+    @State private var saving = false
+    @State private var error: String?
+    @State private var captureId = UUID()
+
+    init(model: ChatWorkbenchModel, draft: String) {
+        self.model = model
+        _text = State(initialValue: String(draft.prefix(8_000)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            Text("Save as Topic Note").font(.headline)
+            Text("Keep the decision or finding you want to reuse. This note enters your Primary Inbox and follows its intake policy.")
+                .font(.callout).foregroundStyle(.secondary)
+            TextField("Topic and decision title", text: $title).disabled(saving)
+            TextEditor(text: $text).font(.body).frame(minHeight: 180)
+                .border(Surface.stroke).disabled(saving)
+            FeedbackLine(error: error, notice: nil)
+            HStack {
+                Button("Cancel") { dismiss() }.disabled(saving)
+                Spacer()
+                Button(saving ? "Saving…" : "Save to Inbox") {
+                    saving = true
+                    model.saveLibraryNote(id: captureId, title: title, text: text) { message in
+                        saving = false
+                        if let message { error = message } else { dismiss() }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          title.utf16.count > 80 || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          text.utf16.count > 8_000)
+            }
+        }
+        .padding(Spacing.xl)
+        .frame(minWidth: 480)
+        .interactiveDismissDisabled(saving)
+        .onChange(of: title) { _ in captureId = UUID() }
+        .onChange(of: text) { _ in captureId = UUID() }
     }
 }
 

@@ -148,7 +148,11 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         return messages;
     });
 
-    public void Append(Guid conversationId, AgentMessage message)
+    public void Append(Guid conversationId, AgentMessage message) => AppendMessage(conversationId, message, scheduleRecap: false);
+
+    public void AppendFinal(Guid conversationId, AgentMessage message) => AppendMessage(conversationId, message, scheduleRecap: true);
+
+    private void AppendMessage(Guid conversationId, AgentMessage message, bool scheduleRecap)
     {
         if (message.Content.Length > 400_000)
         {
@@ -170,6 +174,10 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
                 throw new ArgumentException("Unknown conversation.", nameof(conversationId));
             }
 
+            if (scheduleRecap)
+            {
+                SqliteChatMemoryStore.Schedule(connection, transaction, conversationId, clock.GetUtcNow());
+            }
             transaction.Commit();
         });
     }
@@ -252,6 +260,13 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
 
         return memories;
     });
+
+    public bool EditMemory(Guid memoryId, string? replacement) => replacement is null
+        ? Write("DELETE FROM agent_memories WHERE memory_id = $id", ("$id", memoryId.ToString("D"))) == 1
+        : Write("""
+            UPDATE agent_memories SET text = $text, updated_utc = $now WHERE memory_id = $id
+              AND NOT EXISTS (SELECT 1 FROM agent_memories WHERE memory_id <> $id AND lower(trim(text)) = lower(trim($text)))
+            """, ("$id", memoryId.ToString("D")), ("$text", replacement), ("$now", Now())) == 1;
 
     public bool SetMemoryStatus(Guid memoryId, string status) => Write("""
         UPDATE agent_memories SET status = $status, updated_utc = $now WHERE memory_id = $id
