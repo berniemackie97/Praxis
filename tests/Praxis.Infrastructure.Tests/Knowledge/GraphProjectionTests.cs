@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Knowledge;
 
-public sealed class GraphProjectionTests : IDisposable
+public sealed partial class GraphProjectionTests : IDisposable
 {
     private readonly string workspace = Path.Combine(TestPaths.Temp, "praxis-graph-" + Guid.NewGuid().ToString("N"));
     private readonly string root;
@@ -612,6 +612,8 @@ public sealed class GraphProjectionTests : IDisposable
         using CancellationTokenSource canceled = new();
         canceled.Cancel();
         Assert.Throws<OperationCanceledException>(() => catalog.Graph.Seeds(null, new GraphQuery(), canceled.Token));
+        Assert.Throws<OperationCanceledException>(() => catalog.Graph.Region(
+            new GraphQuery(EntityType: "project"), canceled.Token));
     }
 
     [Fact]
@@ -701,6 +703,16 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Equal(120, zones.RelationshipCount);
         Assert.Equal(120, zones.Links.Sum(link =>
             link.ConfirmedCount + link.SuggestedCount + link.ContradictedCount));
+
+        GraphPage regionFirst = catalog.Graph.Region(new GraphQuery(EntityType: "project", Limit: 99));
+        Assert.Equal(99, regionFirst.Edges.Count);
+        Assert.NotNull(regionFirst.NextCursor);
+        GraphPage regionLast = catalog.Graph.Region(new GraphQuery(
+            EntityType: "project", Limit: 99, Cursor: regionFirst.NextCursor));
+        Assert.Equal(21, regionLast.Edges.Count);
+        Assert.Null(regionLast.NextCursor);
+        Assert.Equal(120, regionFirst.Edges.Concat(regionLast.Edges)
+            .Select(edge => edge.RelationId).Distinct().Count());
 
         GraphPage atlasFirst = catalog.Graph.Atlas(new GraphQuery(Limit: 100));
         Assert.Equal(100, atlasFirst.Edges.Count);

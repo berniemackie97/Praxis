@@ -17,7 +17,7 @@ public sealed class SqliteGraphReader : IGraphReader
         this.database = database;
     }
 
-    private const string RelationStatus = """
+    internal const string RelationStatus = """
         CASE WHEN r.origin = 'owner' THEN 'owner'
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
              WHEN v.verdict = 'unsupported' THEN 'contradicted'
@@ -209,6 +209,38 @@ public sealed class SqliteGraphReader : IGraphReader
     public GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default) =>
         ReadEdges(null, null, query, cancellationToken);
 
+    private const int RegionEdgeBudget = 600;
+
+    public GraphPage Region(GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        Validate(query, allowEdges: true);
+        if (query.EntityType is null)
+        {
+            throw new ArgumentException("A region requires an entity type.", nameof(query));
+        }
+
+        return database.Execute(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            long version = Version(connection);
+            string signature = Signature("region", null, null, query);
+            int offset = ReadRegionCursor(query.Cursor, version, signature, query.Limit);
+            List<EdgeRow> rows = SqliteGraphRegionQuery.Read(connection, query, offset,
+                Math.Min(query.Limit, RegionEdgeBudget - offset) + 1, cancellationToken);
+
+            int pageLimit = Math.Min(query.Limit, RegionEdgeBudget - offset);
+            bool more = rows.Count > pageLimit;
+            if (more)
+            {
+                rows.RemoveAt(rows.Count - 1);
+            }
+            string? nextCursor = more && offset + rows.Count < RegionEdgeBudget
+                ? WriteRegionCursor(version, signature, offset + rows.Count) : null;
+            return ComposePage(connection, query, rows, null, null, null, nextCursor, cancellationToken);
+        });
+    }
+
+
     public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default) =>
         ReadEdges(focusId, null, query, cancellationToken);
 
@@ -288,15 +320,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 while (reader.Read())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    GraphEvidence? evidence = reader.IsDBNull(6) ? null : new GraphEvidence(
-                        Guid.Parse(reader.GetString(6)), Guid.Parse(reader.GetString(7)),
-                        Guid.Parse(reader.GetString(8)), reader.GetInt32(9), reader.GetString(10),
-                        reader.GetString(11), reader.GetString(12), reader.GetInt32(13),
-                        reader.GetString(14), reader.IsDBNull(15) ? null : reader.GetString(15));
-                    rows.Add(new EdgeRow(
-                        Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
-                        Guid.Parse(reader.GetString(2)), reader.GetString(3), reader.GetString(4),
-                        reader.GetString(5), evidence));
+                    rows.Add(ReadEdgeRow(reader));
                 }
             }
 
@@ -305,40 +329,57 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            List<GraphNode> nodes = [];
-            List<GraphEdge> edges = [];
-            HashSet<Guid> known = [];
-            if (focusId is Guid knownFocusId && root is not null)
-            {
-                nodes.Add(root);
-                known.Add(knownFocusId);
-            }
-            foreach (EdgeRow row in rows)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
-                {
-                    nodes.Add(subject);
-                }
-                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
-                {
-                    nodes.Add(objectNode);
-                }
-
-                edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
-                    row.Predicate, row.Origin, row.EvidenceStatus, row.Evidence,
-                    row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
-            }
-
-            string outcome = relationId is not null && edges.Count == 0 ? "unavailable" :
-                focusId is null && edges.Count == 0 ? "empty" : "ready";
-            return new GraphPage(outcome, focusId,
-                relationId is not null && edges.Count == 0 ? [] : nodes, edges,
-                more ? WriteCursor(version, signature, rows[^1].RelationId) : null);
+            return ComposePage(connection, query, rows, focusId, relationId, root,
+                more ? WriteCursor(version, signature, rows[^1].RelationId) : null, cancellationToken);
         });
     }
 
-    private static string RelationPolicy() => $"""
+    internal static EdgeRow ReadEdgeRow(SqliteDataReader reader)
+    {
+        GraphEvidence? evidence = reader.IsDBNull(6) ? null : new GraphEvidence(
+            Guid.Parse(reader.GetString(6)), Guid.Parse(reader.GetString(7)),
+            Guid.Parse(reader.GetString(8)), reader.GetInt32(9), reader.GetString(10),
+            reader.GetString(11), reader.GetString(12), reader.GetInt32(13),
+            reader.GetString(14), reader.IsDBNull(15) ? null : reader.GetString(15));
+        return new EdgeRow(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+            Guid.Parse(reader.GetString(2)), reader.GetString(3), reader.GetString(4),
+            reader.GetString(5), evidence);
+    }
+
+    private static GraphPage ComposePage(SqliteConnection connection, GraphQuery query,
+        IReadOnlyList<EdgeRow> rows, Guid? focusId, Guid? relationId, GraphNode? root,
+        string? nextCursor, CancellationToken cancellationToken)
+    {
+        List<GraphNode> nodes = [];
+        List<GraphEdge> edges = [];
+        HashSet<Guid> known = [];
+        if (focusId is Guid knownFocusId && root is not null)
+        {
+            nodes.Add(root);
+            known.Add(knownFocusId);
+        }
+        foreach (EdgeRow row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
+            {
+                nodes.Add(subject);
+            }
+            if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
+            {
+                nodes.Add(objectNode);
+            }
+            edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
+                row.Predicate, row.Origin, row.EvidenceStatus, row.Evidence,
+                row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
+        }
+        string outcome = relationId is not null && edges.Count == 0 ? "unavailable" :
+            focusId is null && edges.Count == 0 ? "empty" : "ready";
+        return new GraphPage(outcome, focusId,
+            relationId is not null && edges.Count == 0 ? [] : nodes, edges, nextCursor);
+    }
+
+    internal static string RelationPolicy() => $"""
         ({ConfirmedRelation} OR ($suggestions = 1
             AND r.origin = 'model' AND p.proposal_id IS NOT NULL
             AND p.status <> 'rejected' AND p.flags IS NULL
@@ -367,7 +408,7 @@ public sealed class SqliteGraphReader : IGraphReader
     private static string MentionView(GraphQuery query) =>
         query.IncludeSuggestions ? "visible_entity_mentions" : "confirmed_entity_mentions";
 
-    private static string NodeVisible(string alias, GraphQuery query) => $"""
+    internal static string NodeVisible(string alias, GraphQuery query) => $"""
         {alias}.status = 'active' AND EXISTS (
             SELECT 1 FROM {MentionView(query)} scoped
             WHERE scoped.entity_id = {alias}.entity_id
@@ -382,7 +423,7 @@ public sealed class SqliteGraphReader : IGraphReader
          HAVING COUNT(DISTINCT m.entity_type) = 1)
         """;
 
-    private static string EffectiveType(string alias, GraphQuery query) => $"""
+    internal static string EffectiveType(string alias, GraphQuery query) => $"""
         CASE WHEN {alias}.type_origin <> 'owner' AND {TechnicalType(alias)} IS NOT NULL THEN {TechnicalType(alias)}
         WHEN {alias}.type_origin = 'inferred' THEN (
             SELECT m.entity_type FROM {MentionView(query)} m
@@ -471,7 +512,7 @@ public sealed class SqliteGraphReader : IGraphReader
             reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9));
     }
 
-    private static void Scope(SqliteCommand command, GraphQuery query)
+    internal static void Scope(SqliteCommand command, GraphQuery query)
     {
         command.Parameters.AddWithValue("$source", (object?)query.SourceId?.ToString("D") ?? DBNull.Value);
         command.Parameters.AddWithValue("$collection", (object?)query.CollectionId?.ToString("D") ?? DBNull.Value);
@@ -527,35 +568,64 @@ public sealed class SqliteGraphReader : IGraphReader
         {
             return "";
         }
+        string value = CursorValue(cursor, version, signature);
+        if (Guid.TryParseExact(value, "D", out Guid id) && id != Guid.Empty)
+        {
+            return id.ToString("D");
+        }
+        throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
+    }
+
+    private int ReadRegionCursor(string? cursor, long version, string signature, int pageSize)
+    {
+        if (cursor is null)
+        {
+            return 0;
+        }
+        string value = CursorValue(cursor, version, signature);
+        if (int.TryParse(value, out int offset) && offset is > 0 and < RegionEdgeBudget &&
+            offset % pageSize == 0)
+        {
+            return offset;
+        }
+        throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
+    }
+
+    private string CursorValue(string cursor, long version, string signature)
+    {
         try
         {
             string encoded = cursor.Replace('-', '+').Replace('_', '/');
             string raw = Encoding.UTF8.GetString(Convert.FromBase64String(encoded.PadRight((encoded.Length + 3) / 4 * 4, '=')));
             string[] fields = raw.Split('|');
             if (fields.Length == 4 && fields[0] == session && fields[2] == signature &&
-                long.TryParse(fields[1], out long observed) &&
-                Guid.TryParseExact(fields[3], "D", out Guid id) && id != Guid.Empty)
+                long.TryParse(fields[1], out long observed))
             {
                 if (observed != version)
                 {
                     throw new InvalidOperationException("The graph page is no longer current.");
                 }
-                return id.ToString("D");
+                return fields[3];
             }
         }
         catch (FormatException)
         {
         }
-
         throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
     }
 
-    private string WriteCursor(long version, string signature, Guid id)
+    private string WriteCursor(long version, string signature, Guid id) =>
+        WriteToken(version, signature, id.ToString("D"));
+
+    private string WriteRegionCursor(long version, string signature, int offset) =>
+        WriteToken(version, signature, offset.ToString());
+
+    private string WriteToken(long version, string signature, string value)
     {
-        string raw = $"{session}|{version}|{signature}|{id:D}";
+        string raw = $"{session}|{version}|{signature}|{value}";
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
-    private sealed record EdgeRow(Guid RelationId, Guid SubjectId, Guid ObjectId, string Predicate,
+    internal sealed record EdgeRow(Guid RelationId, Guid SubjectId, Guid ObjectId, string Predicate,
         string Origin, string EvidenceStatus, GraphEvidence? Evidence);
 }

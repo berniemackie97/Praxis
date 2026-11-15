@@ -72,6 +72,13 @@ final class GraphWorkbenchModel: ObservableObject {
         return selectedZoneType == nil ? [] : atlasEdges
     }
 
+    var regionalRelationshipCount: Int? {
+        guard let selectedZoneType, let zoneOverview else { return nil }
+        return zoneOverview.links
+            .filter { $0.subjectType == selectedZoneType || $0.objectType == selectedZoneType }
+            .reduce(0) { $0 + $1.count }
+    }
+
     var highlightedNodeIds: Set<String> {
         guard !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         return Set(seeds.map(\.entityId))
@@ -183,7 +190,7 @@ final class GraphWorkbenchModel: ObservableObject {
         if let cursor { fields["cursor"] = cursor }
         if !predicate.isEmpty { fields["predicate"] = predicate }
         if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
-        channel.send("graphAtlas", fields, as: GraphPage.self, scope: atlasScope,
+        channel.send("graphRegion", fields, as: GraphPage.self, scope: atlasScope,
                      failed: { [weak self] error in
                          self?.atlasLoading = false
                          self?.atlasNodes = []
@@ -207,7 +214,8 @@ final class GraphWorkbenchModel: ObservableObject {
             if let next = page.nextCursor, !full {
                 loadAtlas(cursor: next)
             } else {
-                atlasTruncated = atlasTruncated || page.nextCursor != nil
+                atlasTruncated = atlasTruncated || page.nextCursor != nil ||
+                    (regionalRelationshipCount.map { $0 > merged.edges.count } ?? false)
                 atlasNodes = atlasBufferNodes
                 atlasEdges = atlasBufferEdges
                 atlasLoading = false

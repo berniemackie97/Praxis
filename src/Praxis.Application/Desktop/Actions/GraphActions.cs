@@ -13,6 +13,8 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
             Task.FromResult<object>(graph.Zones(Query(fields), token))),
         new DesktopAction("graphAtlas", (fields, token) =>
             Task.FromResult<object>(graph.Atlas(Query(fields), token))),
+        new DesktopAction("graphRegion", (fields, token) =>
+            Task.FromResult<object>(graph.Region(Query(fields), token))),
         new DesktopAction("graphSeeds", (fields, token) =>
             Task.FromResult<object>(graph.Seeds(
                 fields.OptionalText("search", 120, "The graph search is invalid."),

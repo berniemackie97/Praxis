@@ -9,6 +9,8 @@ public interface IGraphReader
 
     GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default);
 
+    GraphPage Region(GraphQuery query, CancellationToken cancellationToken = default);
+
     GraphPage Seeds(string? search, GraphQuery query, CancellationToken cancellationToken = default);
 
     GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default);
