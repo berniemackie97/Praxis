@@ -20,8 +20,16 @@ struct KnowledgeGraphView: View {
 
     private var visibleZones: GraphZoneOverview? {
         guard graph.focusId == nil,
-              graph.selectedZoneType == nil || graph.atlasLoading else { return nil }
-        return graph.zoneOverview
+              graph.selectedZoneType == nil || graph.atlasLoading,
+              let summary = graph.zoneOverview else { return nil }
+        guard !graph.entityType.isEmpty else { return summary }
+        let zones = summary.zones.filter { $0.entityType == graph.entityType }
+        let links = summary.links.filter {
+            $0.subjectType == graph.entityType && $0.objectType == graph.entityType
+        }
+        return GraphZoneOverview(entityCount: zones.reduce(0) { $0 + $1.count },
+                                 relationshipCount: links.reduce(0) { $0 + $1.count },
+                                 zones: zones, links: links)
     }
 
     var body: some View {
@@ -263,7 +271,7 @@ struct KnowledgeGraphView: View {
                 }
             }
             if graph.focusId == nil, graph.selectedZoneType == nil,
-               let zones = graph.zoneOverview {
+               let zones = visibleZones {
                 Divider()
                 Text("Knowledge zones").font(.subheadline.weight(.semibold))
                 List {
