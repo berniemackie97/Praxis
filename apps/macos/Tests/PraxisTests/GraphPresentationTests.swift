@@ -111,7 +111,8 @@ struct GraphPresentationTests {
         scene.size = CGSize(width: 800, height: 600)
         scene.configureZones(zones, type: nil)
         #expect(scene.camera?.xScale == scene.camera?.yScale)
-        #expect(scene.children.filter { $0.name?.hasPrefix("node:") == true }.isEmpty)
+        let endpointSpriteCount = scene.children.filter { $0.name?.hasPrefix("node:") == true }.count
+        #expect(endpointSpriteCount == 0)
         scene.reduceMotion = true
         scene.configure(nodes: [node("a"), node("b")], edges: [edge("r", "a", "b")], focus: nil)
         #expect(scene.camera != nil)
