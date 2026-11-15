@@ -17,7 +17,13 @@ public sealed class ReconsolidationActions(IKnowledgeReconsolidation reconsolida
                 throw new ArgumentException("The revision state is invalid.");
             }
 
-            return new KnowledgeRevisionsResponse(reconsolidation.Revisions(state, fields.IntegerOrDefault("limit", 100, 1, 500)));
+            return new KnowledgeRevisionsResponse(reconsolidation.Revisions(state, fields.IntegerOrDefault("limit", 100, 1, 500),
+                fields.IntegerOrDefault("afterRevisionId", 0, 0, int.MaxValue)));
+        }),
+        DesktopAction.Of("knowledgeWatermark", _ =>
+        {
+            (long graphRevision, long latestRevisionId) = reconsolidation.Watermark();
+            return new KnowledgeWatermarkResponse(graphRevision, latestRevisionId);
         }),
         DesktopAction.Of("knowledgeRevisionDecide", fields =>
         {

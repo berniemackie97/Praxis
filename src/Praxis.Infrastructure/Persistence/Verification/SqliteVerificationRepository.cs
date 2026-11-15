@@ -165,9 +165,15 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
                     JOIN visible_entity_mentions m ON m.entity_id = e.entity_id
                     WHERE e.status = 'active' AND e.type_origin = 'inferred'
                       AND NOT EXISTS (SELECT 1 FROM technical_entity_types t WHERE t.entity_id = e.entity_id)
+                      -- A completed check is final only until new evidence arrives: newer mentions earn a
+                      -- second look. Open, declined or in-flight requests are never duplicated.
                       AND NOT EXISTS (SELECT 1 FROM verification_items i
                           JOIN verification_requests r ON r.request_id = i.request_id
-                          WHERE i.entity_id = e.entity_id AND r.status <> 'failed')
+                          WHERE i.entity_id = e.entity_id AND r.status <> 'failed'
+                            AND (r.status <> 'completed' OR r.completed_utc >= (
+                                SELECT MAX(p.created_utc) FROM entity_mentions em
+                                JOIN enrichment_proposals p ON p.proposal_id = em.proposal_id
+                                WHERE em.entity_id = e.entity_id)))
                     GROUP BY e.entity_id HAVING COUNT(DISTINCT m.entity_type) > 1
                     ORDER BY COUNT(*) DESC, e.entity_id LIMIT $limit
                     """);

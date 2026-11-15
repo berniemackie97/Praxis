@@ -84,8 +84,10 @@ struct KnowledgeRevision: Decodable, Identifiable, Equatable {
     let entityId: String
     let entityName: String
     let field: String
+    let relationId: String?
     let before: String?
     let after: String
+    let afterLabel: String
     let trigger: String
     let basis: String
     let state: String
@@ -95,3 +97,9 @@ struct KnowledgeRevision: Decodable, Identifiable, Equatable {
 }
 
 struct KnowledgeRevisionsData: Decodable { let revisions: [KnowledgeRevision] }
+
+/// The knowledge revision (moves when anything the graph can show changes) and newest revision log id.
+struct KnowledgeWatermarkData: Decodable {
+    let graphRevision: Int64
+    let latestRevisionId: Int64
+}

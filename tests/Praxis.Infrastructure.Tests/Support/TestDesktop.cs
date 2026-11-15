@@ -33,7 +33,7 @@ internal static class TestDesktop
             new EnrichmentActions(catalog.Proposals),
             new IntakeActions(intake, catalog.Processing, catalog.IntakeIncidents),
             new KnowledgeActions(catalog.Knowledge),
-            new ReconsolidationActions(catalog.Reconsolidation, new RevisionReview(catalog.Reconsolidation, catalog.Knowledge)),
+            new ReconsolidationActions(catalog.Reconsolidation, new RevisionReview(catalog.Reconsolidation, catalog.Knowledge, catalog.Proposals)),
             new GraphActions(catalog.Graph),
             new VerificationActions(catalog.Verification, new VerificationApproval(catalog.Verification),
                 new VerificationProviderConfiguration(catalog.Verification, verifierModels), verifierModels, verification),

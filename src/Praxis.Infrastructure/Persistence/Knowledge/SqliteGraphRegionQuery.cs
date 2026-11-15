@@ -10,21 +10,21 @@ internal static class SqliteGraphRegionQuery
     {
         List<SqliteGraphReader.EdgeRow> rows = [];
         using (SqliteCommand command = connection.CreateCommand($"""
-            WITH eligible AS MATERIALIZED (
+            WITH {SqliteGraphReader.VisibleKinds(query)},
+            eligible AS MATERIALIZED (
                 SELECT r.relation_id, r.subject_id, r.object_id,
                        {SqliteGraphReader.RelationStatus} AS evidence_status,
                        {EntityTypeSanity.RuntimeGlueName("subject")} AS subject_glue,
                        {EntityTypeSanity.RuntimeGlueName("object")} AS object_glue
                 FROM knowledge_relations r
+                JOIN visible_kinds subject_kind ON subject_kind.entity_id = r.subject_id
+                JOIN visible_kinds object_kind ON object_kind.entity_id = r.object_id
                 JOIN knowledge_entities subject ON subject.entity_id = r.subject_id
                 JOIN knowledge_entities object ON object.entity_id = r.object_id
                 LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
                 LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
                 WHERE {SqliteGraphReader.RelationPolicy()}
-                  AND {SqliteGraphReader.NodeVisible("subject", query)}
-                  AND {SqliteGraphReader.NodeVisible("object", query)}
-                  AND ({SqliteGraphReader.EffectiveType("subject", query)} = $type
-                       OR {SqliteGraphReader.EffectiveType("object", query)} = $type)
+                  AND (subject_kind.kind = $type OR object_kind.kind = $type)
             ),
             -- Runtime glue keeps its relations but never anchors a hub: its degree counts as zero.
             degrees AS MATERIALIZED (

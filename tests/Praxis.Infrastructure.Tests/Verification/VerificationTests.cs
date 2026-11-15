@@ -78,6 +78,33 @@ public sealed class VerificationTests : IDisposable
     }
 
     [Fact]
+    public async Task NewEvidenceAfterACompletedTypeCheckEarnsASecondLook()
+    {
+        using SqliteCatalog catalog = Open();
+        await Enrich(catalog, "client.md", "# Code\nOpenConquerClient renders maps.");
+        types["OpenConquerClient"] = "project";
+        await Enrich(catalog, "repo.md", "# Repo\nOpenConquerClient has a renderer.");
+        Assert.Equal(1, catalog.Verification.Plan());
+        Guid first = catalog.Verification.List(10).Single(request => request.Reason == "type_conflict").RequestId;
+        SaveProvider(catalog, VerificationProvider.Codex, weight: 10);
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={catalog.DatabasePath}"))
+        {
+            connection.Open();
+            using var complete = connection.CreateCommand();
+            complete.CommandText = "UPDATE verification_requests SET status = 'completed', provider_id = '" + VerificationProvider.Codex + "', completed_utc = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 second') WHERE request_id = $id";
+            complete.Parameters.AddWithValue("$id", first.ToString("D"));
+            complete.ExecuteNonQuery();
+        }
+
+        Assert.Equal(0, catalog.Verification.Plan());
+        await Task.Delay(1100);
+        await Enrich(catalog, "notes.md", "# Notes\nOpenConquerClient ships weekly.");
+        Assert.Equal(1, catalog.Verification.Plan());
+        Assert.Equal(2, catalog.Verification.List(10).Count(request => request.Reason == "type_conflict"));
+        Assert.Equal(0, catalog.Verification.Plan());
+    }
+
+    [Fact]
     public async Task ApprovalSendsExactlyTheNarrowedPayloadToExplicitProvider()
     {
         using SqliteCatalog catalog = Open();

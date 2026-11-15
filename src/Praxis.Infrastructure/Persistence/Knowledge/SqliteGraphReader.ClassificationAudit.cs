@@ -13,7 +13,7 @@ public sealed partial class SqliteGraphReader
             throw new ArgumentException("The audit matches the previous confirmed project filter.", nameof(query));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteSnapshot(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             long revision = Version(connection);
@@ -77,10 +77,11 @@ public sealed partial class SqliteGraphReader
                 rows.RemoveAt(rows.Count - 1);
             }
             List<GraphClassificationAuditEntry> entries = [];
+            Dictionary<Guid, GraphNode> read = ReadNodes(connection, [.. rows.Select(row => row.Id)], query);
             foreach (var row in rows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                GraphNode entity = ReadNode(connection, row.Id, query) ??
+                GraphNode entity = read.GetValueOrDefault(row.Id) ??
                     throw new InvalidOperationException("The classification changed while reading.");
                 entries.Add(new GraphClassificationAuditEntry(entity, row.Accepted, row.Verified, row.Technical, row.Derived));
             }

@@ -18,6 +18,16 @@ public static class RevisionVocabulary
     /// <summary>The entity's confirmed relations contradict its type.</summary>
     public const string Relations = "relations";
 
+    /// <summary>Another entity has the same name apart from spacing, punctuation or case.</summary>
+    public const string Duplicates = "duplicates";
+
+    public const string EntityType = "entity_type";
+    public const string Merge = "merge";
+    public const string Relation = "relation";
+
+    /// <summary>The proposed action for a relation that its endpoints' confirmed types rule out.</summary>
+    public const string Retract = "retract";
+
     public const string Applied = "applied";
     public const string Suggested = "suggested";
     public const string Accepted = "accepted";
