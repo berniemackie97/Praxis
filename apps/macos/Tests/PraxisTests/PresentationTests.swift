@@ -120,7 +120,8 @@ struct WorkbenchPresentationTests {
     @Test("Go menu shortcuts number the workspaces in sidebar order")
     func sectionShortcuts() {
         #expect(AppSection.chat.shortcut.character == "1")
-        #expect(AppSection.allCases.count <= 9)
+        #expect(AppSection.skills.shortcut.character == "0")
+        #expect(Set(AppSection.allCases.map(\.shortcut.character)).count == AppSection.allCases.count)
         #expect(Set(AppSection.groups.flatMap(\.sections)) == Set(AppSection.allCases))
     }
 }

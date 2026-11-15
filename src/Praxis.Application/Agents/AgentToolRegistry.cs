@@ -25,9 +25,15 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
         AgentToolOutput output;
         string outcome;
         string tier = "unknown";
+        bool auditArguments = false;
         if (!byName.TryGetValue(call.Name, out IAgentTool? tool))
         {
             (output, outcome) = (AgentToolOutput.Error("unknown_tool", $"No tool named '{call.Name}'. Use one of: {string.Join(", ", byName.Keys.Order())}."), "unknown_tool");
+        }
+        else if (tool.Definition.LocalOnly && !context.BackendIsLocal)
+        {
+            tier = tool.Definition.Tier;
+            (output, outcome) = (AgentToolOutput.Error("local_only", "Use a local model for this tool."), "permission_denied");
         }
         else if (!ToolTiers.Permits(context.ToolPermission, tier = tool.Definition.Tier))
         {
@@ -39,6 +45,7 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
         }
         else
         {
+            auditArguments = tool.Definition.AuditArguments;
             (output, outcome) = await RunAsync(tool, call, context, cancellationToken);
         }
 
@@ -49,7 +56,7 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
             outcome = outcome == "ok" ? "truncated" : outcome;
         }
 
-        audit.RecordToolCall(new AgentToolCallRecord(context.ConversationId, call.CallId, call.Name, tier, Bound(call.ArgumentsJson), outcome,
+        audit.RecordToolCall(new AgentToolCallRecord(context.ConversationId, call.CallId, call.Name, tier, auditArguments ? Bound(call.ArgumentsJson) : "{}", outcome,
             output.Content.Length, output.Citations.Count, output.Withheld.Sum(notice => notice.Count), started, Stopwatch.GetElapsedTime(timestamp)));
         return output;
     }

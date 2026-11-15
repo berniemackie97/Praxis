@@ -2,13 +2,14 @@ import SwiftUI
 
 /// The workspaces in the main window's sidebar, grouped by what the owner is doing.
 enum AppSection: String, CaseIterable, Identifiable {
-    case chat, approvals, library, quickNote, search, knowledge, collections, verification, activity
+    case chat, approvals, library, quickNote, search, knowledge, collections, verification, activity, skills
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .chat: "Ask Praxis"
+        case .skills: "Skills"
         case .approvals: "Approvals"
         case .library: "Library"
         case .quickNote: "Quick Note"
@@ -23,6 +24,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .chat: "Answers grounded in your sources"
+        case .skills: "Reusable procedures for Praxis"
         case .approvals: "Decisions only you can make"
         case .library: "Everything captured from your watched folders"
         case .quickNote: "Capture a thought into your Inbox"
@@ -37,6 +39,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .chat: "bubble.left.and.text.bubble.right"
+        case .skills: "book.closed"
         case .approvals: "checkmark.seal"
         case .library: "books.vertical"
         case .quickNote: "square.and.pencil"
@@ -49,7 +52,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     }
 
     var shortcut: KeyEquivalent {
-        KeyEquivalent(Character(String((Self.allCases.firstIndex(of: self) ?? 0) + 1)))
+        KeyEquivalent(Character(String(((Self.allCases.firstIndex(of: self) ?? 0) + 1) % 10)))
     }
 
     struct Group: Identifiable {
@@ -59,7 +62,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     }
 
     static let groups: [Group] = [
-        Group(title: "Ask", sections: [.chat]),
+        Group(title: "Ask", sections: [.chat, .skills]),
         Group(title: "Capture", sections: [.library, .quickNote]),
         Group(title: "Explore", sections: [.search, .knowledge, .collections]),
         Group(title: "Review", sections: [.approvals, .verification, .activity])
@@ -77,7 +80,7 @@ extension FocusedValues {
     }
 }
 
-/// Menu commands: a Go menu with ⌘1–⌘8 and New Conversation on ⌘N.
+/// Menu commands: a Go menu with ⌘1–⌘9 and ⌘0 and New Conversation on ⌘N.
 struct PraxisCommands: Commands {
     @ObservedObject var model: WorkbenchModel
     @FocusedBinding(\.workspace) private var workspace

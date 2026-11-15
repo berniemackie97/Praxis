@@ -36,9 +36,15 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         return profiles;
     });
 
-    public void SaveBackend(AgentBackendProfile profile)
+    public void SaveBackend(AgentBackendProfile profile) => database.Execute(_ =>
     {
         profile.Validate();
+        AgentBackendProfile? existing = ReadBackends().FirstOrDefault(item => item.BackendId == profile.BackendId);
+        if (existing is not null && existing.IsLocal != profile.IsLocal)
+        {
+            throw new ArgumentException("Use a new backend ID when changing local or remote access. Existing conversations keep their privacy boundary.");
+        }
+
         Write("""
             INSERT INTO agent_backends (backend_id, kind, endpoint, model, key_account, executable, enabled, updated_utc, effort)
             VALUES ($id, $kind, $endpoint, $model, $key, $executable, $enabled, $now, $effort)
@@ -47,7 +53,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
                 effort = excluded.effort
             """, ("$effort", profile.Effort), ("$id", profile.BackendId), ("$kind", profile.Kind), ("$endpoint", profile.Endpoint), ("$model", profile.Model),
             ("$key", profile.KeyAccount), ("$executable", profile.Executable), ("$enabled", profile.Enabled ? 1 : 0), ("$now", Now()));
-    }
+    });
 
     public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null)
     {

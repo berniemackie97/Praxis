@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 33;
+    internal const int CurrentVersion = 34;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -53,6 +53,9 @@ internal static class CatalogSchema
         (32, "knowledge_revisions", "revision_id, entity_id, field, before_value, after_value, trigger, basis, state, created_utc, decided_utc"),
         (33, "knowledge_revisions", "relation_id"),
         (33, "graph_revision", "singleton, revision"),
+        (34, "agent_skill_revisions", "revision_id, name, description, markdown, digest, base_revision_id, conversation_id, origin, rationale, state, created_utc, decided_utc"),
+        (34, "agent_skill_installs", "name, revision_id"),
+        (34, "agent_skill_disabled", "name"),
         (22, "agent_messages", "conversation_id, sequence, role, content, tool_calls, tool_call_id, created_utc"),
         (22, "agent_tool_calls", "record_id, conversation_id, call_id, tool, tier, arguments, outcome, result_characters, citations, withheld, started_utc, duration_ms"),
         (22, "agent_proposals", "proposal_id, conversation_id, kind, payload, rationale, status, created_utc, resolved_utc"),

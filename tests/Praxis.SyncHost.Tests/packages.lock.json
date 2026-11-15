@@ -143,7 +143,8 @@
           "Microsoft.Data.Sqlite": "[10.0.14, )",
           "PdfPig": "[0.1.16, )",
           "Praxis.Application": "[1.0.0, )",
-          "Praxis.Notes": "[1.0.0, )"
+          "Praxis.Notes": "[1.0.0, )",
+          "YamlDotNet": "[18.1.0, )"
         }
       },
       "praxis.notes": {
@@ -171,6 +172,12 @@
         "requested": "[0.1.16, )",
         "resolved": "0.1.16",
         "contentHash": "qQcbsNMYVY+K5ELptax2S8thNMk0+rSQq3H/KdYj3LLcko8yTCz8y5KIvsKxIyAuTN0ZYNnfsZkM+0EvxTwHVA=="
+      },
+      "YamlDotNet": {
+        "type": "CentralTransitive",
+        "requested": "[18.1.0, )",
+        "resolved": "18.1.0",
+        "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       }
     }
   }

@@ -38,6 +38,7 @@ final class WorkbenchModel: ObservableObject {
     let modelSetup: ModelSetupModel
     let chat: ChatWorkbenchModel
     let approvals: ApprovalsWorkbenchModel
+    let skills: SkillsWorkbenchModel
     let privacy: PrivacySettingsModel
     let links: LinkSettingsModel
     let activity: ActivityModel
@@ -59,6 +60,7 @@ final class WorkbenchModel: ObservableObject {
         modelSetup = ModelSetupModel(channel: channel)
         chat = ChatWorkbenchModel(channel: channel)
         approvals = ApprovalsWorkbenchModel(channel: channel)
+        skills = SkillsWorkbenchModel(channel: channel)
         privacy = PrivacySettingsModel(channel: channel)
         links = LinkSettingsModel(channel: channel)
         activity = ActivityModel(channel: channel)

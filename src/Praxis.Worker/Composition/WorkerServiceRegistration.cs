@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Praxis.Application.Activity;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
+using Praxis.Application.Agents.Skills;
 using Praxis.Application.Collections;
 using Praxis.Application.Desktop;
 using Praxis.Application.Desktop.Actions;
@@ -106,11 +107,12 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
             provider.GetRequiredService<ISecretStore>(), RelayCommand(), Path.GetTempPath()));
+        services.AddSingleton(provider => AgentComposition.Skills(provider.GetRequiredService<SqliteCatalog>()));
         services.AddSingleton(provider => AgentComposition.Runtime(provider.GetRequiredService<SqliteCatalog>(),
             AgentComposition.Tools(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IEmbeddingModelConnector>(),
                 provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>(),
-                provider.GetRequiredService<ISavedLinkWriter>()),
-            provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>()));
+                provider.GetRequiredService<ISavedLinkWriter>(), provider.GetRequiredService<SkillLibrary>()),
+            provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<SkillLibrary>()));
         services.AddSingleton<AgentRunCoordinator>();
         services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>()));
 
@@ -143,6 +145,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, UnderstandingActions>();
         services.AddSingleton<IDesktopActionGroup, PolicyActions>();
         services.AddSingleton<IDesktopActionGroup, AgentActions>();
+        services.AddSingleton<IDesktopActionGroup, SkillActions>();
         services.AddSingleton<IDesktopActionGroup, ActivityActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();
