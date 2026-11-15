@@ -2,10 +2,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="PdfPig" />
+    <PackageReference Include="YamlDotNet" />
     <InternalsVisibleTo Include="Praxis.Infrastructure.Tests" />
     <InternalsVisibleTo Include="Praxis.SyncHost.Tests" />
     <ProjectReference Include="../Praxis.Application/Praxis.Application.csproj" />
     <ProjectReference Include="../Praxis.Notes/Praxis.Notes.csproj" />
+    <EmbeddedResource Include="Agents/BundledSkills/**/SKILL.md" LogicalName="Praxis.BundledSkills.%(RecursiveDir)SKILL.md" />
     <EmbeddedResource Include="Persistence/Migrations/Catalog.V*.sql"
                       LogicalName="Praxis.Infrastructure.%(Filename)%(Extension)" />
   </ItemGroup>

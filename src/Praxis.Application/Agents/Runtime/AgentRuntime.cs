@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Praxis.Application.Agents.Memory;
+using Praxis.Application.Agents.Skills;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Inference;
 using Praxis.Application.Policy;
@@ -17,7 +19,7 @@ namespace Praxis.Application.Agents.Runtime;
 /// </summary>
 public sealed class AgentRuntime(
     IAgentConversationRepository conversations, AgentToolRegistry registry, IAgentBackendFactory backends, PolicyService policy,
-    DisclosureGate gate, TimeProvider clock, ITextSearchIndex? brainSearch = null, IChatMemoryStore? memory = null)
+    DisclosureGate gate, TimeProvider clock, ITextSearchIndex? brainSearch = null, IChatMemoryStore? memory = null, SkillLibrary? skills = null)
 {
     private const int MaximumBoundedTranscriptCharacters = 24_000;
     private const int MaximumCliToolCalls = 12;
@@ -60,7 +62,8 @@ public sealed class AgentRuntime(
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText);
         string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
-            profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : []) : AgentSystemPrompt.Direct;
+            profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : [],
+            skills?.Search(userText, profile.IsLocal, 6), profile.IsLocal) : AgentSystemPrompt.Direct;
         if (managedLocal && memory is not null)
         {
             if (memory.ReadName() is { } name && MemoryText.ValidName(name))
@@ -87,7 +90,7 @@ public sealed class AgentRuntime(
         IReadOnlyList<AgentMessage> WithRecall(IReadOnlyList<AgentMessage> messages) =>
             readOnlyEvidence is null ? messages : [readOnlyEvidence, .. messages];
         AgentToolDefinition[] definitions = useTools ? registry.Definitions
-            .Where(tool => (profile.IsLocal || tool.Name != MemoryRecallTool.ToolName) &&
+            .Where(tool => (profile.IsLocal || (!tool.LocalOnly && tool.Name != MemoryRecallTool.ToolName)) &&
                 (managedLocal || tool.Name != MemoryEditTool.ToolName)).ToArray() : [];
         IReadOnlyList<AgentMessage>? boundedTranscript = null;
         if (session is not null || !useTools)
@@ -161,7 +164,7 @@ public sealed class AgentRuntime(
             }
 
             report("thinking", null, null);
-            AgentTurn turn = await turnBackend.CompleteAsync(system, WithRecall(boundedTranscript ?? Transcript(conversationId)), definitions, cancellationToken);
+            AgentTurn turn = await turnBackend.CompleteAsync(system, WithRecall(boundedTranscript ?? Transcript(conversationId, state.TransientToolResults)), definitions, cancellationToken);
             if ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text)))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
@@ -198,11 +201,45 @@ public sealed class AgentRuntime(
                 string content = state.ToolCalls.Count >= bounds.MaximumToolCalls
                     ? """{"error":"tool_budget_exhausted","message":"Answer with what you have."}"""
                     : await InvokeAsync(call, context, state, report, cancellationToken);
+                if (call.Name is SkillOpenTool.ToolName or SkillSearchTool.ToolName)
+                {
+                    string receipt = SkillReceipt(call.Name, content);
+                    state.TransientToolResults.Add(receipt, content);
+                    content = receipt;
+                }
+
                 conversations.Append(conversationId, AgentMessage.FromTool(call.CallId, content, []));
             }
         }
 
         return Finish(conversationId, userText, "I stopped because this request reached its step limit. Ask me to continue.", AgentReply.StepLimit, state, report, repaired);
+    }
+
+    private static string SkillReceipt(string tool, string content)
+    {
+        string? name = null;
+        string? digest = null;
+        string? revisionId = null;
+        if (tool == SkillOpenTool.ToolName)
+        {
+            using JsonDocument document = JsonDocument.Parse(content);
+            if (document.RootElement.TryGetProperty("result", out JsonElement result) &&
+                result.ValueKind == JsonValueKind.Object && result.TryGetProperty("digest", out JsonElement value))
+            {
+                name = result.GetProperty("name").GetString();
+                digest = value.GetString();
+                revisionId = result.TryGetProperty("revisionId", out JsonElement revision) ? revision.GetString() : null;
+            }
+        }
+
+        return ToolJson.Serialize(new
+        {
+            skillReceipt = Guid.NewGuid(),
+            name,
+            digest,
+            revisionId,
+            message = "Reopen this skill if needed for the current request."
+        });
     }
 
     private async Task<AgentReply> NameAsync(Guid conversationId, string userText, string command,
@@ -282,7 +319,7 @@ public sealed class AgentRuntime(
         AnswerVerifier.Check(text, state.ToolResults, userText, state.Citations.All.Count > 0, repaired);
 
     /// <summary>The transcript from the latest compaction summary onward.</summary>
-    private IReadOnlyList<AgentMessage> Transcript(Guid conversationId)
+    private IReadOnlyList<AgentMessage> Transcript(Guid conversationId, IReadOnlyDictionary<string, string>? transient = null)
     {
         IReadOnlyList<AgentMessage> messages = conversations.ReadMessages(conversationId);
         int start = 0;
@@ -295,7 +332,8 @@ public sealed class AgentRuntime(
             }
         }
 
-        return messages.Skip(start).ToArray();
+        return messages.Skip(start).Select(message => transient is not null && message.Role == AgentRoles.Tool &&
+            transient.TryGetValue(message.Content, out string? result) ? message with { Content = result } : message).ToArray();
     }
 
     private async Task CompactIfNeededAsync(Guid conversationId, IAgentBackend backend, string system, AgentRunLimits bounds,
@@ -338,6 +376,7 @@ public sealed class AgentRuntime(
         public CitationLedger Citations { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<string> ToolResults { get; } = [];
+        public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
         public int Withheld { get; set; }
         public int InputTokens { get; set; }
         public int OutputTokens { get; set; }

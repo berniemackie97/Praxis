@@ -74,6 +74,9 @@ struct WorkbenchSplitView: View {
         switch section {
         case .chat: ChatView(model: model.chat, setup: model.modelSetup) { SettingsOpener.open(.models) }
         case .approvals: ApprovalsView(model: model.approvals)
+        case .skills: SkillsView(model: model.skills) { prompt in
+            if model.chat.prepareDraft(prompt) { section = .chat }
+        }
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()
         case .search: SearchView(model: model.search)

@@ -161,7 +161,7 @@ public sealed partial class AgentRuntimeTests
     {
         CapturingHandler handler = new("""{"choices":[{"message":{"content":"PING"}}]}""");
         using HttpClient http = new(handler);
-        AgentBackendFactory factory = new(http, new NoSecrets(), new AgentRelayCommand("unused", []), Path.GetTempPath());
+        using AgentBackendFactory factory = new(http, http, new NoSecrets(), new AgentRelayCommand("unused", []), Path.GetTempPath());
         IAgentBackend backend = factory.CreateTurnBackend(Local() with { BackendId = id, Endpoint = endpoint })!;
 
         AgentTurn result = await backend.CompleteAsync("Answer directly.", [AgentMessage.FromUser("Reply with PING only.")], [], CancellationToken.None);

@@ -40,9 +40,11 @@
 		00000000000000000000C016 /* AgentPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C015 /* AgentPresentationTests.swift */; };
 		00000000000000000000C014 /* PrivacySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C013 /* PrivacySettingsView.swift */; };
 		00000000000000000000C012 /* ApprovalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C011 /* ApprovalsView.swift */; };
+		00000000000000000000D102 /* SkillsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D101 /* SkillsView.swift */; };
 		00000000000000000000C010 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C00F /* ChatView.swift */; };
 		00000000000000000000C00E /* PrivacySettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C00D /* PrivacySettingsModel.swift */; };
 		00000000000000000000C00C /* ApprovalsWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C00B /* ApprovalsWorkbenchModel.swift */; };
+		00000000000000000000D104 /* SkillsWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D103 /* SkillsWorkbenchModel.swift */; };
 		00000000000000000000C00A /* ChatWorkbenchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C009 /* ChatWorkbenchModel.swift */; };
 		00000000000000000000D022 /* ModelSetupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D021 /* ModelSetupModel.swift */; };
 		00000000000000000000C008 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000C007 /* KeychainStore.swift */; };
@@ -154,9 +156,11 @@
 		00000000000000000000C015 /* AgentPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000C013 /* PrivacySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsView.swift; sourceTree = "<group>"; };
 		00000000000000000000C011 /* ApprovalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalsView.swift; sourceTree = "<group>"; };
+		00000000000000000000D101 /* SkillsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsView.swift; sourceTree = "<group>"; };
 		00000000000000000000C00F /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		00000000000000000000C00D /* PrivacySettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacySettingsModel.swift; sourceTree = "<group>"; };
 		00000000000000000000C00B /* ApprovalsWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalsWorkbenchModel.swift; sourceTree = "<group>"; };
+		00000000000000000000D103 /* SkillsWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkillsWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000C009 /* ChatWorkbenchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatWorkbenchModel.swift; sourceTree = "<group>"; };
 		00000000000000000000D021 /* ModelSetupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSetupModel.swift; sourceTree = "<group>"; };
 		00000000000000000000C007 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
@@ -357,6 +361,7 @@
 				00000000000000000000A03B /* VerificationView.swift */,
 				00000000000000000000C00F /* ChatView.swift */,
 				00000000000000000000C011 /* ApprovalsView.swift */,
+				00000000000000000000D101 /* SkillsView.swift */,
 				00000000000000000000C013 /* PrivacySettingsView.swift */,
 				00000000000000000000D003 /* SettingsView.swift */,
 				00000000000000000000D017 /* IntakePanel.swift */,
@@ -383,6 +388,7 @@
 				00000000000000000000D027 /* ActivityModel.swift */,
 				00000000000000000000D021 /* ModelSetupModel.swift */,
 				00000000000000000000C00B /* ApprovalsWorkbenchModel.swift */,
+				00000000000000000000D103 /* SkillsWorkbenchModel.swift */,
 				00000000000000000000C00D /* PrivacySettingsModel.swift */,
 				00000000000000000000D01D /* LinkSettingsModel.swift */,
 			);
@@ -597,9 +603,11 @@
 				00000000000000000000D002 /* AppSection.swift in Sources */,
 				00000000000000000000C014 /* PrivacySettingsView.swift in Sources */,
 				00000000000000000000C012 /* ApprovalsView.swift in Sources */,
+				00000000000000000000D102 /* SkillsView.swift in Sources */,
 				00000000000000000000C010 /* ChatView.swift in Sources */,
 				00000000000000000000C00E /* PrivacySettingsModel.swift in Sources */,
 				00000000000000000000C00C /* ApprovalsWorkbenchModel.swift in Sources */,
+				00000000000000000000D104 /* SkillsWorkbenchModel.swift in Sources */,
 				00000000000000000000C00A /* ChatWorkbenchModel.swift in Sources */,
 				00000000000000000000D026 /* ActivityModels.swift in Sources */,
 				00000000000000000000D028 /* ActivityModel.swift in Sources */,
