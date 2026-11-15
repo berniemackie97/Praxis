@@ -10,6 +10,12 @@ public interface IGraphReader
     GraphConceptPage ConceptRegions(GraphQuery query, CancellationToken cancellationToken = default,
         Guid? parentRegionId = null);
 
+    /// <summary>The brain's regions from the owner's folders and repositories, with hubs and cross-region evidence.</summary>
+    GraphRegionMap KnowledgeRegions(GraphQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>A page of a region's entities (best connected first) and the confirmed relations among them.</summary>
+    GraphPage RegionMembers(string regionId, GraphQuery query, CancellationToken cancellationToken = default);
+
     GraphClassificationAuditPage ClassificationAudit(GraphQuery query, CancellationToken cancellationToken = default);
 
     GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default);
