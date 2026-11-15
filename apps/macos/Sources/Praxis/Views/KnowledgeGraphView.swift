@@ -19,22 +19,13 @@ struct KnowledgeGraphView: View {
     @State private var showContexts = true
     @AppStorage("brain.graph.style") private var graphStyle = GraphStyle.cellularAtlas.rawValue
 
-    private var scopedZones: GraphZoneOverview? {
-        guard let summary = graph.zoneOverview else { return nil }
-        guard !graph.entityType.isEmpty else { return summary }
-        let zones = summary.zones.filter { $0.entityType == graph.entityType }
-        let links = summary.links.filter {
-            $0.subjectType == graph.entityType && $0.objectType == graph.entityType
-        }
-        return GraphZoneOverview(entityCount: zones.reduce(0) { $0 + $1.count },
-                                 relationshipCount: links.reduce(0) { $0 + $1.count },
-                                 zones: zones, links: links)
+    private var projectMap: GraphVisualOverview {
+        GraphVisualOverview(confirmedProjects: graph.conceptRegions)
     }
 
-    private var visibleZones: GraphZoneOverview? {
-        guard graph.focusId == nil,
-              graph.selectedZoneType == nil || graph.atlasLoading else { return nil }
-        return scopedZones
+    private var visibleProjectMap: GraphVisualOverview? {
+        guard graph.focusId == nil, graph.selectedZoneType == nil else { return nil }
+        return projectMap
     }
 
     var body: some View {
@@ -51,21 +42,21 @@ struct KnowledgeGraphView: View {
                     if graph.focusId == nil, let atlasError = graph.atlasError {
                         EmptyState(systemImage: "exclamationmark.triangle",
                                    title: "Current brain graph unavailable", message: atlasError)
-                    } else if (visibleZones == nil || visibleZones?.zones.isEmpty == true) &&
-                              graph.visibleNodes.isEmpty && !graph.zoneLoading &&
-                              !graph.atlasLoading && !graph.loading &&
-                              !(graphStyle == GraphStyle.neuralNebula.rawValue &&
-                                graph.zoneOverview?.zones.isEmpty == false) {
+                    } else if graph.focusId == nil && graph.selectedZoneType == nil &&
+                              graph.conceptRegions.isEmpty && !graph.conceptLoading &&
+                              !graph.zoneLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
-                                   title: "No current graph evidence",
-                                   message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
+                                   title: "No confirmed project regions yet",
+                                   message: (graph.overview?.entityCount ?? 0) > 0
+                                       ? "Current knowledge exists, but no confirmed project anchor is visible in this scope. Browse entities or adjust the lens."
+                                       : "No confirmed knowledge is visible in this scope. Add or approve evidence to grow the brain.")
                     } else {
                         Group {
                             if graphStyle == GraphStyle.neuralNebula.rawValue {
-                                NeuralNebulaView(zones: scopedZones,
+                                NeuralNebulaView(zones: projectMap,
                                                  nodes: graph.visibleNodes, edges: graph.visibleEdges,
                                                  regionType: graph.selectedZoneType, focusId: graph.focusId,
-                                                 expandZone: { graph.enterZone($0) },
+                                                 expandZone: { graph.focusEntityFromBrowse($0) },
                                                  returnToZones: { graph.showZones() },
                                                  selectedNodeId: $graph.selectedNodeId,
                                                  selectedEdgeId: $graph.selectedEdgeId,
@@ -74,9 +65,8 @@ struct KnowledgeGraphView: View {
                                                  zoom: zoom, zoomRevision: zoomRevision)
                             } else {
                                 GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges,
-                                               zones: visibleZones,
-                                               zoneTypeFilter: graph.entityType.isEmpty ? nil : graph.entityType,
-                                               expandZone: { graph.enterZone($0) },
+                                               zones: visibleProjectMap,
+                                               expandZone: { graph.focusEntityFromBrowse($0) },
                                                returnToZones: { graph.showZones() },
                                                regionType: graph.selectedZoneType,
                                                focusId: graph.focusId,
@@ -93,17 +83,15 @@ struct KnowledgeGraphView: View {
                         .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(visibleZones != nil ? "ONE BRAIN · KNOWLEDGE ZONES" :
-                                         graph.focusId == nil ? "REGIONAL CONNECTIONS" : "FOCUSED CONNECTIONS")
-                                        .font(.caption2.weight(.semibold))
-                                    if let zones = visibleZones {
-                                        Text("\(zones.zones.count) regions · " +
-                                             "\(zones.relationshipCount.formatted()) real relation observations")
-                                            .font(.caption).foregroundStyle(.secondary)
-                                        Text("\(zones.entityCount.formatted()) current entities · " +
-                                             "grouped by recorded type, not inferred communities")
-                                            .font(.caption2).foregroundStyle(.tertiary)
-                                        Text(graphStyle == GraphStyle.neuralNebula.rawValue
+                                    Text(visibleProjectMap != nil ? "ONE BRAIN · CONFIRMED PROJECTS" :
+                                          graph.focusId == nil ? "TYPE LENS CONNECTIONS" : "FOCUSED CONNECTIONS")
+                                         .font(.caption2.weight(.semibold))
+                                     if let regions = visibleProjectMap {
+                                         Text("\(regions.regions.count) of \(graph.conceptRegionCount) confirmed project anchors")
+                                             .font(.caption).foregroundStyle(.secondary)
+                                         Text("Region size reflects explicit membership · no cross-project links inferred")
+                                             .font(.caption2).foregroundStyle(.tertiary)
+                                         Text(graphStyle == GraphStyle.neuralNebula.rawValue
                                                  ? "Click or zoom toward a zone · Drag to orbit · Option-drag to pan"
                                                  : "Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
                                             .font(.caption2).foregroundStyle(.secondary)
@@ -129,8 +117,8 @@ struct KnowledgeGraphView: View {
                                 .allowsHitTesting(false)
                             }
                     }
-                    if graph.loading || graph.atlasLoading || graph.zoneLoading {
-                        ProgressView(graph.zoneLoading ? "Preparing knowledge zones" :
+                    if graph.loading || graph.atlasLoading || graph.zoneLoading || graph.conceptLoading {
+                        ProgressView(graph.conceptLoading ? "Preparing project regions" :
                                      graph.focusId == nil ? "Loading current region" : "Loading neighborhood")
                             .padding(Spacing.m)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
@@ -313,9 +301,9 @@ struct KnowledgeGraphView: View {
             }
             GroundedProjectSection(graph: graph)
             if graph.focusId == nil, graph.selectedZoneType == nil,
-               let zones = visibleZones {
+               let zones = graph.zoneOverview {
                 Divider()
-                Text("Knowledge zones").font(.subheadline.weight(.semibold))
+                Text("Explore by entity type").font(.subheadline.weight(.semibold))
                 List {
                     ForEach(zones.zones) { zone in
                         Button { graph.enterZone(zone.entityType) } label: {

@@ -15,22 +15,23 @@ enum NeuralNebulaGeometry {
         let detailLines: [NeuralNebulaVertex]
     }
 
-    static func build(overview: GraphZoneOverview, placement: NeuralNebulaPlacement,
+    static func build(overview: GraphVisualOverview, placement: NeuralNebulaPlacement,
                       nodes graphNodes: [GraphNode], edges graphEdges: [GraphEdge],
                       selectedNodeId: String?, selectedEdgeId: String? = nil, highContrast: Bool) -> Result {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
-        let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
+        let ordered = overview.regions.sorted { $0.id < $1.id }
         for zone in ordered {
-            guard let center = placement.zoneCenters[zone.entityType] else { continue }
-            let color = NeuralNebulaLayout.color(for: zone.entityType)
-            let size = placement.zoneSizes[zone.entityType] ?? 12
+            guard let center = placement.zoneCenters[zone.id] else { continue }
+            let color = NeuralNebulaLayout.color(for: zone.id)
+            let size = placement.zoneSizes[zone.id] ?? 12
             points.append(NeuralNebulaVertex(position: center, color: color, size: size))
             let satellites = min(72, max(10, Int(log2(Double(zone.count) + 1) * 10)))
             for number in 0..<satellites {
                 let radial = sqrt(Float(number + 1) / Float(satellites))
                 let angle = Float(number) * 2.399963
-                let latitude = 1 - 2 * ((Float(number) + 0.5) / Float(satellites))
+                let fraction = (Float(number) + 0.5) / Float(satellites)
+                let latitude: Float = 1 - 2 * fraction
                 let plane = sqrt(max(0, 1 - latitude * latitude))
                 let displacement = SIMD3<Float>(cos(angle) * plane, latitude,
                                                  sin(angle) * plane) * (size * 1.45 * radial)
@@ -40,7 +41,8 @@ enum NeuralNebulaGeometry {
             }
         }
         for number in 0..<220 {
-            let latitude = 1 - 2 * ((Float(number) + 0.5) / 220)
+            let fraction = (Float(number) + 0.5) / Float(220)
+            let latitude: Float = 1 - 2 * fraction
             let angle = Float(number) * 2.399963
             let radial = sqrt(max(0, 1 - latitude * latitude))
             let position = SIMD3<Float>(cos(angle) * radial, latitude, sin(angle) * radial) * 197
@@ -49,9 +51,9 @@ enum NeuralNebulaGeometry {
         }
 
         for relation in overview.links {
-            guard let a = placement.zoneCenters[relation.subjectType],
-                  let b = placement.zoneCenters[relation.objectType],
-                  relation.subjectType != relation.objectType else { continue }
+            guard let a = placement.zoneCenters[relation.subjectId],
+                  let b = placement.zoneCenters[relation.objectId],
+                  relation.subjectId != relation.objectId else { continue }
             if relation.confirmedCount > 0 {
                 appendLink(from: a, to: b, color: SIMD4<Float>(0.31, 0.77, 1, 0.47), into: &links)
             }

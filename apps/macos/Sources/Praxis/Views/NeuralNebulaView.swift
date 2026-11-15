@@ -5,7 +5,7 @@ import SwiftUI
 /// The same authorized graph projection as Cellular Atlas, rendered in persistent 3D space.
 @MainActor
 struct NeuralNebulaView: NSViewRepresentable {
-    let zones: GraphZoneOverview?
+    let zones: GraphVisualOverview?
     let nodes: [GraphNode]
     let edges: [GraphEdge]
     let regionType: String?
@@ -39,6 +39,8 @@ struct NeuralNebulaView: NSViewRepresentable {
 
     func updateNSView(_ view: NeuralNebulaInputView, context: Context) {
         guard let renderer = context.coordinator.renderer else { return }
+        view.regionTitles = Dictionary(uniqueKeysWithValues:
+            (zones?.regions ?? []).map { ($0.id, $0.title) })
         renderer.onEnterZone = expandZone
         renderer.onReturnToZones = returnToZones
         renderer.onSelectNode = { selectedNodeId = $0; selectedEdgeId = nil }
@@ -67,11 +69,12 @@ struct NeuralNebulaView: NSViewRepresentable {
 final class NeuralNebulaInputView: MTKView {
     weak var graphRenderer: NeuralNebulaRenderer?
     private var labels: [String: NebulaZoneLabel] = [:]
+    var regionTitles: [String: String] = [:]
 
     override var acceptsFirstResponder: Bool { true }
 
     func showFailure() {
-        let label = NSTextField(labelWithString: "Neural Nebula requires an available Metal renderer.")
+        let label = NSTextField(labelWithString: "Knowledge Cosmos requires an available Metal renderer.")
         label.textColor = .white
         label.font = .systemFont(ofSize: 13, weight: .medium)
         label.alignment = .center
@@ -89,7 +92,7 @@ final class NeuralNebulaInputView: MTKView {
                 label = existing
             } else {
                 label = NebulaZoneLabel(frame: CGRect(x: 0, y: 0, width: 150, height: 19))
-                label.stringValue = type.replacingOccurrences(of: "_", with: " ").capitalized
+                label.stringValue = regionTitles[type] ?? type
                 label.isBezeled = false
                 label.drawsBackground = false
                 label.isEditable = false
@@ -101,6 +104,7 @@ final class NeuralNebulaInputView: MTKView {
                 addSubview(label)
                 labels[type] = label
             }
+            label.stringValue = regionTitles[type] ?? type
             label.isHidden = selectedRegion != nil && selectedRegion != type
             label.frame.origin = CGPoint(x: point.x - 75, y: point.y + 27)
         }

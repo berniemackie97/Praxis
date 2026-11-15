@@ -89,51 +89,65 @@ struct GraphPresentationTests {
         #expect(EntityRelationSection.collapsedRows == 6)
     }
 
-    @Test func neuralZoneLayoutIsStableAndUsesOnlyScopedAggregateLinks() {
-        let zones = [
-            GraphTypeCount(entityType: "concept", count: 250),
-            GraphTypeCount(entityType: "project", count: 12),
-            GraphTypeCount(entityType: "technology", count: 40),
-            GraphTypeCount(entityType: "person", count: 2)
+    @Test func wholeBrainRegionLayoutUsesStableCanonicalIdentities() {
+        let regions = [
+            GraphVisualRegion(id: "project-c", title: "C", memberCount: 5, relatedCount: 10),
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0, relatedCount: 0),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 24, relatedCount: 26)
         ]
         let links = [
-            GraphZoneLink(subjectType: "project", objectType: "concept",
-                          confirmedCount: 23, suggestedCount: 0, contradictedCount: 0),
-            GraphZoneLink(subjectType: "concept", objectType: "technology",
-                          confirmedCount: 5, suggestedCount: 2, contradictedCount: 0)
+            GraphVisualLink(subjectId: "project-b", objectId: "project-c",
+                            confirmedCount: 2, suggestedCount: 0, contradictedCount: 0)
         ]
-        let first = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
-                                      zones: zones, links: links)
-        let second = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
-                                       zones: Array(zones.reversed()), links: Array(links.reversed()))
+        let first = GraphVisualOverview(regions: regions, links: links)
+        let second = GraphVisualOverview(regions: Array(regions.reversed()), links: Array(links.reversed()))
         let layout = GraphZoneLayout.place(first)
         #expect(layout.positions == GraphZoneLayout.place(second).positions)
-        #expect(layout.positions.count == 4)
+        #expect(layout.positions.count == 3)
         #expect(layout.bounds.width > 0 && layout.bounds.height > 0)
         #expect(layout.positions.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
-        #expect(layout.positions["person"] != layout.positions["project"])
-        #expect(GraphZoneLayout.place(GraphZoneOverview(entityCount: 0, relationshipCount: 0,
-                                                       zones: [], links: [])).positions.isEmpty)
+        #expect(layout.positions["project-a"] != layout.positions["project-b"])
+        #expect(GraphZoneLayout.place(GraphVisualOverview(regions: [])).positions.count == 0)
     }
 
     @MainActor
-    @Test func wholeBrainSceneUsesAggregatedZonesWithoutEndpointSprites() {
-        let zones = GraphZoneOverview(entityCount: 52, relationshipCount: 7, zones: [
-            GraphTypeCount(entityType: "project", count: 2),
-            GraphTypeCount(entityType: "concept", count: 50)
-        ], links: [
-            GraphZoneLink(subjectType: "project", objectType: "concept",
-                          confirmedCount: 7, suggestedCount: 0, contradictedCount: 0)
+    @Test func wholeBrainSceneUsesProjectRegionsWithoutEntityEndpointSprites() {
+        let map = GraphVisualOverview(regions: [
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0, relatedCount: 2),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 50, relatedCount: 51)
         ])
         let scene = GraphScene()
         scene.size = CGSize(width: 800, height: 600)
-        scene.configureZones(zones, type: nil)
+        scene.configureZones(map)
         #expect(scene.camera?.xScale == scene.camera?.yScale)
         let endpointSpriteCount = scene.children.filter { $0.name?.hasPrefix("node:") == true }.count
         #expect(endpointSpriteCount == 0)
         scene.reduceMotion = true
         scene.configure(nodes: [node("a"), node("b")], edges: [edge("r", "a", "b")], focus: nil)
         #expect(scene.camera != nil)
+    }
+
+    @Test func realProjectRegionsDoNotInventCrossProjectLinksOrMembership() {
+        let project = GraphConceptRegion(regionId: "id-a", label: "Known Project",
+                                         relationCount: 4, relatedEntityCount: 3,
+                                         containedEntityCount: 1)
+        let other = GraphConceptRegion(regionId: "id-b", label: "Other Project",
+                                       relationCount: 0, relatedEntityCount: 0,
+                                       containedEntityCount: 0)
+        let map = GraphVisualOverview(confirmedProjects: [project, other])
+        #expect(map.regions.map(\.id) == ["id-a", "id-b"])
+        #expect(map.regions.map(\.title) == ["Known Project", "Other Project"])
+        #expect(map.regions.map(\.count) == [2, 1])
+        #expect(map.regions[0].relatedCount == 3)
+        #expect(map.links.count == 0)
+        #expect(GraphVisualOverview(confirmedProjects: []).regions.count == 0)
+        let large = (0..<100).map { index in
+            GraphConceptRegion(regionId: "project-\(index)", label: "Project \(index)",
+                               relationCount: 0, relatedEntityCount: 0, containedEntityCount: 0)
+        }
+        let bounded = GraphVisualOverview(confirmedProjects: large)
+        #expect(bounded.regions.count == GraphVisualOverview.maximumRenderedRegions)
+        #expect(bounded.links.count == 0)
     }
 
     @Test func brainGraphStylesHaveDistinctStablePreferences() {
@@ -144,24 +158,20 @@ struct GraphPresentationTests {
     }
 
     @Test func neuralNebulaPlacementIsThreeDimensionalStableAndScopeBound() {
-        let summary = GraphZoneOverview(entityCount: 1003, relationshipCount: 1, zones: [
-            GraphTypeCount(entityType: "project", count: 800),
-            GraphTypeCount(entityType: "concept", count: 200),
-            GraphTypeCount(entityType: "other", count: 3)
-        ], links: [
-            GraphZoneLink(subjectType: "project", objectType: "concept",
-                          confirmedCount: 1, suggestedCount: 0, contradictedCount: 0)
+        let summary = GraphVisualOverview(regions: [
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 800, relatedCount: 900),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 200, relatedCount: 300),
+            GraphVisualRegion(id: "project-c", title: "C", memberCount: 3, relatedCount: 3)
         ])
-        let nodes = [node("alpha", type: "project"), node("beta", type: "concept"),
-                     node("disconnected", type: "other")]
+        let nodes = [node("alpha"), node("beta"), node("disconnected")]
         let links = [edge("actual", "alpha", "beta")]
         let first = NeuralNebulaLayout.place(zones: summary, nodes: nodes,
-                                              edges: links, regionType: "project")
+                                              edges: links, regionId: "project-a")
         let again = NeuralNebulaLayout.place(zones: summary, nodes: Array(nodes.reversed()),
-                                              edges: Array(links.reversed()), regionType: "project")
+                                              edges: Array(links.reversed()), regionId: "project-a")
         #expect(first.zoneCenters == again.zoneCenters)
         #expect(first.nodeCenters == again.nodeCenters)
-        #expect(first.zoneCenters.count == summary.zones.count)
+        #expect(first.zoneCenters.count == summary.regions.count)
         #expect(first.nodeCenters.count == nodes.count)
         #expect(Set(first.nodeCenters.keys) == Set(nodes.map(\.entityId)))
         #expect(Set(first.zoneCenters.values.map(\.z)).count > 1)
@@ -169,24 +179,24 @@ struct GraphPresentationTests {
             $0.x.isFinite && $0.y.isFinite && $0.z.isFinite
         })
         #expect(NeuralNebulaLayout.place(zones: summary, nodes: [], edges: [],
-                                         regionType: nil).nodeCenters.isEmpty)
+                                         regionId: nil).nodeCenters.count == 0)
         #expect(NeuralNebulaLayout.place(zones: summary, nodes: [node("focused")], edges: [],
-                                         regionType: nil).nodeCenters.count == 1)
+                                         regionId: nil).nodeCenters.count == 1)
         #expect(MemoryLayout<NeuralNebulaVertex>.stride == 48)
     }
 
-    @Test func neuralNebulaDrawsOnlyRecordedLinksAndBoundsDecorativeLight() {
-        let zones = GraphZoneOverview(entityCount: 7, relationshipCount: 3, zones: [
-            GraphTypeCount(entityType: "project", count: 5),
-            GraphTypeCount(entityType: "concept", count: 2)
+    @Test func neuralNebulaDrawsOnlySuppliedRegionLinksAndBoundsDecorativeLight() {
+        let zones = GraphVisualOverview(regions: [
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 5, relatedCount: 9),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 2, relatedCount: 3)
         ], links: [
-            GraphZoneLink(subjectType: "project", objectType: "concept",
-                          confirmedCount: 1, suggestedCount: 1, contradictedCount: 1)
+            GraphVisualLink(subjectId: "project-a", objectId: "project-b",
+                            confirmedCount: 1, suggestedCount: 1, contradictedCount: 1)
         ])
-        let nodes = [node("first", type: "project"), node("second", type: "concept")]
+        let nodes = [node("first"), node("second")]
         let edges = [edge("one", "first", "second")]
         let placement = NeuralNebulaLayout.place(zones: zones, nodes: nodes,
-                                                 edges: edges, regionType: "project")
+                                                 edges: edges, regionId: "project-a")
         let geometry = NeuralNebulaGeometry.build(overview: zones, placement: placement,
                                                   nodes: nodes, edges: edges,
                                                   selectedNodeId: nil, highContrast: false)
@@ -195,12 +205,11 @@ struct GraphPresentationTests {
         #expect(geometry.detailPoints.count == 2)
         #expect(geometry.zonePoints.count <= 2 * 73 + 220)
         let disconnected = NeuralNebulaGeometry.build(
-            overview: GraphZoneOverview(entityCount: 7, relationshipCount: 0,
-                                        zones: zones.zones, links: []),
+            overview: GraphVisualOverview(regions: zones.regions),
             placement: placement, nodes: nodes, edges: [],
             selectedNodeId: nil, highContrast: false)
-        #expect(disconnected.zoneLines.isEmpty)
-        #expect(disconnected.detailLines.isEmpty)
+        #expect(disconnected.zoneLines.count == 0)
+        #expect(disconnected.detailLines.count == 0)
     }
 
     @Test func neuralNebulaCameraInterpolatesInsteadOfTeleportingBetweenLevels() {

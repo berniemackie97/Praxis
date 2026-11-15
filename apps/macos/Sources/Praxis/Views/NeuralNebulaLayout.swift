@@ -8,10 +8,10 @@ struct NeuralNebulaPlacement {
 }
 
 enum NeuralNebulaLayout {
-    static func place(zones overview: GraphZoneOverview, nodes: [GraphNode],
-                      edges: [GraphEdge], regionType: String?) -> NeuralNebulaPlacement {
-        let ordered = overview.zones.filter { $0.count > 0 }.sorted {
-            $0.count == $1.count ? $0.entityType < $1.entityType : $0.count > $1.count
+    static func place(zones overview: GraphVisualOverview, nodes: [GraphNode],
+                      edges: [GraphEdge], regionId: String?) -> NeuralNebulaPlacement {
+        let ordered = overview.regions.filter { $0.count > 0 }.sorted {
+            $0.count == $1.count ? $0.id < $1.id : $0.count > $1.count
         }
         let goldenAngle = Float.pi * (3 - sqrt(Float(5)))
         let centers = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { index, zone in
@@ -21,15 +21,15 @@ enum NeuralNebulaLayout {
             let angle = Float(index) * goldenAngle
             let position = ordered.count == 1 ? SIMD3<Float>.zero :
                 SIMD3<Float>(cos(angle) * radial, latitude, sin(angle) * radial) * 185
-            return (zone.entityType, position)
+            return (zone.id, position)
         })
         let sizes = Dictionary(uniqueKeysWithValues: ordered.map {
-            ($0.entityType, min(29, 9 + log2(Float($0.count) + 1) * 2.2))
+            ($0.id, min(29, 9 + log2(Float($0.count) + 1) * 2.2))
         })
         guard !nodes.isEmpty else {
             return NeuralNebulaPlacement(zoneCenters: centers, zoneSizes: sizes, nodeCenters: [:])
         }
-        let center = regionType.flatMap { centers[$0] } ?? .zero
+        let center = regionId.flatMap { centers[$0] } ?? .zero
 
         let flat = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
         let extent = max(1, flat.values.reduce(CGFloat(0)) { maximum, point in
@@ -41,13 +41,13 @@ enum NeuralNebulaLayout {
             let x = Float(point.x / extent) * radius
             let y = Float(point.y / extent) * radius
             let depth = sqrt(max(0, radius * radius - x * x - y * y))
-            let sign: Float = stableHash(node.entityId) & 1 == 0 ? 1 : -1
+            let sign: Float = GraphRegionIdentity.hash(node.entityId) & 1 == 0 ? 1 : -1
             return (node.entityId, center + SIMD3<Float>(x, y, depth * sign * 0.65))
         })
         return NeuralNebulaPlacement(zoneCenters: centers, zoneSizes: sizes, nodeCenters: positions)
     }
 
-    static func color(for type: String) -> SIMD4<Float> {
+    static func color(for regionId: String) -> SIMD4<Float> {
         let palette: [SIMD4<Float>] = [
             SIMD4<Float>(0.28, 0.77, 1.00, 1),
             SIMD4<Float>(0.65, 0.57, 1.00, 1),
@@ -55,10 +55,7 @@ enum NeuralNebulaLayout {
             SIMD4<Float>(1.00, 0.68, 0.50, 1),
             SIMD4<Float>(0.91, 0.54, 0.87, 1)
         ]
-        return palette[Int(stableHash(type) % UInt64(palette.count))]
+        return palette[Int(GraphRegionIdentity.hash(regionId) % UInt64(palette.count))]
     }
 
-    private static func stableHash(_ value: String) -> UInt64 {
-        value.utf8.reduce(14_695_981_039_346_656_037) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
-    }
 }
