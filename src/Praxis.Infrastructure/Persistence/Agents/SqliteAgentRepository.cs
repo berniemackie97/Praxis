@@ -66,6 +66,34 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
 
     public AgentConversation? Read(Guid conversationId) => Conversations("WHERE conversation_id = $id", 1, ("$id", conversationId.ToString("D"))).FirstOrDefault();
 
+    public bool Rename(Guid conversationId, string title)
+    {
+        string normalized = title.Trim();
+        if (normalized.Length is < 1 or > 200)
+        {
+            throw new ArgumentException("The conversation title must have 1–200 characters.", nameof(title));
+        }
+
+        return Write("UPDATE agent_conversations SET title = $title, updated_utc = $now WHERE conversation_id = $id",
+            ("$title", normalized), ("$now", Now()), ("$id", conversationId.ToString("D"))) == 1;
+    }
+
+    public bool Delete(Guid conversationId) => database.Execute(connection =>
+    {
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        string id = conversationId.ToString("D");
+        // Independently owned artifacts, memories and pending owner proposals survive without a chat link.
+        connection.Run(transaction, "UPDATE agent_artifacts SET conversation_id = NULL WHERE conversation_id = $id", ("$id", id));
+        connection.Run(transaction, "UPDATE agent_memories SET conversation_id = NULL WHERE conversation_id = $id", ("$id", id));
+        connection.Run(transaction, "UPDATE agent_proposals SET conversation_id = NULL WHERE conversation_id = $id", ("$id", id));
+        // Remove transcript and tool-call argument history explicitly; do not rely on SQLite FK defaults.
+        connection.Run(transaction, "DELETE FROM agent_tool_calls WHERE conversation_id = $id", ("$id", id));
+        connection.Run(transaction, "DELETE FROM agent_messages WHERE conversation_id = $id", ("$id", id));
+        int deleted = connection.Run(transaction, "DELETE FROM agent_conversations WHERE conversation_id = $id", ("$id", id));
+        transaction.Commit();
+        return deleted == 1;
+    });
+
     public IReadOnlyList<AgentConversation> List(int limit) => Conversations("", Math.Clamp(limit, 1, 500));
 
     public IReadOnlyList<AgentMessage> ReadMessages(Guid conversationId) => database.ExecuteRead(connection =>

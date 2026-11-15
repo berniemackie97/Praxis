@@ -16,6 +16,10 @@ public interface IAgentConversationRepository
 
     AgentConversation? Read(Guid conversationId);
 
+    bool Rename(Guid conversationId, string title);
+
+    bool Delete(Guid conversationId);
+
     IReadOnlyList<AgentConversation> List(int limit);
 
     IReadOnlyList<AgentMessage> ReadMessages(Guid conversationId);

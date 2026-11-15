@@ -59,6 +59,9 @@ struct ChatView: View {
 
 private struct ConversationList: View {
     @ObservedObject var model: ChatWorkbenchModel
+    @State private var renaming: AgentConversation?
+    @State private var renameTitle = ""
+    @State private var deleting: AgentConversation?
 
     var body: some View {
         List(selection: Binding<String?>(
@@ -76,7 +79,36 @@ private struct ConversationList: View {
                 }
                 .padding(.vertical, Spacing.xxs)
                 .tag(conversation.conversationId)
+                .contextMenu {
+                    Button("Rename…", systemImage: "pencil") {
+                        renaming = conversation
+                        renameTitle = conversation.title
+                    }
+                    Button("Delete…", systemImage: "trash", role: .destructive) {
+                        deleting = conversation
+                    }
+                }
             }
+        }
+        .alert("Rename Conversation", isPresented: Binding(
+            get: { renaming != nil },
+            set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $renameTitle)
+            Button("Save") {
+                if let renaming { model.rename(renaming, to: renameTitle) }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog("Delete this conversation?", isPresented: Binding(
+            get: { deleting != nil },
+            set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button("Delete Conversation", role: .destructive) {
+                if let deleting { model.delete(deleting) }
+                deleting = nil
+            }
+        } message: {
+            Text("The conversation and its tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
         }
         .overlay {
             if model.conversations.isEmpty {
