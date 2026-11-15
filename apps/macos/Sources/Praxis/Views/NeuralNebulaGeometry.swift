@@ -13,6 +13,8 @@ enum NeuralNebulaGeometry {
         let zoneLines: [NeuralNebulaVertex]
         let detailPoints: [NeuralNebulaVertex]
         let detailLines: [NeuralNebulaVertex]
+        /// Where each galaxy's stars sit in `zonePoints`, so an entered galaxy can stay lit while the rest dim.
+        let zoneRanges: [String: Range<Int>]
     }
 
     static func build(overview: GraphVisualOverview, placement: NeuralNebulaPlacement,
@@ -20,11 +22,14 @@ enum NeuralNebulaGeometry {
                       selectedNodeId: String?, selectedEdgeId: String? = nil, highContrast: Bool) -> Result {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
+        var ranges: [String: Range<Int>] = [:]
         for (index, zone) in overview.regions.enumerated() {
             guard let center = placement.zoneCenters[zone.id] else { continue }
             let forming = zone.memberCount == 0
             let color = NeuralNebulaLayout.regionColor(index, forming: forming)
             let size = placement.zoneSizes[zone.id] ?? 12
+            let start = points.count
+            defer { ranges[zone.id] = start..<points.count }
             points.append(contentsOf: Galaxy.stars(id: zone.id, center: center, size: size, members: zone.count,
                                                     tint: SIMD3<Float>(color.x, color.y, color.z), forming: forming,
                                                     highContrast: highContrast))
@@ -69,19 +74,32 @@ enum NeuralNebulaGeometry {
         let localLinks = detailLines(edges: graphEdges, placement: placement,
                                      selectedEdgeId: selectedEdgeId, highContrast: highContrast)
         return Result(zonePoints: points, zoneLines: links,
-                      detailPoints: localPoints, detailLines: localLinks)
+                      detailPoints: localPoints, detailLines: localLinks, zoneRanges: ranges)
     }
 
+    /// Member entities as stars: a white-hot core in a coloured corona whose size grows with how
+    /// often the entity is mentioned. Colour is the entity type, warmed or cooled like a real star.
     static func detailPoints(nodes: [GraphNode], placement: NeuralNebulaPlacement,
                              selectedNodeId: String?, highContrast: Bool) -> [NeuralNebulaVertex] {
-        nodes.compactMap { node in
-            guard let position = placement.nodeCenters[node.entityId] else { return nil }
+        var vertices: [NeuralNebulaVertex] = []
+        vertices.reserveCapacity(nodes.count * 3)
+        for node in nodes {
+            guard let position = placement.nodeCenters[node.entityId] else { continue }
             let highlighted = node.entityId == selectedNodeId
-            let color = highlighted ? SIMD4<Float>(1, 1, 1, 1) :
-                NeuralNebulaLayout.color(for: node.entityType ?? "other")
-            return NeuralNebulaVertex(position: position, color: color,
-                                      size: highlighted ? 10 : (highContrast ? 6.5 : 4.7))
+            let type = NeuralNebulaLayout.color(for: node.entityType ?? "other")
+            let magnitude = min(1, log2(Float(max(1, node.mentions)) + 1) / 7)
+            let corona = SIMD3<Float>(type.x, type.y, type.z)
+            if highlighted {
+                vertices.append(NeuralNebulaVertex(position: position, color: SIMD4<Float>(1, 0.92, 0.75, 0.32), size: 9))
+                vertices.append(NeuralNebulaVertex(position: position, color: SIMD4<Float>(1, 1, 1, 1), size: 2.4))
+                continue
+            }
+            vertices.append(NeuralNebulaVertex(position: position, color: SIMD4<Float>(corona, highContrast ? 0.5 : 0.28),
+                                               size: 1.6 + magnitude * 3.4))
+            vertices.append(NeuralNebulaVertex(position: position, color: SIMD4<Float>(corona * 0.35 + 0.65, 0.95),
+                                               size: 0.5 + magnitude * 0.9))
         }
+        return vertices
     }
 
     static func detailLines(edges: [GraphEdge], placement: NeuralNebulaPlacement,
@@ -95,9 +113,9 @@ enum NeuralNebulaGeometry {
                 color = SIMD4<Float>(1, 1, 1, 0.95)
             } else {
                 switch edge.evidenceStatus {
-                case "suggested": color = SIMD4<Float>(1, 0.71, 0.33, 0.49)
-                case "contradicted": color = SIMD4<Float>(1, 0.41, 0.48, 0.58)
-                default: color = SIMD4<Float>(0.55, 0.81, 1, highContrast ? 0.73 : 0.40)
+                case "suggested": color = SIMD4<Float>(1, 0.71, 0.33, 0.22)
+                case "contradicted": color = SIMD4<Float>(1, 0.41, 0.48, 0.3)
+                default: color = SIMD4<Float>(0.55, 0.81, 1, highContrast ? 0.6 : 0.13)
                 }
             }
             appendLink(from: a, to: b, color: color, into: &links)

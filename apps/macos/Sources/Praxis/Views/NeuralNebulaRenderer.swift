@@ -15,9 +15,10 @@ private struct NeuralNebulaUniforms {
 final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
     var onEnterZone: ((String) -> Void)?
     var onReturnToZones: (() -> Void)?
-    var onSelectNode: ((String) -> Void)?
+    var onSelectNode: ((String?) -> Void)?
     var onSelectEdge: ((String) -> Void)?
-    var onFrame: (([String: CGPoint], String?) -> Void)?
+    /// Projected galaxy label anchors, star label anchors (inside a galaxy) and the entered galaxy.
+    var onFrame: (([String: CGPoint], [String: CGPoint], String?) -> Void)?
 
     private struct Batch {
         var buffer: (any MTLBuffer)?
@@ -34,6 +35,13 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
     private var zoneLines = Batch()
     private var detailPoints = Batch()
     private var detailLines = Batch()
+    private var systemPoints = Batch()
+    private var systemLines = Batch()
+    private var zoneRanges: [String: Range<Int>] = [:]
+    private var galaxyShape: Galaxy.Shape?
+    private var enteredGalaxy: String?
+    private var labelledStars: [String] = []
+    private var galaxyOpacity: Float = 0
     private var overview: GraphVisualOverview?
     private var graphNodes: [GraphNode] = []
     private var graphEdges: [GraphEdge] = []
@@ -124,6 +132,12 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
                 detailPoints = buffer(NeuralNebulaGeometry.detailPoints(
                     nodes: nodes, placement: placement,
                     selectedNodeId: selectedNodeId, highContrast: highContrast))
+                // Selecting a star flies into its system; clearing it pulls back out to the galaxy.
+                if enteredGalaxy != nil, focusId == nil { frameLevel() }
+                if reduceMotion {
+                    camera.center = camera.desiredCenter
+                    camera.distance = camera.desiredDistance
+                }
             }
             if edgeSelectionChanged {
                 detailLines = buffer(NeuralNebulaGeometry.detailLines(
@@ -158,13 +172,19 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             camera.desiredDistance = 560
             return
         }
-        let visibleRegion = focusId.flatMap { id in
-            overview.regions.contains(where: { $0.id == id }) ? id : nil
+        let visibleRegion = (regionType ?? focusId).flatMap { id in
+            overview.regions.contains(where: { $0.id == id && $0.count > 0 }) ? id : nil
         }
         if updateLayout {
             placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
                                                   edges: graphEdges, regionId: visibleRegion)
         }
+        enteredGalaxy = visibleRegion
+        galaxyShape = visibleRegion.flatMap { id in
+            placement.zoneCenters[id].map { Galaxy.shape(id: id, center: $0, size: placement.zoneSizes[id] ?? 12) }
+        }
+        labelledStars = graphNodes.sorted { $0.mentions == $1.mentions ? $0.entityId < $1.entityId : $0.mentions > $1.mentions }
+            .prefix(10).map(\.entityId)
         let geometry = NeuralNebulaGeometry.build(overview: overview, placement: placement,
                                                   nodes: graphNodes, edges: graphEdges,
                                                   selectedNodeId: selectedNodeId,
@@ -174,10 +194,9 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         zoneLines = buffer(geometry.zoneLines)
         detailPoints = buffer(geometry.detailPoints)
         detailLines = buffer(geometry.detailLines)
+        zoneRanges = geometry.zoneRanges
         if reposition {
-            camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
-                visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 560 : 157
+            frameLevel()
         } else if focusWasMissing, let focusId, let point = placement.nodeCenters[focusId] {
             camera.desiredCenter = point
         }
@@ -185,7 +204,34 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             camera.center = camera.desiredCenter
             camera.distance = camera.desiredDistance
             detailOpacity = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
+            galaxyOpacity = enteredGalaxy == nil ? 0 : 1
         }
+    }
+
+    /// Distance that frames the entered galaxy's whole disc.
+    private var galaxyDistance: Float { max(60, (galaxyShape?.radius ?? 56) * 1.85) }
+    private static let starSystemDistance: Float = 22
+
+    /// Frames the current tier: the universe, the entered galaxy, or a selected star's system.
+    private func frameLevel() {
+        if let selectedNodeId, enteredGalaxy != nil, let star = placement.nodeCenters[selectedNodeId] {
+            camera.desiredCenter = star
+            camera.desiredDistance = Self.starSystemDistance
+        } else if let focusId, let point = placement.nodeCenters[focusId] {
+            camera.desiredCenter = point
+            camera.desiredDistance = 79
+        } else if let shape = galaxyShape {
+            camera.desiredCenter = shape.center
+            camera.desiredDistance = galaxyDistance
+        } else {
+            camera.desiredCenter = .zero
+            camera.desiredDistance = 560
+        }
+    }
+
+    /// One tier up: out of a star system to its galaxy, or out of a galaxy to the universe.
+    func climb() {
+        if selectedNodeId != nil, enteredGalaxy != nil { onSelectNode?(nil) } else { onReturnToZones?() }
     }
 
     func orbit(dx: Float, dy: Float) {
@@ -202,15 +248,29 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if reduceMotion { view?.setNeedsDisplay(view?.bounds ?? .zero) }
     }
 
+    /// Continuous zoom through the tiers. Zooming in drifts toward what is under the pointer, so
+    /// the camera flies into the galaxy (then the star) being pointed at; crossing a tier's
+    /// threshold enters it, and zooming back out climbs up again.
     func zoom(by factor: Float, at point: CGPoint?) {
-        camera.desiredDistance = max(48, min(1_400, camera.desiredDistance * factor))
-        if regionType == nil, focusId == nil, let point, let zone = zone(at: point) {
-            if let anchor = placement.zoneCenters[zone] {
-                camera.desiredCenter += (anchor - camera.desiredCenter) * 0.16
+        let inside = regionType != nil || focusId != nil
+        camera.desiredDistance = max(inside ? 7 : 48, min(1_400, camera.desiredDistance * factor))
+        let zoomingIn = factor < 1
+        if !inside, let point, let zone = zone(at: point) {
+            if let anchor = placement.zoneCenters[zone], zoomingIn {
+                camera.desiredCenter += (anchor - camera.desiredCenter) * 0.22
             }
             if camera.desiredDistance < 340 { onEnterZone?(zone) }
-        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 450 {
+        } else if inside && camera.desiredDistance > 450 {
             onReturnToZones?()
+        } else if enteredGalaxy != nil, focusId == nil {
+            if selectedNodeId != nil, camera.desiredDistance > galaxyDistance * 0.55 {
+                // Pulled out of a star system: back to the whole galaxy.
+                onSelectNode?(nil)
+            } else if selectedNodeId == nil, zoomingIn, let point, let star = nearestNode(to: point, within: 40),
+                      let anchor = placement.nodeCenters[star] {
+                camera.desiredCenter += (anchor - camera.desiredCenter) * 0.2
+                if camera.desiredDistance < galaxyDistance * 0.3 { onSelectNode?(star) }
+            }
         }
         invalidate()
     }
@@ -221,9 +281,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         lastToolbarZoom = zoom
         zoomRevision = revision
         if zoom == 1 {
-            camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
-                regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 560 : 157
+            frameLevel()
             invalidate()
         } else {
             self.zoom(by: ratio, at: nil)
@@ -234,6 +292,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if regionType != nil || focusId != nil {
             if let node = nearestNode(to: point) { onSelectNode?(node); return }
             if let edge = nearestEdge(to: point) { onSelectEdge?(edge); return }
+            if selectedNodeId != nil { onSelectNode?(nil) }
         } else if let type = zone(at: point) {
             onEnterZone?(type)
         }
@@ -256,11 +315,11 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         }.min { $0.1 < $1.1 }?.0
     }
 
-    private func nearestNode(to point: CGPoint) -> String? {
+    private func nearestNode(to point: CGPoint, within limit: CGFloat = 14) -> String? {
         placement.nodeCenters.compactMap { entry -> (String, CGFloat)? in
             guard let position = projected(entry.value) else { return nil }
             let distance = hypot(position.x - point.x, position.y - point.y)
-            return distance < 14 ? (entry.key, distance) : nil
+            return distance < limit ? (entry.key, distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
@@ -291,6 +350,8 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         camera.settle(weight: weight)
         let desiredOpacity: Float = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
         detailOpacity += (desiredOpacity - detailOpacity) * weight
+        galaxyOpacity += ((enteredGalaxy == nil ? 0 : 1) - galaxyOpacity) * weight
+        buildStarSystem(time: reduceMotion ? 0 : Float(now))
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
               let command = queue.makeCommandBuffer(),
@@ -300,11 +361,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         var uniform = NeuralNebulaUniforms(viewProjection: camera.projection(aspect: aspect),
                                             time: reduceMotion ? 0 : Float(now),
                                             opacity: 1, pointScale: Float(view.drawableSize.height))
-        let baseOpacity = 1 - detailOpacity * 0.82
-        draw(zoneLines, lines: true, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
-        draw(detailLines, lines: true, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
-        draw(zonePoints, lines: false, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
-        draw(detailPoints, lines: false, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        drawScene(uniform: &uniform, encoder: encoder)
         encoder.endEncoding()
         command.present(drawable)
         command.commit()
@@ -312,7 +369,16 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             let positions = placement.zoneCenters.reduce(into: [String: CGPoint]()) { result, entry in
                 if let point = projected(entry.value) { result[entry.key] = point }
             }
-            onFrame(positions, focusId.flatMap { placement.zoneCenters[$0] == nil ? nil : $0 })
+            var stars: [String: CGPoint] = [:]
+            if enteredGalaxy != nil, detailOpacity > 0.5 {
+                var ids = selectedNodeId == nil ? labelledStars : [selectedNodeId!] + planetIds
+                if selectedNodeId == nil, camera.distance > galaxyDistance * 1.6 { ids = [] }
+                for id in ids {
+                    if let point = placement.nodeCenters[id].flatMap(projected),
+                       view.bounds.insetBy(dx: -20, dy: -20).contains(point) { stars[id] = point }
+                }
+            }
+            onFrame(positions, stars, enteredGalaxy)
         }
     }
 
@@ -342,11 +408,9 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         encoder.setDepthStencilState(depthState)
         var uniform = NeuralNebulaUniforms(viewProjection: camera.projection(aspect: Float(size.width / size.height)),
                                             time: 0, opacity: 1, pointScale: Float(size.height))
-        let baseOpacity = 1 - detailOpacity * 0.82
-        draw(zoneLines, lines: true, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
-        draw(detailLines, lines: true, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
-        draw(zonePoints, lines: false, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
-        draw(detailPoints, lines: false, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        galaxyOpacity = enteredGalaxy == nil ? 0 : 1
+        buildStarSystem(time: 1.3)
+        drawScene(uniform: &uniform, encoder: encoder)
         encoder.endEncoding()
         command.commit()
         command.waitUntilCompleted()
@@ -359,14 +423,99 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
-    private func draw(_ batch: Batch, lines: Bool, opacity: Float,
+    /// The universe dims as a galaxy is entered, except that galaxy, which stays lit around its
+    /// member stars; a selected star's planets draw on top.
+    private func drawScene(uniform: inout NeuralNebulaUniforms, encoder: any MTLRenderCommandEncoder) {
+        let baseOpacity = 1 - detailOpacity * 0.8
+        let litOpacity = baseOpacity + (1 - detailOpacity * 0.45 - baseOpacity) * galaxyOpacity
+        draw(zoneLines, lines: true, opacity: baseOpacity * (1 - galaxyOpacity * 0.6), uniform: &uniform, encoder: encoder)
+        draw(detailLines, lines: true, opacity: detailOpacity * (selectedNodeId == nil ? 1 : 0.3), uniform: &uniform, encoder: encoder)
+        if let galaxy = enteredGalaxy, let range = zoneRanges[galaxy] {
+            draw(zonePoints, lines: false, opacity: baseOpacity, range: 0..<range.lowerBound, uniform: &uniform, encoder: encoder)
+            draw(zonePoints, lines: false, opacity: litOpacity, range: range, uniform: &uniform, encoder: encoder)
+            draw(zonePoints, lines: false, opacity: baseOpacity, range: range.upperBound..<zonePoints.count,
+                 uniform: &uniform, encoder: encoder)
+        } else {
+            draw(zonePoints, lines: false, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
+        }
+        draw(detailPoints, lines: false, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        draw(systemLines, lines: true, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        draw(systemPoints, lines: false, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+    }
+
+    private var planetIds: [String] = []
+
+    /// A selected star's system: each confirmed or proposed relation is a planet on its own orbit
+    /// in the galaxy's plane (inner orbits run faster, as Kepler would have it), tethered by a faint
+    /// line to the star it relates to. Rebuilt per frame; it is a few hundred vertices at most.
+    private func buildStarSystem(time: Float) {
+        guard let selectedNodeId, enteredGalaxy != nil, let star = placement.nodeCenters[selectedNodeId],
+              let shape = galaxyShape else {
+            systemPoints = Batch()
+            systemLines = Batch()
+            planetIds = []
+            return
+        }
+        let relations = graphEdges.filter { $0.subjectId == selectedNodeId || $0.objectId == selectedNodeId }
+            .sorted { $0.relationId < $1.relationId }.prefix(14)
+        let u = shape.rotation.act(SIMD3<Float>(1, 0, 0)), v = shape.rotation.act(SIMD3<Float>(0, 1, 0)), normal = shape.normal
+        var points: [NeuralNebulaVertex] = []
+        var lines: [NeuralNebulaVertex] = []
+        // Corona: layered warm glow that breathes slowly.
+        let breath = 1 + 0.06 * sin(time * 1.7)
+        points.append(NeuralNebulaVertex(position: star, color: SIMD4<Float>(1, 0.62, 0.3, 0.10), size: 14 * breath))
+        points.append(NeuralNebulaVertex(position: star, color: SIMD4<Float>(1, 0.85, 0.6, 0.22), size: 5.5 * breath))
+        var ids: [String] = []
+        for (index, relation) in relations.enumerated() {
+            let other = relation.subjectId == selectedNodeId ? relation.objectId : relation.subjectId
+            ids.append(other)
+            let hash = GraphRegionIdentity.hash(relation.relationId)
+            let orbit = 2.4 + Float(index) * 0.95
+            let tilt = (Float(hash & 0xFF) / 255 - 0.5) * 0.3
+            let phase = Float((hash >> 8) & 0xFFFF) / 65_535 * 2 * .pi
+            let angle = phase + time * 1.6 / pow(orbit, 1.5)
+            func at(_ theta: Float) -> SIMD3<Float> {
+                star + (u * cos(theta) + v * sin(theta)) * orbit + normal * sin(theta) * orbit * tilt
+            }
+            let color: SIMD3<Float>
+            switch relation.evidenceStatus {
+            case "suggested": color = [1, 0.71, 0.33]
+            case "contradicted": color = [1, 0.41, 0.48]
+            default:
+                let tone = NeuralNebulaLayout.color(for: relation.predicate)
+                color = SIMD3<Float>(tone.x, tone.y, tone.z)
+            }
+            let selected = relation.relationId == selectedEdgeId
+            let segments = 72
+            for step in 0..<segments {
+                lines.append(NeuralNebulaVertex(position: at(Float(step) / Float(segments) * 2 * .pi),
+                                                color: SIMD4<Float>(color, selected ? 0.55 : 0.24), size: 1))
+                lines.append(NeuralNebulaVertex(position: at(Float(step + 1) / Float(segments) * 2 * .pi),
+                                                color: SIMD4<Float>(color, selected ? 0.55 : 0.24), size: 1))
+            }
+            let planet = at(angle)
+            points.append(NeuralNebulaVertex(position: planet, color: SIMD4<Float>(color, 0.45), size: selected ? 3.2 : 2.3))
+            points.append(NeuralNebulaVertex(position: planet, color: SIMD4<Float>(color * 0.4 + 0.6, 1), size: selected ? 1.0 : 0.7))
+            if let target = placement.nodeCenters[other] {
+                lines.append(NeuralNebulaVertex(position: planet, color: SIMD4<Float>(color, 0.22), size: 1))
+                lines.append(NeuralNebulaVertex(position: target, color: SIMD4<Float>(color, 0.04), size: 1))
+            }
+        }
+        planetIds = ids
+        systemPoints = buffer(points)
+        systemLines = buffer(lines)
+    }
+
+    private func draw(_ batch: Batch, lines: Bool, opacity: Float, range: Range<Int>? = nil,
                       uniform: inout NeuralNebulaUniforms, encoder: any MTLRenderCommandEncoder) {
         guard let buffer = batch.buffer, batch.count > 0, opacity > 0.003 else { return }
+        let span = range.map { $0.clamped(to: 0..<batch.count) } ?? 0..<batch.count
+        guard !span.isEmpty else { return }
         uniform.opacity = opacity
         encoder.setRenderPipelineState(lines ? linesPipeline : pointsPipeline)
         encoder.setVertexBuffer(buffer, offset: 0, index: 0)
         encoder.setVertexBytes(&uniform, length: MemoryLayout<NeuralNebulaUniforms>.stride, index: 1)
-        encoder.drawPrimitives(type: lines ? .line : .point, vertexStart: 0, vertexCount: batch.count)
+        encoder.drawPrimitives(type: lines ? .line : .point, vertexStart: span.lowerBound, vertexCount: span.count)
     }
 
 }

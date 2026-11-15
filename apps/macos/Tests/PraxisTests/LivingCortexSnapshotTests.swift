@@ -39,12 +39,24 @@ struct LivingCortexSnapshotTests {
         #expect(Self.litFraction(territory) > 0.01)
 
         // Knowledge Cosmos draws the same territories as galaxies.
-        var universe: CGImage?
+        var universe: CGImage?, galaxy: CGImage?, system: CGImage?
         if let cosmos = NeuralNebulaRenderer(view: nil) {
             cosmos.update(overview: BrainTerritories.overview(map), nodes: [], edges: [], regionType: nil, focusId: nil,
                           selectedNodeId: nil, selectedEdgeId: nil, reduceMotion: true, highContrast: false, active: false)
             universe = cosmos.snapshot(size: size)
             #expect(universe.map(Self.litFraction) ?? 0 > 0.01)
+            // Entering a galaxy flies into its disc; selecting a star opens its planetary system.
+            cosmos.update(overview: BrainTerritories.overview(map), nodes: members.nodes, edges: members.edges,
+                          regionType: open, focusId: nil, selectedNodeId: nil, selectedEdgeId: nil,
+                          reduceMotion: true, highContrast: false, active: false)
+            galaxy = cosmos.snapshot(size: size)
+            #expect(galaxy.map(Self.litFraction) ?? 0 > 0.01)
+            let star = members.edges.map(\.subjectId).first
+            cosmos.update(overview: BrainTerritories.overview(map), nodes: members.nodes, edges: members.edges,
+                          regionType: open, focusId: nil, selectedNodeId: star, selectedEdgeId: nil,
+                          reduceMotion: true, highContrast: false, active: false)
+            system = cosmos.snapshot(size: size)
+            #expect(system.map(Self.litFraction) ?? 0 > 0.005)
         }
 
         // Cellular Atlas draws them as cells (SpriteKit, rendered offscreen with SKRenderer).
@@ -60,6 +72,8 @@ struct LivingCortexSnapshotTests {
             try Self.png(whole).write(to: folder.appendingPathComponent("living-cortex-whole.png"))
             try Self.png(territory).write(to: folder.appendingPathComponent("living-cortex-territory.png"))
             if let universe { try Self.png(universe).write(to: folder.appendingPathComponent("knowledge-cosmos-universe.png")) }
+            if let galaxy { try Self.png(galaxy).write(to: folder.appendingPathComponent("knowledge-cosmos-galaxy.png")) }
+            if let system { try Self.png(system).write(to: folder.appendingPathComponent("knowledge-cosmos-system.png")) }
             if let tissue { try Self.png(tissue).write(to: folder.appendingPathComponent("cellular-atlas-tissue.png")) }
             if let interior { try Self.png(interior).write(to: folder.appendingPathComponent("cellular-atlas-interior.png")) }
         }

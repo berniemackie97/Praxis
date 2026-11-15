@@ -149,7 +149,7 @@ struct KnowledgeGraphView: View {
                                 .allowsHitTesting(false)
                             }
                     }
-                    if graph.loading || graph.atlasLoading || graph.zoneLoading || graph.regionMapLoading || graph.regionMembersLoading {
+                    if (graph.loading && visibleConceptMap == nil) || graph.atlasLoading || graph.zoneLoading || graph.regionMapLoading || graph.regionMembersLoading {
                         ProgressView(graph.regionMapLoading ? "Mapping regions" : graph.regionMembersLoading ? "Entering region" :
                                      graph.focusId == nil ? "Loading current region" : "Loading neighborhood")
                             .padding(Spacing.m)

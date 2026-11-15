@@ -5,15 +5,42 @@ import simd
 /// much the region knows; everything about its look (inclination, arms, bulge, star-forming knots,
 /// haze, colour temperature) is ornamental and deterministic per region.
 enum Galaxy {
-    static func stars(id: String, center: SIMD3<Float>, size: Float, members: Int, tint: SIMD3<Float>,
-                      forming: Bool, highContrast: Bool) -> [NeuralNebulaVertex] {
-        var random = CortexRandom(seed: GraphRegionIdentity.hash(id))
-        let radius = size * 2.4
+    /// A galaxy's attitude in space and arm pattern. Shared by the procedural stars and by the
+    /// region's member entities, so entering a galaxy flies into the same disc it showed from afar.
+    struct Shape {
+        let center: SIMD3<Float>
+        let rotation: simd_quatf
+        let radius: Float
+        let arms: Int
+        let pitch: Float
+
+        func place(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { center + rotation.act(SIMD3<Float>(x, y, z)) }
+
+        /// Angle of a spiral arm at disc radius `r`.
+        func armAngle(_ arm: Int, at r: Float) -> Float {
+            Float(arm) * 2 * .pi / Float(arms) + log(max(r, radius * 0.12) / (radius * 0.12)) / tan(pitch)
+        }
+
+        /// The disc's normal, the axis everything in it rotates around.
+        var normal: SIMD3<Float> { rotation.act(SIMD3<Float>(0, 0, 1)) }
+    }
+
+    static func shape(id: String, center: SIMD3<Float>, size: Float) -> Shape {
+        var random = CortexRandom(seed: GraphRegionIdentity.hash(id) ^ 0x51A7_C0DE)
         // A real inclination (20-75 degrees) and position angle give each disc its own 3D attitude.
         let inclination = (20 + random.next() * 55) * Float.pi / 180
         let positionAngle = random.next() * 2 * Float.pi
         let rotation = simd_quatf(angle: positionAngle, axis: [0, 0, 1]) * simd_quatf(angle: inclination, axis: [1, 0, 0])
-        func place(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { center + rotation.act(SIMD3<Float>(x, y, z)) }
+        return Shape(center: center, rotation: rotation, radius: size * 2.4,
+                     arms: 2 + Int(random.next() * 3), pitch: 0.22 + random.next() * 0.16)
+    }
+
+    static func stars(id: String, center: SIMD3<Float>, size: Float, members: Int, tint: SIMD3<Float>,
+                      forming: Bool, highContrast: Bool) -> [NeuralNebulaVertex] {
+        var random = CortexRandom(seed: GraphRegionIdentity.hash(id))
+        let form = shape(id: id, center: center, size: size)
+        let radius = form.radius
+        func place(_ x: Float, _ y: Float, _ z: Float) -> SIMD3<Float> { form.place(x, y, z) }
         func gaussian() -> Float { (random.next() + random.next() + random.next() - 1.5) / 1.5 }
         var vertices: [NeuralNebulaVertex] = []
 
@@ -37,8 +64,7 @@ enum Galaxy {
                                                size: 1.1 + random.next() * 1.4))
         }
         // Disc: logarithmic spiral arms, young blue-white stars mixed with the region's colour.
-        let arms = 2 + Int(random.next() * 3)
-        let pitch: Float = 0.22 + random.next() * 0.16
+        let arms = form.arms
         let disc = min(1_600, 260 + Int(log2(Double(members) + 1) * 120))
         for number in 0..<disc {
             let arm = number % arms
@@ -46,7 +72,7 @@ enum Galaxy {
             // A third of the disc is the old diffuse population; the rest traces the arms loosely.
             let diffuse = random.next() < 0.33
             let theta = diffuse ? random.next() * 2 * .pi
-                : Float(arm) * 2 * .pi / Float(arms) + log(r / (radius * 0.12)) / tan(pitch) + gaussian() * 0.75 * (1.15 - r / radius)
+                : form.armAngle(arm, at: r) + gaussian() * 0.75 * (1.15 - r / radius)
             let p = place(cos(theta) * r, sin(theta) * r, gaussian() * radius * 0.035)
             let mix = random.next()
             let color = young * mix + tint * (1 - mix)
@@ -58,9 +84,18 @@ enum Galaxy {
         for _ in 0..<(10 + Int(random.next() * 22)) {
             let arm = Int(random.next() * Float(arms))
             let r = radius * (0.35 + 0.6 * random.next())
-            let theta = Float(arm) * 2 * .pi / Float(arms) + log(r / (radius * 0.12)) / tan(pitch)
+            let theta = form.armAngle(arm, at: r)
             vertices.append(NeuralNebulaVertex(position: place(cos(theta) * r, sin(theta) * r, 0),
                                                color: SIMD4<Float>(pink, 0.55), size: 3 + random.next() * 3))
+        }
+        // Dark-edged dust lanes trail just inside each arm (drawn as dim reddish haze: additive light
+        // cannot darken, so the lanes read by their warm absorption tint against the blue arms).
+        for _ in 0..<(arms * 26) {
+            let arm = Int(random.next() * Float(arms))
+            let r = radius * (0.2 + 0.75 * random.next())
+            let theta = form.armAngle(arm, at: r) - 0.22
+            vertices.append(NeuralNebulaVertex(position: place(cos(theta) * r, sin(theta) * r, 0),
+                                               color: SIMD4<Float>(0.55, 0.28, 0.16, 0.05), size: radius * 0.16))
         }
         for _ in 0..<28 {
             let r = radius * sqrt(random.next()) * 0.9

@@ -27,8 +27,9 @@ struct NeuralNebulaView: NSViewRepresentable {
         if let renderer = NeuralNebulaRenderer(view: view) {
             context.coordinator.renderer = renderer
             view.graphRenderer = renderer
-            renderer.onFrame = { [weak view] labels, region in
+            renderer.onFrame = { [weak view] labels, stars, region in
                 view?.showLabels(labels, selectedRegion: region)
+                view?.showStars(stars)
             }
             view.delegate = renderer
         } else {
@@ -41,6 +42,7 @@ struct NeuralNebulaView: NSViewRepresentable {
         guard let renderer = context.coordinator.renderer else { return }
         view.regionTitles = Dictionary(uniqueKeysWithValues:
             (zones?.regions ?? []).map { ($0.id, $0.title) })
+        view.starTitles = Dictionary(nodes.map { ($0.entityId, $0.label) }, uniquingKeysWith: { first, _ in first })
         renderer.onEnterZone = expandZone
         renderer.onReturnToZones = returnToZones
         renderer.onSelectNode = { selectedNodeId = $0; selectedEdgeId = nil }
@@ -69,7 +71,9 @@ struct NeuralNebulaView: NSViewRepresentable {
 final class NeuralNebulaInputView: MTKView {
     weak var graphRenderer: NeuralNebulaRenderer?
     private var labels: [String: NebulaZoneLabel] = [:]
+    private var starLabels: [String: NebulaZoneLabel] = [:]
     var regionTitles: [String: String] = [:]
+    var starTitles: [String: String] = [:]
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -110,6 +114,33 @@ final class NeuralNebulaInputView: MTKView {
         }
     }
 
+    /// Names beside the brightest member stars inside a galaxy, or a star system's star and planets.
+    func showStars(_ positions: [String: CGPoint]) {
+        for id in starLabels.keys.filter({ positions[$0] == nil }) {
+            starLabels.removeValue(forKey: id)?.removeFromSuperview()
+        }
+        for (id, point) in positions {
+            let label: NebulaZoneLabel
+            if let existing = starLabels[id] {
+                label = existing
+            } else {
+                label = NebulaZoneLabel(frame: CGRect(x: 0, y: 0, width: 220, height: 16))
+                label.isBezeled = false
+                label.drawsBackground = false
+                label.isEditable = false
+                label.isSelectable = false
+                label.font = .monospacedSystemFont(ofSize: 10.5, weight: .regular)
+                label.textColor = NSColor(white: 0.96, alpha: 0.88)
+                label.alignment = .left
+                addSubview(label)
+                starLabels[id] = label
+            }
+            let name = starTitles[id] ?? ""
+            label.stringValue = name.count > 34 ? String(name.prefix(32)) + "…" : name
+            label.frame.origin = CGPoint(x: point.x + 10, y: point.y - 8)
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         graphRenderer?.click(at: convert(event.locationInWindow, from: nil))
@@ -145,7 +176,7 @@ final class NeuralNebulaInputView: MTKView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
-            graphRenderer?.onReturnToZones?()
+            graphRenderer?.climb()
         } else {
             super.keyDown(with: event)
         }
