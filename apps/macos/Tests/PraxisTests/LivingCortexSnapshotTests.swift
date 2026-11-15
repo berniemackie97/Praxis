@@ -8,7 +8,7 @@ import Testing
 /// `PRAXIS_SNAPSHOT_DIR` is set. `PRAXIS_CORTEX_MAP_JSON` (and optionally
 /// `PRAXIS_CORTEX_MEMBERS_JSON`) render a locally exported region map instead of the synthetic one.
 @MainActor
-@Suite("Living Cortex rendering")
+@Suite("Brain style rendering")
 struct LivingCortexSnapshotTests {
     @Test("Whole brain and an entered territory render with visible structure")
     func renders() throws {
@@ -36,11 +36,21 @@ struct LivingCortexSnapshotTests {
         let territory = try #require(renderer.snapshot(size: size))
         #expect(Self.litFraction(territory) > 0.01)
 
+        // Knowledge Cosmos draws the same territories as galaxies.
+        var universe: CGImage?
+        if let cosmos = NeuralNebulaRenderer(view: nil) {
+            cosmos.update(overview: BrainTerritories.overview(map), nodes: [], edges: [], regionType: nil, focusId: nil,
+                          selectedNodeId: nil, selectedEdgeId: nil, reduceMotion: true, highContrast: false, active: false)
+            universe = cosmos.snapshot(size: size)
+            #expect(universe.map(Self.litFraction) ?? 0 > 0.01)
+        }
+
         if let output = environment["PRAXIS_SNAPSHOT_DIR"] {
             let folder = URL(fileURLWithPath: output, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try Self.png(whole).write(to: folder.appendingPathComponent("living-cortex-whole.png"))
             try Self.png(territory).write(to: folder.appendingPathComponent("living-cortex-territory.png"))
+            if let universe { try Self.png(universe).write(to: folder.appendingPathComponent("knowledge-cosmos-universe.png")) }
         }
     }
 
