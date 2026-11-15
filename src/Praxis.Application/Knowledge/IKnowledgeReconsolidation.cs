@@ -14,8 +14,14 @@ public interface IKnowledgeReconsolidation
     /// <summary>Re-examines up to <paramref name="budget"/> queued entities in one transaction.</summary>
     ReconsolidationPass RunPass(int budget);
 
-    /// <summary>Revisions newest first, optionally only those in one state.</summary>
-    IReadOnlyList<KnowledgeRevision> Revisions(string? state, int limit);
+    /// <summary>Revisions newest first, optionally only one state and only those after a revision id (for incremental refresh).</summary>
+    IReadOnlyList<KnowledgeRevision> Revisions(string? state, int limit, long afterRevisionId = 0);
+
+    /// <summary>The model proposal behind a relation, or null for owner relations.</summary>
+    Guid? RelationProposal(Guid relationId);
+
+    /// <summary>The current knowledge revision and newest revision log id; both only grow.</summary>
+    (long GraphRevision, long LatestRevisionId) Watermark();
 
     KnowledgeRevision? Revision(long revisionId);
 

@@ -14,7 +14,7 @@ public sealed partial class SqliteGraphReader
             throw new ArgumentException("Concept regions require a valid parent and confirmed knowledge without a type filter.", nameof(query));
         }
 
-        return database.Execute(connection => ReadConceptRegions(connection, query, parentRegionId, cancellationToken));
+        return database.ExecuteSnapshot(connection => ReadConceptRegions(connection, query, parentRegionId, cancellationToken));
     }
 
     private GraphConceptPage ReadConceptRegions(SqliteConnection connection, GraphQuery query,
@@ -63,10 +63,11 @@ public sealed partial class SqliteGraphReader
         }
 
         List<GraphConceptRegion> regions = [];
+        Dictionary<Guid, GraphNode> roots = ReadNodes(connection, [.. rows.Select(row => row.Id)], query);
         foreach (var row in rows)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            GraphNode root = ReadNode(connection, row.Id, query) ??
+            GraphNode root = roots.GetValueOrDefault(row.Id) ??
                 throw new InvalidOperationException("The concept region changed while reading.");
             regions.Add(new GraphConceptRegion(root.EntityId, root.Label, row.Count,
                 row.Owner, row.Accepted, row.Verified));

@@ -51,7 +51,7 @@ public sealed partial class SqliteGraphReader : IGraphReader
         {
             throw new ArgumentException("Overview accepts a source and collection scope, not a page or type filter.", nameof(query));
         }
-        return database.Execute(connection => ReadOverview(connection, query, cancellationToken));
+        return database.ExecuteSnapshot(connection => ReadOverview(connection, query, cancellationToken));
     }
 
     public GraphZoneOverview Zones(GraphQuery query, CancellationToken cancellationToken = default)
@@ -62,17 +62,15 @@ public sealed partial class SqliteGraphReader : IGraphReader
             throw new ArgumentException("Zone overview does not accept a cursor or entity type.", nameof(query));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteSnapshot(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             GraphOverview overview = ReadOverview(connection, query, cancellationToken);
             using SqliteCommand command = connection.CreateCommand($"""
-                WITH visible_entities AS MATERIALIZED (
-                    SELECT e.entity_id, COALESCE({EffectiveType("e", query)}, 'other') AS kind
-                    FROM knowledge_entities e
-                    WHERE {NodeVisible("e", query)}
-                ),
-                visible_relations AS (
+                WITH {VisibleKinds(query)},
+                visible_entities AS (SELECT entity_id, COALESCE(kind, 'other') AS kind FROM visible_kinds),
+                -- Materialized so the type grouping below cannot reorder the join into a full scan per entity.
+                visible_relations AS MATERIALIZED (
                     SELECT subject.kind AS subject_type, object.kind AS object_type,
                            {RelationStatus} AS status
                     FROM knowledge_relations r
@@ -116,12 +114,9 @@ public sealed partial class SqliteGraphReader : IGraphReader
     {
         cancellationToken.ThrowIfCancellationRequested();
         using SqliteCommand command = connection.CreateCommand($"""
-            SELECT kind, COUNT(*) AS count FROM (
-                SELECT COALESCE({EffectiveType("e", query)}, 'other') AS kind
-                FROM knowledge_entities e
-                WHERE {NodeVisible("e", query)}
-            )
-            GROUP BY kind
+            WITH {VisibleKinds(query)}
+            SELECT COALESCE(kind, 'other') AS kind, COUNT(*) AS count FROM visible_kinds
+            GROUP BY COALESCE(kind, 'other')
             ORDER BY count DESC, kind
             """);
         Scope(command, query);
@@ -147,7 +142,7 @@ public sealed partial class SqliteGraphReader : IGraphReader
             throw new ArgumentException("The graph search is invalid.", nameof(search));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteSnapshot(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             long version = Version(connection);
@@ -191,15 +186,9 @@ public sealed partial class SqliteGraphReader : IGraphReader
             {
                 ids.RemoveAt(ids.Count - 1);
             }
-            List<GraphNode> nodes = [];
-            foreach (Guid id in ids)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (ReadNode(connection, id, query) is { } node)
-                {
-                    nodes.Add(node);
-                }
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            Dictionary<Guid, GraphNode> read = ReadNodes(connection, ids, query);
+            List<GraphNode> nodes = [.. ids.Where(read.ContainsKey).Select(id => read[id])];
 
             return new GraphPage(nodes.Count == 0 ? "empty" : "ready", null, nodes, [],
                 more ? WriteCursor(version, signature, ids[^1]) : null);
@@ -219,7 +208,7 @@ public sealed partial class SqliteGraphReader : IGraphReader
             throw new ArgumentException("A region requires an entity type.", nameof(query));
         }
 
-        return database.Execute(connection =>
+        return database.ExecuteSnapshot(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             long version = Version(connection);
@@ -263,13 +252,15 @@ public sealed partial class SqliteGraphReader : IGraphReader
             throw new ArgumentException("A valid graph focus is required.", nameof(focusId));
         }
         Validate(query, allowEdges: true);
-        return database.Execute(connection =>
+        return database.ExecuteSnapshot(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             long version = Version(connection);
             string signature = Signature(focusId is null ? "atlas" : relationId is null ? "neighbors" : "relation",
                 focusId, relationId?.ToString("D"), query);
-            string after = ReadCursor(query.Cursor, version, signature);
+            // The whole-brain atlas pages runtime glue after every other link: (glue, relation_id) keyset.
+            (long afterGlue, string after) = focusId is null ? ReadAtlasCursor(query.Cursor, version, signature)
+                : (0, ReadCursor(query.Cursor, version, signature));
             GraphNode? root = focusId is Guid rootId ? ReadNode(connection, rootId, query) : null;
             if (focusId is not null && root is null)
             {
@@ -281,11 +272,17 @@ public sealed partial class SqliteGraphReader : IGraphReader
             }
 
             List<EdgeRow> rows = [];
-            using (SqliteCommand command = connection.CreateCommand($"""
+            List<long> glues = [];
+            // Each glue rank is its own keyset scan in relation order, so a page stops early instead of
+            // sorting every visible link; glue links follow only once regular links are exhausted.
+            for (long rank = afterGlue; rank <= (focusId is null ? 1 : 0) && rows.Count <= query.Limit; rank++)
+            {
+                using SqliteCommand command = connection.CreateCommand($"""
                 SELECT r.relation_id, r.subject_id, r.object_id, r.predicate, r.origin,
                        {RelationStatus} AS evidence_status,
                        p.proposal_id, p.source_id, p.item_id, p.revision, p.source_digest,
-                       s.locator, p.evidence, p.evidence_offset, p.status, v.verdict
+                       s.locator, p.evidence, p.evidence_offset, p.status, v.verdict,
+                       CASE WHEN $focus IS NULL THEN {AtlasGlue} ELSE 0 END AS glue
                 FROM knowledge_relations r
                 JOIN knowledge_entities subject ON subject.entity_id = r.subject_id
                 JOIN knowledge_entities object ON object.entity_id = r.object_id
@@ -294,6 +291,7 @@ public sealed partial class SqliteGraphReader : IGraphReader
                 LEFT JOIN sources s ON s.source_id = p.source_id
                 WHERE ($focus IS NULL OR r.subject_id = $focus OR r.object_id = $focus)
                   AND ($relationId IS NULL OR r.relation_id = $relationId)
+                  AND (CASE WHEN $focus IS NULL THEN {AtlasGlue} ELSE 0 END) = $glueRank
                   AND r.relation_id > $after
                   AND {RelationPolicy()}
                   AND {NodeVisible("subject", query)}
@@ -305,22 +303,23 @@ public sealed partial class SqliteGraphReader : IGraphReader
                                 ELSE {EffectiveType("subject", query)} END) = $type))
                 ORDER BY r.relation_id
                 LIMIT $take
-                """))
-            {
+                """);
                 Scope(command, query);
                 command.Parameters.AddWithValue("$focus", (object?)focusId?.ToString("D") ?? DBNull.Value);
                 command.Parameters.AddWithValue("$relationId", (object?)relationId?.ToString("D") ?? DBNull.Value);
                 command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
-                command.Parameters.AddWithValue("$after", after);
+                command.Parameters.AddWithValue("$after", rank == afterGlue ? after : "");
+                command.Parameters.AddWithValue("$glueRank", rank);
                 command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
                 command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
                 command.Parameters.AddWithValue("$type", (object?)query.EntityType ?? DBNull.Value);
-                command.Parameters.AddWithValue("$take", query.Limit + 1);
+                command.Parameters.AddWithValue("$take", query.Limit + 1 - rows.Count);
                 using SqliteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     rows.Add(ReadEdgeRow(reader));
+                    glues.Add(reader.GetInt64(16));
                 }
             }
 
@@ -329,8 +328,10 @@ public sealed partial class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            return ComposePage(connection, query, rows, focusId, relationId, root,
-                more ? WriteCursor(version, signature, rows[^1].RelationId) : null, cancellationToken);
+            string? next = !more ? null : focusId is null
+                ? WriteToken(version, signature, $"{glues[rows.Count - 1]}:{rows[^1].RelationId:D}")
+                : WriteCursor(version, signature, rows[^1].RelationId);
+            return ComposePage(connection, query, rows, focusId, relationId, root, next, cancellationToken);
         });
     }
 
@@ -358,17 +359,31 @@ public sealed partial class SqliteGraphReader : IGraphReader
             nodes.Add(root);
             known.Add(knownFocusId);
         }
+        List<Guid> order = [];
         foreach (EdgeRow row in rows)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
+            if (known.Add(row.SubjectId))
             {
-                nodes.Add(subject);
+                order.Add(row.SubjectId);
             }
-            if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
+            if (known.Add(row.ObjectId))
             {
-                nodes.Add(objectNode);
+                order.Add(row.ObjectId);
             }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Dictionary<Guid, GraphNode> read = ReadNodes(connection, order, query);
+        foreach (Guid id in order)
+        {
+            if (read.TryGetValue(id, out GraphNode? node))
+            {
+                nodes.Add(node);
+            }
+        }
+
+        foreach (EdgeRow row in rows)
+        {
             edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
                 row.Predicate, row.Origin, row.EvidenceStatus, row.Evidence,
                 row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
@@ -434,84 +449,8 @@ public sealed partial class SqliteGraphReader : IGraphReader
         ELSE {alias}.entity_type END
         """;
 
-    private static GraphNode? ReadNode(SqliteConnection connection, Guid id, GraphQuery query)
-    {
-        using SqliteCommand command = connection.CreateCommand($"""
-            SELECT CASE WHEN EXISTS (
-                       SELECT 1 FROM entity_decisions d
-                       WHERE d.entity_id = e.entity_id AND d.action = 'rename')
-                   THEN e.display_name ELSE COALESCE((
-                       SELECT CASE WHEN p.status = 'corrected' THEN p.correction ELSE p.value END
-                       FROM {MentionView(query)} m
-                       JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
-                       WHERE m.entity_id = e.entity_id {ScopeFilter("m")}
-                       ORDER BY CASE WHEN EXISTS (
-                           SELECT 1 FROM confirmed_entity_mentions confirmed
-                           WHERE confirmed.proposal_id = m.proposal_id)
-                       THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
-                   ), e.display_name) END,
-                   {EffectiveType("e", query)},
-                   CASE WHEN e.type_origin <> 'owner' AND {TechnicalType("e")} IS NOT NULL THEN 'evidence' ELSE e.type_origin END,
-                   (SELECT COUNT(DISTINCT m.proposal_id) FROM {MentionView(query)} m
-                    WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
-                   (SELECT COUNT(DISTINCT m.source_id) FROM {MentionView(query)} m
-                    WHERE m.entity_id = e.entity_id {ScopeFilter("m")}),
-                   (SELECT COUNT(DISTINCT m.entity_type) FROM {MentionView(query)} m
-                    WHERE m.entity_id = e.entity_id {ScopeFilter("m")}) > 1,
-                   (SELECT COUNT(DISTINCT confirmed.proposal_id) FROM confirmed_entity_mentions confirmed
-                    WHERE confirmed.entity_id = e.entity_id {ScopeFilter("confirmed")})
-            FROM knowledge_entities e
-            WHERE e.entity_id = $id AND {NodeVisible("e", query)}
-            """);
-        Scope(command, query);
-        command.Parameters.AddWithValue("$id", id.ToString("D"));
-        using SqliteDataReader reader = command.ExecuteReader();
-        if (!reader.Read())
-        {
-            return null;
-        }
-        string label = reader.GetString(0);
-        string? type = reader.IsDBNull(1) ? null : reader.GetString(1);
-        string typeOrigin = reader.GetString(2);
-        int mentions = reader.GetInt32(3);
-        int sources = reader.GetInt32(4);
-        bool conflict = typeOrigin == "inferred" && reader.GetInt64(5) == 1;
-        int confirmed = reader.GetInt32(6);
-        reader.Close();
-
-        GraphEvidence? evidence = ReadMention(connection, id, query);
-        string status = confirmed == 0 ? "suggested" : confirmed < mentions ? "mixed" : "confirmed";
-        return new GraphNode(id, label, type, typeOrigin, status,
-            mentions, sources, conflict, evidence,
-            evidence is null ? ["openEntity"] : ["openEntity", "openSource"]);
-    }
-
-    private static GraphEvidence? ReadMention(SqliteConnection connection, Guid id, GraphQuery query)
-    {
-        using SqliteCommand command = connection.CreateCommand($"""
-            SELECT m.proposal_id, m.source_id, m.item_id, m.revision, p.source_digest,
-                   s.locator, m.evidence, m.evidence_offset, m.status, m.verdict
-            FROM {MentionView(query)} m
-            JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
-            JOIN sources s ON s.source_id = m.source_id
-            WHERE m.entity_id = $id {ScopeFilter("m")}
-            ORDER BY CASE WHEN EXISTS (
-                SELECT 1 FROM confirmed_entity_mentions confirmed WHERE confirmed.proposal_id = m.proposal_id)
-                THEN 0 ELSE 1 END, m.source_id, m.proposal_id LIMIT 1
-            """);
-        Scope(command, query);
-        command.Parameters.AddWithValue("$id", id.ToString("D"));
-        using SqliteDataReader reader = command.ExecuteReader();
-        if (!reader.Read())
-        {
-            return null;
-        }
-        return new GraphEvidence(
-            Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
-            Guid.Parse(reader.GetString(2)), reader.GetInt32(3), reader.GetString(4),
-            reader.GetString(5), reader.GetString(6), reader.GetInt32(7),
-            reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9));
-    }
+    private static GraphNode? ReadNode(SqliteConnection connection, Guid id, GraphQuery query) =>
+        ReadNodes(connection, [id], query).GetValueOrDefault(id);
 
     internal static void Scope(SqliteCommand command, GraphQuery query)
     {
@@ -549,9 +488,13 @@ public sealed partial class SqliteGraphReader : IGraphReader
         }
     }
 
-    private static long Version(SqliteConnection connection)
+    /// <summary>
+    /// The knowledge revision: changes only when something the graph can show changes (mentions,
+    /// relations, entities, reviews, verdicts, source status or scope), not on every catalog write.
+    /// </summary>
+    internal static long Version(SqliteConnection connection)
     {
-        using SqliteCommand command = connection.CreateCommand("SELECT total_changes()");
+        using SqliteCommand command = connection.CreateCommand("SELECT revision FROM graph_revision WHERE singleton = 1");
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
@@ -574,6 +517,26 @@ public sealed partial class SqliteGraphReader : IGraphReader
         {
             return id.ToString("D");
         }
+        throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
+    }
+
+    private static readonly string AtlasGlue =
+        $"MAX({EntityTypeSanity.RuntimeGlueName("subject")}, {EntityTypeSanity.RuntimeGlueName("object")})";
+
+    /// <summary>Atlas cursors carry the glue rank and relation id of the last link shown.</summary>
+    private (long Glue, string After) ReadAtlasCursor(string? cursor, long version, string signature)
+    {
+        if (cursor is null)
+        {
+            return (0, "");
+        }
+
+        string[] parts = CursorValue(cursor, version, signature).Split(':');
+        if (parts.Length == 2 && parts[0] is "0" or "1" && Guid.TryParseExact(parts[1], "D", out Guid id) && id != Guid.Empty)
+        {
+            return (long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), id.ToString("D"));
+        }
+
         throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
     }
 

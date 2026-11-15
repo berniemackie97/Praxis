@@ -72,6 +72,10 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var outcome = "empty"
     @Published private(set) var error: String?
     @Published private(set) var message: String?
+    /// Knowledge changed since the graph was loaded (intake, reviews, revisions). The view offers a
+    /// refresh instead of resetting the camera under the owner.
+    @Published private(set) var knowledgeChanged = false
+    private var loadedRevision: Int64?
 
     var visibleNodes: [GraphNode] {
         guard focusId == nil else { return nodes }
@@ -208,6 +212,23 @@ final class GraphWorkbenchModel: ObservableObject {
         }
         loadSeeds(cursor: nil)
         loadConcepts(cursor: nil)
+        knowledgeChanged = false
+        loadedRevision = nil
+        checkKnowledgeRevision()
+    }
+
+    /// Polls the cheap knowledge watermark; the first answer after a load becomes the baseline.
+    func checkKnowledgeRevision() {
+        guard active else { return }
+        channel.send("knowledgeWatermark", [:], as: KnowledgeWatermarkData.self, scope: "graph-watermark",
+                     failed: { _ in }) { [weak self] watermark in
+            guard let self, active else { return }
+            if let loadedRevision {
+                knowledgeChanged = watermark.graphRevision > loadedRevision
+            } else {
+                loadedRevision = watermark.graphRevision
+            }
+        }
     }
 
     func loadMoreConcepts() {

@@ -43,7 +43,10 @@ struct PraxisWindow: View {
             ticks += 1
             model.refresh()
             model.approvals.refresh()
-            if section == .knowledge && ticks % 2 == 0 { model.knowledge.graph.recheckInspection() }
+            if section == .knowledge && ticks % 2 == 0 {
+                model.knowledge.graph.recheckInspection()
+                model.knowledge.graph.checkKnowledgeRevision()
+            }
             if section == .verification || ticks % 6 == 0 { model.verification.refresh() }
         }
     }

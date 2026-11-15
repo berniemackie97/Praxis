@@ -22,7 +22,7 @@ struct KnowledgeRevisionsView: View {
                         HStack(spacing: Spacing.s) {
                             Button("Accept") { model.decide(revision, accept: true) }
                                 .buttonStyle(.borderedProminent)
-                                .accessibilityLabel("Accept: make \(revision.entityName) \(KnowledgeVocabulary.label(revision.after))")
+                                .accessibilityLabel("Accept for \(revision.entityName): \(RevisionText.change(revision))")
                             Button("Dismiss") { model.decide(revision, accept: false) }
                                 .accessibilityLabel("Dismiss proposal for \(revision.entityName)")
                         }
@@ -72,7 +72,7 @@ private struct RevisionRow<Actions: View>: View {
                 Button(revision.entityName) { inspect(revision.entityId) }
                     .buttonStyle(.link).font(.body.weight(.semibold))
                     .help("Open this entity")
-                Text("\(KnowledgeVocabulary.label(revision.before)) → \(KnowledgeVocabulary.label(revision.after))")
+                Text(RevisionText.change(revision))
                     .font(.callout.monospaced())
                 Spacer()
                 Text(RevisionText.trigger(revision.trigger)).font(.caption).foregroundStyle(.secondary)
@@ -92,7 +92,24 @@ enum RevisionText {
         case "mentions": "new evidence"
         case "owner_lesson": "learned from your fix"
         case "relations": "how it connects"
+        case "duplicates": "same name"
         default: trigger
+        }
+    }
+
+    static func change(_ revision: KnowledgeRevision) -> String {
+        switch revision.field {
+        case "merge": "merge into \(revision.afterLabel)"
+        case "relation": revision.afterLabel
+        default: "\(KnowledgeVocabulary.label(revision.before)) → \(KnowledgeVocabulary.label(revision.after))"
+        }
+    }
+
+    static func accepted(_ revision: KnowledgeRevision) -> String {
+        switch revision.field {
+        case "merge": "\(revision.entityName) merged into \(revision.afterLabel)."
+        case "relation": "Relation retracted."
+        default: "\(revision.entityName) is now \(KnowledgeVocabulary.label(revision.after)). Similar entities will be checked."
         }
     }
 

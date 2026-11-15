@@ -31,9 +31,30 @@ Add a **reconsolidation queue** and a **revision log** (catalog v32) and a backg
 
 Owner and verified types are never revised. Accepting a suggestion applies it as an owner `set_type` decision (and therefore becomes a lesson itself); dismissing it prevents the same proposal from being raised again. The desktop protocol exposes `knowledgeRevisions` and `knowledgeRevisionDecide`; the macOS Knowledge workspace has a **Revisions** tab.
 
+## Second slice (catalog v33)
+
+- **Merges.** An entity whose name equals another's apart from spacing, punctuation or case gets a *suggested* merge into the better-known one (more mentions), never across differing confirmed types. An expression index on the compact name keeps the lookup cheap. On the owner catalog this finds 30 real duplicates (`OpenConquer.Server` / `OpenConquer Server`, `game server` / `GameServer`, `CGameSocket__ReceiveMsg` / `CGameSocket_ReceiveMsg`).
+- **Relations.** A model relation whose endpoints' confirmed (owner or code-evidence) types rule it out, such as a document that `calls` a function, gets a *suggested* retraction. Accepting rejects its proposal; owner relations are never questioned.
+- **Lesson replay.** At a rule change, owner type decisions made before reconsolidation existed are replayed once as lessons, using the type the evidence would have given as what Praxis believed.
+- **Model second look.** The verification planner already proposes owner-approved model checks for type conflicts; a completed check now re-opens when newer mentions arrive, instead of never.
+- **Knowledge revision.** `graph_revision` moves only when something the graph can show changes (triggers on mentions, relations, entities, proposals, verdicts, source status, scope, eligibility). Graph cursors carry it instead of the connection's `total_changes()`, which moved on every catalog write and invalidated open pages while intake ran. `knowledgeWatermark` returns it with the newest revision id; the macOS graph polls it and offers a refresh, and the redesigned renderers will consume the same stream to animate in place.
+
+## Performance (owner catalog copy, 3,839 entities, 1,171 relations)
+
+| Query | Before | After | Change |
+|---|---|---|---|
+| Overview | 212 ms | 90 ms | set-based effective types (`visible_kinds` CTE) |
+| Zones | 973 ms | 234 ms | same, plus materialized relation set before grouping |
+| Atlas, 100 links | 1,180 ms | 164 ms | nodes read in one batch instead of ~6 queries each |
+| Region, 100 links | 1,618 ms | 305 ms | batch nodes, set-based types |
+| Seeds, 40 | 260 ms | 70 ms | batch nodes |
+| Reconsolidation, all 3,891 entities | 18.8 s (worst pass 1.3 s) | 2.3 s (worst pass 156 ms) | per-entity technical type and relation lookups by index |
+
+Graph reads now run on the read-only connection inside one snapshot transaction, so they never wait behind intake writes and a revision always matches the rows it describes. The whole-brain atlas pages runtime glue after every other link with two keyset scans, keeping early termination.
+
 ## Boundaries
 
 - Read-time corrections in the graph remain the source of truth for display; reconsolidation keeps stored values and the review queue consistent with them.
-- No relation, merge or region revisions yet; the log's `field` is limited to `entity_type` and can widen with #455 region revisions.
-- No embeddings or model passes. A later slice can add a model "second look" for entities with conflicting evidence, under the existing disclosure policy and owner-set limits.
-- Region and graph renderers do not yet animate revisions; #455's revision stream will carry them.
+- Region geography is not revised here. On the owner catalog no containment relation is reviewed or verified, so concept regions are empty; deriving regions from owner repository maps (`intake_projects`) and folders is the first #455 step of the graph redesign, and region revisions follow from it.
+- No embeddings. Model involvement stays in the owner-approved verification ladder.
+- Renderers show a refresh prompt on revision change; animated in-place updates belong to the renderer redesign.

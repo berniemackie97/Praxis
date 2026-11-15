@@ -113,7 +113,7 @@ public sealed partial class GraphProjectionTests
             (lesson.EntityName, lesson.Before, lesson.After, lesson.Trigger));
         Assert.Contains("CGameMap", lesson.Basis, StringComparison.Ordinal);
 
-        RevisionReview review = new(catalog.Reconsolidation, catalog.Knowledge);
+        RevisionReview review = new(catalog.Reconsolidation, catalog.Knowledge, catalog.Proposals);
         Assert.True(review.Decide(lesson.RevisionId, accept: false));
         Assert.False(review.Decide(lesson.RevisionId, accept: true));
         // The same lesson again (project -> class) must not resurrect the dismissed proposal.

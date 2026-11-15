@@ -67,4 +67,36 @@ public sealed partial class GraphProjectionTests
         Assert.False(IsGlue(ordered[1]));
         Assert.All(ordered.Skip(2), edge => Assert.True(IsGlue(edge)));
     }
+
+    [Fact]
+    public async Task TheWholeBrainAtlasPagesRuntimeGlueLast()
+    {
+        using SqliteCatalog catalog = Open();
+        string[] callers = ["NodeOne", "NodeTwo", "NodeThree"];
+        types["__EH_prolog"] = "function";
+        CapturedOriginal source = await Enrich(catalog, "decompiled.md", $"Client {string.Join(' ', callers)} __EH_prolog.");
+        await Accept(catalog, source);
+        Guid glue = Single(catalog, "__EH_prolog").EntityId;
+        foreach (string caller in callers)
+        {
+            catalog.Knowledge.Relate(Single(catalog, caller).EntityId, "calls", glue);
+        }
+        catalog.Knowledge.Relate(Single(catalog, "Client").EntityId, "references", Single(catalog, "NodeOne").EntityId);
+        catalog.Knowledge.Relate(Single(catalog, "Client").EntityId, "references", Single(catalog, "NodeTwo").EntityId);
+
+        List<GraphEdge> ordered = [];
+        string? cursor = null;
+        do
+        {
+            GraphPage page = catalog.Graph.Atlas(new GraphQuery(Limit: 1, Cursor: cursor));
+            ordered.AddRange(page.Edges);
+            cursor = page.NextCursor;
+        } while (cursor is not null);
+
+        Assert.Equal(5, ordered.Count);
+        Assert.Equal(5, ordered.Select(edge => edge.RelationId).Distinct().Count());
+        Assert.All(ordered.Take(2), edge => Assert.NotEqual(glue, edge.ObjectId));
+        Assert.All(ordered.Skip(2), edge => Assert.Equal(glue, edge.ObjectId));
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Atlas(new GraphQuery(Limit: 1, Cursor: "garbage")));
+    }
 }

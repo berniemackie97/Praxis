@@ -125,6 +125,18 @@ struct KnowledgeGraphView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .top) {
+                    if graph.knowledgeChanged {
+                        Button { graph.refresh() } label: {
+                            Label("Knowledge updated · Refresh", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .padding(Spacing.s)
+                        .help("Praxis learned or revised something since this view loaded")
+                        .accessibilityLabel("Knowledge updated. Refresh the graph")
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     if graph.selectedNodeId != nil || graph.selectedEdgeId != nil {
                         inspection

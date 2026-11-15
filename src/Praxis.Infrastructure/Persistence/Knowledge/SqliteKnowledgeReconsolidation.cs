@@ -42,6 +42,21 @@ public sealed class SqliteKnowledgeReconsolidation : IKnowledgeReconsolidation
             WHERE status = 'active' AND type_origin = 'inferred'
             ON CONFLICT(entity_id) DO NOTHING
             """, ("$now", now));
+        // Corrections the owner made before reconsolidation existed are replayed once as lessons,
+        // taking the type the evidence would have given as what Praxis believed.
+        queued += connection.Run(transaction, """
+            INSERT INTO reconsolidation_queue (entity_id, reason, previous_type, enqueued_utc)
+            SELECT e.entity_id, 'owner_lesson', ranked.entity_type, $now
+            FROM knowledge_entities e
+            JOIN (SELECT entity_id, entity_type FROM (
+                      SELECT m.entity_id, m.entity_type,
+                             ROW_NUMBER() OVER (PARTITION BY m.entity_id ORDER BY COUNT(*) DESC, m.entity_type) AS rank
+                      FROM visible_entity_mentions m WHERE m.entity_type IS NOT NULL
+                      GROUP BY m.entity_id, m.entity_type)
+                  WHERE rank = 1) ranked ON ranked.entity_id = e.entity_id
+            WHERE e.status = 'active' AND e.type_origin = 'owner' AND ranked.entity_type IS NOT e.entity_type
+            ON CONFLICT(entity_id) DO UPDATE SET reason = 'owner_lesson', previous_type = excluded.previous_type
+            """, ("$now", now));
         connection.Run(transaction, """
             INSERT INTO runtime_settings (key, value, updated_utc) VALUES ($key, $value, $now)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_utc = excluded.updated_utc
@@ -82,6 +97,8 @@ public sealed class SqliteKnowledgeReconsolidation : IKnowledgeReconsolidation
                 }
 
                 examined++;
+                suggested += ReconsolidationRules.DuplicateNames(connection, transaction, entity, now);
+                suggested += ReconsolidationRules.ImpossibleRelations(connection, transaction, entity, now);
                 if (reason == RevisionVocabulary.OwnerLesson && state.Origin == "owner" && previous is not null && state.Type is not null)
                 {
                     suggested += ReconsolidationRules.OwnerLessons(connection, transaction, entity, state.Type, previous, now);
@@ -114,18 +131,19 @@ public sealed class SqliteKnowledgeReconsolidation : IKnowledgeReconsolidation
         });
     }
 
-    public IReadOnlyList<KnowledgeRevision> Revisions(string? state, int limit)
+    public IReadOnlyList<KnowledgeRevision> Revisions(string? state, int limit, long afterRevisionId = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
-        return database.Execute(connection =>
+        return database.ExecuteRead(connection =>
         {
             using SqliteCommand query = connection.CreateCommand($"""
                 SELECT {KnowledgeRevisionLog.Columns}
                 FROM knowledge_revisions r JOIN knowledge_entities e ON e.entity_id = r.entity_id
-                WHERE $state IS NULL OR r.state = $state
+                WHERE ($state IS NULL OR r.state = $state) AND r.revision_id > $after
                 ORDER BY r.revision_id DESC LIMIT $limit
                 """);
             query.Parameters.AddWithValue("$state", (object?)state ?? DBNull.Value);
+            query.Parameters.AddWithValue("$after", afterRevisionId);
             query.Parameters.AddWithValue("$limit", limit);
             using SqliteDataReader reader = query.ExecuteReader();
             List<KnowledgeRevision> revisions = [];
@@ -138,7 +156,7 @@ public sealed class SqliteKnowledgeReconsolidation : IKnowledgeReconsolidation
         });
     }
 
-    public KnowledgeRevision? Revision(long revisionId) => database.Execute(connection =>
+    public KnowledgeRevision? Revision(long revisionId) => database.ExecuteRead(connection =>
     {
         using SqliteCommand query = connection.CreateCommand($"""
             SELECT {KnowledgeRevisionLog.Columns}
@@ -160,6 +178,24 @@ public sealed class SqliteKnowledgeReconsolidation : IKnowledgeReconsolidation
             ("$now", CatalogValues.Timestamp(clock.GetUtcNow())), ("$id", revisionId));
         transaction.Commit();
         return changed == 1;
+    });
+
+    public Guid? RelationProposal(Guid relationId) => database.ExecuteRead(connection =>
+    {
+        using SqliteCommand query = connection.CreateCommand(
+            "SELECT proposal_id FROM knowledge_relations WHERE relation_id = $relation AND origin = 'model'");
+        query.Parameters.AddWithValue("$relation", relationId.ToString("D"));
+        return query.ExecuteScalar() is string proposal ? Guid.Parse(proposal) : (Guid?)null;
+    });
+
+    /// <summary>The newest knowledge revision and revision log entry, for clients that refresh on change.</summary>
+    public (long GraphRevision, long LatestRevisionId) Watermark() => database.ExecuteSnapshot(connection =>
+    {
+        using SqliteCommand query = connection.CreateCommand(
+            "SELECT (SELECT revision FROM graph_revision WHERE singleton = 1), (SELECT COALESCE(MAX(revision_id), 0) FROM knowledge_revisions)");
+        using SqliteDataReader reader = query.ExecuteReader();
+        reader.Read();
+        return (reader.GetInt64(0), reader.GetInt64(1));
     });
 
     private static (string Status, string Origin, string? Type)? State(SqliteConnection connection, SqliteTransaction transaction, string entity)

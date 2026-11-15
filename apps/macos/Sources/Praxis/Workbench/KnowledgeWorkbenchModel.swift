@@ -93,7 +93,7 @@ final class KnowledgeWorkbenchModel: ObservableObject {
                      as: ChangeData.self, failed: report) { [weak self] data in
             guard let self else { return }
             notice = !data.changed ? "That proposal was already decided."
-                : accept ? "\(revision.entityName) is now \(KnowledgeVocabulary.label(revision.after)). Similar entities will be checked."
+                : accept ? RevisionText.accepted(revision)
                 : "Dismissed. Praxis will not propose it again."
             refreshRevisions()
             refresh()
