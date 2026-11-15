@@ -38,7 +38,8 @@ struct KnowledgeGraphView: View {
                     if graph.focusId == nil, let atlasError = graph.atlasError {
                         EmptyState(systemImage: "exclamationmark.triangle",
                                    title: "Current brain graph unavailable", message: atlasError)
-                    } else if visibleZones == nil && graph.visibleNodes.isEmpty &&
+                    } else if (visibleZones == nil || visibleZones?.zones.isEmpty == true) &&
+                              graph.visibleNodes.isEmpty && !graph.zoneLoading &&
                               !graph.atlasLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
                                    title: "No current graph evidence",
@@ -74,7 +75,7 @@ struct KnowledgeGraphView: View {
                                         Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
                                             .font(.caption).foregroundStyle(.secondary)
                                         if graph.focusId == nil {
-                                            Text("Bounded region sample · scroll or pinch to explore")
+                                            Text("Bounded region sample · zoom outward to return to Whole Brain")
                                                 .font(.caption2).foregroundStyle(.tertiary)
                                         }
                                     }
@@ -86,8 +87,9 @@ struct KnowledgeGraphView: View {
                                 .allowsHitTesting(false)
                             }
                     }
-                    if graph.loading || graph.atlasLoading {
-                        ProgressView(graph.focusId == nil ? "Loading current atlas" : "Loading neighborhood")
+                    if graph.loading || graph.atlasLoading || graph.zoneLoading {
+                        ProgressView(graph.zoneLoading ? "Preparing knowledge zones" :
+                                     graph.focusId == nil ? "Loading current region" : "Loading neighborhood")
                             .padding(Spacing.m)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
                     }
