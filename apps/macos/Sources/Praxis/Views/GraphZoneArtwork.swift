@@ -131,7 +131,10 @@ final class GraphZoneArtwork {
         root.isHidden = false
     }
 
-    func hide() { root.isHidden = true }
+    func hide() {
+        root.isHidden = true
+        hover(nil)
+    }
 
     func hover(_ type: String?) {
         guard hoveredType != type else { return }
