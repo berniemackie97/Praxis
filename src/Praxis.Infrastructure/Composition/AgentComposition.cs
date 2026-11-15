@@ -57,5 +57,5 @@ public static class AgentComposition
 
     public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock) =>
         new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
-            new DisclosureGate(catalog.Policy, clock), clock);
+            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search);
 }

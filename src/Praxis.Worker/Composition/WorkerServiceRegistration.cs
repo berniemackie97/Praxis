@@ -100,7 +100,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
-        services.AddSingleton(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
+        services.AddSingleton(_ => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) });
         services.AddSingleton<ISavedLinkWriter>(provider => new SavedLinkWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<ILinkRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Links);
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));

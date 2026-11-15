@@ -221,7 +221,7 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
         });
     }
 
-    public IReadOnlyList<VerificationRequestView> List(int limit)
+    public IReadOnlyList<VerificationRequestView> List(int limit, bool summariesOnly = false)
     {
         if (limit is < 1 or > 200)
         {
@@ -230,10 +230,14 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
 
         return database.ExecuteRead(connection =>
         {
-            using var query = connection.CreateCommand(
-                "SELECT request_id FROM verification_requests ORDER BY created_utc DESC, request_id LIMIT $limit");
+            using var query = connection.CreateCommand("""
+                SELECT request_id FROM verification_requests
+                ORDER BY CASE WHEN $summary = 1 AND status = 'awaiting_approval' THEN 0 ELSE 1 END,
+                         created_utc DESC, request_id LIMIT $limit
+                """);
+            query.Parameters.AddWithValue("$summary", summariesOnly ? 1 : 0);
             query.Parameters.AddWithValue("$limit", limit);
-            return ReadIds(query).Select(id => Read(connection, null, id)!).ToArray();
+            return ReadIds(query).Select(id => Read(connection, null, id, summariesOnly)!).ToArray();
         });
     }
 
@@ -730,14 +734,17 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
         return ordinals;
     }
 
-    private static VerificationRequestView? Read(SqliteConnection connection, SqliteTransaction? transaction, string id)
+    private static VerificationRequestView? Read(SqliteConnection connection, SqliteTransaction? transaction, string id, bool summariesOnly = false)
     {
         using var request = connection.CreateCommand("""
-            SELECT reason, status, provider_id, created_utc, failure_code, model_name, input_tokens, output_tokens, payload
+            SELECT reason, status, provider_id, created_utc, failure_code, model_name, input_tokens, output_tokens,
+                   CASE WHEN $summary = 1 THEN '' ELSE payload END,
+                   (SELECT COUNT(*) FROM verification_items WHERE request_id = $id)
             FROM verification_requests WHERE request_id = $id
             """);
         request.Transaction = transaction;
         request.Parameters.AddWithValue("$id", id);
+        request.Parameters.AddWithValue("$summary", summariesOnly ? 1 : 0);
         using var reader = request.ExecuteReader();
         if (!reader.Read())
         {
@@ -748,7 +755,13 @@ public sealed partial class SqliteVerificationRepository : IVerificationReposito
             Provider: reader.IsDBNull(2) ? null : reader.GetString(2), Created: CatalogValues.ParseTimestamp(reader.GetString(3)),
             Failure: reader.IsDBNull(4) ? null : reader.GetString(4), Model: reader.IsDBNull(5) ? null : reader.GetString(5),
             Input: reader.IsDBNull(6) ? (int?)null : reader.GetInt32(6), Output: reader.IsDBNull(7) ? (int?)null : reader.GetInt32(7),
-            Payload: reader.GetString(8));
+            Payload: reader.GetString(8), Count: reader.GetInt32(9));
+        if (summariesOnly)
+        {
+            return new VerificationRequestView(Guid.Parse(id), header.Reason, header.Status, header.Provider, header.Created,
+                header.Failure, header.Model, header.Input, header.Output, "", [], header.Count);
+        }
+
         using var items = connection.CreateCommand("""
             SELECT ordinal, proposal_id, entity_id, included, verdict, corrected_type, note
             FROM verification_items WHERE request_id = $id ORDER BY ordinal

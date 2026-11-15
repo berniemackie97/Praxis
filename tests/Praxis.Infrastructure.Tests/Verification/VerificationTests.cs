@@ -292,6 +292,11 @@ public sealed class VerificationTests : IDisposable
             $$"""{"requestId":"3","action":"verificationRequestSource","sourceId":"{{source.SourceId}}"}""");
         string request = created.RootElement.GetProperty("data").GetProperty("verificationId").GetString()!;
 
+        using JsonDocument stale = await Send(protocol,
+            $$"""{"requestId":"stale","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","providerRevision":1,"remoteDisclosureApproved":true}""");
+        Assert.False(stale.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(Guid.Parse(request))!.Status);
+
         using JsonDocument approved = await Send(protocol,
             $$"""{"requestId":"4","action":"verificationApprove","verificationId":"{{request}}","providerId":"codex","remoteDisclosureApproved":true,"redactions":["Rivera"]}""");
         JsonElement view = approved.RootElement.GetProperty("data").GetProperty("request");
@@ -301,6 +306,41 @@ public sealed class VerificationTests : IDisposable
         using JsonDocument tooMany = await Send(protocol,
             $$"""{"requestId":"5","action":"verificationApprove","verificationId":"{{request}}","excludedOrdinals":[1,2,3,4,5,6,7,8,9,10,11,12,13]}""");
         Assert.False(tooMany.RootElement.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task QueueLoadsSummariesAndBatchApprovesOnlyTheSelectedRequestsLocally()
+    {
+        using SqliteCatalog catalog = Open();
+        CapturedOriginal first = await Enrich(catalog, "first.md", Meeting);
+        CapturedOriginal second = await Enrich(catalog, "second.md", Meeting);
+        Guid selected = catalog.Verification.RequestForSource(first.SourceId)!.Value;
+        Guid untouched = catalog.Verification.RequestForSource(second.SourceId)!.Value;
+        catalog.Verification.SaveProvider(new VerificationProvider(VerificationProvider.Ollama, null, "qwen:9b",
+            0, VerificationProvider.Unlimited, true, "http://127.0.0.1:11434"));
+        var protocol = TestDesktop.Protocol(catalog);
+
+        using JsonDocument queue = await Send(protocol, """{"requestId":"queue","action":"verifications","summariesOnly":true}""");
+        JsonElement[] rows = queue.RootElement.GetProperty("data").GetProperty("requests").EnumerateArray().ToArray();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row =>
+        {
+            Assert.Equal("", row.GetProperty("payload").GetString());
+            Assert.True(row.GetProperty("itemCount").GetInt32() > 0);
+        });
+        Assert.DoesNotContain("Alex Rivera", queue.RootElement.GetRawText(), StringComparison.Ordinal);
+
+        Guid absent = Guid.NewGuid();
+        using JsonDocument batch = await Send(protocol, $$"""
+            {"requestId":"batch","action":"verificationApproveLocalBatch",
+             "verificationIds":["{{selected:D}}","{{selected:D}}","{{absent:D}}"],"providerId":"codex","remoteDisclosureApproved":true}
+            """);
+        JsonElement result = batch.RootElement.GetProperty("data");
+        Assert.Equal(selected, Assert.Single(result.GetProperty("queued").EnumerateArray()).GetGuid());
+        Assert.Equal(absent, Assert.Single(result.GetProperty("skipped").EnumerateArray()).GetGuid());
+        Assert.Equal(VerificationProvider.Ollama, catalog.Verification.Get(selected)!.ProviderId);
+        Assert.Equal("approved", catalog.Verification.Get(selected)!.Status);
+        Assert.Equal("awaiting_approval", catalog.Verification.Get(untouched)!.Status);
     }
 
     [Fact]

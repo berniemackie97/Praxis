@@ -136,6 +136,11 @@ final class ChatWorkbenchModel: ObservableObject {
         if !sent { completion(.failure(MediaPlaybackError(message: "The worker is not running."))) }
     }
 
+    func saveLibraryNote(id: UUID, title: String, text: String, completion: @escaping (String?) -> Void) {
+        channel.send("noteCapture", ["captureId": id.uuidString.lowercased(), "title": title, "text": text],
+                     as: ChatNoteCaptureData.self, failed: { completion($0) }) { _ in completion(nil) }
+    }
+
     func refresh() {
         channel.reset("chatBackends")
         channel.send("agentBackends", as: AgentBackendsData.self, scope: "chatBackends", failed: reportListError) { [weak self] data in
@@ -400,6 +405,7 @@ enum ChatFailureText {
         case "model_missing": return "The selected model is unavailable. Review its configuration under Models."
         case "backend_configuration_error": return "This chat model is not configured correctly. Review Models before retrying."
         case "model_approval_required": return "Codex could not request an approval in Praxis. Try a read-only question or use the provider directly for the action."
+        case "model_rejected": return "The connection rejected the request. For private Ollama Chat, choose an installed local model."
         case "model_invalid_response": return "The provider did not return a usable answer. Try again or choose another model."
         case "invalid_request": return "The worker rejected this request. Try a shorter message."
         default: return "Chat failed unexpectedly. No answer was saved; the message remains in this conversation."
@@ -466,6 +472,7 @@ enum ChatActivity {
     static func progress(_ event: AgentRunEvent?) -> String {
         guard let event else { return "Starting…" }
         switch event.kind {
+        case "recalling_brain": return "Finding relevant library notes…"
         case "thinking": return "Thinking…"
         case "tool_started": return "Using \(label(event.tool ?? ""))…"
         case "tool_finished": return "Finished \(label(event.tool ?? ""))."
