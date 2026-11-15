@@ -17,7 +17,7 @@ enum NeuralNebulaGeometry {
 
     static func build(overview: GraphZoneOverview, placement: NeuralNebulaPlacement,
                       nodes graphNodes: [GraphNode], edges graphEdges: [GraphEdge],
-                      selectedNodeId: String?, highContrast: Bool) -> Result {
+                      selectedNodeId: String?, selectedEdgeId: String?, highContrast: Bool) -> Result {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
         let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
@@ -63,28 +63,45 @@ enum NeuralNebulaGeometry {
             }
         }
 
-        var localPoints: [NeuralNebulaVertex] = []
-        var localLinks: [NeuralNebulaVertex] = []
-        for node in graphNodes {
-            guard let position = placement.nodeCenters[node.entityId] else { continue }
-            var color = NeuralNebulaLayout.color(for: node.entityType ?? "other")
-            if node.entityId == selectedNodeId { color = SIMD4<Float>(1, 1, 1, 1) }
-            localPoints.append(NeuralNebulaVertex(position: position, color: color,
-                 size: node.entityId == selectedNodeId ? 10 : (highContrast ? 6.5 : 4.7)))
+        let localPoints = detailPoints(nodes: graphNodes, placement: placement,
+                                       selectedNodeId: selectedNodeId, highContrast: highContrast)
+        let localLinks = detailLines(edges: graphEdges, placement: placement,
+                                     selectedEdgeId: selectedEdgeId, highContrast: highContrast)
+        return Result(zonePoints: points, zoneLines: links,
+                      detailPoints: localPoints, detailLines: localLinks)
+    }
+
+    static func detailPoints(nodes: [GraphNode], placement: NeuralNebulaPlacement,
+                             selectedNodeId: String?, highContrast: Bool) -> [NeuralNebulaVertex] {
+        nodes.compactMap { node in
+            guard let position = placement.nodeCenters[node.entityId] else { return nil }
+            let highlighted = node.entityId == selectedNodeId
+            let color = highlighted ? SIMD4<Float>(1, 1, 1, 1) :
+                NeuralNebulaLayout.color(for: node.entityType ?? "other")
+            return NeuralNebulaVertex(position: position, color: color,
+                                      size: highlighted ? 10 : (highContrast ? 6.5 : 4.7))
         }
-        for edge in graphEdges {
+    }
+
+    static func detailLines(edges: [GraphEdge], placement: NeuralNebulaPlacement,
+                            selectedEdgeId: String?, highContrast: Bool) -> [NeuralNebulaVertex] {
+        var links: [NeuralNebulaVertex] = []
+        for edge in edges {
             guard let a = placement.nodeCenters[edge.subjectId],
                   let b = placement.nodeCenters[edge.objectId] else { continue }
             let color: SIMD4<Float>
-            switch edge.evidenceStatus {
-            case "suggested": color = SIMD4<Float>(1, 0.71, 0.33, 0.49)
-            case "contradicted": color = SIMD4<Float>(1, 0.41, 0.48, 0.58)
-            default: color = SIMD4<Float>(0.55, 0.81, 1, highContrast ? 0.73 : 0.40)
+            if edge.relationId == selectedEdgeId {
+                color = SIMD4<Float>(1, 1, 1, 0.95)
+            } else {
+                switch edge.evidenceStatus {
+                case "suggested": color = SIMD4<Float>(1, 0.71, 0.33, 0.49)
+                case "contradicted": color = SIMD4<Float>(1, 0.41, 0.48, 0.58)
+                default: color = SIMD4<Float>(0.55, 0.81, 1, highContrast ? 0.73 : 0.40)
+                }
             }
-            appendLink(from: a, to: b, color: color, into: &localLinks)
+            appendLink(from: a, to: b, color: color, into: &links)
         }
-        return Result(zonePoints: points, zoneLines: links,
-                      detailPoints: localPoints, detailLines: localLinks)
+        return links
     }
 
     private static func appendLink(from a: SIMD3<Float>, to b: SIMD3<Float>,
