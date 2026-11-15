@@ -41,12 +41,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
     private var selectedNodeId: String?
     private var selectedEdgeId: String?
     private var placement = NeuralNebulaPlacement(zoneCenters: [:], zoneSizes: [:], nodeCenters: [:])
-    private var center = SIMD3<Float>.zero
-    private var desiredCenter = SIMD3<Float>.zero
-    private var distance: Float = 590
-    private var desiredDistance: Float = 590
-    private var yaw: Float = 0.28
-    private var pitch: Float = 0.15
+    private var camera = NeuralNebulaCamera()
     private var detailOpacity: Float = 0
     private var reduceMotion = false
     private var highContrast = false
@@ -139,8 +134,8 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             detailPoints = Batch()
             detailLines = Batch()
             detailOpacity = 0
-            desiredCenter = .zero
-            desiredDistance = 590
+            camera.desiredCenter = .zero
+            camera.desiredDistance = 590
             return
         }
         let visibleRegion = regionType ?? (focusId.flatMap { id in
@@ -157,38 +152,32 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         detailPoints = buffer(geometry.detailPoints)
         detailLines = buffer(geometry.detailLines)
         if regionType != nil || focusId != nil {
-            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
+            camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
-            desiredDistance = focusId == nil ? 157 : 79
+            camera.desiredDistance = focusId == nil ? 157 : 79
         } else {
-            desiredCenter = .zero
-            desiredDistance = 590
+            camera.desiredCenter = .zero
+            camera.desiredDistance = 590
         }
         if reduceMotion {
-            center = desiredCenter
-            distance = desiredDistance
+            camera.center = camera.desiredCenter
+            camera.distance = camera.desiredDistance
             detailOpacity = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
         }
     }
 
-    func orbit(dx: Float, dy: Float) {
-        yaw += dx * 0.006
-        pitch = max(-1.38, min(1.38, pitch - dy * 0.006))
-    }
+    func orbit(dx: Float, dy: Float) { camera.orbit(dx: dx, dy: dy) }
 
-    func pan(dx: Float, dy: Float) {
-        let rate = max(0.1, distance / 600)
-        desiredCenter += SIMD3<Float>(-dx * rate, dy * rate, 0)
-    }
+    func pan(dx: Float, dy: Float) { camera.pan(dx: dx, dy: dy) }
 
     func zoom(by factor: Float, at point: CGPoint?) {
-        desiredDistance = max(48, min(1_400, desiredDistance * factor))
+        camera.desiredDistance = max(48, min(1_400, camera.desiredDistance * factor))
         if regionType == nil, focusId == nil, let point, let zone = zone(at: point) {
             if let anchor = placement.zoneCenters[zone] {
-                desiredCenter += (anchor - desiredCenter) * 0.16
+                camera.desiredCenter += (anchor - camera.desiredCenter) * 0.16
             }
-            if desiredDistance < 325 { onEnterZone?(zone) }
-        } else if (regionType != nil || focusId != nil) && desiredDistance > 415 {
+            if camera.desiredDistance < 325 { onEnterZone?(zone) }
+        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 415 {
             onReturnToZones?()
         }
     }
@@ -199,9 +188,9 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         lastToolbarZoom = zoom
         zoomRevision = revision
         if zoom == 1 {
-            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
+            camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
-            desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
         } else {
             self.zoom(by: ratio, at: nil)
         }
@@ -218,7 +207,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
 
     private func projected(_ point: SIMD3<Float>) -> CGPoint? {
         guard let view, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
-        let clip = projection(aspect: Float(view.bounds.width / view.bounds.height)) *
+        let clip = camera.projection(aspect: Float(view.bounds.width / view.bounds.height)) *
             SIMD4<Float>(point, 1)
         guard clip.w > 0 else { return nil }
         return CGPoint(x: CGFloat((clip.x / clip.w + 1) * 0.5) * view.bounds.width,
@@ -228,16 +217,16 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
     private func zone(at point: CGPoint) -> String? {
         placement.zoneCenters.compactMap { entry -> (String, CGFloat)? in
             guard let position = projected(entry.value) else { return nil }
-            let distance = hypot(position.x - point.x, position.y - point.y)
-            return distance < 42 ? (entry.key, distance) : nil
+            let camera.distance = hypot(position.x - point.x, position.y - point.y)
+            return camera.distance < 42 ? (entry.key, camera.distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
     private func nearestNode(to point: CGPoint) -> String? {
         placement.nodeCenters.compactMap { entry -> (String, CGFloat)? in
             guard let position = projected(entry.value) else { return nil }
-            let distance = hypot(position.x - point.x, position.y - point.y)
-            return distance < 14 ? (entry.key, distance) : nil
+            let camera.distance = hypot(position.x - point.x, position.y - point.y)
+            return camera.distance < 14 ? (entry.key, camera.distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
@@ -250,9 +239,9 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             guard squared > 1 else { return nil }
             let projection = max(0, min(1, ((point.x - a.x) * delta.x +
                                           (point.y - a.y) * delta.y) / squared))
-            let distance = hypot(point.x - a.x - delta.x * projection,
+            let camera.distance = hypot(point.x - a.x - delta.x * projection,
                                  point.y - a.y - delta.y * projection)
-            return distance < 7 ? (edge.relationId, distance) : nil
+            return camera.distance < 7 ? (edge.relationId, camera.distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
@@ -265,8 +254,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         let elapsed = Float(min(0.05, now - (lastDrawTime ?? now)))
         lastDrawTime = now
         let weight = reduceMotion ? Float(1) : 1 - exp(-elapsed * 5.3)
-        center += (desiredCenter - center) * weight
-        distance += (desiredDistance - distance) * weight
+        camera.settle(weight: weight)
         let desiredOpacity: Float = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
         detailOpacity += (desiredOpacity - detailOpacity) * weight
         guard let pass = view.currentRenderPassDescriptor,
@@ -275,7 +263,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
               let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return }
         encoder.setDepthStencilState(depthState)
         let aspect = max(0.1, Float(view.drawableSize.width / max(1, view.drawableSize.height)))
-        var uniform = NeuralNebulaUniforms(viewProjection: projection(aspect: aspect),
+        var uniform = NeuralNebulaUniforms(viewProjection: camera.projection(aspect: aspect),
                                             time: reduceMotion ? 0 : Float(now),
                                             opacity: 1, pointScale: Float(view.drawableSize.height))
         let baseOpacity = 1 - detailOpacity * 0.82
@@ -304,27 +292,4 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         encoder.drawPrimitives(type: lines ? .line : .point, vertexStart: 0, vertexCount: batch.count)
     }
 
-    private func projection(aspect: Float) -> simd_float4x4 {
-        let eye = center + SIMD3<Float>(sin(yaw) * cos(pitch), sin(pitch),
-                                         cos(yaw) * cos(pitch)) * distance
-        let direction = simd_normalize(center - eye)
-        let right = simd_normalize(simd_cross(direction, SIMD3<Float>(0, 1, 0)))
-        let up = simd_cross(right, direction)
-        let view = simd_float4x4(columns: (
-            SIMD4<Float>(right.x, up.x, -direction.x, 0),
-            SIMD4<Float>(right.y, up.y, -direction.y, 0),
-            SIMD4<Float>(right.z, up.z, -direction.z, 0),
-            SIMD4<Float>(-simd_dot(right, eye), -simd_dot(up, eye), simd_dot(direction, eye), 1)
-        ))
-        let f: Float = 1 / tan(.pi / 5.5)
-        let near: Float = 0.5
-        let far: Float = 4_000
-        let perspective = simd_float4x4(columns: (
-            SIMD4<Float>(f / aspect, 0, 0, 0),
-            SIMD4<Float>(0, f, 0, 0),
-            SIMD4<Float>(0, 0, (far + near) / (near - far), -1),
-            SIMD4<Float>(0, 0, 2 * far * near / (near - far), 0)
-        ))
-        return perspective * view
-    }
 }
