@@ -67,6 +67,39 @@ public sealed class FileSourceIntakeTests : IDisposable
     }
 
     [Fact]
+    public void ScanSkipsVirtualEnvironmentsToolCachesAndRecoveryCodesOutsideProjects()
+    {
+        string root = Path.Combine(workspace, "watched");
+        string package = Path.Combine(root, "business");
+        foreach (string folder in new[]
+                 {
+                     Path.Combine(package, ".tooling", "venv", "lib", "site-packages"), Path.Combine(package, "env", "bin"),
+                     Path.Combine(package, ".playwright-cli"), Path.Combine(package, ".obsidian"), Path.Combine(package, "Plans")
+                 })
+        {
+            Directory.CreateDirectory(folder);
+        }
+
+        File.WriteAllText(Path.Combine(package, ".tooling", "venv", "pyvenv.cfg"), "home = /usr/bin");
+        File.WriteAllText(Path.Combine(package, ".tooling", "venv", "lib", "site-packages", "six.py"), "import sys");
+        File.WriteAllText(Path.Combine(package, ".tooling", "build_report.py"), "print('report')");
+        File.WriteAllText(Path.Combine(package, "env", "pyvenv.cfg"), "home = /usr/bin");
+        File.WriteAllText(Path.Combine(package, "env", "bin", "activate"), "export PATH");
+        File.WriteAllText(Path.Combine(package, ".playwright-cli", "page-1.yml"), "- button");
+        File.WriteAllText(Path.Combine(package, ".obsidian", "workspace.json"), "{}");
+        File.WriteAllText(Path.Combine(package, "stripe_backup_code.txt"), "1234-5678");
+        File.WriteAllText(Path.Combine(package, "github-recovery-codes-2.txt"), "abcd-efgh");
+        File.WriteAllText(Path.Combine(package, "Plans", "recovery_code_review.md"), "An ordinary note about reviewing code.");
+        File.WriteAllText(Path.Combine(package, "Plans", "budget.md"), "Budget");
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        string[] found = new FileSourceIntake(catalog.Originals, catalog.DataDirectory).InspectFolder(root, 100, 8, 1 << 20)
+            .Select(file => Path.GetRelativePath(root, file.SourcePath).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(["business/.tooling/build_report.py", "business/Plans/budget.md", "business/Plans/recovery_code_review.md"], found);
+    }
+
+    [Fact]
     public async Task SelectedFolderPreservesNestedOriginalsAndStableSourceVersions()
     {
         string selected = Path.Combine(workspace, "selected");

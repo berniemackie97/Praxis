@@ -196,7 +196,7 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
                 bool isDirectory = (attributes & FileAttributes.Directory) != 0;
                 // Dependency and build output, version-control internals and secrets are never
                 // sources; skipping them before any other check keeps their links and size out of scope.
-                if ((isDirectory ? IntakeIgnoreRules.IsIgnoredDirectory(name, insideProject) : IntakeIgnoreRules.IsSecretFile(name))
+                if ((isDirectory ? IntakeIgnoreRules.IsIgnoredDirectory(path, insideProject) : IntakeIgnoreRules.IsSecretFile(name))
                     || IntakeIgnoreRules.IsGitIgnored(rules, path, isDirectory))
                 {
                     continue;

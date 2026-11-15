@@ -100,6 +100,37 @@ public sealed class WatchedFolderIntakeTests : IDisposable
         Assert.NotNull(catalog.Sources.CurrentFile(kept.SourceId));
     }
 
+    [Fact]
+    public async Task SourcesCapturedFromVirtualEnvironmentsToolCachesOrRecoveryCodesAreRetired()
+    {
+        string venv = Path.Combine(inbox, "business", ".tooling", "venv");
+        Directory.CreateDirectory(Path.Combine(venv, "lib"));
+        Directory.CreateDirectory(Path.Combine(inbox, "business", ".playwright-cli"));
+        File.WriteAllText(Path.Combine(venv, "pyvenv.cfg"), "home = /usr/bin");
+        string library = Path.Combine(venv, "lib", "six.py");
+        string snapshot = Path.Combine(inbox, "business", ".playwright-cli", "page-1.yml");
+        string codes = Path.Combine(inbox, "stripe_backup_code.txt");
+        string plan = Path.Combine(inbox, "business", "plan.md");
+        File.WriteAllText(library, "import sys");
+        File.WriteAllText(snapshot, "- button");
+        File.WriteAllText(codes, "1234-5678");
+        File.WriteAllText(plan, "# Plan");
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal dependency = await Capture(catalog, library);
+        CapturedOriginal cache = await Capture(catalog, snapshot);
+        CapturedOriginal secret = await Capture(catalog, codes);
+        CapturedOriginal kept = await Capture(catalog, plan);
+
+        IntakeHarness watcher = NewMonitor(catalog);
+        await watcher.ReconcileAsync(DateTimeOffset.UtcNow);
+
+        Assert.Null(catalog.Sources.CurrentFile(dependency.SourceId));
+        Assert.Null(catalog.Sources.CurrentFile(cache.SourceId));
+        Assert.Null(catalog.Sources.CurrentFile(secret.SourceId));
+        Assert.NotNull(catalog.Sources.CurrentFile(kept.SourceId));
+    }
+
     private static async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string path)
     {
         byte[] bytes = await File.ReadAllBytesAsync(path);
