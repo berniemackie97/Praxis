@@ -92,6 +92,7 @@
 		00000000000000000000E02C /* NeuralNebulaRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02B /* NeuralNebulaRenderer.swift */; };
 		00000000000000000000E02E /* NeuralNebulaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02D /* NeuralNebulaView.swift */; };
 		00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02F /* NeuralNebulaGeometry.swift */; };
+		00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E031 /* NeuralNebulaCamera.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -191,6 +192,7 @@
 		00000000000000000000E02B /* NeuralNebulaRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaRenderer.swift; sourceTree = "<group>"; };
 		00000000000000000000E02D /* NeuralNebulaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaView.swift; sourceTree = "<group>"; };
 		00000000000000000000E02F /* NeuralNebulaGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaGeometry.swift; sourceTree = "<group>"; };
+		00000000000000000000E031 /* NeuralNebulaCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaCamera.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -293,6 +295,7 @@
 				00000000000000000000E025 /* GraphStyle.swift */,
 				00000000000000000000E027 /* NeuralNebulaLayout.swift */,
 				00000000000000000000E02F /* NeuralNebulaGeometry.swift */,
+				00000000000000000000E031 /* NeuralNebulaCamera.swift */,
 				00000000000000000000E029 /* NeuralNebula.metal */,
 				00000000000000000000E02B /* NeuralNebulaRenderer.swift */,
 				00000000000000000000E02D /* NeuralNebulaView.swift */,
@@ -509,6 +512,7 @@
 				00000000000000000000E026 /* GraphStyle.swift in Sources */,
 				00000000000000000000E028 /* NeuralNebulaLayout.swift in Sources */,
 				00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */,
+				00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */,
 				00000000000000000000E02A /* NeuralNebula.metal in Sources */,
 				00000000000000000000E02C /* NeuralNebulaRenderer.swift in Sources */,
 				00000000000000000000E02E /* NeuralNebulaView.swift in Sources */,
