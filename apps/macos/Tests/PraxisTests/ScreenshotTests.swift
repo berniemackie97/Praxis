@@ -184,7 +184,8 @@ private struct SyntheticGraphPreview: View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges,
-                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in }, focusId: "project",
+                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: "project",
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: reduceMotion || forceReducedMotion, active: true,
@@ -225,7 +226,8 @@ private struct SyntheticGraphAtlasPreview: View {
             PageHeader(title: "One Brain · Global Atlas",
                        subtitle: "Synthetic, bounded multi-component topology; no real user data")
             GraphSceneView(nodes: nodes, edges: edges,
-                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in }, focusId: nil,
+                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: nil,
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: true, active: true, highContrast: false,
@@ -276,7 +278,8 @@ private struct SyntheticGraphZonesPreview: View {
             PageHeader(title: "One Brain · Knowledge Zones",
                        subtitle: "Synthetic source-type aggregates; no private knowledge")
             GraphSceneView(nodes: [], edges: [], zones: summary,
-                           zoneTypeFilter: nil, expandZone: { _ in }, focusId: nil,
+                           zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: nil,
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: true, active: true, highContrast: false,
