@@ -426,10 +426,11 @@ public sealed partial class SqliteGraphReader : IGraphReader
     internal static string EffectiveType(string alias, GraphQuery query) => $"""
         CASE WHEN {alias}.type_origin <> 'owner' AND {TechnicalType(alias)} IS NOT NULL THEN {TechnicalType(alias)}
         WHEN {alias}.type_origin = 'inferred' THEN (
-            SELECT m.entity_type FROM {MentionView(query)} m
-            WHERE m.entity_id = {alias}.entity_id AND m.entity_type IS NOT NULL
-              {ScopeFilter("m")}
-            GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1)
+            SELECT {EntityTypeSanity.CorrectInferred("ranked.entity_type", alias)}
+            FROM (SELECT m.entity_type FROM {MentionView(query)} m
+                  WHERE m.entity_id = {alias}.entity_id AND m.entity_type IS NOT NULL
+                    {ScopeFilter("m")}
+                  GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1) ranked)
         ELSE {alias}.entity_type END
         """;
 

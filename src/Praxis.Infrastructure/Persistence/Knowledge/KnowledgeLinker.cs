@@ -96,19 +96,21 @@ internal static class KnowledgeLinker
 
     /// <summary>
     /// For entities whose type is still inferred, adopts the most frequent type among visible
-    /// mentions (ties broken by name for determinism). Verified and owner types are never changed.
+    /// mentions (ties broken by name for determinism), except that a work-item reference is never
+    /// a project. Verified and owner types are never changed.
     /// </summary>
     internal static void RecomputeInferredTypes(
         SqliteConnection connection, SqliteTransaction transaction, IEnumerable<string> entities, string now)
     {
         foreach (string entity in entities.Distinct(StringComparer.Ordinal))
         {
-            connection.Run(transaction, """
+            connection.Run(transaction, $"""
                 UPDATE knowledge_entities
                 SET entity_type = COALESCE((
-                        SELECT m.entity_type FROM visible_entity_mentions m
-                        WHERE m.entity_id = $entity
-                        GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1),
+                        SELECT {EntityTypeSanity.CorrectInferred("ranked.entity_type", "knowledge_entities")}
+                        FROM (SELECT m.entity_type FROM visible_entity_mentions m
+                              WHERE m.entity_id = $entity
+                              GROUP BY m.entity_type ORDER BY COUNT(*) DESC, m.entity_type LIMIT 1) ranked),
                         entity_type),
                     updated_utc = $now
                 WHERE entity_id = $entity AND type_origin = 'inferred'

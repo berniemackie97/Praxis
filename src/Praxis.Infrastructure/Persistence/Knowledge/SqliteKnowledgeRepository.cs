@@ -14,9 +14,11 @@ namespace Praxis.Infrastructure.Persistence.Knowledge;
 /// </summary>
 public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
 {
-    private const string Summary = """
+    private static readonly string Summary = $"""
         SELECT e.entity_id, e.display_name,
-               CASE WHEN e.type_origin = 'owner' THEN e.entity_type ELSE COALESCE(t.entity_type, e.entity_type) END,
+               CASE WHEN e.type_origin = 'owner' THEN e.entity_type WHEN t.entity_type IS NOT NULL THEN t.entity_type
+                    WHEN e.type_origin = 'inferred' THEN {EntityTypeSanity.CorrectInferred("e.entity_type", "e")}
+                    ELSE e.entity_type END,
                CASE WHEN e.type_origin <> 'owner' AND t.entity_type IS NOT NULL THEN 'evidence' ELSE e.type_origin END, e.status,
                COUNT(m.proposal_id), COUNT(DISTINCT m.source_id),
                e.type_origin = 'inferred' AND t.entity_type IS NULL AND COUNT(DISTINCT m.entity_type) > 1
@@ -27,9 +29,11 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
 
     // Knowledge is what the owner confirmed, a verifier supported, or the strong tiers verified;
     // local-model guesses are suggestions until then.
-    private const string ConfirmedSummary = """
+    private static readonly string ConfirmedSummary = $"""
         SELECT e.entity_id, e.display_name,
-               CASE WHEN e.type_origin = 'owner' THEN e.entity_type ELSE COALESCE(t.entity_type, e.entity_type) END,
+               CASE WHEN e.type_origin = 'owner' THEN e.entity_type WHEN t.entity_type IS NOT NULL THEN t.entity_type
+                    WHEN e.type_origin = 'inferred' THEN {EntityTypeSanity.CorrectInferred("e.entity_type", "e")}
+                    ELSE e.entity_type END,
                CASE WHEN e.type_origin <> 'owner' AND t.entity_type IS NOT NULL THEN 'evidence' ELSE e.type_origin END, e.status,
                COUNT(m.proposal_id), COUNT(DISTINCT m.source_id),
                e.type_origin = 'inferred' AND t.entity_type IS NULL AND COUNT(DISTINCT m.entity_type) > 1

@@ -16,6 +16,8 @@ public static class KnowledgeVocabulary
         A class or struct is class; a callable routine or method is function; a compiled executable,
         shared library or DLL is binary_module; a named runtime data or resource file is data_asset.
         A source report or article is document. Project is a whole product, game, repository or initiative.
+        A ticket, issue, milestone or pull-request reference (AUTH-001B, #280) is not a project, and neither
+        is a folder path; a third-party library or package is technology.
         Do not label code symbols as people, organizations, projects, or technologies.
         """;
 

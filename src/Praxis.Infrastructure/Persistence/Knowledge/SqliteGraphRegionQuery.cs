@@ -12,7 +12,9 @@ internal static class SqliteGraphRegionQuery
         using (SqliteCommand command = connection.CreateCommand($"""
             WITH eligible AS MATERIALIZED (
                 SELECT r.relation_id, r.subject_id, r.object_id,
-                       {SqliteGraphReader.RelationStatus} AS evidence_status
+                       {SqliteGraphReader.RelationStatus} AS evidence_status,
+                       {EntityTypeSanity.RuntimeGlueName("subject")} AS subject_glue,
+                       {EntityTypeSanity.RuntimeGlueName("object")} AS object_glue
                 FROM knowledge_relations r
                 JOIN knowledge_entities subject ON subject.entity_id = r.subject_id
                 JOIN knowledge_entities object ON object.entity_id = r.object_id
@@ -24,15 +26,17 @@ internal static class SqliteGraphRegionQuery
                   AND ({SqliteGraphReader.EffectiveType("subject", query)} = $type
                        OR {SqliteGraphReader.EffectiveType("object", query)} = $type)
             ),
+            -- Runtime glue keeps its relations but never anchors a hub: its degree counts as zero.
             degrees AS MATERIALIZED (
-                SELECT entity_id, COUNT(*) AS degree FROM (
-                    SELECT subject_id AS entity_id FROM eligible
+                SELECT entity_id, CASE WHEN MAX(glue) = 1 THEN 0 ELSE COUNT(*) END AS degree FROM (
+                    SELECT subject_id AS entity_id, subject_glue AS glue FROM eligible
                     UNION ALL
-                    SELECT object_id AS entity_id FROM eligible
+                    SELECT object_id AS entity_id, object_glue AS glue FROM eligible
                 ) GROUP BY entity_id
             ),
             anchored AS (
                 SELECT eligible.relation_id, eligible.evidence_status,
+                       MAX(eligible.subject_glue, eligible.object_glue) AS glue,
                        MAX(subject_degree.degree, object_degree.degree) AS hub_degree,
                        CASE WHEN subject_degree.degree > object_degree.degree THEN eligible.subject_id
                             WHEN subject_degree.degree < object_degree.degree THEN eligible.object_id
@@ -43,7 +47,7 @@ internal static class SqliteGraphRegionQuery
                 JOIN degrees object_degree ON object_degree.entity_id = eligible.object_id
             ),
             ranked AS (
-                SELECT relation_id, hub_degree,
+                SELECT relation_id, hub_degree, glue,
                        ROW_NUMBER() OVER (
                            PARTITION BY hub_id
                            ORDER BY CASE WHEN evidence_status IN ('suggested', 'contradicted')
@@ -52,8 +56,8 @@ internal static class SqliteGraphRegionQuery
                 FROM anchored
             ),
             selected AS MATERIALIZED (
-                SELECT relation_id, hub_degree, depth FROM ranked
-                ORDER BY depth, hub_degree DESC, relation_id
+                SELECT relation_id, hub_degree, depth, glue FROM ranked
+                ORDER BY glue, depth, hub_degree DESC, relation_id
                 LIMIT $take OFFSET $offset
             )
             SELECT r.relation_id, r.subject_id, r.object_id, r.predicate, r.origin,
@@ -65,7 +69,7 @@ internal static class SqliteGraphRegionQuery
             LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
             LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
             LEFT JOIN sources s ON s.source_id = p.source_id
-            ORDER BY selected.depth, selected.hub_degree DESC, selected.relation_id
+            ORDER BY selected.glue, selected.depth, selected.hub_degree DESC, selected.relation_id
             """))
         {
             SqliteGraphReader.Scope(command, query);
