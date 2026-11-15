@@ -31,6 +31,7 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var seeds: [GraphNode] = []
     @Published private(set) var overview: GraphOverview?
     @Published private(set) var zoneOverview: GraphZoneOverview?
+    @Published private(set) var zoneLoading = false
     @Published private(set) var selectedZoneType: String?
     @Published private(set) var atlasNodes: [GraphNode] = []
     @Published private(set) var atlasEdges: [GraphEdge] = []
@@ -66,8 +67,10 @@ final class GraphWorkbenchModel: ObservableObject {
             .prefix(GraphBudget.seedCount))
     }
 
-    var visibleEdges: [GraphEdge] { focusId == nil && selectedZoneType == nil ? [] :
-        focusId == nil ? atlasEdges : edges }
+    var visibleEdges: [GraphEdge] {
+        if focusId != nil { return edges }
+        return selectedZoneType == nil ? [] : atlasEdges
+    }
 
     var highlightedNodeIds: Set<String> {
         guard !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
@@ -96,6 +99,7 @@ final class GraphWorkbenchModel: ObservableObject {
         clearInspection()
         overview = nil
         zoneOverview = nil
+        zoneLoading = false
         selectedZoneType = nil
         pendingLocateNodeId = nil
         atlasNodes = []
@@ -127,6 +131,7 @@ final class GraphWorkbenchModel: ObservableObject {
         clearInspection()
         overview = nil
         zoneOverview = nil
+        zoneLoading = false
         selectedZoneType = nil
         pendingLocateNodeId = nil
         atlasNodes = []
@@ -148,6 +153,7 @@ final class GraphWorkbenchModel: ObservableObject {
         error = nil
         message = nil
         loading = true
+        zoneLoading = true
 
         var fields: [String: Any] = [:]
         if !collectionId.isEmpty { fields["collectionId"] = collectionId }
@@ -156,8 +162,12 @@ final class GraphWorkbenchModel: ObservableObject {
         if !predicate.isEmpty { fields["predicate"] = predicate }
         if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
         channel.send("graphZones", fields, as: GraphZoneOverview.self, scope: overviewScope,
-                     failed: { [weak self] error in self?.error = error }) { [weak self] summary in
+                     failed: { [weak self] error in
+                         self?.zoneLoading = false
+                         self?.error = error
+                     }) { [weak self] summary in
             guard let self, active else { return }
+            zoneLoading = false
             zoneOverview = summary
             overview = GraphOverview(entityCount: summary.entityCount, types: summary.zones)
         }
@@ -243,7 +253,8 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func enterZone(_ type: String) {
-        guard active, zoneOverview?.zones.contains(where: { $0.entityType == type }) == true else { return }
+        guard active, selectedZoneType != type,
+              zoneOverview?.zones.contains(where: { $0.entityType == type }) == true else { return }
         channel.reset(atlasScope)
         channel.reset(seedScope)
         clearInspection()
