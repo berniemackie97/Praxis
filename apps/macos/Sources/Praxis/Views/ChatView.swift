@@ -326,6 +326,11 @@ private struct ReplyDetails: View {
             if !reply.check.clean {
                 Banner(text: AnswerCheckText.describe(reply.check), tone: .warning, systemImage: "exclamationmark.triangle.fill")
             }
+            if let omitted = reply.omittedMessages, omitted > 0 {
+                Label("\(omitted) earlier conversation messages were not sent to this model for this response. They remain saved in the conversation.",
+                      systemImage: "text.badge.minus")
+                    .font(.meta).foregroundStyle(.secondary)
+            }
             if reply.withheldResults > 0 {
                 HStack(spacing: Spacing.s) {
                     Image(systemName: "lock.fill").foregroundStyle(.secondary)

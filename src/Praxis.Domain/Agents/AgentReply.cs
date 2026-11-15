@@ -6,7 +6,7 @@ namespace Praxis.Domain.Agents;
 /// </summary>
 public sealed record AgentReply(
     Guid ConversationId, string Text, string StopReason, IReadOnlyList<AgentToolCall> ToolCalls, IReadOnlyList<AgentCitation> Citations,
-    int WithheldResults, AnswerCheck Check, int InputTokens, int OutputTokens)
+    int WithheldResults, AnswerCheck Check, int InputTokens, int OutputTokens, int OmittedMessages = 0)
 {
     public const string Completed = "completed";
     public const string StepLimit = "step_limit";

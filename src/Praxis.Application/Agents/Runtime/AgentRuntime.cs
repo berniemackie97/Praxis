@@ -38,8 +38,15 @@ public sealed class AgentRuntime(
         RunState state = new(new CitationLedger());
         if (backends.CreateSessionBackend(profile) is { } session)
         {
+            AgentContextWindow window = AgentContextWindow.ForCli(Transcript(conversationId), bounds.CompactAfterCharacters);
+            state.OmittedMessages = window.OmittedMessages;
+            if (window.OmittedMessages > 0)
+            {
+                report("context_limited", null, $"{window.OmittedMessages} older messages omitted");
+            }
+
             report("thinking", null, profile.BackendId);
-            AgentTurn turn = await session.RunAsync(system, Transcript(conversationId), registry.Definitions,
+            AgentTurn turn = await session.RunAsync(system, window.Messages, registry.Definitions,
                 (call, token) => InvokeAsync(call, context, state, report, token), cancellationToken);
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
@@ -106,7 +113,7 @@ public sealed class AgentRuntime(
         report("checking", null, null);
         AnswerCheck check = Check(text, userText, state, repaired);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
-        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens);
+        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens, state.OmittedMessages);
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
@@ -170,5 +177,6 @@ public sealed class AgentRuntime(
         public int Withheld { get; set; }
         public int InputTokens { get; set; }
         public int OutputTokens { get; set; }
+        public int OmittedMessages { get; set; }
     }
 }

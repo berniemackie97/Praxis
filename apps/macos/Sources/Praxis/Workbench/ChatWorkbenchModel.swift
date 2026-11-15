@@ -328,6 +328,7 @@ enum ChatActivity {
         case "tool_finished": return "Finished \(label(event.tool ?? ""))."
         case "repairing": return "Correcting figures that no tool returned…"
         case "compacting": return "Summarizing the earlier conversation…"
+        case "context_limited": return "Selecting recent conversation context…"
         case "checking": return "Checking the answer…"
         default: return event.kind.replacingOccurrences(of: "_", with: " ")
         }

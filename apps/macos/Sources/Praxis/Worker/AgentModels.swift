@@ -92,6 +92,7 @@ struct AgentReply: Decodable, Equatable {
     let check: AnswerCheck
     let inputTokens: Int
     let outputTokens: Int
+    let omittedMessages: Int?
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {
