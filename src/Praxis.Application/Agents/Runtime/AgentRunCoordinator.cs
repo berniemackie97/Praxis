@@ -30,14 +30,23 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
                 run.Reply = await runtime.RunAsync(conversationId, text, (kind, tool, detail) => run.Add(kind, tool, detail, clock.GetUtcNow()), run.Cancellation.Token);
                 run.State = AgentRunStatus.Completed;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (run.Cancellation.IsCancellationRequested)
             {
                 run.Add("canceled", null, null, clock.GetUtcNow());
                 run.State = AgentRunStatus.Canceled;
             }
-            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or Inference.InferenceException or HttpRequestException)
+            catch (Exception exception)
             {
-                run.Add("failed", null, exception is Inference.InferenceException inference ? inference.Code : exception.Message, clock.GetUtcNow());
+                string reason = exception switch
+                {
+                    Inference.InferenceException inference => inference.Code,
+                    OperationCanceledException or TimeoutException => "model_timeout",
+                    HttpRequestException => "model_unavailable",
+                    ArgumentException => "invalid_request",
+                    InvalidOperationException => "backend_configuration_error",
+                    _ => "agent_internal_error"
+                };
+                run.Add("failed", null, reason, clock.GetUtcNow());
                 run.State = AgentRunStatus.Failed;
             }
         });

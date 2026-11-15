@@ -40,6 +40,7 @@ public sealed class AgentRuntime(
                 (call, token) => InvokeAsync(call, context, state, report, token), cancellationToken);
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
+            conversations.Append(conversationId, AgentMessage.FromAssistant(turn.Text, []));
             return Finish(conversationId, userText, turn.Text, AgentReply.Completed, state, report, repaired: false);
         }
 

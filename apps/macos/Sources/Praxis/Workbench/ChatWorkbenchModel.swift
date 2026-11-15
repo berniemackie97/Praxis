@@ -11,6 +11,7 @@ final class ChatWorkbenchModel: ObservableObject {
 
     private let channel: WorkerChannel
     private var pollTask: Task<Void, Never>?
+    private var pollInFlight = false
 
     @Published private(set) var backends: [AgentBackendProfile] = []
     @Published private(set) var conversations: [AgentConversation] = []
@@ -131,12 +132,19 @@ final class ChatWorkbenchModel: ObservableObject {
 
     private func poll(_ run: String) {
         pollTask?.cancel()
+        pollInFlight = false
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 guard let self, self.runId == run else { return }
+                guard !self.pollInFlight else { continue }
+                self.pollInFlight = true
                 let after = self.events.last?.sequence ?? 0
-                self.channel.send("agentRun", ["runId": run, "after": after], as: AgentRunStatus.self, failed: self.report) { [weak self] status in
+                self.channel.send("agentRun", ["runId": run, "after": after], as: AgentRunStatus.self, failed: { [weak self] message in
+                    self?.pollInFlight = false
+                    self?.report(message)
+                }) { [weak self] status in
+                    self?.pollInFlight = false
                     self?.apply(status)
                 }
             }
@@ -149,13 +157,14 @@ final class ChatWorkbenchModel: ObservableObject {
         guard !status.running else { return }
         pollTask?.cancel()
         pollTask = nil
+        pollInFlight = false
         runId = nil
         if let reply = status.reply {
             replies[status.conversationId] = reply
         }
 
         switch status.state {
-        case "failed": error = "The request failed: \(status.events.last?.detail.map(FailureCode.label) ?? "unknown error")."
+        case "failed": error = ChatFailureText.describe(status.events.last?.detail)
         case "canceled": notice = "Stopped."
         default: notice = nil
         }
@@ -172,6 +181,22 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     private func report(_ message: String) { error = message }
+}
+
+/// Safe, actionable descriptions of bounded worker failure codes. Provider error text stays private.
+enum ChatFailureText {
+    static func describe(_ code: String?) -> String {
+        switch code {
+        case "model_timeout": return "The model timed out. Try a shorter request or a faster model, then send again."
+        case "model_unavailable": return "The model is unreachable. Check the connection in Models, then retry."
+        case "model_unauthenticated": return "The provider sign-in expired. Sign in again under Models."
+        case "model_quota_exhausted": return "The provider reached its usage limit. Choose an available model for a new conversation."
+        case "model_missing": return "The selected model is unavailable. Review its configuration under Models."
+        case "backend_configuration_error": return "This chat model is not configured correctly. Review Models before retrying."
+        case "invalid_request": return "The worker rejected this request. Try a shorter message."
+        default: return "Chat failed unexpectedly. No answer was saved; the message remains in this conversation."
+        }
+    }
 }
 
 /// One line of the visible transcript.

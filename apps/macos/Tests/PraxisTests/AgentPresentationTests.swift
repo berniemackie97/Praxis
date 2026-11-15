@@ -89,6 +89,15 @@ struct AgentPresentationTests {
         #expect(!chat.canSend)
     }
 
+    @Test func chatFailureLabelsNeverRevealProviderErrorText() {
+        #expect(ChatFailureText.describe("model_timeout").contains("timed out"))
+        #expect(ChatFailureText.describe("model_unavailable").contains("unreachable"))
+        #expect(ChatFailureText.describe("model_unauthenticated").contains("sign-in"))
+        #expect(ChatFailureText.describe("model_quota_exhausted").contains("usage limit"))
+        #expect(ChatFailureText.describe("agent_internal_error").contains("unexpectedly"))
+        #expect(!ChatFailureText.describe("exception: secret-key").contains("secret-key"))
+    }
+
     @Test func backendLocalityMirrorsTheWorker() {
         func profile(_ kind: String, _ endpoint: String?) -> AgentBackendProfile {
             AgentBackendProfile(backendId: "b", kind: kind, endpoint: endpoint, model: "m", keyAccount: nil, executable: nil, enabled: true)
