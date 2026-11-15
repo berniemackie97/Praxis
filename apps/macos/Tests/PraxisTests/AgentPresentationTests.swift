@@ -128,6 +128,19 @@ struct AgentPresentationTests {
         #expect(!profile("anthropic", "https://api.anthropic.com").isLocal)
     }
 
+    @MainActor
+    @Test func ollamaChatPickerOmitsEmbeddingOnlyModelsEvenWithCustomNames() throws {
+        let json = """
+            [{"name":"renamed:latest","digest":"a","sizeBytes":8,"capabilities":{"chat":false,"tools":true,"embedding":true}},
+             {"name":"gemma3:latest","digest":"b","sizeBytes":8,"capabilities":{"chat":true,"tools":false,"embedding":false}},
+             {"name":"older-embedding:latest","digest":"c","sizeBytes":8}]
+            """
+        let installed = try JSONDecoder().decode([InstalledModel].self, from: Data(json.utf8))
+        let settings = ModelSetupModel(channel: WorkerChannel(worker: WorkerSession()))
+        #expect(settings.models(for: ModelTool.ollama, installed: installed).map(\.id) == ["gemma3:latest"])
+        #expect(InstalledModel.matching("gemma3", in: installed)?.capabilities?.tools == false)
+    }
+
     @Test func keychainAccountsAreBounded() {
         #expect(KeychainStore.valid("anthropic"))
         #expect(KeychainStore.valid("openai.work@home"))

@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 using Praxis.Application.Agents;
 using Praxis.Application.Inference;
 using Praxis.Domain.Agents;
+using Praxis.Domain.Models;
+using Praxis.Infrastructure.Inference.Ollama;
 
 namespace Praxis.Infrastructure.Agents;
 
@@ -12,8 +14,37 @@ namespace Praxis.Infrastructure.Agents;
 /// Tool calling over the OpenAI-compatible chat completions API: OpenAI, DeepSeek, OpenRouter,
 /// Gemini's compatible endpoint, and local servers such as Ollama or LM Studio (<c>/v1</c>).
 /// </summary>
-public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, string? reasoningEffort = null) : IAgentBackend
+public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, bool isLocalOllama = false) : IAgentBackend
 {
+    public async ValueTask<bool> SupportsToolsAsync(CancellationToken cancellationToken)
+    {
+        if (!isLocalOllama)
+        {
+            return true;
+        }
+
+        using OllamaRuntime runtime = new(endpoint.GetLeftPart(UriPartial.Authority), TimeSpan.FromSeconds(2));
+        LocalModelCapabilities? capabilities;
+        try
+        {
+            capabilities = await runtime.ReadCapabilitiesAsync(model, cancellationToken);
+        }
+        catch (InferenceException)
+        {
+            // An older runtime may not describe capabilities. The chat request still reports provider failures.
+            capabilities = null;
+        }
+
+        if (capabilities?.Chat == false || (capabilities is null && model.Contains("embed", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InferenceException(InferenceFailure.ChatNotSupported, "This model does not support chat. Choose a chat model.");
+        }
+
+        // Older Ollama versions may not report metadata for the standard Gemma 2/3 tags.
+        string family = model.Split(':', 2)[0];
+        return capabilities?.Tools ?? (family is not ("gemma2" or "gemma3" or "library/gemma2" or "library/gemma3"));
+    }
+
     public async Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         CancellationToken cancellationToken)
     {
@@ -30,9 +61,9 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         }
 
         JsonObject body = new() { ["model"] = model, ["messages"] = messages };
-        if (reasoningEffort is not null)
+        if (isLocalOllama)
         {
-            body["reasoning_effort"] = reasoningEffort;
+            body["reasoning_effort"] = "none";
         }
 
         if (tools.Count > 0)

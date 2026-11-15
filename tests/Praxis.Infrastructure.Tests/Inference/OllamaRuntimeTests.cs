@@ -85,6 +85,22 @@ public sealed class OllamaRuntimeTests
         Assert.Equal(5_600_000_000, models[0].SizeBytes);
     }
 
+    [Fact]
+    public async Task DiscoverCapabilitiesByExactTagWithoutReadingOrSendingChatContent()
+    {
+        RecordingHandler handler = new RecordingHandler(_ => Json("""{"capabilities":["tools","embedding"]}"""));
+        using OllamaRuntime runtime = new(Endpoint, null, handler);
+
+        LocalModelCapabilities? capabilities = await runtime.ReadCapabilitiesAsync("renamed:latest", CancellationToken.None);
+
+        Assert.Equal(new LocalModelCapabilities(false, true, true), capabilities);
+        Assert.False(new InstalledModel("renamed:latest", "digest", 1, capabilities).SupportsChat);
+        SentRequest sent = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("http://127.0.0.1:11434/api/show", sent.Uri);
+        Assert.Equal("""{"model":"renamed:latest"}""", sent.Body);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NotFound, InferenceFailure.ModelMissing, "model_missing")]
     [InlineData(HttpStatusCode.BadRequest, InferenceFailure.Rejected, "model_rejected")]

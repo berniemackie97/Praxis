@@ -22,5 +22,7 @@ public enum InferenceFailure
     /// <summary>The response was malformed or exceeded its size bound.</summary>
     InvalidResponse,
     /// <summary>A noninteractive provider could not request an approval.</summary>
-    ApprovalRequired
+    ApprovalRequired,
+    /// <summary>The selected model cannot generate chat replies.</summary>
+    ChatNotSupported
 }

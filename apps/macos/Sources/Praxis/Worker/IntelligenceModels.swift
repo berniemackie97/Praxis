@@ -14,7 +14,27 @@ struct InstalledModel: Decodable, Identifiable, Equatable {
     let name: String
     let digest: String
     let sizeBytes: Int64
+    let capabilities: LocalModelCapabilities?
     var id: String { name }
+    var supportsChat: Bool { capabilities?.chat ?? Self.mayBeChat(name) }
+    var supportsEmbedding: Bool { capabilities?.embedding ?? !Self.mayBeChat(name) }
+
+    static func mayBeChat(_ name: String) -> Bool { !name.localizedCaseInsensitiveContains("embed") }
+
+    static func matching(_ name: String, in installed: [InstalledModel]) -> InstalledModel? {
+        installed.first { $0.name == name || $0.name == name + ":latest" }
+    }
+
+    static func allowsToolsWithoutMetadata(_ name: String) -> Bool {
+        let family = name.split(separator: ":", maxSplits: 1).first ?? ""
+        return !["gemma2", "gemma3", "library/gemma2", "library/gemma3"].contains(family)
+    }
+}
+
+struct LocalModelCapabilities: Decodable, Equatable {
+    let chat: Bool
+    let tools: Bool
+    let embedding: Bool
 }
 
 /// A local model or explicitly allowed subscription CLI for reviewed verification.

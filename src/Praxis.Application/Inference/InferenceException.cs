@@ -21,6 +21,7 @@ public sealed class InferenceException(InferenceFailure failure, string message,
         InferenceFailure.QuotaExhausted => "model_quota_exhausted",
         InferenceFailure.Unauthenticated => "model_unauthenticated",
         InferenceFailure.ApprovalRequired => "model_approval_required",
+        InferenceFailure.ChatNotSupported => "model_chat_unsupported",
         _ => "model_invalid_response"
     };
 }

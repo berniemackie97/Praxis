@@ -7,9 +7,19 @@ struct ChatView: View {
     @ObservedObject var setup: ModelSetupModel
     let openAgentSettings: () -> Void
 
+    private var installed: [InstalledModel] { setup.machine?.installed ?? [] }
+    private var localModel: InstalledModel? { InstalledModel.matching(model.activeModel, in: installed) }
+    private var supportsChat: Bool {
+        model.activeBackendId != ModelTool.ollama || (localModel?.supportsChat ?? InstalledModel.mayBeChat(model.activeModel))
+    }
+    private var supportsTools: Bool {
+        model.activeBackendId != ModelTool.ollama ||
+            (localModel?.capabilities?.tools ?? InstalledModel.allowsToolsWithoutMetadata(model.activeModel))
+    }
+
     private var modelOptions: [ModelChoice] {
-        let available = setup.models(for: model.activeBackendId, installed: setup.machine?.installed ?? [])
-        if !model.activeModel.isEmpty && !available.contains(where: { $0.id == model.activeModel }) {
+        let available = setup.models(for: model.activeBackendId, installed: installed)
+        if supportsChat && !model.activeModel.isEmpty && !available.contains(where: { $0.id == model.activeModel }) {
             return available + [ModelChoice(id: model.activeModel, label: model.activeModel, efforts: [], defaultEffort: nil)]
         }
         return available
@@ -65,6 +75,7 @@ struct ChatView: View {
                     set: { choice in
                         model.chooseModel(choice, defaultEffort: modelOptions.first { $0.id == choice }?.defaultEffort)
                     })) {
+                    if !supportsChat { Text("Choose a chat model").tag(model.activeModel).disabled(true) }
                     ForEach(modelOptions) { Text($0.label).tag($0.id) }
                 }
             }
@@ -98,7 +109,7 @@ struct ChatView: View {
                     configuration
                     Divider()
                     Transcript(model: model, openAgentSettings: openAgentSettings)
-                    Composer(model: model)
+                    Composer(model: model, supportsChat: supportsChat, supportsTools: supportsTools)
                 }
             }
             .background(Color(nsColor: .textBackgroundColor))
@@ -352,6 +363,10 @@ private struct ReplyDetails: View {
                 }
                 .font(.callout)
             }
+            if reply.toolsUnavailable == true {
+                Text("This model replied without library tools.")
+                    .font(.meta).foregroundStyle(.secondary)
+            }
             if reply.inputTokens > 0 || reply.outputTokens > 0 {
                 Text("Reported tokens: \(reply.inputTokens.formatted()) in · \(reply.outputTokens.formatted()) out")
                     .font(.meta).foregroundStyle(.secondary)
@@ -385,8 +400,11 @@ private struct ReplyDetails: View {
 
 private struct Composer: View {
     @ObservedObject var model: ChatWorkbenchModel
+    let supportsChat: Bool
+    let supportsTools: Bool
     @FocusState private var focused: Bool
 
+    private var canSend: Bool { model.canSend && supportsChat }
     private var tooLong: Bool { model.draft.count > ChatWorkbenchModel.maximumMessageCharacters }
 
     var body: some View {
@@ -396,15 +414,15 @@ private struct Composer: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
                     .focused($focused)
-                    .onSubmit { if model.canSend { model.send() } }
+                    .onSubmit { if canSend { model.send() } }
                     .padding(.vertical, Spacing.xs)
                 Button { model.send() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 22))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(model.canSend ? Color.accentColor : Color.secondary.opacity(0.5))
+                .foregroundStyle(canSend ? Color.accentColor : Color.secondary.opacity(0.5))
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(!model.canSend)
+                .disabled(!canSend)
                 .help("Send (Return). Option-Return adds a new line.")
                 .accessibilityLabel("Send")
             }
@@ -414,11 +432,17 @@ private struct Composer: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
                 .strokeBorder(focused ? Color.accentColor.opacity(0.6) : Surface.stroke))
             HStack {
-                Toggle("Use Praxis tools", isOn: $model.useTools)
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
-                    .disabled(model.busy)
-                    .help("Turn off for general questions. Recent conversation text still goes to the selected model.")
+                if !supportsChat {
+                    Text("Choose a model that supports chat.")
+                } else if !supportsTools {
+                    Text("Plain chat · library tools unavailable")
+                } else {
+                    Toggle("Use Praxis tools", isOn: $model.useTools)
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                        .disabled(model.busy)
+                        .help("Turn off for general questions. Recent conversation text still goes to the selected model.")
+                }
                 if model.activeBackend?.isLocal == false {
                     Text("Messages go to \(model.activeBackendId).")
                 }

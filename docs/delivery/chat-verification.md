@@ -1,11 +1,8 @@
 # Chat recovery verification on the owner's Mac
 
-See [draft PR #450](https://github.com/berniemackie97/Praxis/pull/450) and the [real-provider acceptance issue #431](https://github.com/berniemackie97/Praxis/issues/431). Quit any other Praxis instance, then run from a clean Praxis checkout:
+Track live provider acceptance in [#431](https://github.com/berniemackie97/Praxis/issues/431). Quit any other Praxis instance, then run from a clean checkout of the revision under review:
 
 ```bash
-git fetch origin &&
-git switch feature/chat-bounded-cli-context &&
-git pull --ff-only &&
 dotnet restore Praxis.slnx --locked-mode &&
 dotnet build Praxis.slnx -c Release --no-restore &&
 dotnet test Praxis.slnx -c Release --no-build --no-restore &&
@@ -25,5 +22,7 @@ For live acceptance, use fresh chats and nonsensitive prompts. Don't upload tran
 3. In the Ollama or Claude chat, change to another available model and (where supported) change effort. Keep the same conversation and connection. Send `Reply with PONG only.` Check the setting and both answers after restart. Changing the model must not change the provider or privacy policy.
 4. Start a longer local response and switch conversations while it runs. Leave an unsent draft in each chat. Confirm both can run, the list shows the active entries, and only the selected chat stops. A third send should keep its draft and report that two chats are already responding. Also verify an unavailable local endpoint reports an error only in its own chat; don't change your working connection or disclosure settings just to force a failure.
 5. Turn on **Use Praxis tools**. In a disposable library, index a note named `Workshop inventory.md` with the sentence “The inventory code for the spare bracket is ORCHID-PLUM.” Ask Ollama: `In my fixture library, what is the inventory code for the spare bracket? Cite the source.` Expect the exact code and a citation pointing to that note. For Codex, test source retrieval only if you choose to make another remote request and the fixture is already allowed by your policy. Verify the narrow read behaves without an interactive approval, the cited source opens when expanded, and disallowed evidence stays withheld. Leave a failure open if a provider cannot complete this check.
+
+For the Ollama compatibility check, select an installed Gemma 2 or Gemma 3 in Chat and send a short prompt. The composer should show **Plain chat · library tools unavailable**. The worker should deliver and save the reply without any tool traffic, even if a client requests tools. Embedding-only models (including renamed ones with capability metadata) must not appear in the Chat picker. To query library sources, use a tool-capable model.
 
 Report the commit, provider version, outcome, sanitized failure category, and measured values only. A green scripted run does not satisfy live model acceptance. For [#433](https://github.com/berniemackie97/Praxis/issues/433), model-aware token limits, grounded local answer quality beyond the fixtures, and replay after disclosure revocation still need separate evidence.

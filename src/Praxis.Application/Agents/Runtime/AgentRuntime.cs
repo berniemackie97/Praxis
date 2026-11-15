@@ -35,17 +35,23 @@ public sealed class AgentRuntime(
         AgentBackendProfile profile = conversation.Model is { } pinnedModel
             ? configured with { Model = pinnedModel, Effort = conversation.Effort }
             : configured;
+        conversations.Append(conversationId, AgentMessage.FromUser(userText));
+        ISessionAgentBackend? session = backends.CreateSessionBackend(profile);
+        IAgentBackend? backend = session is null
+            ? backends.CreateTurnBackend(profile) ?? throw new InvalidOperationException("The backend kind is not supported.")
+            : null;
+        bool toolsUnavailable = backend is not null && !await backend.SupportsToolsAsync(cancellationToken);
+        useTools &= !toolsUnavailable;
+
         string permission = policy.Current().ToolPermission;
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose);
         string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
             profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : []) : AgentSystemPrompt.Direct;
-        conversations.Append(conversationId, AgentMessage.FromUser(userText));
 
-        RunState state = new(useTools);
+        RunState state = new(useTools, toolsUnavailable);
         AgentToolDefinition[] definitions = useTools ? registry.Definitions
             .Where(tool => profile.IsLocal || tool.Name != MemoryRecallTool.ToolName).ToArray() : [];
-        ISessionAgentBackend? session = backends.CreateSessionBackend(profile);
         IReadOnlyList<AgentMessage>? boundedTranscript = null;
         if (session is not null || !useTools)
         {
@@ -97,10 +103,10 @@ public sealed class AgentRuntime(
             return Finish(conversationId, userText, turn.Text, AgentReply.Completed, state, report, repaired: false);
         }
 
-        IAgentBackend backend = backends.CreateTurnBackend(profile) ?? throw new InvalidOperationException("The backend kind is not supported.");
+        IAgentBackend turnBackend = backend!;
         if (useTools)
         {
-            await CompactIfNeededAsync(conversationId, backend, system, bounds, report, cancellationToken);
+            await CompactIfNeededAsync(conversationId, turnBackend, system, bounds, report, cancellationToken);
         }
 
         bool repaired = false;
@@ -113,7 +119,7 @@ public sealed class AgentRuntime(
             }
 
             report("thinking", null, null);
-            AgentTurn turn = await backend.CompleteAsync(system, boundedTranscript ?? Transcript(conversationId), definitions, cancellationToken);
+            AgentTurn turn = await turnBackend.CompleteAsync(system, boundedTranscript ?? Transcript(conversationId), definitions, cancellationToken);
             if ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text)))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
@@ -175,7 +181,7 @@ public sealed class AgentRuntime(
 
         AnswerCheck check = state.UseTools ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
-        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens, state.OmittedMessages);
+        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens, state.OmittedMessages, state.ToolsUnavailable);
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
@@ -231,9 +237,10 @@ public sealed class AgentRuntime(
         }
     }
 
-    private sealed class RunState(bool useTools)
+    private sealed class RunState(bool useTools, bool toolsUnavailable)
     {
         public bool UseTools { get; } = useTools;
+        public bool ToolsUnavailable { get; } = toolsUnavailable;
         public CitationLedger Citations { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<string> ToolResults { get; } = [];

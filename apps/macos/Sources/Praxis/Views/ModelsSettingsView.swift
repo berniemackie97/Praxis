@@ -407,8 +407,8 @@ private struct LocalModelsSection: View {
     @ObservedObject var intelligence: IntelligenceSettingsModel
 
     private var installed: [InstalledModel] { setup.machine?.installed ?? intelligence.installedModels }
-    private var generative: [InstalledModel] { installed.filter { !$0.name.localizedCaseInsensitiveContains("embed") } }
-    private var embeddings: [InstalledModel] { installed.filter { $0.name.localizedCaseInsensitiveContains("embed") } }
+    private var generative: [InstalledModel] { installed.filter(\.supportsChat) }
+    private var embeddings: [InstalledModel] { installed.filter(\.supportsEmbedding) }
     private var localModel: String { setup.provider(ModelTool.ollama)?.enabled == true ? setup.provider(ModelTool.ollama)?.model ?? "" : "" }
 
     var body: some View {

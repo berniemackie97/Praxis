@@ -21,7 +21,7 @@ public sealed class OllamaRuntime : IDisposable
     private readonly TimeSpan requestTimeout;
 
     public OllamaRuntime(string endpoint, TimeSpan? requestTimeout = null)
-        : this(endpoint, requestTimeout, new SocketsHttpHandler { UseProxy = false })
+        : this(endpoint, requestTimeout, new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false })
     {
     }
 
@@ -50,6 +50,21 @@ public sealed class OllamaRuntime : IDisposable
         }
 
         return models.EnumerateArray().Select(model => new InstalledModel(RequiredString(model, "name"), RequiredString(model, "digest"), model.TryGetProperty("size", out JsonElement size) && size.TryGetInt64(out long bytes) ? bytes : 0)).ToList();
+    }
+
+    internal async Task<LocalModelCapabilities?> ReadCapabilitiesAsync(string model, CancellationToken cancellationToken)
+    {
+        using JsonDocument document = await SendAsync(HttpMethod.Post, "api/show", JsonSerializer.SerializeToUtf8Bytes(new { model }), cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+            !document.RootElement.TryGetProperty("capabilities", out JsonElement values) ||
+            values.ValueKind != JsonValueKind.Array || values.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        var capabilities = values.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String)
+            .Select(value => value.GetString()).ToHashSet(StringComparer.Ordinal);
+        return new LocalModelCapabilities(capabilities.Contains("completion"), capabilities.Contains("tools"), capabilities.Contains("embedding"));
     }
 
     public IChatModel CreateChatModel(string model) => new OllamaChatModel(this, model);
