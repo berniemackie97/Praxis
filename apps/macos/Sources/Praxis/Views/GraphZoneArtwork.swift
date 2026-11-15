@@ -72,7 +72,11 @@ final class GraphZoneArtwork {
                     let length = max(1, hypot(dx, dy))
                     let side = CGPoint(x: -dy / length * offset, y: dx / length * offset)
                     path.move(to: CGPoint(x: a.x + side.x, y: a.y + side.y))
-                    path.addLine(to: CGPoint(x: b.x + side.x, y: b.y + side.y))
+                    let bend = min(36, length * 0.12) + offset
+                    let control = CGPoint(x: (a.x + b.x) / 2 - dy / length * bend,
+                                          y: (a.y + b.y) / 2 + dx / length * bend)
+                    path.addQuadCurve(to: CGPoint(x: b.x + side.x, y: b.y + side.y),
+                                      control: control)
                 }
                 let stroke = SKShapeNode(path: path)
                 stroke.strokeColor = tint.withAlphaComponent(highContrast ? 0.7 : 0.34)
