@@ -17,7 +17,7 @@ public sealed class SqliteGraphReader : IGraphReader
         this.database = database;
     }
 
-    private const string RelationStatus = """
+    internal const string RelationStatus = """
         CASE WHEN r.origin = 'owner' THEN 'owner'
              WHEN p.status IN ('accepted', 'corrected') THEN 'accepted'
              WHEN v.verdict = 'unsupported' THEN 'contradicted'
@@ -225,80 +225,8 @@ public sealed class SqliteGraphReader : IGraphReader
             long version = Version(connection);
             string signature = Signature("region", null, null, query);
             int offset = ReadRegionCursor(query.Cursor, version, signature, query.Limit);
-            List<EdgeRow> rows = [];
-            using (SqliteCommand command = connection.CreateCommand($"""
-                WITH eligible AS MATERIALIZED (
-                    SELECT r.relation_id, r.subject_id, r.object_id,
-                           {RelationStatus} AS evidence_status
-                    FROM knowledge_relations r
-                    JOIN knowledge_entities subject ON subject.entity_id = r.subject_id
-                    JOIN knowledge_entities object ON object.entity_id = r.object_id
-                    LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
-                    LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
-                    WHERE {RelationPolicy()}
-                      AND {NodeVisible("subject", query)}
-                      AND {NodeVisible("object", query)}
-                      AND ({EffectiveType("subject", query)} = $type
-                           OR {EffectiveType("object", query)} = $type)
-                ),
-                degrees AS MATERIALIZED (
-                    SELECT entity_id, COUNT(*) AS degree FROM (
-                        SELECT subject_id AS entity_id FROM eligible
-                        UNION ALL
-                        SELECT object_id AS entity_id FROM eligible
-                    ) GROUP BY entity_id
-                ),
-                anchored AS (
-                    SELECT eligible.relation_id, eligible.evidence_status,
-                           MAX(subject_degree.degree, object_degree.degree) AS hub_degree,
-                           CASE WHEN subject_degree.degree > object_degree.degree THEN eligible.subject_id
-                                WHEN subject_degree.degree < object_degree.degree THEN eligible.object_id
-                                WHEN eligible.subject_id < eligible.object_id THEN eligible.subject_id
-                                ELSE eligible.object_id END AS hub_id
-                    FROM eligible
-                    JOIN degrees subject_degree ON subject_degree.entity_id = eligible.subject_id
-                    JOIN degrees object_degree ON object_degree.entity_id = eligible.object_id
-                ),
-                ranked AS (
-                    SELECT relation_id, hub_degree,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY hub_id
-                               ORDER BY CASE WHEN evidence_status IN ('suggested', 'contradicted')
-                                             THEN 1 ELSE 0 END,
-                                        relation_id) AS depth
-                    FROM anchored
-                ),
-                selected AS MATERIALIZED (
-                    SELECT relation_id, hub_degree, depth FROM ranked
-                    ORDER BY depth, hub_degree DESC, relation_id
-                    LIMIT $take OFFSET $offset
-                )
-                SELECT r.relation_id, r.subject_id, r.object_id, r.predicate, r.origin,
-                       {RelationStatus} AS evidence_status,
-                       p.proposal_id, p.source_id, p.item_id, p.revision, p.source_digest,
-                       s.locator, p.evidence, p.evidence_offset, p.status, v.verdict
-                FROM selected
-                JOIN knowledge_relations r ON r.relation_id = selected.relation_id
-                LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
-                LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
-                LEFT JOIN sources s ON s.source_id = p.source_id
-                ORDER BY selected.depth, selected.hub_degree DESC, selected.relation_id
-                """))
-            {
-                Scope(command, query);
-                command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
-                command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
-                command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
-                command.Parameters.AddWithValue("$type", query.EntityType);
-                command.Parameters.AddWithValue("$take", Math.Min(query.Limit, RegionEdgeBudget - offset) + 1);
-                command.Parameters.AddWithValue("$offset", offset);
-                using SqliteDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    rows.Add(ReadEdgeRow(reader));
-                }
-            }
+            List<EdgeRow> rows = SqliteGraphRegionQuery.Read(connection, query, offset,
+                Math.Min(query.Limit, RegionEdgeBudget - offset) + 1, cancellationToken);
 
             int pageLimit = Math.Min(query.Limit, RegionEdgeBudget - offset);
             bool more = rows.Count > pageLimit;
@@ -405,7 +333,7 @@ public sealed class SqliteGraphReader : IGraphReader
         });
     }
 
-    private static EdgeRow ReadEdgeRow(SqliteDataReader reader)
+    internal static EdgeRow ReadEdgeRow(SqliteDataReader reader)
     {
         GraphEvidence? evidence = reader.IsDBNull(6) ? null : new GraphEvidence(
             Guid.Parse(reader.GetString(6)), Guid.Parse(reader.GetString(7)),
@@ -450,7 +378,7 @@ public sealed class SqliteGraphReader : IGraphReader
             relationId is not null && edges.Count == 0 ? [] : nodes, edges, nextCursor);
     }
 
-    private static string RelationPolicy() => $"""
+    internal static string RelationPolicy() => $"""
         ({ConfirmedRelation} OR ($suggestions = 1
             AND r.origin = 'model' AND p.proposal_id IS NOT NULL
             AND p.status <> 'rejected' AND p.flags IS NULL
@@ -479,7 +407,7 @@ public sealed class SqliteGraphReader : IGraphReader
     private static string MentionView(GraphQuery query) =>
         query.IncludeSuggestions ? "visible_entity_mentions" : "confirmed_entity_mentions";
 
-    private static string NodeVisible(string alias, GraphQuery query) => $"""
+    internal static string NodeVisible(string alias, GraphQuery query) => $"""
         {alias}.status = 'active' AND EXISTS (
             SELECT 1 FROM {MentionView(query)} scoped
             WHERE scoped.entity_id = {alias}.entity_id
@@ -494,7 +422,7 @@ public sealed class SqliteGraphReader : IGraphReader
          HAVING COUNT(DISTINCT m.entity_type) = 1)
         """;
 
-    private static string EffectiveType(string alias, GraphQuery query) => $"""
+    internal static string EffectiveType(string alias, GraphQuery query) => $"""
         CASE WHEN {alias}.type_origin <> 'owner' AND {TechnicalType(alias)} IS NOT NULL THEN {TechnicalType(alias)}
         WHEN {alias}.type_origin = 'inferred' THEN (
             SELECT m.entity_type FROM {MentionView(query)} m
@@ -583,7 +511,7 @@ public sealed class SqliteGraphReader : IGraphReader
             reader.GetString(8), reader.IsDBNull(9) ? null : reader.GetString(9));
     }
 
-    private static void Scope(SqliteCommand command, GraphQuery query)
+    internal static void Scope(SqliteCommand command, GraphQuery query)
     {
         command.Parameters.AddWithValue("$source", (object?)query.SourceId?.ToString("D") ?? DBNull.Value);
         command.Parameters.AddWithValue("$collection", (object?)query.CollectionId?.ToString("D") ?? DBNull.Value);
@@ -697,6 +625,6 @@ public sealed class SqliteGraphReader : IGraphReader
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
-    private sealed record EdgeRow(Guid RelationId, Guid SubjectId, Guid ObjectId, string Predicate,
+    internal sealed record EdgeRow(Guid RelationId, Guid SubjectId, Guid ObjectId, string Predicate,
         string Origin, string EvidenceStatus, GraphEvidence? Evidence);
 }
