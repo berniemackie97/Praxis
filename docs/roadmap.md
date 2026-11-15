@@ -70,6 +70,35 @@ The MVP includes feature [#176](https://github.com/berniemackie97/Praxis/issues/
 
 This is an **end-to-end vertical slice at production quality**, not a requirement to support all possible files, models, connected services or devices on day one. Foundational L0 remains the next blocking engineering gate, but the roadmap must not claim MVP completion there.
 
+## Second-brain depth and stewardship lane (post-MVP) — November 15, 2026
+
+A review of six public "second brain" video walkthroughs found that Praxis' core is already ahead of them on provenance, permissions and local-first inference. They converge on a set of *stewardship* behaviours that are not part of the #170 gate: memory that is kept current rather than only accumulated, continuity across tools, recurring work, and one place to see what the system can reach. These are tracked as a separate lane so they never weaken or delay #130/#170.
+
+| Capability | Issue | Depends on |
+| --- | --- | --- |
+| Living topic/entity evidence pages with reviewable diffs | [#442](https://github.com/berniemackie97/Praxis/issues/442) | #115, #116, #387 |
+| Scheduled memory review of stale, conflicting and duplicate claims | [#445](https://github.com/berniemackie97/Praxis/issues/445) | #442, #316, #34 |
+| Resume decisions and open work across chats and providers | [#440](https://github.com/berniemackie97/Praxis/issues/440) | #431, #432, #143 |
+| Opt-in Codex/Claude Code lifecycle handoffs (hooks, not model-remembered tools) | [#441](https://github.com/berniemackie97/Praxis/issues/441) | #440, #118, #345 |
+| Recurring workflows: preview, run, pause, receipts | [#443](https://github.com/berniemackie97/Praxis/issues/443) | #34, #339, #334 |
+| One overview of connections, scopes, skills, routines and outcomes | [#447](https://github.com/berniemackie97/Praxis/issues/447) | #443, #318, #334 |
+| Evidence-linked project workflow (idea → research → review → done) | [#446](https://github.com/berniemackie97/Praxis/issues/446) | #173, #146, #443 |
+| Owner-hosted worker reachable from a paired phone (go/no-go spike) | [#444](https://github.com/berniemackie97/Praxis/issues/444) | #50, #19, #34 |
+| Lexical-first retrieval, recency/supersession ranking and section pointers, benchmarked | [#451](https://github.com/berniemackie97/Praxis/issues/451) | #106, #316, #311 |
+| Relationship-aware people profiles that change over time | [#452](https://github.com/berniemackie97/Praxis/issues/452) | #324, #316, #353 |
+
+Already tracked elsewhere and deliberately not duplicated: interview-style onboarding and owner profile #353; teach-by-example skills #341; token/time savings for external agents #346; connector health and conformance #315/#317; screen-level computer use #338; Markdown export #171.
+
+Rules for this lane:
+
+- **Not an MVP gate.** Nothing here blocks #130 or #170. Promote an item only by an explicit owner decision recorded in the issue.
+- **Derived, reviewable, reversible.** Pages, summaries, handoffs and profiles are derived from immutable originals, show their evidence and can be corrected, expired or forgotten; forgetting clears dependent caches. Imported text never grants tools or permissions.
+- **Hooks over memory tools.** Capture that must always happen uses supported lifecycle events and exposes unsupported ones, rather than relying on a model to call a memory tool.
+- **Measure before adding machinery.** Retrieval additions (#451) stay only where they beat the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency.
+- **Single schedulers and stores.** Routines use #34; workflows use existing project/collection records; no second task database and no unattended privileged writes.
+
+`scripts/github/roadmap.json` carries this lane as delivery lane L7, together with the open issues from #137 and #268 through #452 that were previously untracked (graph exploration #416–#428, Chat #431–#449, verification #427). Closed issues, and #421, whose `[Security]` title prefix is not an accepted kind, remain outside the plan.
+
 ## Quality gates
 
 An epic closes only after its feature outcomes are demonstrated and dependency links have no unsatisfied release blockers. A milestone closes when its acceptance evidence is present—not merely because all PRs are green or child issues have been administratively closed.

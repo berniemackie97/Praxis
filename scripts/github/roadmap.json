@@ -106,6 +106,11 @@
       "issue": 290,
       "stage": "M6",
       "area": "clients"
+    },
+    {
+      "issue": 436,
+      "stage": "M5",
+      "area": "clients"
     }
   ],
   "features": [
@@ -163,7 +168,8 @@
       "epic": 8,
       "area": "clients",
       "children": [
-        24
+        24,
+        444
       ]
     },
     {
@@ -186,7 +192,8 @@
         124,
         126,
         128,
-        136
+        136,
+        268
       ]
     },
     {
@@ -209,7 +216,8 @@
         170,
         172,
         369,
-        379
+        379,
+        451
       ]
     },
     {
@@ -249,7 +257,8 @@
         166,
         215,
         370,
-        380
+        380,
+        446
       ]
     },
     {
@@ -288,7 +297,10 @@
       "area": "intelligence",
       "children": [
         115,
-        116
+        116,
+        442,
+        445,
+        452
       ]
     },
     {
@@ -378,7 +390,8 @@
       "children": [
         314,
         315,
-        316
+        316,
+        427
       ]
     },
     {
@@ -458,7 +471,9 @@
       "children": [
         344,
         345,
-        346
+        346,
+        440,
+        441
       ]
     },
     {
@@ -479,7 +494,9 @@
       "children": [
         351,
         352,
-        353
+        353,
+        443,
+        447
       ]
     },
     {
@@ -491,7 +508,27 @@
         385,
         386,
         387,
-        388
+        388,
+        416,
+        417,
+        418,
+        420,
+        428
+      ]
+    },
+    {
+      "issue": 432,
+      "epic": 436,
+      "area": "clients",
+      "children": []
+    },
+    {
+      "issue": 433,
+      "epic": 436,
+      "area": "clients",
+      "children": [
+        437,
+        449
       ]
     }
   ],
@@ -531,6 +568,14 @@
     {
       "issue": 382,
       "epic": 2
+    },
+    {
+      "issue": 137,
+      "epic": 2
+    },
+    {
+      "issue": 431,
+      "epic": 436
     }
   ],
   "dependencies": {
@@ -1120,6 +1165,70 @@
       385,
       386,
       387
+    ],
+    "432": [
+      431
+    ],
+    "433": [
+      431,
+      432
+    ],
+    "440": [
+      431,
+      432,
+      143
+    ],
+    "441": [
+      440,
+      118,
+      345
+    ],
+    "442": [
+      115,
+      116,
+      387
+    ],
+    "443": [
+      34,
+      339,
+      334
+    ],
+    "444": [
+      50,
+      19,
+      34
+    ],
+    "445": [
+      442,
+      316,
+      34
+    ],
+    "446": [
+      173,
+      146,
+      443
+    ],
+    "447": [
+      443,
+      318,
+      334
+    ],
+    "451": [
+      106,
+      316,
+      311
+    ],
+    "452": [
+      324,
+      316,
+      353
+    ],
+    "420": [
+      417,
+      418
+    ],
+    "449": [
+      437
     ]
   },
   "priorities": {
@@ -1263,7 +1372,31 @@
     "385": "P1",
     "386": "P1",
     "387": "P1",
-    "388": "P1"
+    "388": "P1",
+    "137": "P1",
+    "268": "P2",
+    "416": "P1",
+    "417": "P1",
+    "418": "P1",
+    "420": "P1",
+    "427": "P1",
+    "428": "P0",
+    "431": "P0",
+    "432": "P1",
+    "433": "P1",
+    "436": "P1",
+    "437": "P1",
+    "440": "P2",
+    "441": "P2",
+    "442": "P2",
+    "443": "P2",
+    "444": "P3",
+    "445": "P2",
+    "446": "P3",
+    "447": "P2",
+    "449": "P1",
+    "451": "P2",
+    "452": "P3"
   },
   "area_overrides": {
     "24": "clients",
@@ -1295,7 +1428,11 @@
     "352": "automation",
     "353": "knowledge",
     "362": "knowledge",
-    "385": "knowledge"
+    "385": "knowledge",
+    "268": "capture",
+    "440": "retrieval",
+    "441": "retrieval",
+    "451": "retrieval"
   },
   "decision_queue": [
     30,
@@ -1589,6 +1726,23 @@
         388
       ],
       "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate secure, accessible native interactive knowledge graph with exact source/relation provenance (#383/#388), semantic/structural retrieval, bounded agent investigation, approved actions, efficient contexts, measured local-or-consented-remote model routing, provider outage/denial and privacy/revocation/cost tests. Optional Obsidian/Markdown portability #57/#171 is not a release gate."
+    },
+    {
+      "id": "L7",
+      "name": "Second-brain depth and stewardship (post-MVP)",
+      "issues": [
+        440,
+        441,
+        442,
+        443,
+        444,
+        445,
+        446,
+        447,
+        451,
+        452
+      ],
+      "exit": "Owner-run evidence that approved sources keep living topic pages current with reviewable diffs, that decisions resume across two authorized providers via supported lifecycle events, that a paused or revoked connector or grant is visible and blocks dependent routines before their next effect, and that lexical-first ranking beats the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency. Nothing here gates #130 or #170."
     }
   ]
 }
