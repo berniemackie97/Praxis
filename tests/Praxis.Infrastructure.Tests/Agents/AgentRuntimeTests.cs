@@ -230,6 +230,50 @@ public sealed class AgentRuntimeTests : IDisposable
         Assert.Equal(expectedCode, Assert.Single(failed.Events, item => item.Kind == "failed").Detail);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConversationsKeepTheirChosenModelAndEffortAfterConnectionDefaultsChange(bool session)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = session
+            ? new AgentBackendProfile("codex", AgentBackendKinds.Codex, null, "original", null, "/usr/bin/true", true, "low")
+            : Local();
+        catalog.Agents.SaveBackend(profile);
+        string model = session ? "gpt-6" : "qwen:other";
+        string? effort = session ? "high" : null;
+        AgentConversation current = catalog.Agents.Create(profile.BackendId, "pinned", model, effort);
+        catalog.Agents.SaveBackend(profile with { Model = "changed", Effort = session ? "medium" : null });
+
+        AgentConversation saved = catalog.Agents.Read(current.ConversationId)!;
+        Assert.Equal((model, effort), (saved.Model, saved.Effort));
+        FixedFactory factory = new(
+            session ? null : new ScriptedBackend(_ => new AgentTurn("Local response", [], 1, 1)),
+            session ? new SessionBackend(_ => Task.FromResult(new AgentTurn("CLI response", [], 1, 1))) : null);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), factory, clock);
+
+        AgentReply answer = await runtime.RunAsync(current.ConversationId, "Hello", (_, _, _) => { }, CancellationToken.None);
+        Assert.Equal(AgentReply.Completed, answer.StopReason);
+        Assert.Equal((model, effort), (factory.LastProfile!.Model, factory.LastProfile.Effort));
+        Assert.Equal(answer.Text, catalog.Agents.ReadMessages(current.ConversationId)[1].Content);
+
+        AgentConversation defaulted = catalog.Agents.Create(profile.BackendId, "new default");
+        Assert.Equal("changed", defaulted.Model);
+        Assert.Equal(session ? "medium" : null, defaulted.Effort);
+    }
+
+    [Fact]
+    public async Task ConversationsRejectUnconfiguredOrInvalidModelOverrides()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        Assert.Throws<ArgumentException>(() => catalog.Agents.Create("missing", "unknown"));
+        catalog.Agents.SaveBackend(Local());
+        Assert.Throws<ArgumentException>(() => catalog.Agents.Create("local-llm", "bad", "\nmodel", null));
+        Assert.Throws<ArgumentException>(() => catalog.Agents.Create("local-llm", "bad", "model", "unknown-effort"));
+        catalog.Agents.SaveBackend(Local() with { Enabled = false });
+        Assert.Throws<ArgumentException>(() => catalog.Agents.Create("local-llm", "disabled"));
+    }
+
     [Fact]
     public async Task CoordinatorRunsInTheBackgroundReportsEventsAndCancels()
     {
@@ -466,9 +510,19 @@ public sealed class AgentRuntimeTests : IDisposable
 
     private sealed class FixedFactory(IAgentBackend? turn, ISessionAgentBackend? session) : IAgentBackendFactory
     {
-        public IAgentBackend? CreateTurnBackend(AgentBackendProfile profile) => session is null ? turn : null;
+        public AgentBackendProfile? LastProfile { get; private set; }
 
-        public ISessionAgentBackend? CreateSessionBackend(AgentBackendProfile profile) => session;
+        public IAgentBackend? CreateTurnBackend(AgentBackendProfile profile)
+        {
+            LastProfile = profile;
+            return session is null ? turn : null;
+        }
+
+        public ISessionAgentBackend? CreateSessionBackend(AgentBackendProfile profile)
+        {
+            LastProfile = profile;
+            return session;
+        }
     }
 
     private sealed class CapturingHandler(string response, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler

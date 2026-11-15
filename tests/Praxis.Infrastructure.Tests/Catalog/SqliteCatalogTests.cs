@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Praxis.Domain.Agents;
 using Praxis.Domain.Originals;
 using Praxis.Domain.Sources;
 using Praxis.Infrastructure.FileSystem;
@@ -311,6 +312,34 @@ public sealed class SqliteCatalogTests : IDisposable
     }
 
     [Fact]
+    public void VersionThirtyChatMigrationPinsExistingModelAndEffort()
+    {
+        CreateLegacyCatalog(30);
+        Guid id = Guid.NewGuid();
+        using (SqliteConnection connection = Connect(Path.Combine(root, "catalog.sqlite")))
+        {
+            using SqliteCommand insert = connection.CreateCommand();
+            insert.CommandText = """
+                INSERT INTO agent_backends (backend_id, kind, endpoint, model, key_account, executable, enabled, updated_utc, effort)
+                VALUES ('codex', 'codex', NULL, 'first-model', NULL, '/usr/bin/true', 1, '2026-11-14T12:00:00Z', 'high');
+                INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc)
+                VALUES ($id, 'codex', 'prior chat', '2026-11-14T12:00:00Z', '2026-11-14T12:00:00Z');
+                """;
+            insert.Parameters.AddWithValue("$id", id.ToString("D"));
+            insert.ExecuteNonQuery();
+        }
+
+        using SqliteCatalog upgraded = SqliteCatalog.Open(root);
+        AgentConversation original = upgraded.Agents.Read(id)!;
+        Assert.Equal(("first-model", "high"), (original.Model, original.Effort));
+        upgraded.Agents.SaveBackend(new AgentBackendProfile("codex", AgentBackendKinds.Codex, null, "second-model", null,
+            "/usr/bin/true", true, "low"));
+        AgentConversation reopened = upgraded.Agents.Read(id)!;
+        Assert.Equal(("first-model", "high"), (reopened.Model, reopened.Effort));
+        Assert.Equal(CatalogSchema.CurrentVersion, upgraded.SchemaVersion);
+    }
+
+    [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
         CreateLegacyCatalog(1);
@@ -480,7 +509,7 @@ public sealed class SqliteCatalogTests : IDisposable
 
     private void CreateLegacyCatalog(int version)
     {
-        if (version is < 1 or > 19)
+        if (version is < 1 or > 30)
         {
             throw new ArgumentOutOfRangeException(nameof(version));
         }

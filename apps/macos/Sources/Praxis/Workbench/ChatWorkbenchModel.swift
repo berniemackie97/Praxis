@@ -22,7 +22,10 @@ final class ChatWorkbenchModel: ObservableObject {
     /// The latest finished reply per conversation, kept for its citations and answer check.
     @Published private(set) var replies: [String: AgentReply] = [:]
     @Published var draft = ""
-    @Published var backendChoice = ""
+    @Published private(set) var backendChoice = ""
+    @Published private(set) var modelChoice = ""
+    @Published private(set) var effortChoice = ""
+    private var customModelChoice = false
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
     @Published private(set) var notice: String? { didSet { if notice != nil { error = nil } } }
 
@@ -35,11 +38,32 @@ final class ChatWorkbenchModel: ObservableObject {
     var latestReply: AgentReply? { selectedId.flatMap { replies[$0] } }
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !running && !text.isEmpty && draft.count <= Self.maximumMessageCharacters && (selectedId != nil || !backendChoice.isEmpty)
+        return !running && !text.isEmpty && draft.count <= Self.maximumMessageCharacters &&
+            (selectedId != nil || (!backendChoice.isEmpty && !modelChoice.isEmpty))
     }
 
     /// The transcript as the owner reads it: their messages and the agent's answers; tool traffic is summarized.
     var transcript: [ChatLine] { ChatLine.lines(messages) }
+
+    func chooseBackend(_ backendId: String) {
+        guard let profile = backends.first(where: { $0.backendId == backendId && $0.enabled }) else { return }
+        backendChoice = backendId
+        modelChoice = profile.model
+        effortChoice = profile.effort ?? ""
+        customModelChoice = false
+    }
+
+    func chooseModel(_ modelId: String, defaultEffort: String?) {
+        guard !modelId.isEmpty else { return }
+        modelChoice = modelId
+        effortChoice = defaultEffort ?? ""
+        customModelChoice = true
+    }
+
+    func chooseEffort(_ effort: String) {
+        effortChoice = effort
+        customModelChoice = true
+    }
 
     /// Asks the worker how to play a cited media source; the reply arrives on the main actor.
     func playback(for sourceId: String, completion: @escaping (Result<MediaPlayback, MediaPlaybackError>) -> Void) {
@@ -53,12 +77,17 @@ final class ChatWorkbenchModel: ObservableObject {
     func refresh() {
         channel.send("agentBackends", as: AgentBackendsData.self, failed: report) { [weak self] data in
             guard let self else { return }
+            let previous = backends.first(where: { $0.backendId == backendChoice })
             backends = data.backends
             if backendChoice.isEmpty || !data.backends.contains(where: { $0.backendId == backendChoice && $0.enabled }) {
-                // Start with the model chosen for Chat in Settings → Models.
                 let preferred = UserDefaults.standard.string(forKey: "defaultChatBackend") ?? ""
-                backendChoice = data.backends.first { $0.backendId == preferred && $0.enabled }?.backendId
-                    ?? data.backends.first(where: \.enabled)?.backendId ?? ""
+                let selected = data.backends.first { $0.backendId == preferred && $0.enabled }
+                    ?? data.backends.first(where: \.enabled)
+                if let selected { chooseBackend(selected.backendId) }
+            } else if !customModelChoice, let changed = data.backends.first(where: { $0.backendId == backendChoice }),
+                      previous?.model != changed.model || previous?.effort != changed.effort {
+                modelChoice = changed.model
+                effortChoice = changed.effort ?? ""
             }
         }
         channel.send("agentConversations", ["limit": 100], as: AgentConversationsData.self, failed: report) { [weak self] data in
@@ -75,6 +104,7 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     func newConversation() {
+        if !backendChoice.isEmpty { chooseBackend(backendChoice) }
         selectedId = nil
         messages = []
         events = []
@@ -136,7 +166,9 @@ final class ChatWorkbenchModel: ObservableObject {
         }
 
         let title = String(text.prefix(60))
-        channel.send("agentConversationStart", ["backendId": backendChoice, "title": title], as: AgentConversation.self, failed: report) { [weak self] conversation in
+        var fields: [String: Any] = ["backendId": backendChoice, "title": title, "model": modelChoice]
+        if !effortChoice.isEmpty { fields["effort"] = effortChoice }
+        channel.send("agentConversationStart", fields, as: AgentConversation.self, failed: report) { [weak self] conversation in
             guard let self else { return }
             conversations.insert(conversation, at: 0)
             selectedId = conversation.conversationId
