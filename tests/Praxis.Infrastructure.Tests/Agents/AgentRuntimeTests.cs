@@ -258,6 +258,57 @@ public sealed class AgentRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task DeletingConversationRemovesMessagesAndToolHistoryButPreservesIndependentRecords()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        catalog.Agents.SaveBackend(Local());
+        AgentConversation conversation = catalog.Agents.Create("local-llm", "Old name");
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromUser("private transcript"));
+        catalog.Agents.RecordToolCall(new AgentToolCallRecord(conversation.ConversationId, "c1", "knowledge_search",
+            ToolTiers.Read, "{\"query\":\"private\"}", "ok", 18, 0, 0, clock.GetUtcNow(), TimeSpan.FromMilliseconds(1)));
+        catalog.Agents.AddMemory(conversation.ConversationId, "Persistent preference", AgentMemory.Active);
+        catalog.Agents.AddProposal(conversation.ConversationId, AgentProposal.SourceCategory, "{}", "Review source", AgentProposal.Pending);
+        Guid sourceId = catalog.Library.List(10, 0, null)[0].SourceId;
+        AgentArtifact artifact = new(Guid.NewGuid(), "Saved report", sourceId, 1, "/private/report.md",
+            conversation.ConversationId, clock.GetUtcNow());
+        catalog.Agents.SaveArtifact(artifact);
+
+        Assert.True(catalog.Agents.Rename(conversation.ConversationId, "  Revised chat  "));
+        Assert.Equal("Revised chat", catalog.Agents.Read(conversation.ConversationId)!.Title);
+        Assert.Throws<ArgumentException>(() => catalog.Agents.Rename(conversation.ConversationId, "  "));
+        Assert.True(catalog.Agents.Delete(conversation.ConversationId));
+        Assert.False(catalog.Agents.Delete(conversation.ConversationId));
+        Assert.Null(catalog.Agents.Read(conversation.ConversationId));
+        Assert.Empty(catalog.Agents.ReadMessages(conversation.ConversationId));
+        Assert.Empty(catalog.Agents.ReadToolCalls(conversation.ConversationId, 100));
+        Assert.DoesNotContain(catalog.Agents.List(100), row => row.ConversationId == conversation.ConversationId);
+        Assert.Null(Assert.Single(catalog.Agents.ReadMemories(null, null, 10)).ConversationId);
+        Assert.Null(Assert.Single(catalog.Agents.ReadProposals(AgentProposal.Pending, 10)).ConversationId);
+        Assert.Null(catalog.Agents.ReadArtifact(artifact.ArtifactId)!.ConversationId);
+    }
+
+    [Fact]
+    public async Task DeletionIsRejectedWhileTheConversationHasARunningResponse()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        TaskCompletionSource release = new();
+        ScriptedBackend slow = new(async (_, token) =>
+        {
+            await release.Task.WaitAsync(token);
+            return new AgentTurn("done", [], 1, 1);
+        });
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), slow);
+        AgentRunCoordinator coordinator = new(runtime, clock);
+        Guid running = coordinator.Start(conversation.ConversationId, "hello");
+        Assert.True(coordinator.HasRunning(conversation.ConversationId));
+        Assert.True(coordinator.Cancel(running));
+        Assert.Equal(AgentRunStatus.Canceled, (await Poll(coordinator, running)).State);
+        Assert.False(coordinator.HasRunning(conversation.ConversationId));
+        Assert.True(catalog.Agents.Delete(conversation.ConversationId));
+        release.SetResult();
+    }
+
+    [Fact]
     public async Task McpRelayBridgesStdioToTheSessionSocketOnlyWithItsToken()
     {
         McpServerProtocol protocol = new([], (_, _) => Task.FromResult("{}"));

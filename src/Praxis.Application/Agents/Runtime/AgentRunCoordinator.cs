@@ -53,6 +53,9 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         return run.RunId;
     }
 
+    public bool HasRunning(Guid conversationId) =>
+        runs.Values.Any(run => run.ConversationId == conversationId && run.State == AgentRunStatus.Running);
+
     public AgentRunStatus? Status(Guid runId, int afterSequence) =>
         runs.TryGetValue(runId, out Run? run) ? new AgentRunStatus(run.RunId, run.ConversationId, run.State, run.EventsAfter(afterSequence), run.Reply) : null;
 

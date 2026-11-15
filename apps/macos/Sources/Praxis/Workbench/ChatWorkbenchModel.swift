@@ -81,6 +81,39 @@ final class ChatWorkbenchModel: ObservableObject {
         channel.reset("conversation")
     }
 
+    func rename(_ conversation: AgentConversation, to title: String) {
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...200).contains(normalized.count) else {
+            error = "Use a conversation title of 1–200 characters."
+            return
+        }
+        channel.send("agentConversationRename", ["conversationId": conversation.conversationId, "title": normalized],
+                     as: ChangedFlag.self, failed: report) { [weak self] result in
+            if result.changed { self?.refresh() }
+            else { self?.error = "This conversation no longer exists." }
+        }
+    }
+
+    func delete(_ conversation: AgentConversation) {
+        channel.send("agentConversationDelete", ["conversationId": conversation.conversationId],
+                     as: ChangedFlag.self, failed: report) { [weak self] result in
+            guard let self else { return }
+            if !result.changed {
+                error = "This conversation no longer exists."
+                return
+            }
+            conversations.removeAll { $0.conversationId == conversation.conversationId }
+            replies.removeValue(forKey: conversation.conversationId)
+            if selectedId == conversation.conversationId {
+                selectedId = nil
+                messages = []
+                events = []
+                channel.reset("conversation")
+            }
+            notice = "Conversation deleted. Independently saved knowledge and artifacts remain available."
+        }
+    }
+
     func prepareDraft(_ text: String) -> Bool {
         guard !running else {
             error = "Finish or cancel the current response before preparing a graph question."
