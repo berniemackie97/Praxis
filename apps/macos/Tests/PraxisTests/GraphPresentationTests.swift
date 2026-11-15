@@ -26,18 +26,19 @@ struct GraphPresentationTests {
         #expect(overview.types.map(\.entityType) == ["project", "technology"])
     }
 
-    @Test func conceptRegionResponseKeepsConfirmedProjectIdentitiesAcrossModes() throws {
+    @Test func conceptRegionResponseKeepsIdentityAuthorityAndRevisionAcrossModes() throws {
         let json = #"""
         {"regionCount":1,"regions":[
             {"regionId":"11111111-1111-1111-1111-111111111111","label":"Client",
-             "relationCount":2,"relatedEntityCount":2,"containedEntityCount":1}
-        ],"nextCursor":null}
+             "containedEntityCount":1,"ownerMemberCount":0,"acceptedMemberCount":0,"verifiedMemberCount":1}
+        ],"nextCursor":null,"revision":14}
         """#
         let page = try JSONDecoder().decode(GraphConceptPage.self, from: Data(json.utf8))
         #expect(page.regionCount == 1)
         #expect(page.regions[0].label == "Client")
         #expect(page.regions[0].containedEntityCount == 1)
-        #expect(page.regions[0].relatedEntityCount == 2)
+        #expect(page.regions[0].verifiedMemberCount == 1)
+        #expect(page.revision == 14)
         #expect(GraphStyle.neuralNebula.rawValue == "neuralNebula")
         #expect(GraphStyle.neuralNebula.title == "Knowledge Cosmos")
         #expect(GraphStyle.cellularAtlas.title == "Cellular Atlas")
@@ -91,9 +92,9 @@ struct GraphPresentationTests {
 
     @Test func wholeBrainRegionLayoutUsesStableCanonicalIdentities() {
         let regions = [
-            GraphVisualRegion(id: "project-c", title: "C", memberCount: 5, relatedCount: 10),
-            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0, relatedCount: 0),
-            GraphVisualRegion(id: "project-b", title: "B", memberCount: 24, relatedCount: 26)
+            GraphVisualRegion(id: "project-c", title: "C", memberCount: 5),
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 24)
         ]
         let links = [
             GraphVisualLink(subjectId: "project-b", objectId: "project-c",
@@ -113,8 +114,8 @@ struct GraphPresentationTests {
     @MainActor
     @Test func wholeBrainSceneUsesProjectRegionsWithoutEntityEndpointSprites() {
         let map = GraphVisualOverview(regions: [
-            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0, relatedCount: 2),
-            GraphVisualRegion(id: "project-b", title: "B", memberCount: 50, relatedCount: 51)
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 0),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 50)
         ])
         let scene = GraphScene()
         scene.size = CGSize(width: 800, height: 600)
@@ -127,27 +128,22 @@ struct GraphPresentationTests {
         #expect(scene.camera != nil)
     }
 
-    @Test func realProjectRegionsDoNotInventCrossProjectLinksOrMembership() {
-        let project = GraphConceptRegion(regionId: "id-a", label: "Known Project",
-                                         relationCount: 4, relatedEntityCount: 3,
-                                         containedEntityCount: 1)
-        let other = GraphConceptRegion(regionId: "id-b", label: "Other Project",
-                                       relationCount: 0, relatedEntityCount: 0,
-                                       containedEntityCount: 0)
-        let map = GraphVisualOverview(confirmedProjects: [project, other])
-        #expect(map.regions.map(\.id) == ["id-a", "id-b"])
-        #expect(map.regions.map(\.title) == ["Known Project", "Other Project"])
-        #expect(map.regions.map(\.count) == [2, 1])
-        #expect(map.regions[0].relatedCount == 3)
-        #expect(map.links.count == 0)
-        #expect(GraphVisualOverview(confirmedProjects: []).regions.count == 0)
-        let large = (0..<100).map { index in
-            GraphConceptRegion(regionId: "project-\(index)", label: "Project \(index)",
-                               relationCount: 0, relatedEntityCount: 0, containedEntityCount: 0)
+    @Test func sharedRegionMapKeepsConceptsAndBoundsTheRenderedPage() {
+        func region(_ id: String, _ label: String, _ members: Int) -> GraphConceptRegion {
+            GraphConceptRegion(regionId: id, label: label, containedEntityCount: members,
+                               ownerMemberCount: members, acceptedMemberCount: 0, verifiedMemberCount: 0)
         }
-        let bounded = GraphVisualOverview(confirmedProjects: large)
+        let map = GraphVisualOverview(conceptRegions: [
+            region("id-a", "Harbor Toolkit", 2), region("id-b", "Household planning", 1)
+        ])
+        #expect(map.regions.map(\.id) == ["id-a", "id-b"])
+        #expect(map.regions.map(\.title) == ["Harbor Toolkit", "Household planning"])
+        #expect(map.regions.map(\.count) == [3, 2])
+        #expect(map.links.isEmpty)
+        #expect(GraphVisualOverview(conceptRegions: []).regions.isEmpty)
+        let large = (0..<100).map { region("region-\($0)", "Region \($0)", 1) }
+        let bounded = GraphVisualOverview(conceptRegions: large)
         #expect(bounded.regions.count == GraphVisualOverview.maximumRenderedRegions)
-        #expect(bounded.links.count == 0)
     }
 
     @Test func brainGraphStylesHaveDistinctStablePreferences() {
@@ -159,9 +155,9 @@ struct GraphPresentationTests {
 
     @Test func neuralNebulaPlacementIsThreeDimensionalStableAndScopeBound() {
         let summary = GraphVisualOverview(regions: [
-            GraphVisualRegion(id: "project-a", title: "A", memberCount: 800, relatedCount: 900),
-            GraphVisualRegion(id: "project-b", title: "B", memberCount: 200, relatedCount: 300),
-            GraphVisualRegion(id: "project-c", title: "C", memberCount: 3, relatedCount: 3)
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 800),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 200),
+            GraphVisualRegion(id: "project-c", title: "C", memberCount: 3)
         ])
         let nodes = [node("alpha"), node("beta"), node("disconnected")]
         let links = [edge("actual", "alpha", "beta")]
@@ -187,8 +183,8 @@ struct GraphPresentationTests {
 
     @Test func neuralNebulaDrawsOnlySuppliedRegionLinksAndBoundsDecorativeLight() {
         let zones = GraphVisualOverview(regions: [
-            GraphVisualRegion(id: "project-a", title: "A", memberCount: 5, relatedCount: 9),
-            GraphVisualRegion(id: "project-b", title: "B", memberCount: 2, relatedCount: 3)
+            GraphVisualRegion(id: "project-a", title: "A", memberCount: 5),
+            GraphVisualRegion(id: "project-b", title: "B", memberCount: 2)
         ], links: [
             GraphVisualLink(subjectId: "project-a", objectId: "project-b",
                             confirmedCount: 1, suggestedCount: 1, contradictedCount: 1)

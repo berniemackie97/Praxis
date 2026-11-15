@@ -12,7 +12,6 @@ struct GraphVisualRegion: Equatable, Identifiable {
     let id: String
     let title: String
     let memberCount: Int
-    let relatedCount: Int
 
     var count: Int { memberCount + 1 }
 }
@@ -38,13 +37,12 @@ struct GraphVisualOverview: Equatable {
         self.links = links
     }
 
-    init(confirmedProjects: [GraphConceptRegion]) {
-        regions = confirmedProjects.prefix(Self.maximumRenderedRegions).map { project in
-            GraphVisualRegion(id: project.regionId, title: project.label,
-                              memberCount: project.containedEntityCount,
-                              relatedCount: project.relatedEntityCount)
+    init(conceptRegions: [GraphConceptRegion]) {
+        regions = conceptRegions.prefix(Self.maximumRenderedRegions).map { region in
+            GraphVisualRegion(id: region.regionId, title: region.label,
+                              memberCount: region.containedEntityCount)
         }
-        // Cross-project lines require an actual scoped region-link read; no links are inferred.
+        // Lines between regions require an actual scoped region-link read; no links are inferred.
         links = []
     }
 }

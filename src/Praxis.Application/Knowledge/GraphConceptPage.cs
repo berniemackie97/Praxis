@@ -1,5 +1,5 @@
 namespace Praxis.Application.Knowledge;
 
-/// <summary>Confirmed project anchors in the current evidence scope, paged independently of entity types.</summary>
+/// <summary>Paged root or child groups in one authorized scope and catalog revision.</summary>
 public sealed record GraphConceptPage(int RegionCount,
-    IReadOnlyList<GraphConceptRegion> Regions, string? NextCursor);
+    IReadOnlyList<GraphConceptRegion> Regions, string? NextCursor, long Revision);

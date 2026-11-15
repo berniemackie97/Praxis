@@ -7,7 +7,10 @@ public interface IGraphReader
 
     GraphZoneOverview Zones(GraphQuery query, CancellationToken cancellationToken = default);
 
-    GraphConceptPage ConceptRegions(GraphQuery query, CancellationToken cancellationToken = default);
+    GraphConceptPage ConceptRegions(GraphQuery query, CancellationToken cancellationToken = default,
+        Guid? parentRegionId = null);
+
+    GraphClassificationAuditPage ClassificationAudit(GraphQuery query, CancellationToken cancellationToken = default);
 
     GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default);
 

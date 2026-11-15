@@ -283,20 +283,16 @@ private struct SyntheticGraphRegionsPreview: View {
     @State private var selectedNode: String?
     @State private var selectedEdge: String?
 
-    private let summary = GraphVisualOverview(regions: [
-        GraphVisualRegion(id: "sample-a", title: "Synthetic Project A", memberCount: 139, relatedCount: 150),
-        GraphVisualRegion(id: "sample-b", title: "Synthetic Project B", memberCount: 579, relatedCount: 610),
-        GraphVisualRegion(id: "sample-c", title: "Synthetic Project C", memberCount: 289, relatedCount: 312),
-        GraphVisualRegion(id: "sample-d", title: "Synthetic Project D", memberCount: 669, relatedCount: 701),
-        GraphVisualRegion(id: "sample-e", title: "Synthetic Project E", memberCount: 509, relatedCount: 533),
-        GraphVisualRegion(id: "sample-f", title: "Synthetic Project F", memberCount: 119, relatedCount: 136),
-        GraphVisualRegion(id: "sample-g", title: "Synthetic Project G", memberCount: 49, relatedCount: 55),
-        GraphVisualRegion(id: "sample-h", title: "Synthetic Project H", memberCount: 39, relatedCount: 42)
+    private let summary = GraphVisualOverview(conceptRegions: [
+        GraphConceptRegion(regionId: "sample-a", label: "Harbor Toolkit", containedEntityCount: 4,
+                           ownerMemberCount: 0, acceptedMemberCount: 4, verifiedMemberCount: 0),
+        GraphConceptRegion(regionId: "sample-b", label: "Household Planning", containedEntityCount: 2,
+                           ownerMemberCount: 2, acceptedMemberCount: 0, verifiedMemberCount: 0)
     ])
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
-            PageHeader(title: "One Brain · Confirmed Project Regions",
-                       subtitle: "Synthetic confirmed project anchors; no private knowledge")
+            PageHeader(title: "One Brain · Knowledge Regions",
+                       subtitle: "Synthetic groups with direct members; no private knowledge")
             GraphSceneView(nodes: [], edges: [], zones: summary,
                            expandZone: { _ in },
                            returnToZones: {}, regionType: nil, focusId: nil,
