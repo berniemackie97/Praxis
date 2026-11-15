@@ -125,6 +125,35 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public async Task BrainRecallIsBoundedLocalOnlyAndDoesNotRequireModelTools(bool local, bool useBrain, bool expected)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local() with
+        {
+            BackendId = "ollama",
+            Endpoint = local ? Local().Endpoint : "https://example.test/v1"
+        };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation conversation = catalog.Agents.Create(profile.BackendId, "recall");
+        CapturingHandler handler = new("""{"choices":[{"message":{"content":"The lease is in the library."}}]}""");
+        using HttpClient http = new(handler);
+        IAgentBackend backend = new PlainChatBackend(new OpenAiCompatibleAgentBackend(http, new Uri(profile.Endpoint + "/"), profile.Model, null));
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "What does the lease say?", (_, _, _) => { },
+            CancellationToken.None, useTools: useBrain);
+
+        Assert.Equal(expected, handler.Body!.Contains("Monthly rent", StringComparison.Ordinal));
+        Assert.Equal(expected, reply.Citations.Any(citation => citation.SourceName == "lease.md"));
+        Assert.True(reply.ToolsUnavailable);
+        Assert.Empty(reply.ToolCalls);
+        Assert.Equal(2, catalog.Agents.ReadMessages(conversation.ConversationId).Count);
+    }
+
+    [Theory]
     [InlineData("ollama", "http://127.0.0.1:11434/v1", "none")]
     [InlineData("other-local", "http://127.0.0.1:11434/v1", null)]
     [InlineData("ollama", "https://api.example.com/v1", null)]

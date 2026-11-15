@@ -141,6 +141,11 @@ struct AgentMemory: Decodable, Identifiable, Equatable {
     var id: String { memoryId }
 }
 
+struct ChatNoteCaptureData: Decodable {
+    struct Capture: Decodable { let sourcePath: String }
+    let capture: Capture
+}
+
 struct AgentBackendsData: Decodable { let backends: [AgentBackendProfile] }
 struct AgentConversationsData: Decodable { let conversations: [AgentConversation] }
 struct AgentConversationData: Decodable {

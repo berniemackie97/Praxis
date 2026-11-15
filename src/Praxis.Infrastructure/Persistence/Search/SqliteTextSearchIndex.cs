@@ -26,7 +26,10 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
     public IReadOnlyList<SearchHit> QueryAny(string query, int limit = 20, Guid? collectionId = null) =>
         Run(BuildTextQuery(query, " OR "), limit, collectionId);
 
-    private IReadOnlyList<SearchHit> Run(string expression, int limit, Guid? collectionId)
+    public IReadOnlyList<SearchHit> QueryPassages(string query, int limit, bool anyTerm = false) =>
+        Run(BuildTextQuery(query, anyTerm ? " OR " : " AND "), limit, null, snippetColumn: 1);
+
+    private IReadOnlyList<SearchHit> Run(string expression, int limit, Guid? collectionId, int snippetColumn = -1)
     {
         if (limit is < 1 or > 100)
         {
@@ -38,7 +41,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
         {
             using SqliteCommand command = connection.CreateCommand("""
                                                                    SELECT s.source_id, v.item_id, v.revision, s.locator, v.digest,
-                                                                          snippet(text_search, -1, '⟦', '⟧', '…', 24)
+                                                                          snippet(text_search, $snippetColumn, '⟦', '⟧', '…', 24)
                                                                    FROM text_search
                                                                    JOIN search_index_keys k ON k.rowid = text_search.rowid
                                                                    JOIN item_versions v
@@ -69,6 +72,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                    LIMIT $limit
                                                                    """);
             command.CommandTimeout = 5;
+            command.Parameters.AddWithValue("$snippetColumn", snippetColumn);
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             command.Parameters.AddWithValue("$limit", limit);

@@ -19,7 +19,7 @@ public sealed class VerificationActions(
             verification.ListEnabledProviderAllowances())),
         DesktopAction.Of("verificationProviderSave", SaveProvider),
         DesktopAction.Of("verifications", fields => new VerificationRequestsResponse(
-            verification.List(fields.IntegerOrDefault("limit", 50, 1, 200)))),
+            verification.List(fields.IntegerOrDefault("limit", 50, 1, 200), fields.OptionalBoolean("summariesOnly") ?? false))),
         DesktopAction.Of("verification", fields => new VerificationRequestResponse(
             verification.Get(fields.RequireGuid("verificationId")))),
         DesktopAction.Of("verificationPlan", _ => new VerificationPlanResponse(verification.Plan())),
@@ -39,6 +39,7 @@ public sealed class VerificationActions(
             new VerificationDisclosureAuditResponse(verification.DisclosureAudit(
                 fields.IntegerOrDefault("limit", 50, 1, 200)))),
         DesktopAction.Of("verificationApprove", Approve),
+        DesktopAction.Of("verificationApproveLocalBatch", ApproveLocalBatch),
         DesktopAction.Of("verificationDecline", fields => new VerificationDeclineResponse(
             verification.Decline(fields.RequireGuid("verificationId"))))
     ];
@@ -58,6 +59,45 @@ public sealed class VerificationActions(
         return new VerificationProviderResponse(saved);
     }
 
+    private VerificationBatchApprovalResponse ApproveLocalBatch(DesktopRequestFields fields)
+    {
+        Guid[] ids = fields.OptionalStrings("verificationIds", 36, VerificationLimits.MaximumAwaitingRequests)
+            .Select(id => Guid.TryParseExact(id, "D", out Guid parsed) && parsed != Guid.Empty
+                ? parsed : throw new ArgumentException("Each request needs a valid identifier."))
+            .Distinct().ToArray();
+        if (ids.Length == 0)
+        {
+            throw new ArgumentException("No requests selected.");
+        }
+
+        if (VerificationRouter.Route(verification.ListEnabledProviderAllowances(), VerificationProvider.Ollama) is null)
+        {
+            throw new InvalidOperationException("Enable local Ollama under Models before approving a batch.");
+        }
+
+        List<Guid> queued = [];
+        List<Guid> skipped = [];
+        foreach (Guid id in ids)
+        {
+            try
+            {
+                approval.Approve(id, VerificationProvider.Ollama);
+                queued.Add(id);
+            }
+            catch (InvalidOperationException)
+            {
+                skipped.Add(id);
+            }
+        }
+
+        if (queued.Count > 0)
+        {
+            runner?.Wake();
+        }
+
+        return new VerificationBatchApprovalResponse(queued, skipped);
+    }
+
     private VerificationRequestResponse Approve(DesktopRequestFields fields)
     {
         VerificationRequestView approved = approval.Approve(
@@ -65,7 +105,7 @@ public sealed class VerificationActions(
             fields.OptionalText("providerId", 32, "The provider is invalid."),
             fields.OptionalIntegers("excludedOrdinals", 1, VerificationLimits.MaximumItemsPerRequest, VerificationLimits.MaximumItemsPerRequest),
             fields.OptionalStrings("redactions", 200, 50),
-            fields.OptionalBoolean("remoteDisclosureApproved") ?? false);
+            fields.OptionalBoolean("remoteDisclosureApproved") ?? false, fields.OptionalInteger("providerRevision", 1, int.MaxValue));
         runner?.Wake();
         return new VerificationRequestResponse(approved);
     }

@@ -24,6 +24,7 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         }
 
         using OllamaRuntime runtime = new(endpoint.GetLeftPart(UriPartial.Authority), TimeSpan.FromSeconds(2));
+        await runtime.RequireLocalModelAsync(model, cancellationToken);
         LocalModelCapabilities? capabilities;
         try
         {

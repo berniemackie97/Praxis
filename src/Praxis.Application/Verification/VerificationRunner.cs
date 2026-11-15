@@ -14,8 +14,6 @@ public sealed class VerificationRunner(
     IVerificationRepository repository, IVerifierModelFactory models, TimeProvider clock,
     TimeSpan? idlePoll = null, Action<string>? status = null)
 {
-    private const int MaximumOutputTokens = 4_096;
-    private const int ContextTokens = 32_768;
     private static readonly TimeSpan PlanInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan idle = idlePoll ?? TimeSpan.FromMinutes(1);
     private readonly Action<string> report = status ?? (_ => { });
@@ -71,9 +69,7 @@ public sealed class VerificationRunner(
 
         try
         {
-            IReadOnlyList<ChatMessage> messages = VerificationPrompt.Messages(claim.Payload);
-            if (messages.Sum(message => System.Text.Encoding.UTF8.GetByteCount(message.Content)) >
-                ContextTokens - MaximumOutputTokens - 1_024)
+            if (VerificationBudget.For(claim.Payload, claim.Ordinals.Count) is not { } budget)
             {
                 repository.Fail(claim, "model_context_exceeded");
                 report("Verification context exceeds its bounded budget; narrow the reviewed items.");
@@ -91,7 +87,7 @@ public sealed class VerificationRunner(
             }
 
             ChatResult result = await model.CompleteAsync(new ChatRequest(
-                messages, VerificationPrompt.Schema, MaximumOutputTokens, ContextTokens), cancellationToken);
+                VerificationPrompt.Messages(claim.Payload), VerificationPrompt.Schema, budget.OutputTokens, budget.ContextTokens), cancellationToken);
             if (claim.Provider.IsLocal &&
                 (await model.DescribeAsync(cancellationToken)).Digest != identity.Digest)
             {

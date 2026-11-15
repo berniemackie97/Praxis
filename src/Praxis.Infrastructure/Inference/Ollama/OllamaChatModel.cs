@@ -29,21 +29,10 @@ internal sealed class OllamaChatModel : IChatModel
 
     public async Task<ModelIdentity> DescribeAsync(CancellationToken cancellationToken)
     {
-        using JsonDocument document = await runtime.SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
-        if (!document.RootElement.TryGetProperty("models", out JsonElement models) || models.ValueKind != JsonValueKind.Array)
-        {
-            throw OllamaRuntime.Invalid();
-        }
-
-        foreach (JsonElement candidate in models.EnumerateArray().Where(candidate => OllamaRuntime.RequiredString(candidate, "name") == model))
-        {
-            candidate.TryGetProperty("details", out JsonElement details);
-            return new ModelIdentity(ModelProfile.OllamaProvider, model, OllamaRuntime.RequiredString(candidate, "digest"),
-                OptionalString(details, "family"), OptionalString(details, "parameter_size"),
-                OptionalString(details, "quantization_level"));
-        }
-
-        throw new InferenceException(InferenceFailure.ModelMissing, "The requested model is not installed in the local runtime.");
+        JsonElement installed = await runtime.RequireLocalModelAsync(model, cancellationToken);
+        installed.TryGetProperty("details", out JsonElement details);
+        return new ModelIdentity(ModelProfile.OllamaProvider, model, OllamaRuntime.RequiredString(installed, "digest"),
+            OptionalString(details, "family"), OptionalString(details, "parameter_size"), OptionalString(details, "quantization_level"));
     }
 
     public async Task<ChatResult> CompleteAsync(ChatRequest request, CancellationToken cancellationToken)

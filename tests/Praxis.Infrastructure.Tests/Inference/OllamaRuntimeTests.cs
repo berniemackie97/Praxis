@@ -86,6 +86,19 @@ public sealed class OllamaRuntimeTests
     }
 
     [Fact]
+    public async Task RejectsCloudBackedLocalOllamaAliasBeforeInference()
+    {
+        RecordingHandler handler = new(_ => Json("""
+            {"models":[{"name":"private-alias:latest","digest":"id","remote_model":"hosted","remote_host":"ollama.com"}]}
+            """));
+        using OllamaRuntime runtime = new(Endpoint, null, handler);
+        InferenceException failure = await Assert.ThrowsAsync<InferenceException>(() =>
+            runtime.CreateChatModel("private-alias").DescribeAsync(CancellationToken.None));
+        Assert.Equal(InferenceFailure.Rejected, failure.Failure);
+        Assert.Equal(HttpMethod.Get, Assert.Single(handler.Requests).Method);
+    }
+
+    [Fact]
     public async Task DiscoverCapabilitiesByExactTagWithoutReadingOrSendingChatContent()
     {
         RecordingHandler handler = new RecordingHandler(_ => Json("""{"capabilities":["tools","embedding"]}"""));

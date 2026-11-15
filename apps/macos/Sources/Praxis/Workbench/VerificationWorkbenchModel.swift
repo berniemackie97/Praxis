@@ -9,12 +9,15 @@ final class VerificationWorkbenchModel: ObservableObject {
 
     @Published private(set) var requests: [VerificationRequest] = []
     @Published private(set) var selectedId: String?
-    @Published var excluded: Set<Int> = []
-    @Published var redactions: [String] = []
-    @Published private(set) var providerChoice = "" { didSet { if providerChoice != oldValue { remoteConsent = false } } }
+    @Published private(set) var selected: VerificationRequest?
+    @Published private(set) var providers: [VerificationProvider] = []
+    @Published private(set) var loadingDetail = false
+    @Published private(set) var deciding = false
+    @Published var excluded: Set<Int> = [] { didSet { if excluded != oldValue { remoteConsent = false } } }
+    @Published var redactions: [String] = [] { didSet { if redactions != oldValue { remoteConsent = false } } }
+    @Published private(set) var providerChoice = VerificationProvider.ollama { didSet { if providerChoice != oldValue { remoteConsent = false } } }
     @Published var remoteConsent = false
-    private var preferredProvider = ""
-    private var manuallySelectedProvider = false
+    private var loadingList = false
     @Published private(set) var disclosureSources: [VerificationDisclosureSource] = []
     @Published private(set) var disclosureAudit: [VerificationDisclosureEvent] = []
     /// The latest failure or confirmation; setting one clears the other.
@@ -25,8 +28,12 @@ final class VerificationWorkbenchModel: ObservableObject {
         self.channel = channel
     }
 
-    var selected: VerificationRequest? { requests.first { $0.requestId == selectedId } }
-    var awaitingCount: Int { requests.filter(\.awaitingApproval).count }
+    var pendingIDs: [String] { requests.filter(\.awaitingApproval).map(\.requestId) }
+    var awaitingCount: Int { pendingIDs.count }
+    var canApproveLocalBatch: Bool {
+        !deciding && !pendingIDs.isEmpty && excluded.isEmpty && redactions.isEmpty &&
+            providers.contains { $0.providerId == VerificationProvider.ollama }
+    }
 
     /// Exactly what approval sends with the current exclusions and redactions.
     var preview: String {
@@ -36,35 +43,67 @@ final class VerificationWorkbenchModel: ObservableObject {
             : PayloadPreview.narrow(selected.payload, excluded: [], redactions: [])
     }
 
-    func refresh() {
-        channel.send("verifications", ["limit": 100], as: VerificationListData.self, failed: report) { [weak self] data in
-            self?.requests = data.requests
-            self?.refreshAuthorization()
+    func refresh(includeReview: Bool = false) {
+        if !loadingList {
+            loadingList = true
+            channel.send("verifications", ["limit": 100, "summariesOnly": true], as: VerificationListData.self,
+                         failed: { [weak self] message in
+                self?.loadingList = false
+                self?.report(message)
+            }) { [weak self] data in
+                guard let self else { return }
+                loadingList = false
+                requests = data.requests
+                if let selectedId, !deciding, !loadingDetail {
+                    let status = requests.first { $0.id == selectedId }
+                    if includeReview || status?.status != selected?.status || status?.failureCode != selected?.failureCode {
+                        loadDetail(selectedId)
+                    }
+                }
+            }
+        }
+        if includeReview {
+            channel.send("verificationProviders", as: ProvidersData.self, failed: report) { [weak self] data in
+                guard let self else { return }
+                let oldRevision = providers.first { $0.providerId == providerChoice }?.revision
+                providers = data.providers.filter(\.enabled)
+                if oldRevision != providers.first(where: { $0.providerId == providerChoice })?.revision {
+                    remoteConsent = false
+                }
+            }
+            refreshAuthorization()
         }
     }
 
     func select(_ request: VerificationRequest) {
         guard selectedId != request.requestId else { return }
         selectedId = request.requestId
+        selected = request.payload.isEmpty ? nil : request
+        error = nil
+        notice = nil
         excluded = []
         redactions = []
-        manuallySelectedProvider = false
-        providerChoice = preferredProvider
+        providerChoice = VerificationProvider.ollama
         remoteConsent = false
         disclosureSources = []
+        loadDetail(request.requestId)
         refreshAuthorization()
-        notice = nil
     }
 
-    /// Changes the default for the active request only until the owner explicitly chooses a provider.
-    func setPreferredProvider(_ providerId: String) {
-        guard preferredProvider != providerId else { return }
-        preferredProvider = providerId
-        if selectedId != nil && !manuallySelectedProvider { providerChoice = providerId }
+    private func loadDetail(_ id: String) {
+        channel.reset("verification-detail")
+        loadingDetail = true
+        channel.send("verification", ["verificationId": id], as: VerificationData.self,
+                     scope: "verification-detail", failed: { [weak self] message in
+            self?.loadingDetail = false
+            self?.report(message)
+        }) { [weak self] data in
+            self?.selected = data.request
+            self?.loadingDetail = false
+        }
     }
 
     func chooseProvider(_ providerId: String) {
-        manuallySelectedProvider = true
         providerChoice = providerId
     }
 
@@ -90,19 +129,45 @@ final class VerificationWorkbenchModel: ObservableObject {
     }
 
     func approve() {
-        guard let selected, selected.awaitingApproval else { return }
+        guard let selected, selected.awaitingApproval, !deciding, !loadingDetail else { return }
+        deciding = true
         var fields: [String: Any] = [
             "verificationId": selected.requestId,
             "excludedOrdinals": excluded.sorted(),
             "redactions": redactions
         ]
-        if !providerChoice.isEmpty { fields["providerId"] = providerChoice }
-        fields["remoteDisclosureApproved"] = remoteConsent
-        channel.send("verificationApprove", fields, as: VerificationData.self, failed: report) { [weak self] data in
-            let provider = data.request?.providerId.map(VerificationProvider.displayName) ?? "a verifier"
-            self?.notice = "Approved for \(provider)."
-            self?.refresh()
+        fields["providerId"] = providerChoice
+        if let provider = providers.first(where: { $0.providerId == providerChoice }) {
+            fields["providerRevision"] = provider.revision
         }
+        fields["remoteDisclosureApproved"] = remoteConsent
+        channel.send("verificationApprove", fields, as: VerificationData.self, failed: decisionFailed) { [weak self] data in
+            guard let self else { return }
+            if selectedId == data.request?.id { self.selected = data.request }
+            deciding = false
+            let provider = data.request?.providerId.map(VerificationProvider.displayName) ?? "a verifier"
+            notice = "Queued for \(provider)."
+            refresh(includeReview: true)
+        }
+    }
+
+    func approveLocalBatch(_ ids: [String]) {
+        guard canApproveLocalBatch, !ids.isEmpty else { return }
+        deciding = true
+        channel.send("verificationApproveLocalBatch", ["verificationIds": ids], as: VerificationBatchApprovalData.self,
+                     failed: decisionFailed) { [weak self] data in
+            guard let self else { return }
+            deciding = false
+            let skipped = data.skipped.isEmpty ? "" : " \(data.skipped.count) skipped. Review those requests individually."
+            notice = "Queued \(Count.label(data.queued.count, "request")) for local Ollama." + skipped
+            refresh(includeReview: true)
+        }
+    }
+
+    private func decisionFailed(_ message: String) {
+        deciding = false
+        report(message)
+        refresh(includeReview: true)
     }
 
     func setRemoteVerification(_ sourceId: String, allowed: Bool) {
@@ -110,7 +175,7 @@ final class VerificationWorkbenchModel: ObservableObject {
                      ["sourceId": sourceId, "allowRemoteVerification": allowed],
                      as: VerificationDisclosurePolicyData.self, failed: report) { [weak self] data in
             self?.notice = data.changed ? "Source disclosure classification updated." : "Source classification unchanged."
-            self?.refresh()
+            self?.refresh(includeReview: true)
         }
     }
 
@@ -119,7 +184,7 @@ final class VerificationWorkbenchModel: ObservableObject {
         channel.send("verificationDisclosureRevoke", ["verificationId": selected.requestId],
                      as: VerificationDisclosureRevokedData.self, failed: report) { [weak self] data in
             self?.notice = data.revoked ? "External verification grant revoked." : "No active grant to revoke."
-            self?.refresh()
+            self?.refresh(includeReview: true)
         }
     }
 
@@ -138,11 +203,13 @@ final class VerificationWorkbenchModel: ObservableObject {
     }
 
     func decline() {
-        guard let selected else { return }
+        guard let selected, !deciding else { return }
+        deciding = true
         channel.send("verificationDecline", ["verificationId": selected.requestId],
-                     as: VerificationDeclinedData.self, failed: report) { [weak self] _ in
-            self?.notice = "Declined. These items will not be suggested again."
-            self?.refresh()
+                     as: VerificationDeclinedData.self, failed: decisionFailed) { [weak self] result in
+            self?.deciding = false
+            self?.notice = result.declined ? "Declined. These items will not be suggested again." : "Request already changed."
+            self?.refresh(includeReview: true)
         }
     }
 

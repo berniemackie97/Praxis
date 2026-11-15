@@ -52,6 +52,38 @@ public sealed class OllamaRuntime : IDisposable
         return models.EnumerateArray().Select(model => new InstalledModel(RequiredString(model, "name"), RequiredString(model, "digest"), model.TryGetProperty("size", out JsonElement size) && size.TryGetInt64(out long bytes) ? bytes : 0)).ToList();
     }
 
+    internal async Task<JsonElement> RequireLocalModelAsync(string model, CancellationToken cancellationToken)
+    {
+        string tag = model.Contains(':', StringComparison.Ordinal) ? model : model + ":latest";
+        using JsonDocument document = await SendAsync(HttpMethod.Get, "api/tags", null, cancellationToken);
+        if (!document.RootElement.TryGetProperty("models", out JsonElement models) || models.ValueKind != JsonValueKind.Array)
+        {
+            throw Invalid();
+        }
+
+        foreach (JsonElement installed in models.EnumerateArray())
+        {
+            if (RequiredString(installed, "name") != tag)
+            {
+                continue;
+            }
+
+            if (tag.EndsWith(":cloud", StringComparison.OrdinalIgnoreCase) ||
+                tag.EndsWith("-cloud", StringComparison.OrdinalIgnoreCase) ||
+                HasText(installed, "remote_model") || HasText(installed, "remote_host"))
+            {
+                throw new InferenceException(InferenceFailure.Rejected, "Private Ollama requests require a locally installed model, not a cloud model.");
+            }
+
+            return installed.Clone();
+        }
+
+        throw new InferenceException(InferenceFailure.ModelMissing, "The requested model is not installed in the local runtime.");
+    }
+
+    private static bool HasText(JsonElement model, string key) =>
+        model.TryGetProperty(key, out JsonElement value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString());
+
     internal async Task<LocalModelCapabilities?> ReadCapabilitiesAsync(string model, CancellationToken cancellationToken)
     {
         using JsonDocument document = await SendAsync(HttpMethod.Post, "api/show", JsonSerializer.SerializeToUtf8Bytes(new { model }), cancellationToken);

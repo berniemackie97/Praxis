@@ -4,14 +4,8 @@ import SwiftUI
 /// reviews the payload, optionally excludes items or redacts phrases, and approves.
 struct VerificationView: View {
     @ObservedObject var model: VerificationWorkbenchModel
-    @ObservedObject var setup: ModelSetupModel
-
-    private var providers: [VerificationProvider] { setup.providers.filter(\.enabled) }
-
-    private func syncPreferredProvider() {
-        model.setPreferredProvider(VerificationProviderDefault.choice(
-            checkingProvider: setup.tier("strongest")?.providerId, providers: providers))
-    }
+    @State private var batchIDs: [String] = []
+    @State private var confirmBatch = false
 
     var body: some View {
         MasterDetail(listWidth: (260, 320, 440)) {
@@ -21,7 +15,7 @@ struct VerificationView: View {
                 ForEach(model.requests) { request in
                     ItemRow(systemImage: request.awaitingApproval ? "hand.raised" : "checkmark.shield",
                             title: request.reasonLabel,
-                            subtitle: "\(RequestStatus.label(request)) · \(Count.label(request.items.count, "item"))",
+                            subtitle: "\(RequestStatus.label(request)) · \(Count.label(request.displayedItemCount, "item"))",
                             tint: request.awaitingApproval ? .accentColor : .secondary) {
                         if request.awaitingApproval { Circle().fill(Color.accentColor).frame(width: 7, height: 7) }
                     }
@@ -55,7 +49,9 @@ struct VerificationView: View {
             }
         } detail: {
             if let request = model.selected {
-                VerificationDetailView(request: request, model: model, providers: providers)
+                VerificationDetailView(request: request, model: model, providers: model.providers).id(request.id)
+            } else if model.loadingDetail {
+                ProgressView("Loading evidence…")
             } else {
                 EmptyState(systemImage: "doc.text.magnifyingglass", title: "Select a request",
                            message: "Review exactly what would be sent, remove items, and redact phrases before approving.")
@@ -65,16 +61,22 @@ struct VerificationView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { model.plan() } label: { Label("Check for New", systemImage: "sparkle.magnifyingglass") }
                     .help("Looks for flagged evidence and type conflicts. Creates requests for review only.")
-                Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button {
+                    batchIDs = Array(model.pendingIDs.prefix(20))
+                    confirmBatch = true
+                } label: { Label("Approve Pending Locally", systemImage: "checkmark.shield") }
+                .disabled(!model.canApproveLocalBatch)
+                .help("Queue the pending requests on this Mac. Remote requests still need individual approval.")
+                Button { model.refresh(includeReview: true) } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }
-        .onAppear {
-            syncPreferredProvider()
-            setup.refresh()
-            model.refresh()
+        .confirmationDialog("Queue \(Count.label(batchIDs.count, "request")) locally?", isPresented: $confirmBatch) {
+            Button("Queue for Ollama") { model.approveLocalBatch(batchIDs) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Ollama will receive the full evidence for these requests on this Mac. Review individually to exclude or redact evidence.")
         }
-        .onChange(of: setup.tiers) { _ in syncPreferredProvider() }
-        .onChange(of: setup.providers) { _ in syncPreferredProvider() }
+        .onAppear { model.refresh(includeReview: true) }
     }
 }
 
@@ -122,11 +124,11 @@ private struct VerificationDetailView: View {
     @State private var confirmRemotePolicy = false
 
     private var remoteSelected: Bool {
-        !model.providerChoice.isEmpty && model.providerChoice != VerificationProvider.ollama
+        model.providerChoice != VerificationProvider.ollama
     }
 
     private var selectedProviderAvailable: Bool {
-        VerificationProviderDefault.available(model.providerChoice, providers: providers)
+        providers.contains { $0.providerId == model.providerChoice }
     }
 
     private var selectedExternalProvider: VerificationProvider? {
@@ -151,16 +153,16 @@ private struct VerificationDetailView: View {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(request.reasonLabel).font(.pageTitle)
                     StatusPill(text: RequestStatus.label(request), tone: request.awaitingApproval ? .accent : request.status == "completed" ? .positive : .neutral)
+                    FeedbackLine(error: model.error, notice: model.notice)
                 }
+                if request.awaitingApproval { approval }
                 Panel(title: "Items", systemImage: "list.bullet.rectangle",
                       caption: request.awaitingApproval ? "Uncheck an item to leave it out of the request." : nil) {
                     VStack(alignment: .leading, spacing: Spacing.s) {
                         ForEach(items) { item in itemCard(item) }
                     }
                 }
-                if request.awaitingApproval {
-                    approval
-                } else if request.providerId != nil && request.providerId != VerificationProvider.ollama &&
+                if !request.awaitingApproval && request.providerId != nil && request.providerId != VerificationProvider.ollama &&
                             (request.status == "approved" || request.status == "running") {
                     Button("Revoke External Disclosure", role: .destructive) { model.revokeDisclosure() }
                 }
@@ -168,7 +170,7 @@ private struct VerificationDetailView: View {
                     Text("\(request.providerId.map(VerificationProvider.displayName) ?? "Verifier"), model \(request.modelName ?? "default"): \(tokens) input and \(request.outputTokens ?? 0) output tokens.")
                         .font(.meta).foregroundStyle(.secondary)
                 }
-                Panel(title: request.awaitingApproval ? "What approval will send" : "What was sent", systemImage: "eye") {
+                DisclosureGroup(request.awaitingApproval ? "Exact payload" : "Reviewed payload") {
                     Text(model.preview)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
@@ -206,7 +208,13 @@ private struct VerificationDetailView: View {
                 }
             }
             ForEach(Array(item.quotes.enumerated()), id: \.offset) { _, quote in
-                Text("“\(shown(quote.quote))” — \(quote.source)").font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                Text("“\(shown(quote.quote))” — \(shown(quote.source))").font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                if !quote.context.isEmpty && quote.context != quote.quote {
+                    DisclosureGroup("Surrounding context") {
+                        Text(shown(quote.context)).font(.callout).textSelection(.enabled)
+                    }
+                    .font(.meta)
+                }
             }
             if let note = verdict?.note {
                 Text(note).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -278,24 +286,24 @@ private struct VerificationDetailView: View {
                     Picker("Send to", selection: Binding(
                         get: { model.providerChoice },
                         set: { model.chooseProvider($0) })) {
-                        Text("Local Ollama (if enabled)").tag("")
+                        Text("Local Ollama").tag(VerificationProvider.ollama)
                         ForEach(providers.filter { $0.providerId != VerificationProvider.ollama }) { provider in
                             Text(VerificationProvider.displayName(provider.providerId)).tag(provider.providerId)
                         }
                     }
                     .frame(maxWidth: 320)
                     Spacer()
-                    Button("Decline") { model.decline() }
-                    Button("Approve and Send") { model.approve() }
+                    Button("Decline") { model.decline() }.disabled(model.deciding)
+                    Button(model.deciding ? "Updating…" : remoteSelected ? "Approve Remote Request" : "Queue on This Mac") { model.approve() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!selectedProviderAvailable || model.excluded.count >= items.count ||
+                        .disabled(model.deciding || model.loadingDetail || !selectedProviderAvailable || model.excluded.count >= items.count ||
                             (remoteSelected && (!model.remoteConsent || !remoteReady)))
                 }
-                if model.providerChoice == "" {
-                    Text("Local Ollama is selected. The Checking model can be changed under Settings → Models; selecting a remote provider never sends data without approval.")
+                if !remoteSelected {
+                    Text("Local Ollama is selected. Manage its model under Settings → Models. Remote verification requires individual approval.")
                         .font(.caption).foregroundStyle(.secondary)
-                } else if model.providerChoice != VerificationProvider.ollama {
-                    Text("The configured Checking provider is suggested when available. External disclosure still requires each included source's permission and your explicit approval of the redacted payload.")
+                } else {
+                    Text("External disclosure requires each included source's permission and your explicit approval of the reviewed payload.")
                         .font(.caption).foregroundColor(.orange)
                 }
                 if !selectedProviderAvailable {
