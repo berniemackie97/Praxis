@@ -76,6 +76,15 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Equal(1, scoped.RelationshipCount);
         Assert.DoesNotContain(scoped.Zones, zone => zone.EntityType == "person");
 
+        Guid collection = catalog.Collections.Create("Technical only").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collection, technical.SourceId));
+        GraphZoneOverview collectionZones = catalog.Graph.Zones(new GraphQuery(CollectionId: collection));
+        Assert.Equal(2, collectionZones.EntityCount);
+        Assert.Equal(1, collectionZones.RelationshipCount);
+        Assert.DoesNotContain(collectionZones.Zones, zone => zone.EntityType == "person");
+        Assert.True(catalog.Collections.Archive(collection));
+        Assert.Equal(0, catalog.Graph.Zones(new GraphQuery(CollectionId: collection)).EntityCount);
+
         GraphZoneOverview predicate = catalog.Graph.Zones(new GraphQuery(Predicate: "parses"));
         Assert.Equal(4, predicate.EntityCount);
         Assert.Single(predicate.Links);
