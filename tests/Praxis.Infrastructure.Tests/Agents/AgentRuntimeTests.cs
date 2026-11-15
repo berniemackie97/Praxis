@@ -191,6 +191,43 @@ public sealed class AgentRuntimeTests : IDisposable
         Assert.Equal("knowledge_search", Assert.Single(reply.ToolCalls).Name);
         Assert.NotEmpty(reply.Citations);
         Assert.Single(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10));
+        Assert.Equal([AgentRoles.User, AgentRoles.Assistant], catalog.Agents.ReadMessages(conversation.ConversationId).Select(message => message.Role));
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[1].Content);
+    }
+
+    [Fact]
+    public async Task UnexpectedBackendFailureIsTerminalAndDoesNotExposeProviderText()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend broken = new((_, _) => Task.FromException<AgentTurn>(new IOException("secret provider response: token-123")));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), broken);
+        AgentRunCoordinator coordinator = new(runtime, clock);
+
+        AgentRunStatus failed = await Poll(coordinator, coordinator.Start(conversation.ConversationId, "hello"));
+        Assert.Equal(AgentRunStatus.Failed, failed.State);
+        Assert.Null(failed.Reply);
+        Assert.Equal("agent_internal_error", Assert.Single(failed.Events, item => item.Kind == "failed").Detail);
+        Assert.DoesNotContain("token-123", string.Join(" ", failed.Events.Select(item => item.Detail)), StringComparison.Ordinal);
+
+        AgentRunStatus retry = await Poll(coordinator, coordinator.Start(conversation.ConversationId, "retry"));
+        Assert.Equal(AgentRunStatus.Failed, retry.State);
+    }
+
+    [Theory]
+    [InlineData(true, "model_timeout")]
+    [InlineData(false, "agent_internal_error")]
+    public async Task UnexpectedCancellationOrExceptionHasAnActionableBoundedFailure(bool canceled, string expectedCode)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new((_, _) => Task.FromException<AgentTurn>(canceled
+            ? new OperationCanceledException("server operation timed out")
+            : new InvalidDataException("unsafe error details")));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        AgentRunCoordinator coordinator = new(runtime, clock);
+
+        AgentRunStatus failed = await Poll(coordinator, coordinator.Start(conversation.ConversationId, "hello"));
+        Assert.Equal(AgentRunStatus.Failed, failed.State);
+        Assert.Equal(expectedCode, Assert.Single(failed.Events, item => item.Kind == "failed").Detail);
     }
 
     [Fact]
