@@ -100,6 +100,13 @@ final class GraphZoneArtwork {
             ring.lineWidth = highContrast ? 3 : 1.7
             ring.zPosition = 1
             hub.addChild(ring)
+            let density = SKShapeNode(path: Self.densityPath(type: zone.entityType,
+                                                             count: zone.count, radius: radius))
+            density.fillColor = tint.withAlphaComponent(dark ? 0.68 : 0.47)
+            density.strokeColor = .clear
+            density.lineWidth = 0
+            density.zPosition = 1.5
+            hub.addChild(density)
             let core = SKShapeNode(circleOfRadius: max(9, radius * 0.20))
             core.fillColor = tint
             core.strokeColor = .clear
@@ -160,4 +167,26 @@ final class GraphZoneArtwork {
     }
 
     func point(for type: String) -> CGPoint? { placement.positions[type] }
+
+    private static func densityPath(type: String, count: Int, radius: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        var state = type.utf8.reduce(UInt64(14_695_981_039_346_656_037)) {
+            ($0 ^ UInt64($1)) &* 1_099_511_628_211
+        }
+        let samples = min(96, max(6, Int(log2(Double(count) + 1) * 12)))
+        for _ in 0..<samples {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let direction = CGFloat((state >> 32) & 0xFFFF_FFFF) / CGFloat(UInt32.max)
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let distance = sqrt(CGFloat((state >> 32) & 0xFFFF_FFFF) / CGFloat(UInt32.max))
+            let angle = direction * 2 * .pi
+            let point = CGPoint(x: cos(angle) * distance * radius * 0.85,
+                                y: sin(angle) * distance * radius * 0.85)
+            let size: CGFloat = 1.2
+            path.addEllipse(in: CGRect(x: point.x - size, y: point.y - size,
+                                       width: size * 2, height: size * 2))
+        }
+        return path
+    }
+
 }
