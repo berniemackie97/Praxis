@@ -99,10 +99,11 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
                 selectedNodeId: String?, selectedEdgeId: String?,
                 reduceMotion: Bool, highContrast: Bool, active: Bool) {
         self.reduceMotion = reduceMotion
+        let levelChanged = self.regionType != regionType || self.focusId != focusId
+        let focusWasMissing = focusId != nil && focusId.flatMap { placement.nodeCenters[$0] } == nil
         let changed = self.overview != overview || graphNodes != nodes || graphEdges != edges ||
-            self.regionType != regionType || self.focusId != focusId ||
-            self.selectedNodeId != selectedNodeId || self.selectedEdgeId != selectedEdgeId ||
-            self.highContrast != highContrast
+            levelChanged || self.selectedNodeId != selectedNodeId ||
+            self.selectedEdgeId != selectedEdgeId || self.highContrast != highContrast
         self.highContrast = highContrast
         if changed {
             self.overview = overview
@@ -112,7 +113,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             self.focusId = focusId
             self.selectedNodeId = selectedNodeId
             self.selectedEdgeId = selectedEdgeId
-            rebuild()
+            rebuild(reposition: levelChanged, focusWasMissing: focusWasMissing)
         }
         view?.enableSetNeedsDisplay = reduceMotion
         view?.isPaused = !active
@@ -129,7 +130,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         return Batch(buffer: value, count: value == nil ? 0 : vertices.count)
     }
 
-    private func rebuild() {
+    private func rebuild(reposition: Bool, focusWasMissing: Bool) {
         guard let overview else {
             placement = NeuralNebulaPlacement(zoneCenters: [:], zoneSizes: [:], nodeCenters: [:])
             zonePoints = Batch()
@@ -154,13 +155,12 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         zoneLines = buffer(geometry.zoneLines)
         detailPoints = buffer(geometry.detailPoints)
         detailLines = buffer(geometry.detailLines)
-        if regionType != nil || focusId != nil {
+        if reposition {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId == nil ? 157 : 79
-        } else {
-            camera.desiredCenter = .zero
-            camera.desiredDistance = 590
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
+        } else if focusWasMissing, let focusId, let point = placement.nodeCenters[focusId] {
+            camera.desiredCenter = point
         }
         if reduceMotion {
             camera.center = camera.desiredCenter
