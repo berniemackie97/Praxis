@@ -11,6 +11,8 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
             Task.FromResult<object>(graph.Overview(Query(fields), token))),
         new DesktopAction("graphZones", (fields, token) =>
             Task.FromResult<object>(graph.Zones(Query(fields), token))),
+        new DesktopAction("graphConceptRegions", (fields, token) =>
+            Task.FromResult<object>(graph.ConceptRegions(Query(fields), token))),
         new DesktopAction("graphAtlas", (fields, token) =>
             Task.FromResult<object>(graph.Atlas(Query(fields), token))),
         new DesktopAction("graphRegion", (fields, token) =>

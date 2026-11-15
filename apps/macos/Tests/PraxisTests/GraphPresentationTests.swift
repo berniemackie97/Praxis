@@ -26,6 +26,23 @@ struct GraphPresentationTests {
         #expect(overview.types.map(\.entityType) == ["project", "technology"])
     }
 
+    @Test func conceptRegionResponseKeepsConfirmedProjectIdentitiesAcrossModes() throws {
+        let json = #"""
+        {"regionCount":1,"regions":[
+            {"regionId":"11111111-1111-1111-1111-111111111111","label":"Client",
+             "relationCount":2,"relatedEntityCount":2,"containedEntityCount":1}
+        ],"nextCursor":null}
+        """#
+        let page = try JSONDecoder().decode(GraphConceptPage.self, from: Data(json.utf8))
+        #expect(page.regionCount == 1)
+        #expect(page.regions[0].label == "Client")
+        #expect(page.regions[0].containedEntityCount == 1)
+        #expect(page.regions[0].relatedEntityCount == 2)
+        #expect(GraphStyle.neuralNebula.rawValue == "neuralNebula")
+        #expect(GraphStyle.neuralNebula.title == "Knowledge Cosmos")
+        #expect(GraphStyle.cellularAtlas.title == "Cellular Atlas")
+    }
+
     @Test func graphSidebarGroupsAssertionsWithoutCollapsingEvidence() {
         let first = edge("e1", "subject", "object")
         let second = edge("e2", "subject", "object")

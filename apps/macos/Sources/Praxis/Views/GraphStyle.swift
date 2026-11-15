@@ -8,7 +8,7 @@ enum GraphStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .neuralNebula: "Neural Nebula"
+        case .neuralNebula: "Knowledge Cosmos"
         case .cellularAtlas: "Cellular Atlas"
         }
     }

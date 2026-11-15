@@ -7,6 +7,7 @@ final class GraphWorkbenchModel: ObservableObject {
     private let channel: WorkerChannel
     private let seedScope = "graph-seeds"
     private let overviewScope = "graph-overview"
+    private let conceptScope = "graph-concepts"
     private let atlasScope = "graph-atlas"
     private let neighborhoodScope = "graph-neighborhood"
     private let inspectionScope = "graph-inspection"
@@ -32,6 +33,11 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var overview: GraphOverview?
     @Published private(set) var zoneOverview: GraphZoneOverview?
     @Published private(set) var zoneLoading = false
+    @Published private(set) var conceptRegions: [GraphConceptRegion] = []
+    @Published private(set) var conceptRegionCount = 0
+    @Published private(set) var conceptNextCursor: String?
+    @Published private(set) var conceptLoading = false
+    @Published private(set) var conceptError: String?
     @Published private(set) var selectedZoneType: String?
     @Published private(set) var atlasNodes: [GraphNode] = []
     @Published private(set) var atlasEdges: [GraphEdge] = []
@@ -101,12 +107,18 @@ final class GraphWorkbenchModel: ObservableObject {
         active = false
         channel.reset(seedScope)
         channel.reset(overviewScope)
+        channel.reset(conceptScope)
         channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
         zoneOverview = nil
         zoneLoading = false
+        conceptRegions = []
+        conceptRegionCount = 0
+        conceptNextCursor = nil
+        conceptLoading = false
+        conceptError = nil
         selectedZoneType = nil
         pendingLocateNodeId = nil
         atlasNodes = []
@@ -133,12 +145,18 @@ final class GraphWorkbenchModel: ObservableObject {
         guard active else { return }
         channel.reset(seedScope)
         channel.reset(overviewScope)
+        channel.reset(conceptScope)
         channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
         zoneOverview = nil
         zoneLoading = false
+        conceptRegions = []
+        conceptRegionCount = 0
+        conceptNextCursor = nil
+        conceptLoading = false
+        conceptError = nil
         selectedZoneType = nil
         pendingLocateNodeId = nil
         atlasNodes = []
@@ -179,6 +197,38 @@ final class GraphWorkbenchModel: ObservableObject {
             overview = GraphOverview(entityCount: summary.entityCount, types: summary.zones)
         }
         loadSeeds(cursor: nil)
+        loadConcepts(cursor: nil)
+    }
+
+    func loadMoreConcepts() {
+        guard conceptNextCursor != nil, !conceptLoading else { return }
+        loadConcepts(cursor: conceptNextCursor)
+    }
+
+    private func loadConcepts(cursor: String?) {
+        guard active else { return }
+        conceptLoading = true
+        var fields: [String: Any] = ["limit": 32]
+        if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+        if let cursor { fields["cursor"] = cursor }
+        channel.send("graphConceptRegions", fields, as: GraphConceptPage.self, scope: conceptScope,
+                     failed: { [weak self] error in
+                         self?.conceptLoading = false
+                         self?.conceptError = error
+                     }) { [weak self] page in
+            guard let self, active else { return }
+            conceptLoading = false
+            conceptError = nil
+            conceptRegionCount = page.regionCount
+            conceptNextCursor = page.nextCursor
+            if cursor == nil {
+                conceptRegions = page.regions
+            } else {
+                let existing = Set(conceptRegions.map(\.regionId))
+                conceptRegions += page.regions.filter { !existing.contains($0.regionId) }
+            }
+        }
     }
 
     private func loadAtlas(cursor: String?) {
