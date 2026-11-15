@@ -1,5 +1,6 @@
 import Foundation
 import MetalKit
+import QuartzCore
 import simd
 
 private struct NeuralNebulaUniforms {
@@ -120,8 +121,10 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
 
     private func buffer(_ vertices: [NeuralNebulaVertex]) -> Batch {
         guard !vertices.isEmpty else { return Batch() }
-        let value = vertices.withUnsafeBytes { data in
-            device.makeBuffer(bytes: data.baseAddress!, length: data.count, options: .storageModeShared)
+        let value = vertices.withUnsafeBufferPointer { data in
+            device.makeBuffer(bytes: data.baseAddress!,
+                              length: data.count * MemoryLayout<NeuralNebulaVertex>.stride,
+                              options: .storageModeShared)
         }
         return Batch(buffer: value, count: value == nil ? 0 : vertices.count)
     }
