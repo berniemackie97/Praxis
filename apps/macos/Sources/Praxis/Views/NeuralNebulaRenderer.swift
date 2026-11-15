@@ -217,16 +217,16 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
     private func zone(at point: CGPoint) -> String? {
         placement.zoneCenters.compactMap { entry -> (String, CGFloat)? in
             guard let position = projected(entry.value) else { return nil }
-            let camera.distance = hypot(position.x - point.x, position.y - point.y)
-            return camera.distance < 42 ? (entry.key, camera.distance) : nil
+            let distance = hypot(position.x - point.x, position.y - point.y)
+            return distance < 42 ? (entry.key, distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
     private func nearestNode(to point: CGPoint) -> String? {
         placement.nodeCenters.compactMap { entry -> (String, CGFloat)? in
             guard let position = projected(entry.value) else { return nil }
-            let camera.distance = hypot(position.x - point.x, position.y - point.y)
-            return camera.distance < 14 ? (entry.key, camera.distance) : nil
+            let distance = hypot(position.x - point.x, position.y - point.y)
+            return distance < 14 ? (entry.key, distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
@@ -239,9 +239,9 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             guard squared > 1 else { return nil }
             let projection = max(0, min(1, ((point.x - a.x) * delta.x +
                                           (point.y - a.y) * delta.y) / squared))
-            let camera.distance = hypot(point.x - a.x - delta.x * projection,
+            let distance = hypot(point.x - a.x - delta.x * projection,
                                  point.y - a.y - delta.y * projection)
-            return camera.distance < 7 ? (edge.relationId, camera.distance) : nil
+            return distance < 7 ? (edge.relationId, distance) : nil
         }.min { $0.1 < $1.1 }?.0
     }
 
