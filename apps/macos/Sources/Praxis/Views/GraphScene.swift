@@ -31,6 +31,7 @@ final class GraphScene: SKScene {
     private var zoneOverview: GraphZoneOverview?
     private var zoneFilterType: String?
     private var regionType: String?
+    private var preserveNextFitTransition = false
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let nodeHighlights = SKShapeNode()
     private let edgeArtwork = GraphEdgeArtwork()
@@ -64,6 +65,7 @@ final class GraphScene: SKScene {
         guard zoneMode || graphNodes != nodes || graphEdges != edges ||
               focusId != focus || self.regionType != regionType else { return }
         let fromZones = zoneMode
+        preserveNextFitTransition = fromZones
         self.regionType = regionType
         zoneMode = false
         zoneArtwork.hide()
@@ -137,6 +139,7 @@ final class GraphScene: SKScene {
     func configureZones(_ summary: GraphZoneOverview, type: String?) {
         guard !zoneMode || zoneOverview != summary || zoneFilterType != type else { return }
         zoneMode = true
+        preserveNextFitTransition = false
         zoneOverview = summary
         zoneFilterType = type
         regionType = nil
@@ -223,8 +226,15 @@ final class GraphScene: SKScene {
         guard toolbarZoomRevision != revision else { return }
         toolbarZoomRevision = revision
         if focusId == nil && zoom == 1 {
-            if zoneMode { fitZones() } else { fitAtlas() }
+            if preserveNextFitTransition {
+                preserveNextFitTransition = false
+            } else if zoneMode {
+                fitZones()
+            } else {
+                fitAtlas()
+            }
         } else {
+            preserveNextFitTransition = false
             let base = focusId == nil ? atlasFitScale : CGFloat(1)
             let relative = lastToolbarZoom > 0 ? zoom / lastToolbarZoom : zoom
             viewCamera.setScale(min(base * 2.5, max(base * 0.12,
