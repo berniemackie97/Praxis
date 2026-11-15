@@ -152,7 +152,7 @@ public sealed partial class SqliteGraphReader
 
                 if (placement.ChildKey is { } childKey)
                 {
-                    RegionBuild child = Region(regions, childKey, placement.ChildLabel!, "folder");
+                    RegionBuild child = Region(regions, childKey, RegionPaths.Qualify(placement.ChildLabel!, top.Label), "folder");
                     child.ParentKey = top.Key;
                     child.Sources.Add(source);
                 }
@@ -161,6 +161,7 @@ public sealed partial class SqliteGraphReader
             }
         }
 
+        HashSet<string> pendingSources = [];
         foreach (string source in ReadStrings(connection, query, $"""
             SELECT DISTINCT i.source_id FROM processing_jobs j
             JOIN items i ON i.item_id = j.item_id
@@ -170,6 +171,7 @@ public sealed partial class SqliteGraphReader
               {ScopeFilter("s")}
             """))
         {
+            pendingSources.Add(source);
             if (placed.TryGetValue(source, out var at))
             {
                 regions[at.Top].Pending++;
@@ -183,6 +185,7 @@ public sealed partial class SqliteGraphReader
         // Authorized mentions place entities in every region they are known from.
         HashSet<Guid> entities = [];
         HashSet<Guid> placedEntities = [];
+        Dictionary<string, Dictionary<Guid, int>> looseMentions = [];
         using (SqliteCommand command = connection.CreateCommand($"""
             SELECT m.entity_id, m.source_id, COUNT(*) FROM {MentionView(query)} m
             JOIN knowledge_entities e ON e.entity_id = m.entity_id AND e.status = 'active'
@@ -204,6 +207,12 @@ public sealed partial class SqliteGraphReader
 
                 placedEntities.Add(entity);
                 int count = reader.GetInt32(2);
+                if (regions[at.Top].Kind == "loose")
+                {
+                    string source = reader.GetString(1);
+                    Add(looseMentions.TryGetValue(source, out var known) ? known : looseMentions[source] = [], entity, count);
+                }
+
                 Add(regions[at.Top].Mentions, entity, count);
                 if (at.Child is { } child)
                 {
@@ -220,10 +229,11 @@ public sealed partial class SqliteGraphReader
             Add(degree, relation.Object, 1);
         }
 
-        BindSuperRegions(connection, query, regions, degree);
-        Dictionary<Guid, string> home = Homes(regions);
         HashSet<Guid> glue = [.. ReadStrings(connection, query,
             $"SELECT e.entity_id FROM knowledge_entities e WHERE e.status = 'active' AND {EntityTypeSanity.RuntimeGlueName("e")}").Select(Guid.Parse)];
+        RehomeLooseFiles(connection, query, regions, looseMentions, pendingSources, glue);
+        BindSuperRegions(connection, query, regions, degree);
+        Dictionary<Guid, string> home = Homes(regions);
 
         // Cross-region evidence between top regions; internal relations count toward their region.
         Dictionary<(string, string), (int Relations, int Shared)> links = [];
@@ -434,6 +444,95 @@ public sealed partial class SqliteGraphReader
                 foreach ((Guid entity, int count) in member.Mentions)
                 {
                     Add(super.Mentions, entity, count);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// A root's loose files are not a subject. Each one joins the folder region it shares most of
+    /// its knowledge with (at least three entities and 30% of its own); the rest group by shared
+    /// entities into regions named after what they are about ("Neovim &amp; kitty"). Files nothing is
+    /// known from yet wait in one region marked as awaiting understanding.
+    /// </summary>
+    private static void RehomeLooseFiles(SqliteConnection connection, GraphQuery query, Dictionary<string, RegionBuild> regions,
+        Dictionary<string, Dictionary<Guid, int>> looseMentions, HashSet<string> pendingSources, HashSet<Guid> glue)
+    {
+        foreach (RegionBuild loose in regions.Values.Where(region => region.Kind == "loose").ToList())
+        {
+            regions.Remove(loose.Key);
+            List<RegionBuild> folders = [.. regions.Values.Where(region => region.ParentKey is null && region.Kind != "loose")];
+            List<string> remaining = [];
+            foreach (string source in loose.Sources.Order(StringComparer.Ordinal))
+            {
+                Dictionary<Guid, int> known = looseMentions.GetValueOrDefault(source) ?? [];
+                RegionBuild? best = folders
+                    .Select(folder => (Folder: folder, Shared: known.Keys.Count(entity => !glue.Contains(entity) && folder.Mentions.ContainsKey(entity))))
+                    .Where(entry => entry.Shared >= 3 && entry.Shared * 10 >= known.Count * 3)
+                    .OrderByDescending(entry => entry.Shared).ThenBy(entry => entry.Folder.Key, StringComparer.Ordinal)
+                    .Select(entry => entry.Folder).FirstOrDefault();
+                if (best is null)
+                {
+                    remaining.Add(source);
+                    continue;
+                }
+
+                best.Sources.Add(source);
+                best.Pending += pendingSources.Contains(source) ? 1 : 0;
+                foreach ((Guid entity, int count) in known)
+                {
+                    Add(best.Mentions, entity, count);
+                }
+            }
+
+            Dictionary<string, string> parent = remaining.ToDictionary(source => source, source => source, StringComparer.Ordinal);
+            string Find(string key) => parent[key] == key ? key : parent[key] = Find(parent[key]);
+            Dictionary<Guid, string> firstSeen = [];
+            foreach (string source in remaining)
+            {
+                foreach (Guid entity in (looseMentions.GetValueOrDefault(source) ?? []).Keys.Where(entity => !glue.Contains(entity)))
+                {
+                    if (firstSeen.TryGetValue(entity, out string? other))
+                    {
+                        parent[Find(source)] = Find(other);
+                    }
+                    else
+                    {
+                        firstSeen[entity] = source;
+                    }
+                }
+            }
+
+            foreach (IGrouping<string, string> component in remaining.GroupBy(Find))
+            {
+                Dictionary<Guid, int> mentions = [];
+                foreach (string source in component)
+                {
+                    foreach ((Guid entity, int count) in looseMentions.GetValueOrDefault(source) ?? [])
+                    {
+                        Add(mentions, entity, count);
+                    }
+                }
+
+                // Name a theme after what is specific to it: entities known across other regions
+                // (a project's executable, say) describe the brain, not this theme.
+                List<Guid> top = [.. mentions.Where(entry => !glue.Contains(entry.Key))
+                    .OrderByDescending(entry => entry.Value / (1.0 + 3 * folders.Count(folder => folder.Mentions.ContainsKey(entry.Key))))
+                    .ThenBy(entry => entry.Key).Select(entry => entry.Key).Take(2)];
+                Dictionary<Guid, GraphNode> names = ReadNodes(connection, top, query);
+                string label = top.Count == 0 ? "Awaiting understanding"
+                    : string.Join(" & ", top.Where(names.ContainsKey).Select(id => names[id].Label));
+                string key = loose.Key + "~" + RegionPaths.Id(string.Join("|", component.Order(StringComparer.Ordinal)));
+                RegionBuild region = Region(regions, key, label.Length > 0 ? label : "Awaiting understanding", "theme");
+                foreach (string source in component)
+                {
+                    region.Sources.Add(source);
+                    region.Pending += pendingSources.Contains(source) ? 1 : 0;
+                }
+
+                foreach ((Guid entity, int count) in mentions)
+                {
+                    Add(region.Mentions, entity, count);
                 }
             }
         }

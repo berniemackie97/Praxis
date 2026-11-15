@@ -86,9 +86,53 @@ public static partial class RegionPaths
     public static string Label(string folder)
     {
         string trimmed = OrderingPrefix().Replace(folder, "");
-        string label = (trimmed.Length > 0 ? trimmed : folder).Replace('_', ' ').Trim();
-        return label.Length > 0 ? label : folder;
+        string label = (trimmed.Length > 0 ? trimmed : folder).Replace('_', ' ').Replace('-', ' ').Trim();
+        if (label.Length == 0)
+        {
+            return folder;
+        }
+
+        // "OpenConquerClient" reads "OpenConquer Client": only the last lower-to-upper hump splits,
+        // so product names keep their own casing.
+        if (!label.Contains(' ') && !label.Contains('.'))
+        {
+            Match hump = LastHump().Match(label);
+            if (hump.Success)
+            {
+                label = label[..(hump.Index + 1)] + " " + label[(hump.Index + 1)..];
+            }
+        }
+
+        // All-lowercase names read as titles: "bradenton resale" becomes "Bradenton Resale".
+        return label == label.ToLowerInvariant()
+            ? string.Join(' ', label.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(word => char.ToUpperInvariant(word[0]) + word[1..]))
+            : label;
     }
+
+    private static readonly HashSet<string> GenericFolders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "docs", "doc", "documentation", "tests", "test", "tools", "content", "archive", "scripts", "assets",
+        "samples", "examples", "ops", "build", "resources", "data", "misc", "other", "notes"
+    };
+
+    /// <summary>
+    /// A generic child folder name gains its parent's distinguishing word, so two repositories'
+    /// <c>docs</c> folders read "Client docs" and "Server docs" instead of colliding.
+    /// </summary>
+    public static string Qualify(string childLabel, string parentLabel)
+    {
+        if (!GenericFolders.Contains(childLabel))
+        {
+            return childLabel;
+        }
+
+        string word = parentLabel.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? parentLabel;
+        return word + " " + childLabel.ToLowerInvariant();
+    }
+
+    [GeneratedRegex(@"[a-z](?=[A-Z][a-z])", RegexOptions.RightToLeft)]
+    private static partial Regex LastHump();
 
     [GeneratedRegex(@"^\d{1,3}[_\- ]+(?=\D)")]
     private static partial Regex OrderingPrefix();

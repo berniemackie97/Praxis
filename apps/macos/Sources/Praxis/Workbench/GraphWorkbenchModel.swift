@@ -86,6 +86,8 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var regionNodes: [GraphNode] = []
     @Published private(set) var regionEdges: [GraphEdge] = []
     @Published private(set) var regionMembersLoading = false
+    /// Members already read per region at the current knowledge revision, so re-entering is instant.
+    private var regionMemberCache: [String: GraphPage] = [:]
     private var loadedRevision: Int64?
 
     /// Territories the whole-brain views draw, and the evidence links between them.
@@ -231,7 +233,9 @@ final class GraphWorkbenchModel: ObservableObject {
         loadConcepts(cursor: nil)
         knowledgeChanged = false
         loadedRevision = nil
-        closeRegion()
+        regionMemberCache = [:]
+        // A refresh keeps the owner where they are: an open territory reloads in place.
+        if let open = openRegionId { loadRegionMembers(open, keepShown: true) }
         loadRegionMap()
     }
 
@@ -253,21 +257,49 @@ final class GraphWorkbenchModel: ObservableObject {
             regionMapError = nil
             regionMap = map
             loadedRevision = map.revision
+            prefetchTerritories()
         }
     }
 
-    /// Enters a region: its best-connected members and the confirmed relations among them.
+    /// Reads the largest territories' members ahead of time so entering them needs no wait.
+    private func prefetchTerritories() {
+        for region in territories.prefix(4) where regionMemberCache[region.regionId] == nil {
+            var fields: [String: Any] = ["regionId": region.regionId, "limit": 100]
+            if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+            if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+            if includeSuggestions { fields["includeSuggestions"] = true }
+            let id = region.regionId
+            channel.send("graphRegionMembers", fields, as: GraphPage.self, scope: "graph-region-prefetch-\(id)",
+                         failed: { _ in }) { [weak self] page in
+                self?.regionMemberCache[id] = page
+            }
+        }
+    }
+
+    /// Enters a region: its best-connected members and the confirmed relations among them. The
+    /// region's hubs (already in the map) or cached members show at once, so the view never sits
+    /// empty while the full page loads.
     func openRegion(_ id: String) {
-        guard active, regionMap?.regions.contains(where: { $0.regionId == id }) == true else { return }
+        guard active, let region = regionMap?.regions.first(where: { $0.regionId == id }) else { return }
         clearInspection()
         focusId = nil
         selectedZoneType = nil
         selectedNodeId = nil
         selectedEdgeId = nil
         openRegionId = id
-        regionNodes = []
+        if let cached = regionMemberCache[id] {
+            regionNodes = cached.nodes
+            regionEdges = cached.edges
+            regionMembersLoading = false
+            return
+        }
+        regionNodes = region.hubs
         regionEdges = []
-        regionMembersLoading = true
+        loadRegionMembers(id, keepShown: true)
+    }
+
+    private func loadRegionMembers(_ id: String, keepShown: Bool) {
+        regionMembersLoading = !keepShown || regionNodes.isEmpty
         channel.reset(regionMembersScope)
         var fields: [String: Any] = ["regionId": id, "limit": 100]
         if !collectionId.isEmpty { fields["collectionId"] = collectionId }
@@ -278,7 +310,9 @@ final class GraphWorkbenchModel: ObservableObject {
                          self?.regionMembersLoading = false
                          self?.error = error
                      }) { [weak self] page in
-            guard let self, active, openRegionId == id else { return }
+            guard let self, active else { return }
+            regionMemberCache[id] = page
+            guard openRegionId == id else { return }
             regionMembersLoading = false
             regionNodes = page.nodes
             regionEdges = page.edges

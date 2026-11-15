@@ -92,6 +92,26 @@ enum NeuralNebulaLayout {
             let scaled = radius > 0 ? planar / radius * pow(radius / extent, 0.55) : planar
             return SIMD3<Float>(scaled.x * 230, scaled.y * 160, (position.z - mean.z) * 0.4)
         }
+        // Galaxies keep clear space between them: no arms overlap, whatever the evidence pull.
+        let reach = zones.map { min(34, 8 + log2(Float($0.count) + 1) * 2.6) * 1.9 + 16 }
+        for _ in 0..<160 {
+            var moved = false
+            for a in 0..<zones.count {
+                for b in (a + 1)..<zones.count {
+                    let delta = SIMD2<Float>(positions[b].x - positions[a].x, positions[b].y - positions[a].y)
+                    let distance = max(0.5, simd_length(delta))
+                    let spacing = reach[a] + reach[b]
+                    guard distance < spacing else { continue }
+                    let push = delta / distance * (spacing - distance) / 2
+                    positions[a].x -= push.x
+                    positions[a].y -= push.y
+                    positions[b].x += push.x
+                    positions[b].y += push.y
+                    moved = true
+                }
+            }
+            if !moved { break }
+        }
         return Dictionary(uniqueKeysWithValues: zones.enumerated().map { ($0.element.id, positions[$0.offset]) })
     }
 
