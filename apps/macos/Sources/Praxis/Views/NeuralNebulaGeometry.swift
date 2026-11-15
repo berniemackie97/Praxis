@@ -17,7 +17,7 @@ enum NeuralNebulaGeometry {
 
     static func build(overview: GraphZoneOverview, placement: NeuralNebulaPlacement,
                       nodes graphNodes: [GraphNode], edges graphEdges: [GraphEdge],
-                      selectedNodeId: String?, selectedEdgeId: String?, highContrast: Bool) -> Result {
+                      selectedNodeId: String?, selectedEdgeId: String? = nil, highContrast: Bool) -> Result {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
         let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
