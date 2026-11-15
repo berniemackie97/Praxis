@@ -6,6 +6,7 @@ final class GraphScene: SKScene {
     var didSelectNode: ((String?) -> Void)?
     var didSelectEdge: ((String?) -> Void)?
     var didSelectZone: ((String) -> Void)?
+    var didReturnToZones: (() -> Void)?
     var reduceMotion = false {
         didSet {
             atlasArtwork.reduceMotion = reduceMotion
@@ -29,6 +30,7 @@ final class GraphScene: SKScene {
     private var zoneMode = false
     private var zoneOverview: GraphZoneOverview?
     private var zoneFilterType: String?
+    private var regionType: String?
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let nodeHighlights = SKShapeNode()
     private let edgeArtwork = GraphEdgeArtwork()
@@ -57,9 +59,12 @@ final class GraphScene: SKScene {
 
     required init?(coder: NSCoder) { return nil }
 
-    func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
-        guard zoneMode || graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
+    func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?,
+                   regionType: String? = nil) {
+        guard zoneMode || graphNodes != nodes || graphEdges != edges ||
+              focusId != focus || self.regionType != regionType else { return }
         let fromZones = zoneMode
+        self.regionType = regionType
         zoneMode = false
         zoneArtwork.hide()
         let previousFocus = focusId
@@ -134,6 +139,7 @@ final class GraphScene: SKScene {
         zoneMode = true
         zoneOverview = summary
         zoneFilterType = type
+        regionType = nil
         graphNodes = []
         graphEdges = []
         nodesById.removeAll(keepingCapacity: true)
@@ -227,6 +233,10 @@ final class GraphScene: SKScene {
             updateVisibility()
         }
         lastToolbarZoom = zoom
+        if regionType != nil, focusId == nil,
+           viewCamera.xScale > atlasFitScale * 2.2 {
+            didReturnToZones?()
+        }
     }
 
     func setHighlights(_ ids: Set<String>) {
@@ -262,6 +272,8 @@ final class GraphScene: SKScene {
         if zoneMode && scale < atlasFitScale * 0.48, let before,
            let type = zoneArtwork.nearest(to: before, scale: scale) {
             didSelectZone?(type)
+        } else if regionType != nil && focusId == nil && scale > atlasFitScale * 2.2 {
+            didReturnToZones?()
         }
     }
 
