@@ -7,6 +7,7 @@ final class GraphZoneArtwork {
     private var hubs: [String: SKNode] = [:]
     private var overview: GraphZoneOverview?
     private var selectedType: String?
+    private var hoveredType: String?
     private var placement = GraphZonePlacement(positions: [:], radii: [:], bounds: .zero)
     private var dark = false
     private var highContrast = false
@@ -27,6 +28,7 @@ final class GraphZoneArtwork {
         root.removeAllChildren()
         hubs.removeAll(keepingCapacity: true)
         overview = nil
+        hoveredType = nil
         root.isHidden = true
     }
 
@@ -126,6 +128,14 @@ final class GraphZoneArtwork {
     }
 
     func hide() { root.isHidden = true }
+
+    func hover(_ type: String?) {
+        guard hoveredType != type else { return }
+        hoveredType = type
+        for (id, hub) in hubs {
+            hub.alpha = type == nil || type == id ? 1 : 0.75
+        }
+    }
 
     func type(at point: CGPoint, scale: CGFloat) -> String? {
         var best: (type: String, distance: CGFloat)?
