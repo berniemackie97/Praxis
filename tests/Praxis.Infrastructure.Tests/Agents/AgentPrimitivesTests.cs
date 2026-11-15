@@ -194,6 +194,7 @@ public sealed class AgentPrimitivesTests
         public void SaveBackend(AgentBackendProfile profile) => throw new NotSupportedException();
         public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null) => throw new NotSupportedException();
         public AgentConversation? Read(Guid conversationId) => throw new NotSupportedException();
+        public AgentConversation SetModel(Guid conversationId, string model, string? effort) => throw new NotSupportedException();
         public bool Rename(Guid conversationId, string title) => throw new NotSupportedException();
         public bool Delete(Guid conversationId) => throw new NotSupportedException();
         public IReadOnlyList<AgentConversation> List(int limit) => throw new NotSupportedException();

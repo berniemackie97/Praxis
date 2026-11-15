@@ -209,6 +209,129 @@ struct WorkerSessionTests {
 
     }
 
+    @Test("Chat keeps drafts, errors, replies and cancellation with the originating conversation")
+    func chatIsolation() async throws {
+        let executable = URL(fileURLWithPath: try #require(WorkerFixture.dotnetPath))
+        let worker = try #require(WorkerFixture.workerPath)
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("praxis-chat-\(UUID().uuidString)")
+        let catalog = fixture.appendingPathComponent("Catalog")
+        let inbox = fixture.appendingPathComponent("Inbox")
+        for folder in [fixture, catalog, inbox] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+        }
+        defer { try? FileManager.default.removeItem(at: fixture) }
+
+        // A real child process with deterministic CLI output; no provider sign-in or network.
+        let fake = fixture.appendingPathComponent("codex-fixture")
+        try """
+        #!/bin/sh
+        json=no
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --json) json=yes ;;
+            -m) shift; model="$1" ;;
+            -o) shift; answer="$1" ;;
+            model_reasoning_effort=*) effort="$1" ;;
+          esac
+          shift
+        done
+        [ "$json" = yes ] || exit 5
+        input=$(cat)
+        latest=$(printf '%s\\n' "$input" | grep '^Owner: ' | tail -1)
+        case "$latest" in
+          *"BLOCK A"*) sleep 60 ;;
+          *"FAIL B"*)
+            printf '%s\\n' '{"type":"turn.failed","error":{"message":"tool requires approval: fixture-private"}}'
+            exit 1 ;;
+          *)
+            printf 'PING %s %s\\n' "$model" "$effort" > "$answer"
+            printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":123,"cached_input_tokens":23,"output_tokens":7}}' ;;
+        esac
+        """.write(to: fake, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fake.path)
+
+        let session = WorkerSession()
+        let model = ChatWorkbenchModel(channel: WorkerChannel(worker: session))
+        var exited = false
+        try session.start(executable: executable,
+                          arguments: [worker, "--data-root", catalog.path, "--intake", inbox.path, "--stdio"],
+                          onDiagnostic: { _ in }, onExit: { _ in model.workerExited(); exited = true })
+        defer { session.stop() }
+
+        var connected = false
+        try session.send("agentBackendSave", fields: [
+            "backendId": "fixture-codex", "kind": "codex", "model": "fixture-v1",
+            "executable": fake.path, "enabled": true, "effort": "low"
+        ], as: ChangedFlag.self) { connected = $0.data?.changed == true }
+        try await waitFor("saved fixture connection") { connected }
+        model.refresh()
+        try await waitFor("loaded fixture connection") { model.backendChoice == "fixture-codex" }
+
+        model.draft = "BLOCK A"
+        model.send()
+        model.send() // A second click during the conversation-create handshake must do nothing.
+        try await waitFor("A running") { model.running }
+        let first = try #require(model.selected)
+        model.draft = "A unsent follow-up"
+        model.newConversation()
+        #expect(model.draft.isEmpty)
+        #expect(!model.running)
+
+        model.draft = "FAIL B"
+        model.send()
+        model.select(first)
+        #expect(model.draft == "A unsent follow-up")
+        try await waitFor("B created") { model.conversations.count == 2 }
+        let second = try #require(model.conversations.first { $0.id != first.id })
+        try await waitFor("B ended") { !model.hasWork(second.id) }
+        #expect(model.running)
+        #expect(model.error == nil)
+        model.select(second)
+        #expect(model.error == ChatFailureText.describe("model_approval_required"))
+        #expect(model.draft.isEmpty)
+
+        model.chooseModel("fixture-v2", defaultEffort: nil)
+        try await waitFor("B model saved") { model.selected?.model == "fixture-v2" && !model.busy }
+        model.chooseEffort("high")
+        try await waitFor("B effort saved") { model.selected?.effort == "high" && !model.busy }
+        #expect(model.selected?.backendId == first.backendId)
+        // Reload from the worker and confirm the same conversation retains its choices.
+        model.refresh()
+        try await waitFor("B transcript reloaded") { model.messages.contains { $0.content == "FAIL B" } }
+        #expect(model.activeModel == "fixture-v2")
+        #expect(model.activeEffort == "high")
+
+        model.newConversation()
+        #expect(model.error == nil)
+        model.draft = "ANSWER C"
+        model.send()
+        try await waitFor("C replied while A still runs") { model.latestReply?.text.hasPrefix("PING fixture-v1") == true }
+        #expect(model.latestReply?.inputTokens == 123)
+        #expect(model.latestReply?.outputTokens == 7)
+
+        model.select(first)
+        #expect(model.running)
+        #expect(model.draft == "A unsent follow-up")
+        #expect(model.latestReply == nil)
+        model.cancel()
+        try await waitFor("A canceled") { !model.running }
+        #expect(model.notice == "Stopped.")
+        model.select(second)
+        #expect(model.notice == nil)
+        #expect(model.selected?.id == second.id)
+        #expect(model.activeModel == "fixture-v2")
+        model.draft = "VERIFY B CHOICE"
+        // B's history includes FAIL B, so the fixture treats only the last owner request as the trigger.
+        model.send()
+        try await waitFor("B dispatched with edited model and effort") {
+            model.latestReply?.text == #"PING fixture-v2 model_reasoning_effort="high""#
+        }
+        session.stop()
+        try await waitFor("fixture worker exited") { exited }
+    }
+
     private func waitFor(_ event: String, condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !condition() {

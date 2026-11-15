@@ -20,6 +20,7 @@ public sealed class InferenceException(InferenceFailure failure, string message,
         InferenceFailure.Truncated => "model_truncated",
         InferenceFailure.QuotaExhausted => "model_quota_exhausted",
         InferenceFailure.Unauthenticated => "model_unauthenticated",
+        InferenceFailure.ApprovalRequired => "model_approval_required",
         _ => "model_invalid_response"
     };
 }

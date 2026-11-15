@@ -45,6 +45,10 @@ The local foundation now contains a version-controlled native Xcode workbench, o
 
 After the L0 gate, the #170 product success test must independently demonstrate supported technical synthesis, source-linked in-chat video playback and reconciled editable monthly budgeting, along with approved tasks and permissioned knowledge projections. Existing read-only cue and CSV tools are not completion of those flows.
 
+### Chat recovery gate
+
+[#431](https://github.com/berniemackie97/Praxis/issues/431) is the P0 Chat gate under [#436](https://github.com/berniemackie97/Praxis/issues/436). Review [#450](https://github.com/berniemackie97/Praxis/pull/450) as the combined isolation, existing-chat controls, and CLI context/usage slice. Require the [owner-Mac provider smoke](delivery/chat-verification.md) and green CI before advancing. Then use the measured runs and source-grounding cases to prioritize Ollama response quality, model-specific budgets and the remaining history/presentation work in #432/#433. Streaming and cross-provider handoffs follow stable send, stop, and disclosure behavior.
+
 ### Local foundation checkpoint — not the finished MVP
 
 After #130 verification, an owner can open Praxis directly, explicitly add files/folders with mixed supported and unsupported formats, see provenance and processing errors, search supported extracted content, inspect source originals, retry after a restart, rebuild the index and verify restoration. Obsidian, cloud storage, an external AI model and a second device are **not requirements** for this local milestone.

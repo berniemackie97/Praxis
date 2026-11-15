@@ -1,3 +1,4 @@
+using Praxis.Application.Agents.Tools;
 using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 
@@ -14,9 +15,13 @@ public sealed class AgentRuntime(
     IAgentConversationRepository conversations, AgentToolRegistry registry, IAgentBackendFactory backends, PolicyService policy,
     DisclosureGate gate, TimeProvider clock)
 {
+    private const int MaximumCliHistoryCharacters = 24_000;
+    private const int MaximumCliToolCalls = 12;
+
     public async Task<AgentReply> RunAsync(Guid conversationId, string userText, Action<string, string?, string?> report, CancellationToken cancellationToken,
         AgentRunLimits? limits = null)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         AgentRunLimits bounds = limits ?? new AgentRunLimits();
         if (string.IsNullOrWhiteSpace(userText) || userText.Length > 32_000)
         {
@@ -32,13 +37,17 @@ public sealed class AgentRuntime(
         string permission = policy.Current().ToolPermission;
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose);
-        string system = AgentSystemPrompt.Build(clock.GetUtcNow(), permission, conversations.ReadMemories(AgentMemory.Active, null, 12));
+        string system = AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
+            profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : []);
         conversations.Append(conversationId, AgentMessage.FromUser(userText));
 
         RunState state = new(new CitationLedger());
+        AgentToolDefinition[] definitions = registry.Definitions
+            .Where(tool => profile.IsLocal || tool.Name != MemoryRecallTool.ToolName).ToArray();
         if (backends.CreateSessionBackend(profile) is { } session)
         {
-            AgentContextWindow window = AgentContextWindow.ForCli(Transcript(conversationId), bounds.CompactAfterCharacters);
+            AgentContextWindow window = AgentContextWindow.ForCli(Transcript(conversationId),
+                Math.Min(bounds.CompactAfterCharacters, MaximumCliHistoryCharacters));
             state.OmittedMessages = window.OmittedMessages;
             if (window.OmittedMessages > 0)
             {
@@ -48,8 +57,26 @@ public sealed class AgentRuntime(
             string sessionSystem = window.OmittedMessages == 0 ? system : system +
                 "\n\nSome earlier conversation messages were omitted to fit this request. Do not assume their contents or invent earlier decisions; ask the owner for missing context when necessary.";
             report("thinking", null, profile.BackendId);
-            AgentTurn turn = await session.RunAsync(sessionSystem, window.Messages, registry.Definitions,
-                (call, token) => InvokeAsync(call, context, state, report, token), cancellationToken);
+            AgentToolDefinition[] permitted = definitions.Where(tool => ToolTiers.Permits(permission, tool.Tier)).ToArray();
+            int toolLimit = Math.Min(bounds.MaximumToolCalls, MaximumCliToolCalls);
+            SemaphoreSlim toolGate = new(1);
+            async Task<string> InvokeSessionTool(AgentToolCall call, CancellationToken token)
+            {
+                await toolGate.WaitAsync(token);
+                try
+                {
+                    return state.ToolCalls.Count >= toolLimit
+                        ? """{"error":"tool_budget_exhausted","message":"Answer with what you have."}"""
+                        : await InvokeAsync(call, context, state, report, token);
+                }
+                finally
+                {
+                    toolGate.Release();
+                }
+            }
+
+            AgentTurn turn = await session.RunAsync(sessionSystem, window.Messages, permitted, InvokeSessionTool, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
             conversations.Append(conversationId, AgentMessage.FromAssistant(turn.Text, []));
@@ -68,9 +95,10 @@ public sealed class AgentRuntime(
             }
 
             report("thinking", null, null);
-            AgentTurn turn = await backend.CompleteAsync(system, Transcript(conversationId), registry.Definitions, cancellationToken);
+            AgentTurn turn = await backend.CompleteAsync(system, Transcript(conversationId), definitions, cancellationToken);
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
+            cancellationToken.ThrowIfCancellationRequested();
             conversations.Append(conversationId, AgentMessage.FromAssistant(turn.Text, turn.ToolCalls));
             if (turn.ToolCalls.Count == 0)
             {

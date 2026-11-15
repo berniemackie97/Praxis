@@ -497,19 +497,23 @@ public sealed partial class AgentRuntimeTests : IDisposable
 
         public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools, CancellationToken cancellationToken)
         {
-            SystemPrompts.Add(systemPrompt);
+            lock (SystemPrompts)
+            {
+                SystemPrompts.Add(systemPrompt);
+            }
             Assert.Contains(tools, tool => tool.Name == "data_query");
             return turns.Count > 1 ? turns.Dequeue()(transcript, cancellationToken) : turns.Peek()(transcript, cancellationToken);
         }
     }
 
     private sealed class SessionBackend(Func<Func<AgentToolCall, CancellationToken, Task<string>>, Task<AgentTurn>> run,
-        Action<IReadOnlyList<AgentMessage>>? inspect = null) : ISessionAgentBackend
+        Action<IReadOnlyList<AgentMessage>>? inspect = null, Action<string, IReadOnlyList<AgentToolDefinition>>? inspectRequest = null) : ISessionAgentBackend
     {
         public Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
             Func<AgentToolCall, CancellationToken, Task<string>> invoke, CancellationToken cancellationToken)
         {
             inspect?.Invoke(transcript);
+            inspectRequest?.Invoke(systemPrompt, tools);
             return run(invoke);
         }
     }

@@ -297,6 +297,7 @@ final class WorkbenchModel: ObservableObject {
     }
 
     private func workerExited(error: String?) {
+        chat.workerExited()
         running = false
         watchedInboxes = []
         intakeRoots = []

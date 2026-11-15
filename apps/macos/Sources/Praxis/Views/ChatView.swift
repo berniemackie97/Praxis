@@ -8,18 +8,18 @@ struct ChatView: View {
     let openAgentSettings: () -> Void
 
     private var modelOptions: [ModelChoice] {
-        let available = setup.models(for: model.backendChoice, installed: setup.machine?.installed ?? [])
-        if !model.modelChoice.isEmpty && !available.contains(where: { $0.id == model.modelChoice }) {
-            return available + [ModelChoice(id: model.modelChoice, label: model.modelChoice, efforts: [], defaultEffort: nil)]
+        let available = setup.models(for: model.activeBackendId, installed: setup.machine?.installed ?? [])
+        if !model.activeModel.isEmpty && !available.contains(where: { $0.id == model.activeModel }) {
+            return available + [ModelChoice(id: model.activeModel, label: model.activeModel, efforts: [], defaultEffort: nil)]
         }
         return available
     }
 
     private var effortOptions: [String] {
-        guard let backend = model.backends.first(where: { $0.backendId == model.backendChoice }),
+        guard let backend = model.activeBackend,
               backend.kind == "codex" || backend.kind == "claude_code",
-              let selected = modelOptions.first(where: { $0.id == model.modelChoice }) else { return [] }
-        return Array(Set(selected.efforts + (model.effortChoice.isEmpty ? [] : [model.effortChoice]))).sorted()
+              let selected = modelOptions.first(where: { $0.id == model.activeModel }) else { return [] }
+        return Array(Set(selected.efforts + (model.activeEffort.isEmpty ? [] : [model.activeEffort]))).sorted()
     }
 
     var body: some View {
@@ -27,7 +27,7 @@ struct ChatView: View {
             if model.backends.isEmpty && model.conversations.isEmpty {
                 EmptyState(systemImage: "cpu",
                            title: "Connect a model to start",
-                           message: "Praxis can chat through a local model, an API key, or your Claude Code or Codex plan. Remote models only see what your disclosure policy grants.",
+                           message: "Praxis can chat through a local model, an API key, or your Claude Code or Codex plan. Messages go to the chosen model. Your disclosure policy controls source access.",
                            actionTitle: "Set Up Models…", action: openAgentSettings)
             } else {
                 conversations
@@ -35,40 +35,6 @@ struct ChatView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if model.selectedId == nil && !model.backends.isEmpty {
-                    Picker("Connection", selection: Binding(
-                        get: { model.backendChoice },
-                        set: { model.chooseBackend($0) })) {
-                        ForEach(model.backends.filter(\.enabled)) { backend in
-                            Text("\(backend.backendId) · \(backend.kindLabel)").tag(backend.backendId)
-                        }
-                    }
-                    .help("Connection for this new conversation. Source disclosure still applies.")
-                    if !modelOptions.isEmpty {
-                        Picker("Model", selection: Binding(
-                            get: { model.modelChoice },
-                            set: { choice in
-                                let selected = modelOptions.first(where: { $0.id == choice })
-                                model.chooseModel(choice, defaultEffort: selected?.defaultEffort)
-                            })) {
-                            ForEach(modelOptions) { option in
-                                Text(option.label).tag(option.id)
-                            }
-                        }
-                    }
-                    if !effortOptions.isEmpty {
-                        Picker("Effort", selection: Binding(
-                            get: { model.effortChoice },
-                            set: { model.chooseEffort($0) })) {
-                            Text("Provider default").tag("")
-                            ForEach(effortOptions, id: \.self) { effort in Text(effort.capitalized).tag(effort) }
-                        }
-                    }
-                } else if let conversation = model.selected {
-                    StatusPill(text: [conversation.backendId, conversation.model ?? "legacy default", conversation.effort]
-                        .compactMap { $0 }.joined(separator: " · "), tone: .neutral, systemImage: "cpu")
-                        .help("This conversation retains its model and reasoning effort when connection defaults change.")
-                }
                 Button { model.newConversation() } label: { Label("New Conversation", systemImage: "square.and.pencil") }
                     .help("New conversation (⌘N)")
             }
@@ -79,6 +45,45 @@ struct ChatView: View {
         }
     }
 
+    private var configuration: some View {
+        HStack(spacing: Spacing.m) {
+            if model.selectedId == nil {
+                Picker("Connection", selection: Binding(
+                    get: { model.backendChoice }, set: { model.chooseBackend($0) })) {
+                    ForEach(model.backends.filter(\.enabled)) { backend in
+                        Text(backend.backendId).tag(backend.backendId)
+                    }
+                }
+            } else if let conversation = model.selected {
+                Label(conversation.backendId, systemImage: "cpu")
+                    .foregroundStyle(.secondary).lineLimit(1)
+                    .help("The connection and its disclosure rules stay fixed for this conversation.")
+            }
+            if !modelOptions.isEmpty {
+                Picker("Model", selection: Binding(
+                    get: { model.activeModel },
+                    set: { choice in
+                        model.chooseModel(choice, defaultEffort: modelOptions.first { $0.id == choice }?.defaultEffort)
+                    })) {
+                    ForEach(modelOptions) { Text($0.label).tag($0.id) }
+                }
+            }
+            if !effortOptions.isEmpty {
+                Picker("Effort", selection: Binding(get: { model.activeEffort }, set: { model.chooseEffort($0) })) {
+                    Text("Default").tag("")
+                    ForEach(effortOptions, id: \.self) { Text($0.capitalized).tag($0) }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .controlSize(.small)
+        .disabled(model.busy || model.activeBackend?.enabled == false)
+        .help("Model and effort changes take effect on the next message.")
+        .padding(.horizontal, Spacing.l)
+        .padding(.vertical, Spacing.s)
+    }
+
     private var conversations: some View {
         MasterDetail(listWidth: (200, 240, 340)) {
             ConversationList(model: model)
@@ -87,9 +92,11 @@ struct ChatView: View {
                 if model.backends.isEmpty {
                     EmptyState(systemImage: "cpu",
                                title: "Connect a model to start",
-                               message: "Praxis can chat through a local model, an API key, or your Claude Code or Codex plan. Remote models only see what your disclosure policy grants.",
+                               message: "Praxis can chat through a local model, an API key, or your Claude Code or Codex plan. Messages go to the chosen model. Your disclosure policy controls source access.",
                                actionTitle: "Set Up Models…", action: openAgentSettings)
                 } else {
+                    configuration
+                    Divider()
                     Transcript(model: model, openAgentSettings: openAgentSettings)
                     Composer(model: model)
                 }
@@ -115,7 +122,13 @@ private struct ConversationList: View {
             })) {
             ForEach(model.conversations) { conversation in
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
-                    Text(conversation.title).font(.rowTitle).lineLimit(2)
+                    HStack {
+                        Text(conversation.title).font(.rowTitle).lineLimit(2)
+                        if model.hasWork(conversation.id) {
+                            ProgressView().controlSize(.mini)
+                                .accessibilityLabel("Conversation in progress")
+                        }
+                    }
                     Text("\(conversation.backendId) · \(conversation.model ?? "default") · \(DateText.relative(conversation.updatedUtc))")
                         .font(.meta).foregroundStyle(.secondary).lineLimit(1)
                 }
@@ -133,6 +146,7 @@ private struct ConversationList: View {
                     } label: {
                         Label("Delete…", systemImage: "trash")
                     }
+                    .disabled(model.hasWork(conversation.id))
                 }
             }
         }
@@ -155,6 +169,11 @@ private struct ConversationList: View {
             }
         } message: {
             Text("The conversation and its tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let error = model.listError {
+                FeedbackLine(error: error, notice: nil).padding(Spacing.s)
+            }
         }
         .overlay {
             if model.conversations.isEmpty {
@@ -183,7 +202,7 @@ private struct Transcript: View {
                     } else if let reply = model.latestReply, !model.transcript.isEmpty {
                         ReplyDetails(reply: reply, model: model, openAgentSettings: openAgentSettings)
                     }
-                    FeedbackLine(error: model.error, notice: model.notice)
+                    FeedbackLine(error: model.error, notice: model.notice).id("chat-feedback")
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, Spacing.xl)
@@ -197,6 +216,9 @@ private struct Transcript: View {
             }
             .onChange(of: model.running) { running in
                 if running { withAnimation { proxy.scrollTo("thinking", anchor: .bottom) } }
+            }
+            .onChange(of: model.error) { error in
+                if error != nil { proxy.scrollTo("chat-feedback", anchor: .bottom) }
             }
         }
     }
@@ -219,14 +241,13 @@ private struct Welcome: View {
                 .foregroundStyle(Color.accentColor)
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text("Ask anything about what you've captured").font(.title2.weight(.semibold))
-                Text("Praxis answers from your documents, notes and statements, cites every source, and checks figures against the data before you see them.")
+                Text("Ask a question or start with one of these prompts.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: Spacing.m)], spacing: Spacing.m) {
                 ForEach(Self.prompts, id: \.1) { symbol, prompt in
                     Button {
-                        model.draft = prompt
-                        if model.canSend { model.send() }
+                        _ = model.prepareDraft(prompt)
                     } label: {
                         HStack(spacing: Spacing.s) {
                             Image(systemName: symbol).foregroundStyle(Color.accentColor).frame(width: 18)
@@ -288,7 +309,9 @@ private struct Thinking: View {
     var body: some View {
         HStack(spacing: Spacing.s) {
             ProgressView().controlSize(.small)
-            Text(ChatActivity.progress(model.events.last)).font(.callout).foregroundStyle(.secondary)
+            Text(model.statusPaused ? "Status paused" : ChatActivity.progress(model.events.last))
+                .font(.callout).foregroundStyle(.secondary)
+            if model.statusPaused { Button("Refresh Status") { model.refresh() } }
             Spacer()
             Button("Stop", role: .cancel) { model.cancel() }
                 .controlSize(.small)
@@ -302,6 +325,7 @@ private struct ReplyDetails: View {
     let reply: AgentReply
     @ObservedObject var model: ChatWorkbenchModel
     let openAgentSettings: () -> Void
+    @State private var showingSources = false
 
     /// Cited clips, played inline; the first few are shown as players, all stay listed as chips.
     private var clips: [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
@@ -312,16 +336,26 @@ private struct ReplyDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
-            ForEach(clips, id: \.citation.id) { clip in
-                MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
-            }
             if !reply.citations.isEmpty {
-                FlowLayout(spacing: Spacing.xs) {
-                    ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, citation in
-                        Chip(text: chipText(index, citation), systemImage: SourceSymbol.of(citation.sourceName))
-                            .help("[\(index + 1)] \(citation.sourceName) · \(citation.locator)")
+                DisclosureGroup(Count.label(reply.citations.count, "citation"), isExpanded: $showingSources) {
+                    VStack(alignment: .leading, spacing: Spacing.s) {
+                        ForEach(clips, id: \.citation.id) { clip in
+                            MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
+                        }
+                        ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, citation in
+                            Label(chipText(index, citation), systemImage: SourceSymbol.of(citation.sourceName))
+                                .lineLimit(1)
+                                .help("[\(index + 1)] \(citation.sourceName) · \(citation.locator)")
+                        }
                     }
+                    .padding(.top, Spacing.s)
                 }
+                .font(.callout)
+            }
+            if reply.inputTokens > 0 || reply.outputTokens > 0 {
+                Text("Reported tokens: \(reply.inputTokens.formatted()) in · \(reply.outputTokens.formatted()) out")
+                    .font(.meta).foregroundStyle(.secondary)
+                    .help("Model-reported token counts. These are not a subscription balance or charge.")
             }
             if !reply.check.clean {
                 Banner(text: AnswerCheckText.describe(reply.check), tone: .warning, systemImage: "exclamationmark.triangle.fill")
@@ -380,7 +414,9 @@ private struct Composer: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
                 .strokeBorder(focused ? Color.accentColor.opacity(0.6) : Surface.stroke))
             HStack {
-                Text(model.selected.map { "Continuing with \($0.backendId)" } ?? "Answers cite your sources. Figures are checked against tool results.")
+                if model.activeBackend?.isLocal == false {
+                    Text("Messages go to \(model.activeBackendId). Source access follows your disclosure policy.")
+                }
                 Spacer()
                 if tooLong {
                     Text("\(model.draft.count) / \(ChatWorkbenchModel.maximumMessageCharacters)").foregroundStyle(.orange)

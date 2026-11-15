@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Mcp;
+using Praxis.Application.Inference;
 using Praxis.Domain.Agents;
 using Praxis.Infrastructure.Inference.Subscription;
 
@@ -13,6 +14,12 @@ namespace Praxis.Infrastructure.Agents;
 public sealed class CodexSessionBackend(string executable, string model, AgentRelayCommand relay, string socketParent, string? effort = null)
     : ISessionAgentBackend
 {
+    // These reads are either source-disclosure checked or purely computational.
+    private static readonly HashSet<string> NoninteractiveReads = new(StringComparer.Ordinal)
+    {
+        "knowledge_search", "knowledge_open", "data_describe", "data_query", "compute_evaluate"
+    };
+
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(15);
 
     public async Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
@@ -24,15 +31,86 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
         string arguments = JsonSerializer.Serialize(relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray());
         CliResult result = await CliProcess.RunAsync(executable,
         [
-            "exec", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
+            "exec", "--json", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
+            "--disable", "shell_tool", "--disable", "view_image", "--disable", "apps", "--disable", "multi_agent",
+            "-c", "web_search=\"disabled\"",
             "-c", $"mcp_servers.praxis.command={JsonSerializer.Serialize(relay.Executable)}", "-c", $"mcp_servers.praxis.args={arguments}",
+            // Codex cannot prompt in exec. Only Praxis read tools get this override, and every call
+            // still crosses Praxis's permission and disclosure checks. Never approve shell or writes.
+            .. tools.Where(tool => tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)).SelectMany(tool => new[]
+            {
+                "-c", $"mcp_servers.praxis.tools.{JsonSerializer.Serialize(tool.Name)}.approval_mode=\"approve\""
+            }),
             .. (model == "default" ? Array.Empty<string>() : ["-m", model]), .. (effort is null ? Array.Empty<string>() : ["-c", $"model_reasoning_effort=\"{effort}\""]), "-o", answer, "-"
         ], systemPrompt + "\n\n" + CliTranscript.Render(transcript), workspace.Path, Deadline, cancellationToken);
-        if (result.ExitCode != 0 || !File.Exists(answer))
+        var (input, output, failure) = ReadEvents(result.Stdout);
+        if (result.ExitCode != 0 || failure is not null || !File.Exists(answer))
         {
-            throw SubscriptionCli.Classify(result.Stderr, "Codex did not produce an answer.");
+            throw ClassifyFailure(failure, result.Stderr);
         }
 
-        return new AgentTurn((await File.ReadAllTextAsync(answer, cancellationToken)).Trim(), [], 0, 0);
+        string text = (await File.ReadAllTextAsync(answer, cancellationToken)).Trim();
+        if (text.Length == 0)
+        {
+            throw new InferenceException(InferenceFailure.InvalidResponse, "Codex returned an empty answer.");
+        }
+
+        return new AgentTurn(text, [], input, output);
+    }
+
+    internal static (int Input, int Output, string? Failure) ReadEvents(string stdout)
+    {
+        int input = 0;
+        int output = 0;
+        string? failure = null;
+        using StringReader lines = new(stdout);
+        while (lines.ReadLine() is { } line)
+        {
+            try
+            {
+                using JsonDocument parsed = JsonDocument.Parse(line);
+                JsonElement root = parsed.RootElement;
+                if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("type", out JsonElement type) ||
+                    type.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                if (type.GetString() == "turn.completed" && root.TryGetProperty("usage", out JsonElement usage))
+                {
+                    input = Tokens(usage, "input_tokens");
+                    output = Tokens(usage, "output_tokens");
+                }
+                else if (type.GetString() == "turn.failed")
+                {
+                    failure = root.TryGetProperty("error", out JsonElement error) && error.ValueKind == JsonValueKind.Object &&
+                        error.TryGetProperty("message", out JsonElement message) && message.ValueKind == JsonValueKind.String
+                        ? message.GetString() : "";
+                }
+            }
+            catch (JsonException)
+            {
+                // Unknown telemetry must not invalidate an otherwise successful answer.
+            }
+        }
+
+        return (input, output, failure);
+    }
+
+    private static int Tokens(JsonElement usage, string name) =>
+        usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty(name, out JsonElement value) &&
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int tokens) ? Math.Max(0, tokens) : 0;
+
+    internal static InferenceException ClassifyFailure(string? failure, string stderr)
+    {
+        string diagnostic = failure + "\n" + stderr;
+        if (diagnostic.Contains("approval required", StringComparison.OrdinalIgnoreCase) ||
+            diagnostic.Contains("approval is required", StringComparison.OrdinalIgnoreCase) ||
+            diagnostic.Contains("requires approval", StringComparison.OrdinalIgnoreCase))
+        {
+            return new InferenceException(InferenceFailure.ApprovalRequired, "Codex required interactive approval.");
+        }
+
+        return SubscriptionCli.Classify(diagnostic, "Codex did not produce an answer.");
     }
 }

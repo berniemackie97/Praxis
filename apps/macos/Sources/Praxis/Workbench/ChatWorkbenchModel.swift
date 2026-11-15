@@ -10,43 +10,83 @@ final class ChatWorkbenchModel: ObservableObject {
     static let maximumMessageCharacters = 12_000
 
     private let channel: WorkerChannel
+    private struct ConversationState {
+        var draft = ""
+        var busy = false
+        var runId: String?
+        var polling = false
+        var pollFailures = 0
+        var events: [AgentRunEvent] = []
+        var reply: AgentReply?
+        var feedback: Feedback?
+    }
+
+    private enum Feedback {
+        case error(String)
+        case notice(String)
+    }
+
+    // The empty key is the unsent new-chat composer. Saved conversations always use their UUID.
+    @Published private var states: [String: ConversationState] = [:]
     private var pollTask: Task<Void, Never>?
-    private var pollInFlight = false
 
     @Published private(set) var backends: [AgentBackendProfile] = []
     @Published private(set) var conversations: [AgentConversation] = []
     @Published private(set) var selectedId: String?
     @Published private(set) var messages: [AgentMessage] = []
-    @Published private(set) var runId: String?
-    @Published private(set) var events: [AgentRunEvent] = []
-    /// The latest finished reply per conversation, kept for its citations and answer check.
-    @Published private(set) var replies: [String: AgentReply] = [:]
-    @Published var draft = ""
+    @Published private(set) var listError: String?
     @Published private(set) var backendChoice = ""
     @Published private(set) var modelChoice = ""
     @Published private(set) var effortChoice = ""
     private var customModelChoice = false
-    @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
-    @Published private(set) var notice: String? { didSet { if notice != nil { error = nil } } }
 
     init(channel: WorkerChannel) {
         self.channel = channel
     }
 
+    private var key: String { selectedId ?? "" }
+    private var current: ConversationState { states[key] ?? ConversationState() }
     var selected: AgentConversation? { conversations.first { $0.conversationId == selectedId } }
-    var running: Bool { runId != nil }
-    var latestReply: AgentReply? { selectedId.flatMap { replies[$0] } }
+    var running: Bool { current.runId != nil }
+    var busy: Bool { current.busy || running }
+    var events: [AgentRunEvent] { current.events }
+    var latestReply: AgentReply? { current.reply }
+    var error: String? {
+        if case .error(let text) = current.feedback { return text }
+        return nil
+    }
+    var notice: String? {
+        if case .notice(let text) = current.feedback { return text }
+        return nil
+    }
+    var draft: String {
+        get { current.draft }
+        set { states[key, default: ConversationState()].draft = newValue }
+    }
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !running && !text.isEmpty && draft.count <= Self.maximumMessageCharacters &&
-            (selectedId != nil || (!backendChoice.isEmpty && !modelChoice.isEmpty))
+        return !busy && !text.isEmpty && draft.count <= Self.maximumMessageCharacters &&
+            activeBackend?.enabled == true && !activeModel.isEmpty
     }
+
+    func hasWork(_ id: String) -> Bool { states[id]?.busy == true || states[id]?.runId != nil }
 
     /// The transcript as the owner reads it: their messages and the agent's answers; tool traffic is summarized.
     var transcript: [ChatLine] { ChatLine.lines(messages) }
 
+    var activeBackendId: String { selected?.backendId ?? backendChoice }
+    var activeBackend: AgentBackendProfile? { backends.first { $0.backendId == activeBackendId } }
+    var activeModel: String {
+        selectedId == nil ? modelChoice : selected?.model ?? activeBackend?.model ?? ""
+    }
+    var activeEffort: String {
+        if let selected { return (selected.model == nil ? activeBackend?.effort : selected.effort) ?? "" }
+        return effortChoice
+    }
+
     func chooseBackend(_ backendId: String) {
-        guard let profile = backends.first(where: { $0.backendId == backendId && $0.enabled }) else { return }
+        guard selectedId == nil, !busy,
+              let profile = backends.first(where: { $0.backendId == backendId && $0.enabled }) else { return }
         backendChoice = backendId
         modelChoice = profile.model
         effortChoice = profile.effort ?? ""
@@ -54,15 +94,32 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     func chooseModel(_ modelId: String, defaultEffort: String?) {
-        guard !modelId.isEmpty else { return }
-        modelChoice = modelId
-        effortChoice = defaultEffort ?? ""
-        customModelChoice = true
+        setConfiguration(modelId, effort: defaultEffort ?? "")
     }
 
     func chooseEffort(_ effort: String) {
-        effortChoice = effort
-        customModelChoice = true
+        setConfiguration(activeModel, effort: effort)
+    }
+
+    private func setConfiguration(_ model: String, effort: String) {
+        guard !busy, !model.isEmpty, activeBackend?.enabled == true else { return }
+        guard let id = selectedId else {
+            modelChoice = model
+            effortChoice = effort
+            customModelChoice = true
+            return
+        }
+
+        states[id, default: ConversationState()].busy = true
+        states[id]?.feedback = nil
+        var fields: [String: Any] = ["conversationId": id, "model": model]
+        if !effort.isEmpty { fields["effort"] = effort }
+        channel.send("agentConversationModel", fields, as: AgentConversation.self, failed: { [weak self] message in
+            self?.failOperation(id, message)
+        }) { [weak self] conversation in
+            self?.states[id]?.busy = false
+            self?.updateConversation(conversation)
+        }
     }
 
     /// Asks the worker how to play a cited media source; the reply arrives on the main actor.
@@ -75,82 +132,102 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     func refresh() {
-        channel.send("agentBackends", as: AgentBackendsData.self, failed: report) { [weak self] data in
+        channel.reset("chatBackends")
+        channel.send("agentBackends", as: AgentBackendsData.self, scope: "chatBackends", failed: reportListError) { [weak self] data in
             guard let self else { return }
             let previous = backends.first(where: { $0.backendId == backendChoice })
             backends = data.backends
             if backendChoice.isEmpty || !data.backends.contains(where: { $0.backendId == backendChoice && $0.enabled }) {
                 let preferred = UserDefaults.standard.string(forKey: "defaultChatBackend") ?? ""
-                let selected = data.backends.first { $0.backendId == preferred && $0.enabled }
+                let connection = data.backends.first { $0.backendId == preferred && $0.enabled }
                     ?? data.backends.first(where: \.enabled)
-                if let selected { chooseBackend(selected.backendId) }
+                backendChoice = connection?.backendId ?? ""
+                modelChoice = connection?.model ?? ""
+                effortChoice = connection?.effort ?? ""
+                customModelChoice = false
             } else if !customModelChoice, let changed = data.backends.first(where: { $0.backendId == backendChoice }),
                       previous?.model != changed.model || previous?.effort != changed.effort {
                 modelChoice = changed.model
                 effortChoice = changed.effort ?? ""
             }
         }
-        channel.send("agentConversations", ["limit": 100], as: AgentConversationsData.self, failed: report) { [weak self] data in
+        refreshConversations()
+        loadMessages()
+        for id in states.keys where states[id]?.runId != nil { states[id]?.pollFailures = 0 }
+        ensurePolling()
+    }
+
+    private func refreshConversations() {
+        channel.reset("chatList")
+        channel.send("agentConversations", ["limit": 100], as: AgentConversationsData.self, scope: "chatList",
+                     failed: reportListError) { [weak self] data in
             self?.conversations = data.conversations
+            self?.listError = nil
+        }
+    }
+
+    private func updateConversation(_ conversation: AgentConversation) {
+        channel.reset("chatList")
+        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+            conversations[index] = conversation
+        } else {
+            conversations.insert(conversation, at: 0)
         }
     }
 
     func select(_ conversation: AgentConversation) {
-        guard selectedId != conversation.conversationId else { return }
-        selectedId = conversation.conversationId
-        channel.reset("conversation")
+        guard selectedId != conversation.id else { return }
+        selectedId = conversation.id
         messages = []
         loadMessages()
     }
 
     func newConversation() {
-        if !backendChoice.isEmpty { chooseBackend(backendChoice) }
         selectedId = nil
         messages = []
-        events = []
         channel.reset("conversation")
     }
 
     func rename(_ conversation: AgentConversation, to title: String) {
+        let id = conversation.id
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (1...200).contains(normalized.count) else {
-            error = "Use a conversation title of 1–200 characters."
+            feedback(.error("Use a conversation title of 1–200 characters."), for: id)
             return
         }
-        channel.send("agentConversationRename", ["conversationId": conversation.conversationId, "title": normalized],
-                     as: ChangedFlag.self, failed: report) { [weak self] result in
-            if result.changed { self?.refresh() }
-            else { self?.error = "This conversation no longer exists." }
+        channel.send("agentConversationRename", ["conversationId": id, "title": normalized],
+                     as: ChangedFlag.self, failed: { [weak self] in self?.feedback(.error($0), for: id) }) { [weak self] result in
+            if result.changed { self?.refreshConversations() }
+            else { self?.feedback(.error("This conversation no longer exists."), for: id) }
         }
     }
 
     func delete(_ conversation: AgentConversation) {
-        channel.send("agentConversationDelete", ["conversationId": conversation.conversationId],
-                     as: ChangedFlag.self, failed: report) { [weak self] result in
+        let id = conversation.id
+        guard !hasWork(id) else { return }
+        states[id, default: ConversationState()].busy = true
+        channel.send("agentConversationDelete", ["conversationId": id], as: ChangedFlag.self,
+                     failed: { [weak self] in self?.failOperation(id, $0) }) { [weak self] result in
             guard let self else { return }
-            if !result.changed {
-                error = "This conversation no longer exists."
+            guard result.changed else {
+                failOperation(id, "This conversation no longer exists.")
                 return
             }
-            conversations.removeAll { $0.conversationId == conversation.conversationId }
-            replies.removeValue(forKey: conversation.conversationId)
-            if selectedId == conversation.conversationId {
-                selectedId = nil
-                messages = []
-                events = []
-                channel.reset("conversation")
-            }
-            notice = "Conversation deleted. Independently saved knowledge and artifacts remain available."
+
+            channel.reset("chatList")
+            conversations.removeAll { $0.id == id }
+            states.removeValue(forKey: id)
+            if selectedId == id { newConversation() }
         }
     }
 
     func prepareDraft(_ text: String) -> Bool {
-        guard !running else {
-            error = "Finish or cancel the current response before preparing a graph question."
+        guard !busy else {
+            feedback(.error("Finish or stop the current response before preparing a graph question."), for: key)
             return false
         }
         guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || draft == text else {
-            error = "Your current draft was preserved. Save or send it before preparing a graph question."
+            feedback(.error("Your current draft was preserved. Save or send it before preparing a graph question."), for: key)
             return false
         }
         draft = String(text.prefix(Self.maximumMessageCharacters))
@@ -159,93 +236,150 @@ final class ChatWorkbenchModel: ObservableObject {
 
     func send() {
         guard canSend else { return }
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = draft
+        let text = original.trimmingCharacters(in: .whitespacesAndNewlines)
         if let selectedId {
-            start(selectedId, text)
+            start(selectedId, text, originalDraft: original)
             return
         }
 
-        let title = String(text.prefix(60))
-        var fields: [String: Any] = ["backendId": backendChoice, "title": title, "model": modelChoice]
+        states["", default: ConversationState()].busy = true
+        feedback(nil, for: "")
+        var fields: [String: Any] = ["backendId": backendChoice, "title": String(text.prefix(60)), "model": modelChoice]
         if !effortChoice.isEmpty { fields["effort"] = effortChoice }
-        channel.send("agentConversationStart", fields, as: AgentConversation.self, failed: report) { [weak self] conversation in
+        channel.send("agentConversationStart", fields, as: AgentConversation.self,
+                     failed: { [weak self] in self?.failOperation("", $0) }) { [weak self] conversation in
             guard let self else { return }
-            conversations.insert(conversation, at: 0)
-            selectedId = conversation.conversationId
-            start(conversation.conversationId, text)
+            states[""]?.busy = false
+            if states[""]?.draft == original { states[""]?.draft = "" }
+            updateConversation(conversation)
+            states[conversation.id] = ConversationState(draft: original)
+            if selectedId == nil { select(conversation) }
+            start(conversation.id, text, originalDraft: original)
         }
     }
 
     func cancel() {
-        guard let runId else { return }
-        channel.send("agentCancel", ["runId": runId], as: ChangedFlag.self, failed: report) { [weak self] _ in
-            self?.notice = "Stopping…"
+        let id = key
+        guard let runId = current.runId else { return }
+        channel.send("agentCancel", ["runId": runId], as: ChangedFlag.self, failed: { [weak self] message in
+            guard self?.states[id]?.runId == runId else { return }
+            self?.feedback(.error(message), for: id)
+        }) { [weak self] result in
+            guard result.changed, self?.states[id]?.runId == runId else { return }
+            self?.feedback(.notice("Stopping…"), for: id)
         }
     }
 
-    private func start(_ conversationId: String, _ text: String) {
-        channel.send("agentSend", ["conversationId": conversationId, "message": text], as: AgentRunStartedData.self, failed: report) { [weak self] data in
-            guard let self else { return }
-            draft = ""
-            events = []
-            runId = data.runId
-            notice = nil
-            loadMessages()
-            poll(data.runId)
-        }
-    }
-
-    private func poll(_ run: String) {
+    func workerExited() {
         pollTask?.cancel()
-        pollInFlight = false
+        pollTask = nil
+        for id in states.keys where hasWork(id) {
+            states[id]?.busy = false
+            states[id]?.runId = nil
+            states[id]?.polling = false
+            feedback(.error("The worker stopped. Check this conversation before sending again."), for: id)
+        }
+    }
+
+    private func start(_ id: String, _ text: String, originalDraft: String) {
+        states[id, default: ConversationState()].busy = true
+        feedback(nil, for: id)
+        channel.send("agentSend", ["conversationId": id, "message": text], as: AgentRunStartedData.self,
+                     failed: { [weak self] in self?.failOperation(id, $0) }) { [weak self] data in
+            guard let self else { return }
+            if states[id]?.draft == originalDraft { states[id]?.draft = "" }
+            states[id]?.busy = false
+            states[id]?.runId = data.runId
+            states[id]?.events = []
+            states[id]?.reply = nil
+            states[id]?.pollFailures = 0
+            if selectedId == id { loadMessages() }
+            ensurePolling()
+        }
+    }
+
+    private func ensurePolling() {
+        guard pollTask == nil, states.values.contains(where: { $0.runId != nil && $0.pollFailures < 3 }) else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 400_000_000)
-                guard let self, self.runId == run else { return }
-                guard !self.pollInFlight else { continue }
-                self.pollInFlight = true
-                let after = self.events.last?.sequence ?? 0
-                self.channel.send("agentRun", ["runId": run, "after": after], as: AgentRunStatus.self, failed: { [weak self] message in
-                    self?.pollInFlight = false
-                    self?.report(message)
-                }) { [weak self] status in
-                    self?.pollInFlight = false
-                    self?.apply(status)
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, let self else { return }
+                if !pollRuns() {
+                    pollTask = nil
+                    return
                 }
             }
         }
     }
 
-    private func apply(_ status: AgentRunStatus) {
-        guard status.runId == runId else { return }
-        events.append(contentsOf: status.events.filter { event in !events.contains { $0.sequence == event.sequence } })
-        guard !status.running else { return }
-        pollTask?.cancel()
-        pollTask = nil
-        pollInFlight = false
-        runId = nil
-        if let reply = status.reply {
-            replies[status.conversationId] = reply
+    private func pollRuns() -> Bool {
+        let active = states.filter { $0.value.runId != nil && $0.value.pollFailures < 3 }
+        for (id, state) in active {
+            guard let run = state.runId, !state.polling else { continue }
+            states[id]?.polling = true
+            channel.send("agentRun", ["runId": run, "after": state.events.last?.sequence ?? 0],
+                         as: AgentRunStatus.self, failed: { [weak self] message in
+                guard let self, states[id]?.runId == run else { return }
+                states[id]?.polling = false
+                if message == "Unknown run." {
+                    states[id]?.runId = nil
+                    feedback(.error("This response is no longer available. Check the saved conversation before retrying."), for: id)
+                    if selectedId == id { loadMessages() }
+                } else {
+                    states[id]?.pollFailures += 1
+                    if states[id]?.pollFailures == 3 {
+                        feedback(.error("Lost contact with this response. Refresh its status or try Stop."), for: id)
+                    }
+                }
+            }) { [weak self] status in
+                guard let self, status.conversationId == id, status.runId == run, states[id]?.runId == run else { return }
+                apply(status)
+            }
         }
+        return !active.isEmpty
+    }
+
+    var statusPaused: Bool { running && current.pollFailures >= 3 }
+
+    private func apply(_ status: AgentRunStatus) {
+        let id = status.conversationId
+        states[id]?.polling = false
+        states[id]?.pollFailures = 0
+        states[id]?.events.append(contentsOf: status.events)
+        guard !status.running else { return }
+        states[id]?.runId = nil
+        states[id]?.reply = status.reply
 
         switch status.state {
-        case "failed": error = ChatFailureText.describe(status.events.last?.detail)
-        case "canceled": notice = "Stopped."
-        default: notice = nil
+        case "failed": feedback(.error(ChatFailureText.describe(states[id]?.events.last?.detail)), for: id)
+        case "canceled": feedback(.notice("Stopped."), for: id)
+        default: feedback(nil, for: id)
         }
 
-        if status.conversationId == selectedId { loadMessages() }
-        refresh()
+        if selectedId == id { loadMessages() }
+        refreshConversations()
     }
 
     private func loadMessages() {
-        guard let selectedId else { return }
-        channel.send("agentConversation", ["conversationId": selectedId], as: AgentConversationData.self, scope: "conversation", failed: report) { [weak self] data in
+        channel.reset("conversation")
+        guard let id = selectedId else { return }
+        channel.send("agentConversation", ["conversationId": id], as: AgentConversationData.self, scope: "conversation",
+                     failed: { [weak self] in self?.feedback(.error($0), for: id) }) { [weak self] data in
             self?.messages = data.messages
         }
     }
 
-    private func report(_ message: String) { error = message }
+    private func failOperation(_ id: String, _ message: String) {
+        states[id]?.busy = false
+        feedback(.error(message), for: id)
+    }
+
+    private func feedback(_ value: Feedback?, for id: String) {
+        states[id, default: ConversationState()].feedback = value
+    }
+
+    private func reportListError(_ message: String) { listError = message }
 }
 
 /// Safe, actionable descriptions of bounded worker failure codes. Provider error text stays private.
@@ -255,9 +389,11 @@ enum ChatFailureText {
         case "model_timeout": return "The model timed out. Try a shorter request or a faster model, then send again."
         case "model_unavailable": return "The model is unreachable. Check the connection in Models, then retry."
         case "model_unauthenticated": return "The provider sign-in expired. Sign in again under Models."
-        case "model_quota_exhausted": return "The provider reached its usage limit. Choose an available model for a new conversation."
+        case "model_quota_exhausted": return "The provider reached its usage limit. Choose another model if the connection supports it, or wait for the limit to reset."
         case "model_missing": return "The selected model is unavailable. Review its configuration under Models."
         case "backend_configuration_error": return "This chat model is not configured correctly. Review Models before retrying."
+        case "model_approval_required": return "Codex could not request an approval in Praxis. Try a read-only question or use the provider directly for the action."
+        case "model_invalid_response": return "The provider did not return a usable answer. Try again or choose another model."
         case "invalid_request": return "The worker rejected this request. Try a shorter message."
         default: return "Chat failed unexpectedly. No answer was saved; the message remains in this conversation."
         }
@@ -277,16 +413,16 @@ struct ChatLine: Identifiable, Equatable {
         for (index, message) in messages.enumerated() {
             switch message.role {
             case "user" where !message.content.hasPrefix("Answer check failed."):
-                lines.append(ChatLine(id: index, kind: .owner, text: message.content))
+                lines.append(ChatLine(id: index * 2, kind: .owner, text: message.content))
             case "assistant":
                 if !message.toolCalls.isEmpty {
-                    lines.append(ChatLine(id: index, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
+                    lines.append(ChatLine(id: index * 2, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
                 }
                 if !message.content.isEmpty {
-                    lines.append(ChatLine(id: index * 1_000 + 1, kind: message.toolCalls.isEmpty ? .agent : .activity, text: message.content))
+                    lines.append(ChatLine(id: index * 2 + 1, kind: message.toolCalls.isEmpty ? .agent : .activity, text: message.content))
                 }
             case "summary":
-                lines.append(ChatLine(id: index, kind: .summary, text: "Earlier conversation summarized."))
+                lines.append(ChatLine(id: index * 2, kind: .summary, text: "Earlier conversation summarized."))
             default:
                 continue
             }

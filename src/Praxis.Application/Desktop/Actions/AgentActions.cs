@@ -45,15 +45,16 @@ public sealed class AgentActions(
             fields.OptionalText("effort", 16, "The reasoning effort is invalid."))),
         DesktopAction.Of("agentConversationRename", fields => new ChangedResponse(repository.Rename(fields.RequireGuid("conversationId"),
             fields.RequireString("title", 200)))),
+        DesktopAction.Of("agentConversationModel", fields =>
+        {
+            Guid id = fields.RequireGuid("conversationId");
+            return runs.WhileIdle(id, () => repository.SetModel(id, fields.RequireString("model", 200),
+                fields.OptionalText("effort", 16, "The reasoning effort is invalid.")));
+        }),
         DesktopAction.Of("agentConversationDelete", fields =>
         {
-            Guid conversationId = fields.RequireGuid("conversationId");
-            if (runs.HasRunning(conversationId))
-            {
-                throw new InvalidOperationException("Stop this conversation's running response before deleting it.");
-            }
-
-            return new ChangedResponse(repository.Delete(conversationId));
+            Guid id = fields.RequireGuid("conversationId");
+            return runs.WhileIdle(id, () => new ChangedResponse(repository.Delete(id)));
         }),
         DesktopAction.Of("agentConversations", fields => new AgentConversationsResponse(repository.List(fields.IntegerOrDefault("limit", 50, 1, 500)))),
         DesktopAction.Of("agentConversation", fields =>
