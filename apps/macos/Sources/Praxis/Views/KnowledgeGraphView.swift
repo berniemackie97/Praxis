@@ -73,7 +73,8 @@ struct KnowledgeGraphView: View {
                                          graph.focusId == nil ? "REGIONAL CONNECTIONS" : "FOCUSED CONNECTIONS")
                                         .font(.caption2.weight(.semibold))
                                     if let zones = visibleZones {
-                                        Text("\(zones.zones.count) regions · \(zones.relationshipCount.formatted()) real relation observations")
+                                        Text("\(zones.zones.count) regions · " +
+                                             "\(zones.relationshipCount.formatted()) real relation observations")
                                             .font(.caption).foregroundStyle(.secondary)
                                         Text("\(zones.entityCount.formatted()) current entities · grouped by recorded type, not inferred communities")
                                             .font(.caption2).foregroundStyle(.tertiary)
