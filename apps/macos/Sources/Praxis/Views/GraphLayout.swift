@@ -4,6 +4,12 @@ import Foundation
 /// Deterministic visual positions. A node's location never creates a knowledge relation.
 struct GraphLayout {
     private(set) var positions: [String: CGPoint] = [:]
+
+    /// Replaces positions with an arrangement computed elsewhere (a cell interior), keeping
+    /// hit testing, edges and labels consistent with what is drawn.
+    mutating func adopt(_ arranged: [String: CGPoint]) {
+        positions = arranged
+    }
     private var velocities: [String: CGVector] = [:]
     private var settledSteps = 0
 

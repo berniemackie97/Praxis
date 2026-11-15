@@ -50,6 +50,9 @@ struct LivingCortexSnapshotTests {
         // Cellular Atlas draws them as cells (SpriteKit, rendered offscreen with SKRenderer).
         let tissue = Self.cells(BrainTerritories.overview(map), size: size)
         #expect(tissue.map(Self.litFraction) ?? 0 > 0.01)
+        let interior = Self.cells(BrainTerritories.overview(map), size: size, entering: territories[0].regionId,
+                                  nodes: members.nodes, edges: members.edges)
+        #expect(interior.map(Self.litFraction) ?? 0 > 0.01)
 
         if let output = environment["PRAXIS_SNAPSHOT_DIR"] {
             let folder = URL(fileURLWithPath: output, isDirectory: true)
@@ -58,10 +61,12 @@ struct LivingCortexSnapshotTests {
             try Self.png(territory).write(to: folder.appendingPathComponent("living-cortex-territory.png"))
             if let universe { try Self.png(universe).write(to: folder.appendingPathComponent("knowledge-cosmos-universe.png")) }
             if let tissue { try Self.png(tissue).write(to: folder.appendingPathComponent("cellular-atlas-tissue.png")) }
+            if let interior { try Self.png(interior).write(to: folder.appendingPathComponent("cellular-atlas-interior.png")) }
         }
     }
 
-    private static func cells(_ overview: GraphVisualOverview, size: CGSize) -> CGImage? {
+    private static func cells(_ overview: GraphVisualOverview, size: CGSize, entering: String? = nil,
+                              nodes: [GraphNode] = [], edges: [GraphEdge] = []) -> CGImage? {
         let scene = GraphScene()
         scene.size = size
         scene.reduceMotion = true
@@ -69,6 +74,10 @@ struct LivingCortexSnapshotTests {
         let view = SKView(frame: CGRect(origin: .zero, size: size))
         view.presentScene(scene)
         scene.configureZones(overview)
+        if let entering {
+            scene.interiorTint = NSColor(calibratedRed: 1, green: 0.36, blue: 0.36, alpha: 1)
+            scene.configure(nodes: nodes, edges: edges, focus: nil, regionType: entering)
+        }
         guard let texture = view.texture(from: scene) else { return nil }
         let art = texture.cgImage()
         // Composite onto the scene's background, the way the view shows it.

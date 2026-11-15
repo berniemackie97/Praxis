@@ -30,6 +30,12 @@ struct KnowledgeGraphView: View {
 
     private var drawnLevel: String? { graph.selectedZoneType ?? graph.openRegionId }
 
+    private var openRegionTint: NSColor? {
+        guard let id = graph.openRegionId, let region = graph.regionMap?.regions.first(where: { $0.regionId == id }) else { return nil }
+        let rgb = BrainPalette.rgb(for: region, in: graph.regionMap)
+        return NSColor(calibratedRed: CGFloat(rgb.x), green: CGFloat(rgb.y), blue: CGFloat(rgb.z), alpha: 1)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -102,7 +108,8 @@ struct KnowledgeGraphView: View {
                                                selectedEdgeId: $graph.selectedEdgeId,
                                                reduceMotion: reduceMotion, active: scenePhase == .active,
                                                highContrast: contrast == .increased,
-                                               colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
+                                               colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision,
+                                               interiorTint: openRegionTint)
                             }
                         }
                         .accessibilityHidden(true)

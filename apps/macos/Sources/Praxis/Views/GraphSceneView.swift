@@ -23,6 +23,8 @@ struct GraphSceneView: NSViewRepresentable {
     let colorScheme: ColorScheme
     let zoom: CGFloat
     let zoomRevision: Int
+    /// Colour of an entered region; when set, the region is drawn as the inside of a cell.
+    var interiorTint: NSColor?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(selectedNodeId: $selectedNodeId, selectedEdgeId: $selectedEdgeId)
@@ -40,6 +42,7 @@ struct GraphSceneView: NSViewRepresentable {
     func updateNSView(_ view: SKView, context: Context) {
         let scene = context.coordinator.scene
         view.window?.acceptsMouseMovedEvents = true
+        scene.interiorTint = interiorTint
         scene.didSelectZone = expandZone
         scene.didReturnToZones = returnToZones
         if let zones {

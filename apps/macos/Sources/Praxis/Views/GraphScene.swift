@@ -10,6 +10,7 @@ final class GraphScene: SKScene {
     var reduceMotion = false {
         didSet {
             atlasArtwork.reduceMotion = reduceMotion
+            cellInterior.reduceMotion = reduceMotion
             zoneArtwork.reduceMotion = reduceMotion
         }
     }
@@ -26,6 +27,9 @@ final class GraphScene: SKScene {
     private var hoveredEdgeId: String?
     private var nodeShapes: [String: SKShapeNode] = [:]
     private let atlasArtwork = GraphAtlasArtwork()
+    private let cellInterior = GraphCellInterior()
+    /// The entered region's colour; when set, an entered region is drawn as the inside of a cell.
+    var interiorTint: NSColor?
     private let zoneArtwork = GraphZoneArtwork()
     private var zoneMode = false
     private var zoneOverview: GraphVisualOverview?
@@ -89,6 +93,7 @@ final class GraphScene: SKScene {
 
         for shape in nodeShapes.values { shape.removeFromParent() }
         atlasArtwork.clear()
+        cellInterior.clear()
         for label in nodeLabels.values { label.removeFromParent() }
         nodeShapes.removeAll(keepingCapacity: true)
         nodeLabels.removeAll(keepingCapacity: true)
@@ -103,9 +108,15 @@ final class GraphScene: SKScene {
                 : node.entityId == focus ? 15 : 11)
         })
         if focus == nil {
-            atlasArtwork.draw(nodes: nodes, positions: layout.positions, radii: nodeRadii,
-                              degree: degree, in: self)
-            fitAtlas(animated: fromZones)
+            if regionType != nil, let interiorTint {
+                layout.adopt(GraphCellInterior.arrange(nodes, radii: nodeRadii))
+                cellInterior.draw(nodes: nodes, positions: layout.positions, radii: nodeRadii,
+                                  tint: interiorTint, dark: dark, in: self)
+            } else {
+                atlasArtwork.draw(nodes: nodes, positions: layout.positions, radii: nodeRadii,
+                                  degree: degree, in: self)
+            }
+            fitAtlas(animated: fromZones, diveIn: fromZones && regionType != nil)
         } else {
             for node in nodes {
                 let shape = SKShapeNode(circleOfRadius: nodeRadii[node.entityId] ?? 11)
@@ -186,7 +197,7 @@ final class GraphScene: SKScene {
         viewCamera.setScale(atlasFitScale)
     }
 
-    private func fitAtlas(animated: Bool = false) {
+    private func fitAtlas(animated: Bool = false, diveIn: Bool = false) {
         guard !layout.positions.isEmpty, size.width > 0, size.height > 0 else { return }
         let points = Array(layout.positions.values)
         let minX = points.map(\.x).min() ?? 0
@@ -198,11 +209,17 @@ final class GraphScene: SKScene {
         let target = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
         viewCamera.removeAllActions()
         if animated && !reduceMotion {
-            viewCamera.run(.group([
-                .move(to: target, duration: 0.28),
-                .scale(to: atlasFitScale, duration: 0.28),
-                .rotate(toAngle: 0, duration: 0.28, shortestUnitArc: true)
-            ]))
+            // Entering a cell continues the zoom: the camera starts far out and dives in.
+            if diveIn {
+                viewCamera.position = target
+                viewCamera.setScale(atlasFitScale * 3.5)
+            }
+            let duration = diveIn ? 0.75 : 0.28
+            let move = SKAction.move(to: target, duration: duration)
+            let scale = SKAction.scale(to: atlasFitScale, duration: duration)
+            move.timingMode = .easeOut
+            scale.timingMode = .easeOut
+            viewCamera.run(.group([move, scale, .rotate(toAngle: 0, duration: duration, shortestUnitArc: true)]))
         } else {
             viewCamera.zRotation = 0
             viewCamera.position = target
