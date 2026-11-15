@@ -152,7 +152,7 @@ public sealed class WatchedFolderIntake
                 notifyCaptured();
             }
 
-            status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported, notificationsUnavailable);
+            status.RecordSuccessfulScan(now, result.ObservedFiles, result.Imported, notificationsUnavailable, result.SkippedLinks);
             return result;
         }
         finally

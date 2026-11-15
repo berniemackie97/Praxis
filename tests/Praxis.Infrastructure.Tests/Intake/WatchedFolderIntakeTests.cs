@@ -31,6 +31,52 @@ public sealed class WatchedFolderIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task NestedLinksIncludingBrokenDependenciesDoNotBlockWatchedCapture()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string tooling = Path.Combine(inbox, "project", ".tooling");
+        Directory.CreateDirectory(tooling);
+        Directory.CreateDirectory(Path.Combine(workspace, "outside"));
+        string hidden = Path.Combine(workspace, "outside", "private.md");
+        File.WriteAllText(hidden, "Not authorized for watched capture");
+        Directory.CreateSymbolicLink(Path.Combine(tooling, "node_modules"), Path.Combine(workspace, "missing"));
+        Directory.CreateSymbolicLink(Path.Combine(tooling, "linked-directory"), Path.GetDirectoryName(hidden)!);
+        File.CreateSymbolicLink(Path.Combine(tooling, "linked-file.md"), hidden);
+        string note = Path.Combine(inbox, "project", "notes.md");
+        File.WriteAllText(note, "Authorized notes");
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Equal(0, await watcher.ReconcileAsync(now));
+        Assert.Equal(1, await watcher.ReconcileAsync(now.AddSeconds(2)));
+        Assert.Equal(note, Assert.Single(catalog.Library.List()).SourceLocator);
+        Assert.Equal("watching", watcher.Snapshot().State);
+        Assert.Equal("Skipped 3 linked entries; other files will scan normally.", watcher.Snapshot().Problem);
+        Assert.Equal(1L, Count(catalog.DatabasePath, "ingest_requests"));
+        Assert.Equal("Not authorized for watched capture", File.ReadAllText(hidden));
+    }
+
+    [Fact]
+    public async Task WatchedFolderCanObserveMoreThanFiveThousandFiles()
+    {
+        for (int i = 0; i < 5_001; i++)
+        {
+            File.WriteAllText(Path.Combine(inbox, $"note-{i}.txt"), "");
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        IntakeHarness watcher = NewMonitor(catalog);
+        Assert.Equal(0, await watcher.ReconcileAsync(DateTimeOffset.UtcNow));
+        Assert.Equal("watching", watcher.Snapshot().State);
+        Assert.Equal(5_001, watcher.Snapshot().ObservedFiles);
+    }
+
+    [Fact]
     public async Task SourcesCapturedFromGitInternalsOrSecretsByOlderVersionsAreRetired()
     {
         Directory.CreateDirectory(Path.Combine(inbox, "repo", ".git"));
@@ -226,7 +272,7 @@ public sealed class WatchedFolderIntakeTests : IDisposable
     }
 
     [Fact]
-    public async Task RejectedLinksPreventImportOutsideApprovedDirectory()
+    public async Task LinkOnlyFolderNeverCapturesOutsideApprovedDirectory()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -238,8 +284,10 @@ public sealed class WatchedFolderIntakeTests : IDisposable
         File.CreateSymbolicLink(Path.Combine(inbox, "linked.txt"), outside);
         using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
         IntakeHarness watcher = NewMonitor(catalog);
-        await Assert.ThrowsAsync<InvalidDataException>(() =>
-            watcher.ReconcileAsync(DateTimeOffset.UtcNow));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Equal(0, await watcher.ReconcileAsync(now));
+        Assert.Equal(0, await watcher.ReconcileAsync(now.AddSeconds(2)));
+        Assert.Equal(0, watcher.Snapshot().ObservedFiles);
         Assert.Empty(catalog.Library.List());
         Assert.Equal("private", File.ReadAllText(outside));
     }

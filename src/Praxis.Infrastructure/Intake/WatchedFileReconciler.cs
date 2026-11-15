@@ -15,7 +15,7 @@ namespace Praxis.Infrastructure.Intake;
 /// </summary>
 internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
 {
-    private const int MaximumFiles = 5_000;
+    private const int MaximumFiles = 10_000;
     private const int MaximumQueuedChanges = 512;
     private const int MaximumDepth = 12;
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
@@ -115,7 +115,8 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             locatorsNormalized = true;
         }
 
-        IReadOnlyList<ObservedFile> files = intake.InspectFolder(root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
+        var (files, skippedLinks) = intake.InspectWatchedFolder(
+            root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
         long renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
         ForgetMissing(files);
 
@@ -167,7 +168,7 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             }
         }
 
-        return new WatchedScanResult(files.Count, imported, nextScanDelay);
+        return new WatchedScanResult(files.Count, imported, nextScanDelay, skippedLinks);
     }
 
     private static TimeSpan Earlier(TimeSpan? current, TimeSpan candidate) =>
