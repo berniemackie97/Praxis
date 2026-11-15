@@ -16,7 +16,9 @@ struct ChatView: View {
     }
 
     private var effortOptions: [String] {
-        guard let selected = modelOptions.first(where: { $0.id == model.modelChoice }) else { return [] }
+        guard let backend = model.backends.first(where: { $0.backendId == model.backendChoice }),
+              backend.kind == "codex" || backend.kind == "claude_code",
+              let selected = modelOptions.first(where: { $0.id == model.modelChoice }) else { return [] }
         return Array(Set(selected.efforts + (model.effortChoice.isEmpty ? [] : [model.effortChoice]))).sorted()
     }
 
@@ -38,7 +40,7 @@ struct ChatView: View {
                         get: { model.backendChoice },
                         set: { model.chooseBackend($0) })) {
                         ForEach(model.backends.filter(\.enabled)) { backend in
-                            Text(backend.kindLabel).tag(backend.backendId)
+                            Text("\(backend.backendId) · \(backend.kindLabel)").tag(backend.backendId)
                         }
                     }
                     .help("Connection for this new conversation. Source disclosure still applies.")
