@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import SpriteKit
+import simd
 import Testing
 @testable import Praxis
 
@@ -139,8 +140,8 @@ struct GraphPresentationTests {
         let links = [edge("actual", "alpha", "beta")]
         let first = NeuralNebulaLayout.place(zones: summary, nodes: nodes,
                                               edges: links, regionType: "project")
-        let again = NeuralNebulaLayout.place(zones: summary, nodes: nodes.reversed(),
-                                              edges: links.reversed(), regionType: "project")
+        let again = NeuralNebulaLayout.place(zones: summary, nodes: Array(nodes.reversed()),
+                                              edges: Array(links.reversed()), regionType: "project")
         #expect(first.zoneCenters == again.zoneCenters)
         #expect(first.nodeCenters == again.nodeCenters)
         #expect(first.zoneCenters.count == summary.zones.count)
@@ -192,10 +193,11 @@ struct GraphPresentationTests {
         let before = camera.projection(aspect: 1.5)
         camera.settle(weight: 0.14)
         #expect(camera.distance < 590 && camera.distance > 157)
-        #expect(camera.center != camera.desiredCenter)
+        #expect(simd_length(camera.center - camera.desiredCenter) > 0.1)
         camera.orbit(dx: 12, dy: -6)
         let after = camera.projection(aspect: 1.5)
-        #expect(before != after)
+        #expect(before.columns.0.x != after.columns.0.x ||
+                before.columns.2.x != after.columns.2.x)
         camera.settle(weight: 1)
         #expect(camera.center == camera.desiredCenter)
         #expect(camera.distance == 157)
