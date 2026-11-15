@@ -166,9 +166,19 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         }
     }
 
-    func orbit(dx: Float, dy: Float) { camera.orbit(dx: dx, dy: dy) }
+    func orbit(dx: Float, dy: Float) {
+        camera.orbit(dx: dx, dy: dy)
+        invalidate()
+    }
 
-    func pan(dx: Float, dy: Float) { camera.pan(dx: dx, dy: dy) }
+    func pan(dx: Float, dy: Float) {
+        camera.pan(dx: dx, dy: dy)
+        invalidate()
+    }
+
+    private func invalidate() {
+        if reduceMotion { view?.setNeedsDisplay(view?.bounds ?? .zero) }
+    }
 
     func zoom(by factor: Float, at point: CGPoint?) {
         camera.desiredDistance = max(48, min(1_400, camera.desiredDistance * factor))
@@ -180,6 +190,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 415 {
             onReturnToZones?()
         }
+        invalidate()
     }
 
     func setToolbarZoom(_ zoom: CGFloat, revision: Int) {
@@ -191,6 +202,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
             camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
+            invalidate()
         } else {
             self.zoom(by: ratio, at: nil)
         }
