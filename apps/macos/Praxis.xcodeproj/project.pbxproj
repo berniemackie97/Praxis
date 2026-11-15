@@ -95,6 +95,7 @@
 		00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E031 /* NeuralNebulaCamera.swift */; };
 		00000000000000000000E034 /* GraphConceptPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E033 /* GraphConceptPage.swift */; };
 		00000000000000000000E036 /* KnowledgeRegionSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E035 /* KnowledgeRegionSection.swift */; };
+		00000000000000000000E041 /* KnowledgeRevisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E040 /* KnowledgeRevisionsView.swift */; };
 		00000000000000000000E038 /* GraphVisualOverview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E037 /* GraphVisualOverview.swift */; };
 /* End PBXBuildFile section */
 
@@ -198,6 +199,7 @@
 		00000000000000000000E031 /* NeuralNebulaCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaCamera.swift; sourceTree = "<group>"; };
 		00000000000000000000E033 /* GraphConceptPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphConceptPage.swift; sourceTree = "<group>"; };
 		00000000000000000000E035 /* KnowledgeRegionSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeRegionSection.swift; sourceTree = "<group>"; };
+		00000000000000000000E040 /* KnowledgeRevisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeRevisionsView.swift; sourceTree = "<group>"; };
 		00000000000000000000E037 /* GraphVisualOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphVisualOverview.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -301,6 +303,7 @@
 				00000000000000000000E025 /* GraphStyle.swift */,
 				00000000000000000000E037 /* GraphVisualOverview.swift */,
 				00000000000000000000E035 /* KnowledgeRegionSection.swift */,
+				00000000000000000000E040 /* KnowledgeRevisionsView.swift */,
 				00000000000000000000E027 /* NeuralNebulaLayout.swift */,
 				00000000000000000000E02F /* NeuralNebulaGeometry.swift */,
 				00000000000000000000E031 /* NeuralNebulaCamera.swift */,
@@ -521,6 +524,7 @@
 				00000000000000000000E026 /* GraphStyle.swift in Sources */,
 				00000000000000000000E038 /* GraphVisualOverview.swift in Sources */,
 				00000000000000000000E036 /* KnowledgeRegionSection.swift in Sources */,
+				00000000000000000000E041 /* KnowledgeRevisionsView.swift in Sources */,
 				00000000000000000000E028 /* NeuralNebulaLayout.swift in Sources */,
 				00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */,
 				00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */,

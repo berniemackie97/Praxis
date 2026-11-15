@@ -15,9 +15,10 @@ struct KnowledgeView: View {
             Picker("Knowledge view", selection: $viewMode) {
                 Label("Brain", systemImage: "point.3.connected.trianglepath.dotted").tag("graph")
                 Label("Entities", systemImage: "list.bullet").tag("list")
+                Label("Revisions", systemImage: "arrow.triangle.2.circlepath").tag("revisions")
             }
             .pickerStyle(.segmented)
-            .frame(width: 230)
+            .frame(width: 340)
             .padding(.vertical, Spacing.s)
             .accessibilityLabel("Knowledge view")
             Divider()
@@ -27,6 +28,11 @@ struct KnowledgeView: View {
                                        model.selectEntityId(entityId)
                                        viewMode = "list"
                                    }, explain: explain, openSource: openSource)
+            } else if viewMode == "revisions" {
+                KnowledgeRevisionsView(model: model) { entityId in
+                    model.selectEntityId(entityId)
+                    viewMode = "list"
+                }
             } else {
                 listContent
             }

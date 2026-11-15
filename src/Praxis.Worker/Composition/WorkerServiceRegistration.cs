@@ -58,6 +58,10 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IProposalRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Proposals);
         services.AddSingleton<IKnowledgeRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Knowledge);
         services.AddSingleton<IGraphReader>(provider => provider.GetRequiredService<SqliteCatalog>().Graph);
+        services.AddSingleton<IKnowledgeReconsolidation>(provider => provider.GetRequiredService<SqliteCatalog>().Reconsolidation);
+        services.AddSingleton<RevisionReview>();
+        services.AddSingleton(provider => new ReconsolidationRunner(provider.GetRequiredService<IKnowledgeReconsolidation>(),
+            provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Reconsolidation")));
         services.AddSingleton<IVerificationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Verification);
         services.AddSingleton<ICollectionRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Collections);
         services.AddSingleton<IModelProfileRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Models);
@@ -130,6 +134,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, EnrichmentActions>();
         services.AddSingleton<IDesktopActionGroup, IntakeActions>();
         services.AddSingleton<IDesktopActionGroup, KnowledgeActions>();
+        services.AddSingleton<IDesktopActionGroup, ReconsolidationActions>();
         services.AddSingleton<IDesktopActionGroup, GraphActions>();
         services.AddSingleton<IDesktopActionGroup, VerificationActions>();
         services.AddSingleton<IDesktopActionGroup, ModelSetupActions>();

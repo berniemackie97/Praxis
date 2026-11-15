@@ -9,6 +9,9 @@ namespace Praxis.Infrastructure.Persistence.Knowledge;
 /// </summary>
 internal static class EntityTypeSanity
 {
+    /// <summary>Bump whenever a correction rule changes, so reconsolidation re-examines earlier judgments.</summary>
+    internal const int Version = 1;
+
     private static readonly string GlueList = string.Join(", ",
         RuntimeGlue.Names.Order(StringComparer.Ordinal).Select(name => "'" + name.Replace("'", "''", StringComparison.Ordinal) + "'"));
 
