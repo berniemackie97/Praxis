@@ -263,7 +263,7 @@ public sealed class AgentRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task ConversationsRejectUnconfiguredOrInvalidModelOverrides()
+    public void ConversationsRejectUnconfiguredOrInvalidModelOverrides()
     {
         using SqliteCatalog catalog = await SeededAsync();
         Assert.Throws<ArgumentException>(() => catalog.Agents.Create("missing", "unknown"));
