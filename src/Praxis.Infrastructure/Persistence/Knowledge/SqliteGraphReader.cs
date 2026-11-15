@@ -234,7 +234,8 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            string? nextCursor = more ? WriteRegionCursor(version, signature, offset + rows.Count) : null;
+            string? nextCursor = more && offset + rows.Count < RegionEdgeBudget
+                ? WriteRegionCursor(version, signature, offset + rows.Count) : null;
             return ComposePage(connection, query, rows, null, null, null, nextCursor, cancellationToken);
         });
     }
