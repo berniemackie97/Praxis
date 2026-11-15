@@ -147,10 +147,11 @@ struct GraphPresentationTests {
     }
 
     @Test func brainGraphStylesHaveDistinctStablePreferences() {
-        #expect(GraphStyle.allCases.count == 2)
+        #expect(GraphStyle.allCases.count == 3)
+        #expect(GraphStyle(rawValue: "livingCortex") == .livingCortex)
         #expect(GraphStyle(rawValue: "neuralNebula") == .neuralNebula)
         #expect(GraphStyle(rawValue: "cellularAtlas") == .cellularAtlas)
-        #expect(GraphStyle.neuralNebula.title != GraphStyle.cellularAtlas.title)
+        #expect(Set(GraphStyle.allCases.map(\.title)).count == 3)
     }
 
     @Test func neuralNebulaPlacementIsThreeDimensionalStableAndScopeBound() {
@@ -196,10 +197,12 @@ struct GraphPresentationTests {
         let geometry = NeuralNebulaGeometry.build(overview: zones, placement: placement,
                                                   nodes: nodes, edges: edges,
                                                   selectedNodeId: nil, highContrast: false)
-        #expect(geometry.zoneLines.count == 6)
+        // One curved 18-segment lane per evidence status present: confirmed, suggested, contradicted.
+        #expect(geometry.zoneLines.count == 3 * 18 * 2)
         #expect(geometry.detailLines.count == 2)
         #expect(geometry.detailPoints.count == 2)
-        #expect(geometry.zonePoints.count <= 2 * 73 + 220)
+        // Two galaxies (core, glow and at most 300 stars each) plus bounded ornamental sky.
+        #expect(geometry.zonePoints.count <= 2 * 302 + 900 + 9)
         let disconnected = NeuralNebulaGeometry.build(
             overview: GraphVisualOverview(regions: zones.regions),
             placement: placement, nodes: nodes, edges: [],

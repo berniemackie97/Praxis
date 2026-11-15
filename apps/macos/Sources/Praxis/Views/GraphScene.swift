@@ -300,7 +300,7 @@ final class GraphScene: SKScene {
         guard force || self.dark != dark || self.highContrast != highContrast else { return }
         self.dark = dark
         self.highContrast = highContrast
-        backgroundColor = dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .windowBackgroundColor
+        backgroundColor = dark ? NSColor(calibratedRed: 0.01, green: 0.035, blue: 0.075, alpha: 1) : .windowBackgroundColor
         if zoneMode, let zoneOverview {
             zoneArtwork.show(zoneOverview, dark: dark, highContrast: highContrast)
             return

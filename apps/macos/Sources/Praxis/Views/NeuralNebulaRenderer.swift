@@ -50,7 +50,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
     private var zoomRevision = -1
     private var lastToolbarZoom: CGFloat = 1
 
-    init?(view: MTKView) {
+    init?(view: MTKView?) {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let library = device.makeDefaultLibrary(),
@@ -86,6 +86,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         self.depthState = depthState
         self.view = view
         super.init()
+        guard let view else { return }
         view.device = device
         view.colorPixelFormat = .bgra8Unorm
         view.depthStencilPixelFormat = .depth32Float
@@ -153,7 +154,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             detailLines = Batch()
             detailOpacity = 0
             camera.desiredCenter = .zero
-            camera.desiredDistance = 590
+            camera.desiredDistance = 420
             return
         }
         let visibleRegion = focusId.flatMap { id in
@@ -175,7 +176,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if reposition {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 420 : 157
         } else if focusWasMissing, let focusId, let point = placement.nodeCenters[focusId] {
             camera.desiredCenter = point
         }
@@ -206,8 +207,8 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             if let anchor = placement.zoneCenters[zone] {
                 camera.desiredCenter += (anchor - camera.desiredCenter) * 0.16
             }
-            if camera.desiredDistance < 325 { onEnterZone?(zone) }
-        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 415 {
+            if camera.desiredDistance < 260 { onEnterZone?(zone) }
+        } else if (regionType != nil || focusId != nil) && camera.desiredDistance > 340 {
             onReturnToZones?()
         }
         invalidate()
@@ -221,7 +222,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         if zoom == 1 {
             camera.desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
-            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
+            camera.desiredDistance = focusId != nil ? 79 : regionType == nil ? 420 : 157
             invalidate()
         } else {
             self.zoom(by: ratio, at: nil)
@@ -312,6 +313,49 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             }
             onFrame(positions, focusId.flatMap { placement.zoneCenters[$0] == nil ? nil : $0 })
         }
+    }
+
+    /// Renders the current scene offscreen after settling the camera, for tests and review.
+    func snapshot(size: CGSize) -> CGImage? {
+        camera.center = camera.desiredCenter
+        camera.distance = camera.desiredDistance
+        detailOpacity = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
+        let width = Int(size.width), height = Int(size.height)
+        let color = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        color.usage = [.renderTarget, .shaderRead]
+        color.storageMode = .shared
+        let depth = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .depth32Float, width: width, height: height, mipmapped: false)
+        depth.usage = .renderTarget
+        depth.storageMode = .private
+        guard let target = device.makeTexture(descriptor: color), let depthTarget = device.makeTexture(descriptor: depth),
+              let command = queue.makeCommandBuffer() else { return nil }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0.008, green: 0.015, blue: 0.039, alpha: 1)
+        pass.depthAttachment.texture = depthTarget
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.storeAction = .dontCare
+        guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return nil }
+        encoder.setDepthStencilState(depthState)
+        var uniform = NeuralNebulaUniforms(viewProjection: camera.projection(aspect: Float(size.width / size.height)),
+                                            time: 0, opacity: 1, pointScale: Float(size.height))
+        let baseOpacity = 1 - detailOpacity * 0.82
+        draw(zoneLines, lines: true, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
+        draw(detailLines, lines: true, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        draw(zonePoints, lines: false, opacity: baseOpacity, uniform: &uniform, encoder: encoder)
+        draw(detailPoints, lines: false, opacity: detailOpacity, uniform: &uniform, encoder: encoder)
+        encoder.endEncoding()
+        command.commit()
+        command.waitUntilCompleted()
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        target.getBytes(&bytes, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
     private func draw(_ batch: Batch, lines: Bool, opacity: Float,

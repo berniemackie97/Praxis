@@ -4,8 +4,8 @@ import simd
 struct NeuralNebulaCamera {
     var center = SIMD3<Float>.zero
     var desiredCenter = SIMD3<Float>.zero
-    var distance: Float = 590
-    var desiredDistance: Float = 590
+    var distance: Float = 420
+    var desiredDistance: Float = 420
     private var yaw: Float = 0.28
     private var pitch: Float = 0.15
 

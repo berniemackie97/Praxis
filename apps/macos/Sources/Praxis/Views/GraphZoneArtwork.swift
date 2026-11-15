@@ -44,90 +44,102 @@ final class GraphZoneArtwork {
         let regions = summary.regions
         let links = summary.links
         placement = GraphZoneLayout.place(summary)
-        for link in links where link.count > 0 {
-            guard let a = placement.positions[link.subjectId],
-                  let b = placement.positions[link.objectId] else { continue }
-            let groups: [(Int, NSColor, CGFloat)] = [
-                (link.confirmedCount, .systemTeal, 0),
-                (link.suggestedCount, .systemOrange, 9),
-                (link.contradictedCount, .systemRed, -9)
-            ]
-            for (count, tint, offset) in groups where count > 0 {
-                let path = CGMutablePath()
-                if link.subjectId == link.objectId {
-                    let radius = (placement.radii[link.subjectId] ?? 30) + 15 + offset
-                    path.addEllipse(in: CGRect(x: a.x - radius, y: a.y - radius,
-                                               width: radius * 2, height: radius * 2))
-                } else {
-                    let dx = b.x - a.x
-                    let dy = b.y - a.y
-                    let length = max(1, hypot(dx, dy))
-                    let side = CGPoint(x: -dy / length * offset, y: dx / length * offset)
-                    path.move(to: CGPoint(x: a.x + side.x, y: a.y + side.y))
-                    let bend = min(36, length * 0.12) + offset
-                    let control = CGPoint(x: (a.x + b.x) / 2 - dy / length * bend,
-                                          y: (a.y + b.y) / 2 + dx / length * bend)
-                    path.addQuadCurve(to: CGPoint(x: b.x + side.x, y: b.y + side.y),
-                                      control: control)
-                }
-                let stroke = SKShapeNode(path: path)
-                stroke.strokeColor = tint.withAlphaComponent(highContrast ? 0.7 : 0.34)
-                stroke.lineWidth = min(5, max(1.1, sqrt(CGFloat(count)) * 0.78))
-                stroke.zPosition = -2
-                root.addChild(stroke)
+        let colors = Dictionary(uniqueKeysWithValues: regions.enumerated().map { index, zone -> (String, NSColor) in
+            let rgb = zone.memberCount == 0 ? BrainPalette.forming : BrainPalette.hues[index % BrainPalette.hues.count]
+            return (zone.id, NSColor(calibratedRed: CGFloat(rgb.x), green: CGFloat(rgb.y), blue: CGFloat(rgb.z), alpha: 1))
+        })
+        // Gap junctions: evidence between cells, drawn membrane to membrane with bright pores.
+        for link in links where link.count > 0 && link.subjectId != link.objectId {
+            guard let a = placement.positions[link.subjectId], let b = placement.positions[link.objectId],
+                  let ra = placement.radii[link.subjectId], let rb = placement.radii[link.objectId] else { continue }
+            let dx = b.x - a.x, dy = b.y - a.y
+            let length = max(1, hypot(dx, dy))
+            let ux = dx / length, uy = dy / length
+            let start = CGPoint(x: a.x + ux * ra, y: a.y + uy * ra)
+            let end = CGPoint(x: b.x - ux * rb, y: b.y - uy * rb)
+            let path = CGMutablePath()
+            path.move(to: start)
+            path.addCurve(to: end, control1: CGPoint(x: start.x + ux * 40 - uy * 18, y: start.y + uy * 40 + ux * 18),
+                          control2: CGPoint(x: end.x - ux * 40 + uy * 18, y: end.y - uy * 40 - ux * 18))
+            let tint = (colors[link.subjectId] ?? .systemTeal).blended(withFraction: 0.5, of: colors[link.objectId] ?? .systemTeal) ?? .systemTeal
+            let strand = SKShapeNode(path: path)
+            strand.strokeColor = tint.withAlphaComponent(highContrast ? 0.9 : 0.62)
+            strand.lineWidth = min(4, max(1.2, sqrt(CGFloat(link.count)) * 0.6))
+            strand.glowWidth = dark ? 3 : 0
+            strand.zPosition = -2
+            root.addChild(strand)
+            for pore in [start, end] {
+                let dot = SKShapeNode(circleOfRadius: 3.2)
+                dot.fillColor = .white
+                dot.strokeColor = .clear
+                dot.glowWidth = dark ? 4 : 0
+                dot.position = pore
+                dot.zPosition = 4
+                root.addChild(dot)
             }
         }
         for zone in regions {
             guard let center = placement.positions[zone.id],
                   let radius = placement.radii[zone.id] else { continue }
-            let hue = CGFloat(GraphRegionIdentity.hash(zone.id) % 360) / 360
-            let tint = NSColor(calibratedHue: hue, saturation: highContrast ? 0.73 : 0.61,
-                               brightness: dark ? 0.93 : 0.76, alpha: 1)
+            let forming = zone.memberCount == 0
+            let tint = colors[zone.id] ?? .systemTeal
             let hub = SKNode()
             hub.position = center
             hub.name = "zone:" + zone.id
-            let halo = SKShapeNode(circleOfRadius: radius * 1.38)
-            halo.fillColor = tint.withAlphaComponent(dark ? 0.065 : 0.04)
-            halo.strokeColor = tint.withAlphaComponent(highContrast ? 0.55 : 0.17)
-            halo.lineWidth = highContrast ? 2.6 : 1
-            halo.zPosition = 0
-            hub.addChild(halo)
-            let ring = SKShapeNode(circleOfRadius: radius)
-            ring.fillColor = tint.withAlphaComponent(dark ? 0.26 : 0.13)
-            ring.strokeColor = tint.withAlphaComponent(highContrast ? 1 : 0.78)
-            ring.lineWidth = highContrast ? 3 : 1.7
-            ring.zPosition = 1
-            hub.addChild(ring)
-            let density = SKShapeNode(path: Self.densityPath(regionId: zone.id,
-                                                             count: zone.count, radius: radius))
-            density.fillColor = tint.withAlphaComponent(dark ? 0.68 : 0.47)
+            let membranePath = Self.membrane(regionId: zone.id, radius: radius)
+            let cytoplasm = SKShapeNode(path: membranePath)
+            cytoplasm.fillColor = tint.withAlphaComponent(forming ? 0.04 : dark ? 0.12 : 0.08)
+            cytoplasm.strokeColor = .clear
+            cytoplasm.zPosition = 0
+            hub.addChild(cytoplasm)
+            let outer = SKShapeNode(path: forming ? membranePath.copy(dashingWithPhase: 0, lengths: [7, 6]) : membranePath)
+            outer.strokeColor = tint.withAlphaComponent(highContrast ? 1 : 0.9)
+            outer.lineWidth = highContrast ? 2.6 : 1.8
+            outer.glowWidth = dark && !forming ? 5 : 0
+            outer.fillColor = .clear
+            outer.zPosition = 1
+            hub.addChild(outer)
+            if !forming {
+                let inner = SKShapeNode(path: Self.membrane(regionId: zone.id, radius: radius * 0.93))
+                inner.strokeColor = tint.withAlphaComponent(0.38)
+                inner.lineWidth = 0.8
+                inner.fillColor = .clear
+                inner.zPosition = 1
+                hub.addChild(inner)
+            }
+            let density = SKShapeNode(path: Self.densityPath(regionId: zone.id, count: zone.count, radius: radius))
+            density.fillColor = tint.withAlphaComponent(forming ? 0.25 : dark ? 0.75 : 0.5)
             density.strokeColor = .clear
-            density.lineWidth = 0
             density.zPosition = 1.5
             hub.addChild(density)
-            let core = SKShapeNode(circleOfRadius: max(9, radius * 0.20))
-            core.fillColor = tint
-            core.strokeColor = .clear
-            core.zPosition = 2
-            hub.addChild(core)
-            let title = SKLabelNode(fontNamed: "Helvetica Neue Medium")
+            if !forming {
+                // Ornamental nucleus; the region's members and relations appear when it is entered.
+                let nucleus = SKShapeNode(circleOfRadius: max(7, radius * 0.17))
+                nucleus.fillColor = NSColor(calibratedRed: 1, green: 0.6, blue: 0.24, alpha: 0.9)
+                nucleus.strokeColor = NSColor(calibratedRed: 1, green: 0.78, blue: 0.5, alpha: 0.9)
+                nucleus.glowWidth = dark ? 6 : 0
+                nucleus.position = CGPoint(x: radius * 0.12, y: radius * 0.1)
+                nucleus.zPosition = 2
+                hub.addChild(nucleus)
+            }
+            let title = SKLabelNode(fontNamed: "Helvetica Neue Bold")
             title.text = String(zone.title.prefix(32)).uppercased()
             title.fontSize = 13
-            title.fontColor = dark ? .white : .labelColor
+            title.fontColor = dark ? tint : tint.blended(withFraction: 0.35, of: .black)
             title.verticalAlignmentMode = .center
-            title.position = CGPoint(x: 0, y: -radius * 0.49)
+            title.position = CGPoint(x: 0, y: -radius - 16)
             title.zPosition = 3
             hub.addChild(title)
-            let count = SKLabelNode(fontNamed: "Helvetica Neue")
-            count.text = "\(zone.memberCount.formatted()) explicit members"
+            let count = SKLabelNode(fontNamed: "Menlo")
+            count.text = forming ? "dividing · not knowledge yet" : "\(zone.memberCount.formatted()) entities"
             count.fontSize = 10
-            count.fontColor = dark ? NSColor.white.withAlphaComponent(0.73) : .secondaryLabelColor
-            count.position = CGPoint(x: 0, y: -radius * 0.49 - 17)
+            count.fontColor = dark ? NSColor.white.withAlphaComponent(0.75) : .secondaryLabelColor
+            count.position = CGPoint(x: 0, y: -radius - 32)
             count.zPosition = 3
             hub.addChild(count)
             hub.run(.repeatForever(.sequence([
-                .scale(to: 1.035, duration: 3.5),
-                .scale(to: 1, duration: 3.5)
+                .scale(to: 1.03, duration: 3.2),
+                .scale(to: 1, duration: 3.2)
             ])))
             hub.isPaused = reduceMotion
             root.addChild(hub)
@@ -166,10 +178,25 @@ final class GraphZoneArtwork {
 
     func point(for regionId: String) -> CGPoint? { placement.positions[regionId] }
 
+    /// A living, slightly irregular membrane: a circle perturbed by three low harmonics per cell.
+    private static func membrane(regionId: String, radius: CGFloat) -> CGPath {
+        var random = CortexRandom(seed: GraphRegionIdentity.hash(regionId))
+        let phases = (0..<3).map { _ in CGFloat(random.next()) * 6.283 }
+        let path = CGMutablePath()
+        for step in 0...72 {
+            let angle = CGFloat(step) / 72 * 2 * .pi
+            let wobble = 1 + 0.05 * sin(3 * angle + phases[0]) + 0.035 * sin(5 * angle + phases[1]) + 0.02 * sin(9 * angle + phases[2])
+            let point = CGPoint(x: cos(angle) * radius * wobble, y: sin(angle) * radius * wobble)
+            if step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
+    }
+
     private static func densityPath(regionId: String, count: Int, radius: CGFloat) -> CGPath {
         let path = CGMutablePath()
         var state = GraphRegionIdentity.hash(regionId)
-        let samples = min(96, max(6, Int(log2(Double(count) + 1) * 12)))
+        let samples = min(220, max(12, Int(log2(Double(count) + 1) * 22)))
         for _ in 0..<samples {
             state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
             let direction = CGFloat((state >> 32) & 0xFFFF_FFFF) / CGFloat(UInt32.max)

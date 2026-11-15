@@ -841,11 +841,22 @@ public sealed partial class GraphProjectionTests : IDisposable
         return catalog;
     }
 
-    private async Task<CapturedOriginal> Enrich(SqliteCatalog catalog, string name, string body)
+    private async Task<CapturedOriginal> Enrich(SqliteCatalog catalog, string name, string body, string? watchedRoot = null)
     {
         using MemoryStream stream = new(Encoding.UTF8.GetBytes(body));
-        CapturedOriginal captured = await catalog.Originals.CaptureFileAsync(
-            Path.Combine(workspace, name), stream, 200_000, Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(watchedRoot ?? workspace, name);
+        CapturedOriginal captured;
+        if (watchedRoot is null)
+        {
+            captured = await catalog.Originals.CaptureFileAsync(path, stream, 200_000, Guid.NewGuid().ToString("N"));
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(path, body);
+            captured = await catalog.Originals.CaptureFileAsync(path, stream, 200_000, Guid.NewGuid().ToString("N"),
+                Praxis.Infrastructure.Intake.CaptureContexts.WatchedFolder(watchedRoot));
+        }
         ScriptedChatModel model = new(request =>
         {
             string excerpt = ScriptedChatModel.Excerpt(request);

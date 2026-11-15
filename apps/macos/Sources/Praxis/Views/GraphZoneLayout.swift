@@ -39,7 +39,7 @@ enum GraphZoneLayout {
             let key = RegionPair(link.subjectId, link.objectId)
             weights[key, default: 0] += link.count
         }
-        for _ in 0..<90 {
+        for _ in 0..<240 {
             var impulses = Array(repeating: CGVector.zero, count: regions.count)
             for first in 0..<regions.count {
                 for second in (first + 1)..<regions.count {
@@ -47,10 +47,10 @@ enum GraphZoneLayout {
                     let dy = points[second].y - points[first].y
                     let distance = max(1, hypot(dx, dy))
                     let spacing = (radii[regions[first].id] ?? 30) +
-                        (radii[regions[second].id] ?? 30) + 32
+                        (radii[regions[second].id] ?? 30) + 46
                     let key = RegionPair(regions[first].id, regions[second].id)
                     let weight = CGFloat(weights[key, default: 0])
-                    let repel = max(0, spacing - distance) * 0.22
+                    let repel = max(0, spacing - distance) * 0.45
                     let attract = weight == 0 ? CGFloat(0) :
                         min(2.2, sqrt(weight) * 0.14) * max(0, distance - spacing - 65) * 0.015
                     let delta = repel - attract
@@ -66,6 +66,26 @@ enum GraphZoneLayout {
                 points[index].x = (points[index].x + impulses[index].dx) * 0.999
                 points[index].y = (points[index].y + impulses[index].dy) * 0.999
             }
+        }
+        // Cells never overlap: a final pass separates any pair closer than their membranes allow.
+        for _ in 0..<80 {
+            var moved = false
+            for first in 0..<regions.count {
+                for second in (first + 1)..<regions.count {
+                    let dx = points[second].x - points[first].x
+                    let dy = points[second].y - points[first].y
+                    let distance = max(0.5, hypot(dx, dy))
+                    let spacing = (radii[regions[first].id] ?? 30) + (radii[regions[second].id] ?? 30) + 40
+                    guard distance < spacing else { continue }
+                    let push = (spacing - distance) / 2
+                    points[first].x -= dx / distance * push
+                    points[first].y -= dy / distance * push
+                    points[second].x += dx / distance * push
+                    points[second].y += dy / distance * push
+                    moved = true
+                }
+            }
+            if !moved { break }
         }
         let positions = Dictionary(uniqueKeysWithValues: zip(regions.map(\.id), points))
         let minX = regions.indices.map { points[$0].x - (radii[regions[$0].id] ?? 30) }.min() ?? 0

@@ -13,6 +13,10 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
             Task.FromResult<object>(graph.Zones(Query(fields), token))),
         new DesktopAction("graphConceptRegions", (fields, token) =>
             Task.FromResult<object>(graph.ConceptRegions(Query(fields), token, fields.OptionalGuid("parentRegionId")))),
+        new DesktopAction("graphKnowledgeRegions", (fields, token) =>
+            Task.FromResult<object>(graph.KnowledgeRegions(Query(fields), token))),
+        new DesktopAction("graphRegionMembers", (fields, token) =>
+            Task.FromResult<object>(graph.RegionMembers(RegionId(fields), Query(fields), token))),
         new DesktopAction("graphClassificationAudit", (fields, token) =>
             Task.FromResult<object>(graph.ClassificationAudit(Query(fields), token))),
         new DesktopAction("graphAtlas", (fields, token) =>
@@ -29,6 +33,12 @@ public sealed class GraphActions(IGraphReader graph) : IDesktopActionGroup
             Task.FromResult<object>(graph.Relation(
                 fields.RequireGuid("entityId"), fields.RequireGuid("relationId"), Query(fields), token)))
     ];
+
+    private static string RegionId(DesktopRequestFields fields)
+    {
+        string id = fields.RequireString("regionId", 32);
+        return id.Length == 32 && id.All(Uri.IsHexDigit) ? id : throw new ArgumentException("The region id is invalid.");
+    }
 
     private static GraphQuery Query(DesktopRequestFields fields) => new(
         fields.OptionalGuid("collectionId"),
