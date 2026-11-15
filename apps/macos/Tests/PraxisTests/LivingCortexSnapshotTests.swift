@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import Metal
+import SpriteKit
 import Testing
 @testable import Praxis
 
@@ -45,13 +47,42 @@ struct LivingCortexSnapshotTests {
             #expect(universe.map(Self.litFraction) ?? 0 > 0.01)
         }
 
+        // Cellular Atlas draws them as cells (SpriteKit, rendered offscreen with SKRenderer).
+        let tissue = Self.cells(BrainTerritories.overview(map), size: size)
+        #expect(tissue.map(Self.litFraction) ?? 0 > 0.01)
+
         if let output = environment["PRAXIS_SNAPSHOT_DIR"] {
             let folder = URL(fileURLWithPath: output, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try Self.png(whole).write(to: folder.appendingPathComponent("living-cortex-whole.png"))
             try Self.png(territory).write(to: folder.appendingPathComponent("living-cortex-territory.png"))
             if let universe { try Self.png(universe).write(to: folder.appendingPathComponent("knowledge-cosmos-universe.png")) }
+            if let tissue { try Self.png(tissue).write(to: folder.appendingPathComponent("cellular-atlas-tissue.png")) }
         }
+    }
+
+    private static func cells(_ overview: GraphVisualOverview, size: CGSize) -> CGImage? {
+        let scene = GraphScene()
+        scene.size = size
+        scene.reduceMotion = true
+        scene.updateAppearance(dark: true, highContrast: false, force: true)
+        let view = SKView(frame: CGRect(origin: .zero, size: size))
+        view.presentScene(scene)
+        scene.configureZones(overview)
+        guard let texture = view.texture(from: scene) else { return nil }
+        let art = texture.cgImage()
+        // Composite onto the scene's background, the way the view shows it.
+        let width = Int(size.width), height = Int(size.height)
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
+        context.setFillColor(CGColor(red: 0.01, green: 0.035, blue: 0.075, alpha: 1))
+        context.fill(CGRect(origin: .zero, size: size))
+        let scale = min(size.width * 0.92 / CGFloat(art.width), size.height * 0.92 / CGFloat(art.height))
+        let drawn = CGSize(width: CGFloat(art.width) * scale, height: CGFloat(art.height) * scale)
+        context.draw(art, in: CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2,
+                                     width: drawn.width, height: drawn.height))
+        return context.makeImage()
     }
 
     private static func litFraction(_ image: CGImage) -> Double {
