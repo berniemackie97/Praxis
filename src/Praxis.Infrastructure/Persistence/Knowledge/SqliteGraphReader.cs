@@ -209,6 +209,108 @@ public sealed class SqliteGraphReader : IGraphReader
     public GraphPage Atlas(GraphQuery query, CancellationToken cancellationToken = default) =>
         ReadEdges(null, null, query, cancellationToken);
 
+    private const int RegionEdgeBudget = 600;
+
+    public GraphPage Region(GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        Validate(query, allowEdges: true);
+        if (query.EntityType is null)
+        {
+            throw new ArgumentException("A region requires an entity type.", nameof(query));
+        }
+
+        return database.Execute(connection =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            long version = Version(connection);
+            string signature = Signature("region", null, null, query);
+            int offset = ReadRegionCursor(query.Cursor, version, signature, query.Limit);
+            List<EdgeRow> rows = [];
+            using (SqliteCommand command = connection.CreateCommand($"""
+                WITH eligible AS MATERIALIZED (
+                    SELECT r.relation_id, r.subject_id, r.object_id,
+                           {RelationStatus} AS evidence_status
+                    FROM knowledge_relations r
+                    JOIN knowledge_entities subject ON subject.entity_id = r.subject_id
+                    JOIN knowledge_entities object ON object.entity_id = r.object_id
+                    LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
+                    LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
+                    WHERE {RelationPolicy()}
+                      AND {NodeVisible("subject", query)}
+                      AND {NodeVisible("object", query)}
+                      AND ({EffectiveType("subject", query)} = $type
+                           OR {EffectiveType("object", query)} = $type)
+                ),
+                degrees AS MATERIALIZED (
+                    SELECT entity_id, COUNT(*) AS degree FROM (
+                        SELECT subject_id AS entity_id FROM eligible
+                        UNION ALL
+                        SELECT object_id AS entity_id FROM eligible
+                    ) GROUP BY entity_id
+                ),
+                anchored AS (
+                    SELECT eligible.relation_id, eligible.evidence_status,
+                           MAX(subject_degree.degree, object_degree.degree) AS hub_degree,
+                           CASE WHEN subject_degree.degree > object_degree.degree THEN eligible.subject_id
+                                WHEN subject_degree.degree < object_degree.degree THEN eligible.object_id
+                                WHEN eligible.subject_id < eligible.object_id THEN eligible.subject_id
+                                ELSE eligible.object_id END AS hub_id
+                    FROM eligible
+                    JOIN degrees subject_degree ON subject_degree.entity_id = eligible.subject_id
+                    JOIN degrees object_degree ON object_degree.entity_id = eligible.object_id
+                ),
+                ranked AS (
+                    SELECT relation_id, hub_degree,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY hub_id
+                               ORDER BY CASE WHEN evidence_status IN ('suggested', 'contradicted')
+                                             THEN 1 ELSE 0 END,
+                                        relation_id) AS depth
+                    FROM anchored
+                ),
+                selected AS MATERIALIZED (
+                    SELECT relation_id, hub_degree, depth FROM ranked
+                    ORDER BY depth, hub_degree DESC, relation_id
+                    LIMIT $take OFFSET $offset
+                )
+                SELECT r.relation_id, r.subject_id, r.object_id, r.predicate, r.origin,
+                       {RelationStatus} AS evidence_status,
+                       p.proposal_id, p.source_id, p.item_id, p.revision, p.source_digest,
+                       s.locator, p.evidence, p.evidence_offset, p.status, v.verdict
+                FROM selected
+                JOIN knowledge_relations r ON r.relation_id = selected.relation_id
+                LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
+                LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
+                LEFT JOIN sources s ON s.source_id = p.source_id
+                ORDER BY selected.depth, selected.hub_degree DESC, selected.relation_id
+                """))
+            {
+                Scope(command, query);
+                command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
+                command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
+                command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
+                command.Parameters.AddWithValue("$type", query.EntityType);
+                command.Parameters.AddWithValue("$take", query.Limit + 1);
+                command.Parameters.AddWithValue("$offset", offset);
+                using SqliteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    rows.Add(ReadEdgeRow(reader));
+                }
+            }
+
+            bool more = rows.Count > query.Limit;
+            if (more)
+            {
+                rows.RemoveAt(rows.Count - 1);
+            }
+            string? nextCursor = more ? WriteRegionCursor(version, signature, offset + rows.Count) : null;
+            return ComposePage(connection, query, rows, null, null, null, nextCursor, cancellationToken);
+        });
+    }
+
+
     public GraphPage Neighborhood(Guid focusId, GraphQuery query, CancellationToken cancellationToken = default) =>
         ReadEdges(focusId, null, query, cancellationToken);
 
@@ -288,15 +390,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 while (reader.Read())
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    GraphEvidence? evidence = reader.IsDBNull(6) ? null : new GraphEvidence(
-                        Guid.Parse(reader.GetString(6)), Guid.Parse(reader.GetString(7)),
-                        Guid.Parse(reader.GetString(8)), reader.GetInt32(9), reader.GetString(10),
-                        reader.GetString(11), reader.GetString(12), reader.GetInt32(13),
-                        reader.GetString(14), reader.IsDBNull(15) ? null : reader.GetString(15));
-                    rows.Add(new EdgeRow(
-                        Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
-                        Guid.Parse(reader.GetString(2)), reader.GetString(3), reader.GetString(4),
-                        reader.GetString(5), evidence));
+                    rows.Add(ReadEdgeRow(reader));
                 }
             }
 
@@ -305,37 +399,54 @@ public sealed class SqliteGraphReader : IGraphReader
             {
                 rows.RemoveAt(rows.Count - 1);
             }
-            List<GraphNode> nodes = [];
-            List<GraphEdge> edges = [];
-            HashSet<Guid> known = [];
-            if (focusId is Guid knownFocusId && root is not null)
-            {
-                nodes.Add(root);
-                known.Add(knownFocusId);
-            }
-            foreach (EdgeRow row in rows)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
-                {
-                    nodes.Add(subject);
-                }
-                if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
-                {
-                    nodes.Add(objectNode);
-                }
-
-                edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
-                    row.Predicate, row.Origin, row.EvidenceStatus, row.Evidence,
-                    row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
-            }
-
-            string outcome = relationId is not null && edges.Count == 0 ? "unavailable" :
-                focusId is null && edges.Count == 0 ? "empty" : "ready";
-            return new GraphPage(outcome, focusId,
-                relationId is not null && edges.Count == 0 ? [] : nodes, edges,
-                more ? WriteCursor(version, signature, rows[^1].RelationId) : null);
+            return ComposePage(connection, query, rows, focusId, relationId, root,
+                more ? WriteCursor(version, signature, rows[^1].RelationId) : null, cancellationToken);
         });
+    }
+
+    private static EdgeRow ReadEdgeRow(SqliteDataReader reader)
+    {
+        GraphEvidence? evidence = reader.IsDBNull(6) ? null : new GraphEvidence(
+            Guid.Parse(reader.GetString(6)), Guid.Parse(reader.GetString(7)),
+            Guid.Parse(reader.GetString(8)), reader.GetInt32(9), reader.GetString(10),
+            reader.GetString(11), reader.GetString(12), reader.GetInt32(13),
+            reader.GetString(14), reader.IsDBNull(15) ? null : reader.GetString(15));
+        return new EdgeRow(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1)),
+            Guid.Parse(reader.GetString(2)), reader.GetString(3), reader.GetString(4),
+            reader.GetString(5), evidence);
+    }
+
+    private static GraphPage ComposePage(SqliteConnection connection, GraphQuery query,
+        IReadOnlyList<EdgeRow> rows, Guid? focusId, Guid? relationId, GraphNode? root,
+        string? nextCursor, CancellationToken cancellationToken)
+    {
+        List<GraphNode> nodes = [];
+        List<GraphEdge> edges = [];
+        HashSet<Guid> known = [];
+        if (focusId is Guid knownFocusId && root is not null)
+        {
+            nodes.Add(root);
+            known.Add(knownFocusId);
+        }
+        foreach (EdgeRow row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (known.Add(row.SubjectId) && ReadNode(connection, row.SubjectId, query) is { } subject)
+            {
+                nodes.Add(subject);
+            }
+            if (known.Add(row.ObjectId) && ReadNode(connection, row.ObjectId, query) is { } objectNode)
+            {
+                nodes.Add(objectNode);
+            }
+            edges.Add(new GraphEdge(row.RelationId, row.SubjectId, row.ObjectId,
+                row.Predicate, row.Origin, row.EvidenceStatus, row.Evidence,
+                row.Evidence is null ? ["inspectRelation"] : ["inspectRelation", "openSource"]));
+        }
+        string outcome = relationId is not null && edges.Count == 0 ? "unavailable" :
+            focusId is null && edges.Count == 0 ? "empty" : "ready";
+        return new GraphPage(outcome, focusId,
+            relationId is not null && edges.Count == 0 ? [] : nodes, edges, nextCursor);
     }
 
     private static string RelationPolicy() => $"""
@@ -527,32 +638,61 @@ public sealed class SqliteGraphReader : IGraphReader
         {
             return "";
         }
+        string value = CursorValue(cursor, version, signature);
+        if (Guid.TryParseExact(value, "D", out Guid id) && id != Guid.Empty)
+        {
+            return id.ToString("D");
+        }
+        throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
+    }
+
+    private int ReadRegionCursor(string? cursor, long version, string signature, int pageSize)
+    {
+        if (cursor is null)
+        {
+            return 0;
+        }
+        string value = CursorValue(cursor, version, signature);
+        if (int.TryParse(value, out int offset) && offset is > 0 and <= RegionEdgeBudget &&
+            offset % pageSize == 0)
+        {
+            return offset;
+        }
+        throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
+    }
+
+    private string CursorValue(string cursor, long version, string signature)
+    {
         try
         {
             string encoded = cursor.Replace('-', '+').Replace('_', '/');
             string raw = Encoding.UTF8.GetString(Convert.FromBase64String(encoded.PadRight((encoded.Length + 3) / 4 * 4, '=')));
             string[] fields = raw.Split('|');
             if (fields.Length == 4 && fields[0] == session && fields[2] == signature &&
-                long.TryParse(fields[1], out long observed) &&
-                Guid.TryParseExact(fields[3], "D", out Guid id) && id != Guid.Empty)
+                long.TryParse(fields[1], out long observed))
             {
                 if (observed != version)
                 {
                     throw new InvalidOperationException("The graph page is no longer current.");
                 }
-                return id.ToString("D");
+                return fields[3];
             }
         }
         catch (FormatException)
         {
         }
-
         throw new ArgumentException("The graph cursor is invalid.", nameof(cursor));
     }
 
-    private string WriteCursor(long version, string signature, Guid id)
+    private string WriteCursor(long version, string signature, Guid id) =>
+        WriteToken(version, signature, id.ToString("D"));
+
+    private string WriteRegionCursor(long version, string signature, int offset) =>
+        WriteToken(version, signature, offset.ToString());
+
+    private string WriteToken(long version, string signature, string value)
     {
-        string raw = $"{session}|{version}|{signature}|{id:D}";
+        string raw = $"{session}|{version}|{signature}|{value}";
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
