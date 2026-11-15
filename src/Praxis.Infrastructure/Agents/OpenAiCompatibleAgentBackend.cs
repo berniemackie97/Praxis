@@ -12,7 +12,7 @@ namespace Praxis.Infrastructure.Agents;
 /// Tool calling over the OpenAI-compatible chat completions API: OpenAI, DeepSeek, OpenRouter,
 /// Gemini's compatible endpoint, and local servers such as Ollama or LM Studio (<c>/v1</c>).
 /// </summary>
-public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey) : IAgentBackend
+public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, string? reasoningEffort = null) : IAgentBackend
 {
     public async Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         CancellationToken cancellationToken)
@@ -30,6 +30,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         }
 
         JsonObject body = new() { ["model"] = model, ["messages"] = messages };
+        if (reasoningEffort is not null)
+        {
+            body["reasoning_effort"] = reasoningEffort;
+        }
+
         if (tools.Count > 0)
         {
             body["tools"] = new JsonArray(tools.Select(tool => (JsonNode)new JsonObject

@@ -120,6 +120,30 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal("PING", catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
 
+    [Theory]
+    [InlineData("ollama", "http://127.0.0.1:11434/v1", "none")]
+    [InlineData("other-local", "http://127.0.0.1:11434/v1", null)]
+    [InlineData("ollama", "https://api.example.com/v1", null)]
+    public async Task OnlyTheLoopbackOllamaConnectionRequestsThinkingOff(string id, string endpoint, string? expectedEffort)
+    {
+        CapturingHandler handler = new("""{"choices":[{"message":{"content":"PING"}}]}""");
+        using HttpClient http = new(handler);
+        AgentBackendFactory factory = new(http, new NoSecrets(), new AgentRelayCommand("unused", []), Path.GetTempPath());
+        IAgentBackend backend = factory.CreateTurnBackend(Local() with { BackendId = id, Endpoint = endpoint })!;
+
+        AgentTurn result = await backend.CompleteAsync("Answer directly.", [AgentMessage.FromUser("Reply with PING only.")], [], CancellationToken.None);
+
+        using JsonDocument payload = JsonDocument.Parse(handler.Body!);
+        string? effort = payload.RootElement.TryGetProperty("reasoning_effort", out JsonElement value) ? value.GetString() : null;
+        Assert.Equal(expectedEffort, effort);
+        Assert.Equal("PING", result.Text);
+    }
+
+    private sealed class NoSecrets : ISecretStore
+    {
+        public string? Read(string account) => throw new InvalidOperationException("This connection must not use a secret.");
+    }
+
     [Fact]
     public void CodexUsageIsProviderReportedAndFailureDetailsStayPrivate()
     {
