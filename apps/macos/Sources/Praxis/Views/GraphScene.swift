@@ -180,8 +180,8 @@ final class GraphScene: SKScene {
     private func fitZones() {
         let bounds = zoneArtwork.bounds
         guard bounds.width > 0, bounds.height > 0, size.width > 0, size.height > 0 else { return }
-        atlasFitScale = max(1, bounds.width / (size.width * 0.88),
-                              bounds.height / (size.height * 0.88))
+        atlasFitScale = max(0.45, bounds.width / (size.width * 0.88),
+                                 bounds.height / (size.height * 0.88))
         viewCamera.removeAllActions()
         viewCamera.zRotation = 0
         viewCamera.position = CGPoint(x: bounds.midX, y: bounds.midY)
