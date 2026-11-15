@@ -79,19 +79,27 @@ enum NeuralNebulaGeometry {
             guard let a = placement.zoneCenters[relation.subjectId],
                   let b = placement.zoneCenters[relation.objectId],
                   relation.subjectId != relation.objectId else { continue }
-            // Filaments: curved light lanes whose brightness is the evidence between galaxies.
-            let weight = sqrt(Float(relation.count) / strongest)
+            // Filaments: curved light lanes whose brightness is the evidence between galaxies. Confirmed
+            // evidence takes the galaxies' colours; suggested (amber) and contradicted (red) lanes stay
+            // distinct and bend away so they are never mistaken for confirmed links.
             let colorA = colors[relation.subjectId] ?? [0.55, 0.81, 1, 1], colorB = colors[relation.objectId] ?? [0.55, 0.81, 1, 1]
-            let lift = SIMD3<Float>(0, simd_length(b - a) * 0.12, 0)
-            let control = (a + b) * 0.5 + lift
-            let segments = 18
-            for step in 0..<segments {
-                for t in [Float(step) / Float(segments), Float(step + 1) / Float(segments)] {
-                    let u = 1 - t
-                    let point = u * u * a + 2 * u * t * control + t * t * b
-                    var color = colorA * u + colorB * t
-                    color.w = (highContrast ? 0.5 : 0.22) + 0.5 * weight
-                    links.append(NeuralNebulaVertex(position: point, color: color, size: 1))
+            let lanes: [(Int, SIMD4<Float>?, Float)] = [
+                (relation.confirmedCount, nil, 0.12),
+                (relation.suggestedCount, SIMD4<Float>(0.98, 0.69, 0.31, 1), 0.2),
+                (relation.contradictedCount, SIMD4<Float>(1, 0.37, 0.44, 1), 0.04)
+            ]
+            for (count, fixed, bend) in lanes where count > 0 {
+                let weight = sqrt(Float(count) / strongest)
+                let control = (a + b) * 0.5 + SIMD3<Float>(0, simd_length(b - a) * bend, 0)
+                let segments = 18
+                for step in 0..<segments {
+                    for t in [Float(step) / Float(segments), Float(step + 1) / Float(segments)] {
+                        let u = 1 - t
+                        let point = u * u * a + 2 * u * t * control + t * t * b
+                        var color = fixed ?? (colorA * u + colorB * t)
+                        color.w = (highContrast ? 0.5 : 0.22) + 0.5 * weight
+                        links.append(NeuralNebulaVertex(position: point, color: color, size: 1))
+                    }
                 }
             }
         }
