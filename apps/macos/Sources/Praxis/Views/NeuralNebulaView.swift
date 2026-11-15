@@ -88,7 +88,8 @@ final class NeuralNebulaInputView: MTKView {
             if let existing = labels[type] {
                 label = existing
             } else {
-                label = NebulaZoneLabel(labelWithString: type.replacingOccurrences(of: "_", with: " ").capitalized)
+                label = NebulaZoneLabel(frame: CGRect(x: 0, y: 0, width: 150, height: 19))
+                label.stringValue = type.replacingOccurrences(of: "_", with: " ").capitalized
                 label.isBezeled = false
                 label.drawsBackground = false
                 label.isEditable = false
