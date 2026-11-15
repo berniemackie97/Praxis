@@ -29,7 +29,7 @@ enum GraphZoneLayout {
         let radii = Dictionary(uniqueKeysWithValues: zones.map {
             ($0.entityType, min(90, max(30, 24 + sqrt(CGFloat($0.count)) * 5)))
         })
-        var points = zones.enumerated().map { index, zone in
+        var points = zones.enumerated().map { index, _ in
             let radius = CGFloat(index) * 57
             let theta = CGFloat(index) * goldenAngle
             return CGPoint(x: cos(theta) * radius, y: sin(theta) * radius)
