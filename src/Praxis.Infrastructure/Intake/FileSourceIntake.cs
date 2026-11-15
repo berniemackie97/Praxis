@@ -11,7 +11,19 @@ namespace Praxis.Infrastructure.Intake;
 
 public sealed class FileSourceIntake(IOriginalStore originals, string catalogDirectory)
 {
-    public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default)
+    public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default) =>
+        InspectFolderCore(selectedDirectory, maxFiles, maxDepth, maxTotalBytes, false, out _, cancellationToken);
+
+    internal (IReadOnlyList<ObservedFile> Files, int SkippedLinks) InspectWatchedFolder(
+        string directory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ObservedFile> files = InspectFolderCore(directory, maxFiles, maxDepth,
+            maxTotalBytes, true, out int skippedLinks, cancellationToken);
+        return (files, skippedLinks);
+    }
+
+    private IReadOnlyList<ObservedFile> InspectFolderCore(string selectedDirectory, int maxFiles, int maxDepth,
+        long maxTotalBytes, bool skipLinks, out int skippedLinks, CancellationToken cancellationToken)
     {
         if (maxFiles is < 1 or > 10_000)
         {
@@ -26,7 +38,7 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
         ArgumentOutOfRangeException.ThrowIfNegative(maxTotalBytes);
 
         string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
-        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, skipLinks, out skippedLinks, cancellationToken);
         List<ObservedFile> files = new(paths.Count);
         long remaining = maxTotalBytes;
         foreach (string path in paths)
@@ -93,7 +105,7 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
         ArgumentOutOfRangeException.ThrowIfNegative(maxTotalBytes);
 
         string root = ValidateSourcePath(selectedDirectory, expectDirectory: true);
-        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, cancellationToken);
+        List<string> paths = DiscoverFiles(root, maxFiles, maxDepth, false, out _, cancellationToken);
         long remaining = maxTotalBytes;
         foreach (string path in paths)
         {
@@ -150,8 +162,10 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
             : FileSystemPaths.Canonicalize(full);
     }
 
-    private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth, CancellationToken cancellationToken)
+    private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth,
+        bool skipLinks, out int skippedLinks, CancellationToken cancellationToken)
     {
+        skippedLinks = 0;
         List<string> result = new();
         Stack<(string Directory, int Depth, bool InsideProject, IReadOnlyList<GitIgnoreRules> Rules)> stack = new();
         stack.Push((directory, 0, false, []));
@@ -190,6 +204,12 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
 
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
+                    if (skipLinks)
+                    {
+                        skippedLinks++;
+                        continue;
+                    }
+
                     throw new InvalidDataException("Folder imports cannot follow symbolic links.");
                 }
 
