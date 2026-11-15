@@ -194,6 +194,8 @@ public sealed class AgentPrimitivesTests
         public void SaveBackend(AgentBackendProfile profile) => throw new NotSupportedException();
         public AgentConversation Create(string backendId, string title) => throw new NotSupportedException();
         public AgentConversation? Read(Guid conversationId) => throw new NotSupportedException();
+        public bool Rename(Guid conversationId, string title) => throw new NotSupportedException();
+        public bool Delete(Guid conversationId) => throw new NotSupportedException();
         public IReadOnlyList<AgentConversation> List(int limit) => throw new NotSupportedException();
         public IReadOnlyList<AgentMessage> ReadMessages(Guid conversationId) => throw new NotSupportedException();
         public void Append(Guid conversationId, AgentMessage message) => throw new NotSupportedException();
