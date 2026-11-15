@@ -81,7 +81,7 @@ public sealed partial class GraphProjectionTests
         GraphQuery scoped = new(EntityType: "project", SourceId: source.SourceId, Limit: 10);
         Assert.Empty(catalog.Graph.Region(scoped).Edges);
         GraphEdge pending = Assert.Single(catalog.Graph.Region(scoped with
-            { IncludeSuggestions = true }).Edges);
+        { IncludeSuggestions = true }).Edges);
         Assert.Equal("suggested", pending.EvidenceStatus);
         Assert.Equal(source.SourceId, pending.Evidence!.SourceId);
 
