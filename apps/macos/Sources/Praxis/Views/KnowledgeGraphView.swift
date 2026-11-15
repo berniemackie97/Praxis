@@ -19,10 +19,8 @@ struct KnowledgeGraphView: View {
     @State private var showContexts = true
     @AppStorage("brain.graph.style") private var graphStyle = GraphStyle.cellularAtlas.rawValue
 
-    private var visibleZones: GraphZoneOverview? {
-        guard graph.focusId == nil,
-              graph.selectedZoneType == nil || graph.atlasLoading,
-              let summary = graph.zoneOverview else { return nil }
+    private var scopedZones: GraphZoneOverview? {
+        guard let summary = graph.zoneOverview else { return nil }
         guard !graph.entityType.isEmpty else { return summary }
         let zones = summary.zones.filter { $0.entityType == graph.entityType }
         let links = summary.links.filter {
@@ -31,6 +29,12 @@ struct KnowledgeGraphView: View {
         return GraphZoneOverview(entityCount: zones.reduce(0) { $0 + $1.count },
                                  relationshipCount: links.reduce(0) { $0 + $1.count },
                                  zones: zones, links: links)
+    }
+
+    private var visibleZones: GraphZoneOverview? {
+        guard graph.focusId == nil,
+              graph.selectedZoneType == nil || graph.atlasLoading else { return nil }
+        return scopedZones
     }
 
     var body: some View {
@@ -58,7 +62,7 @@ struct KnowledgeGraphView: View {
                     } else {
                         Group {
                             if graphStyle == GraphStyle.neuralNebula.rawValue {
-                                NeuralNebulaView(zones: graph.zoneOverview,
+                                NeuralNebulaView(zones: scopedZones,
                                                  nodes: graph.visibleNodes, edges: graph.visibleEdges,
                                                  regionType: graph.selectedZoneType, focusId: graph.focusId,
                                                  expandZone: { graph.enterZone($0) },
