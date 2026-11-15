@@ -153,6 +153,7 @@ struct AgentConversationData: Decodable {
     let messages: [AgentMessage]
     let toolCalls: [AgentToolCallRecord]
 }
+struct AgentRecapData: Decodable { let recap: String? }
 struct AgentRunStartedData: Decodable { let runId: String }
 struct AgentProposalsData: Decodable { let proposals: [AgentProposal] }
 struct AgentMemoriesData: Decodable { let memories: [AgentMemory] }

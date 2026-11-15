@@ -1,5 +1,6 @@
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Data;
+using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Finance;
@@ -19,7 +20,7 @@ public static class AgentComposition
 {
     public static IReadOnlyList<IAgentTool> Tools(
         SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock,
-        ISavedLinkWriter? links = null)
+        ISavedLinkWriter? links = null, IChatMemoryNotes? memoryNotes = null)
     {
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
@@ -45,6 +46,7 @@ public static class AgentComposition
             new ArtifactUpdateTool(artifacts, catalog.Agents, clock),
             new MemoryRecallTool(catalog.Agents),
             new MemoryRememberTool(catalog.Agents),
+            .. (memoryNotes is null ? Array.Empty<IAgentTool>() : [new MemoryEditTool(memoryNotes, catalog.ChatMemory, catalog.Agents)]),
             new IntakeStatusTool(catalog.Processing, catalog.Policy, ledger),
             .. (links is null ? Array.Empty<IAgentTool>() : [new KnowledgeSaveLinkTool(links, catalog.Agents, catalog.Links)]),
             new IntakeReprocessTool(catalog.Processing),
@@ -57,5 +59,5 @@ public static class AgentComposition
 
     public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock) =>
         new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
-            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search);
+            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory);
 }

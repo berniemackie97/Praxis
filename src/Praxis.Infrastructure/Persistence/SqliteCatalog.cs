@@ -58,6 +58,7 @@ public sealed class SqliteCatalog : IDisposable
     public SqliteFinancialLedgerRepository Finance { get; }
     public SqlitePolicyRepository Policy { get; }
     public SqliteAgentRepository Agents { get; }
+    public SqliteChatMemoryStore ChatMemory { get; }
     public SqliteUnderstandingRepository Understanding { get; }
 
     public SqliteLinkRepository Links { get; }
@@ -96,6 +97,7 @@ public sealed class SqliteCatalog : IDisposable
         Finance = new SqliteFinancialLedgerRepository(database, clock);
         Policy = new SqlitePolicyRepository(database, clock);
         Agents = new SqliteAgentRepository(database, clock);
+        ChatMemory = new SqliteChatMemoryStore(database, clock);
         Understanding = new SqliteUnderstandingRepository(database, clock);
         Links = new SqliteLinkRepository(database, clock);
         Settings = new SqliteSettingsStore(database, clock);

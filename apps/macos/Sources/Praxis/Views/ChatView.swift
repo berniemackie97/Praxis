@@ -108,6 +108,14 @@ struct ChatView: View {
                 } else {
                     configuration
                     Divider()
+                    if let recap = model.recap {
+                        DisclosureGroup("Chat recap") {
+                            Text(recap).textSelection(.enabled)
+                        }
+                        .font(.callout)
+                        .padding(.horizontal, Spacing.l)
+                        .padding(.vertical, Spacing.s)
+                    }
                     Transcript(model: model, openAgentSettings: openAgentSettings)
                     Composer(model: model, supportsChat: supportsChat, supportsTools: supportsTools)
                 }
@@ -179,7 +187,7 @@ private struct ConversationList: View {
                 deleting = nil
             }
         } message: {
-            Text("The conversation and its tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
+            Text("The conversation, recap and tool-call history will be deleted. Separately saved knowledge, memories and artifacts stay available.")
         }
         .safeAreaInset(edge: .bottom) {
             if let error = model.listError {
