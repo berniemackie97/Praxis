@@ -9,6 +9,8 @@ The existing private desktop worker protocol is the only transport. The catalog 
 ## Actions and output
 
 - **graphOverview** accepts sourceId, collectionId and includeSuggestions, returning exact counts of currently visible entities grouped by effective canonical type. It has no graph edges, names, search samples or cursor. Counts use the same active-source, current-revision and source/collection visibility predicates as other graph reads; they do not include queued intake.
+- **graphConceptRegions** takes sourceId, collectionId, limit, cursor, and optional parentRegionId. It returns paged root or child groups, always without suggestions or type filters. The response contains the writer revision, canonical anchor ID and scoped label, distinct direct-member count and direct-member counts by authority. A member can have more than one kind of evidence.
+- **graphClassificationAudit** takes sourceId, collectionId, limit and cursor. It reproduces the former project-root **candidate population** using the exact same confirmed visibility and effective type. It returns a scoped total, writer revision, and a page of candidates with their type origin, one current mention example and project-tagged mention counts by authority. See the [audit and review procedure](../testing/one-brain-classification-audit.md).
 - **graphAtlas** accepts the existing collection/source/type/predicate/evidence/trust filters and a stable cursor. It pages **actual** visible relationships across all authorized entities without a required focus, carrying their source-validated endpoints. It shares `ReadEdges`, the source and revision visibility predicates, and the same no-invented-relations rule as a focused neighborhood. The macOS viewer gathers bounded pages up to **600 relationships / 960 graph endpoint nodes**, plus at most 32 currently scoped search/discovery nodes and labels capped output as a partial sample, not the full corpus.
 - **graphSeeds** accepts optional search, entityType, collectionId, sourceId, limit and cursor. It returns confirmed matching entities and one eligible source reference per entity.
 - **graphNeighborhood** requires entityId, and accepts optional entityType, collectionId, sourceId, predicate, evidenceStatus, limit and cursor. It returns one focused entity and a page of its immediate, authorized relations and neighbors. The entityType filter applies to neighbors, not the focus.
@@ -29,6 +31,14 @@ By default, a model relation needs an eligible current source proposal and confi
 A confirmed relation is not inferred from a co-mention, proximity, similarity score or graph position. There is no multihop expansion, client SQL, automatic approval or write action.
 
 Collection membership must be active; revoked sources, obsolete revisions and rejected proposals are excluded by current canonical records. No new graph cache needs invalidation after lifecycle writes.
+
+## Structural region placement — #455
+
+The renderer receives group placement from a separate read projection. Eligible edges are explicit `parent contains child` or `child part_of parent` claims with an owner assertion, an accepted/corrected proposal or a supporting verifier verdict. The existing graph policy still checks proposal eligibility, current revision, both endpoints and source/collection scope. Mere technical extraction, document tier, title, entity type, co-occurrence, or a nonstructural relationship cannot place a region. The ordinary neighborhood still exposes eligible evidence with its original status.
+
+A root is a group with at least one direct member and no eligible incoming parent in scope. Immediate child groups can participate in more than one parent's region. Reciprocal spellings of the same parent-child relation do not double-count members; original observations remain inspectable. Nested navigation suppresses candidate groups that would lead back to an ancestor and refuses to invent a root in a cycle. A rootless cycle remains available in the canonical relation view. Narrowing scope can produce a different root or omit a group entirely.
+
+Pages are bounded (max 100), ordered by direct membership count then canonical ID, and bound to the parent, scope, session and writer revision. The current query materializes scoped containment and groups it once per page; the bound on returned rows is not a bound on SQL work. No persisted region cache or ingestion reprocessing is introduced. Each mounted style renders the same client projection; there is no event subscription in this slice.
 
 ## Evidence inspection and review — #387
 

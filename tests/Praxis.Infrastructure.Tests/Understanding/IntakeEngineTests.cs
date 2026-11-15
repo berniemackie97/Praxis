@@ -98,6 +98,35 @@ public sealed class IntakeEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task StrongIntakeWithExactQuotesDoesNotVerifyProjectTypeOrPlaceARegion()
+    {
+        using SqliteCatalog catalog = Open();
+        Grant(catalog, DataCategories.Documents, Strong);
+        const string source = "Oriole Studio uses the Delta Index library.";
+        const string misunderstanding = """
+            {"summary":"Integration notes.","documentType":"notes","topics":[],"records":[],
+             "entities":[{"name":"Oriole Studio","type":"project","quote":"Oriole Studio uses the Delta Index library."},
+                         {"name":"Delta Index","type":"project","quote":"Oriole Studio uses the Delta Index library."}],
+             "relations":[{"subject":"Oriole Studio","predicate":"contains","object":"Delta Index",
+                           "quote":"Oriole Studio uses the Delta Index library."}]}
+            """;
+        CapturedOriginal note = await Capture(catalog, "integration.md", Encoding.UTF8.GetBytes(source));
+        await ProcessingDriver.RunIntakeAsync(catalog, CatalogProcessing.CreateHandlers(catalog, Models(_ => misunderstanding), clock));
+        Assert.Equal(ModelTiers.Strong, catalog.Understanding.ReadCurrent(note.SourceId)!.Tier);
+
+        GraphQuery query = new(SourceId: note.SourceId);
+        GraphClassificationAuditPage audit = catalog.Graph.ClassificationAudit(query);
+        Assert.Equal(2, audit.ProjectTypedCount);
+        GraphClassificationAuditEntry library = Assert.Single(audit.Entries, row => row.Entity.Label == "Delta Index");
+        Assert.Equal(1, library.UnverifiedDerivedProjectMentions);
+        Assert.Equal(0, library.VerifierSupportedProjectMentions);
+        Assert.Equal(0, library.AcceptedProjectMentions);
+        Assert.Equal(source, library.Entity.Evidence!.Text);
+        Assert.Equal("documented", Assert.Single(catalog.Graph.Neighborhood(library.Entity.EntityId, query).Edges).EvidenceStatus);
+        Assert.Empty(catalog.Graph.ConceptRegions(query).Regions);
+    }
+
+    [Fact]
     public async Task TheLocalDraftIsReviewedByTheStrongTierWhichWritesOnlyCorrections()
     {
         using SqliteCatalog catalog = Open();

@@ -1,5 +1,6 @@
 namespace Praxis.Application.Knowledge;
 
-/// <summary>A source-visible project anchor, not a guessed topic or a claim of shared ownership.</summary>
-public sealed record GraphConceptRegion(Guid RegionId, string Label, int RelationCount,
-    int RelatedEntityCount, int ContainedEntityCount);
+/// <summary>A canonical entity acting as a group because of current structural evidence.
+/// Member counts are direct; the evidence categories can overlap.</summary>
+public sealed record GraphConceptRegion(Guid RegionId, string Label, int ContainedEntityCount,
+    int OwnerMemberCount, int AcceptedMemberCount, int VerifiedMemberCount);

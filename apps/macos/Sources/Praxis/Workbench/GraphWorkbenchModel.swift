@@ -8,6 +8,8 @@ final class GraphWorkbenchModel: ObservableObject {
     private let seedScope = "graph-seeds"
     private let overviewScope = "graph-overview"
     private let conceptScope = "graph-concepts"
+    private let childConceptScope = "graph-child-concepts"
+    private var conceptTrail: [String] = []
     private let atlasScope = "graph-atlas"
     private let neighborhoodScope = "graph-neighborhood"
     private let inspectionScope = "graph-inspection"
@@ -38,6 +40,12 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published private(set) var conceptNextCursor: String?
     @Published private(set) var conceptLoading = false
     @Published private(set) var conceptError: String?
+    @Published private(set) var childConcepts: GraphConceptPage?
+    @Published private(set) var childConceptLoading = false
+    @Published private(set) var childConceptError: String?
+
+    var isBrowsingConcept: Bool { !conceptTrail.isEmpty }
+
     @Published private(set) var selectedZoneType: String?
     @Published private(set) var atlasNodes: [GraphNode] = []
     @Published private(set) var atlasEdges: [GraphEdge] = []
@@ -108,6 +116,7 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(seedScope)
         channel.reset(overviewScope)
         channel.reset(conceptScope)
+        resetConceptTrail()
         channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
@@ -146,6 +155,7 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(seedScope)
         channel.reset(overviewScope)
         channel.reset(conceptScope)
+        resetConceptTrail()
         channel.reset(atlasScope)
         channel.reset(neighborhoodScope)
         clearInspection()
@@ -201,6 +211,11 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func loadMoreConcepts() {
+        if let parent = conceptTrail.last {
+            guard let cursor = childConcepts?.nextCursor, !childConceptLoading else { return }
+            loadChildConcepts(parent, cursor: cursor)
+            return
+        }
         guard conceptNextCursor != nil, !conceptLoading else { return }
         loadConcepts(cursor: conceptNextCursor)
     }
@@ -231,6 +246,56 @@ final class GraphWorkbenchModel: ObservableObject {
                 let existing = Set(conceptRegions.map(\.regionId))
                 conceptRegions += page.regions.filter { !existing.contains($0.regionId) }
             }
+        }
+    }
+
+    func openConcept(_ id: String) {
+        let regions = isBrowsingConcept ? childConcepts?.regions ?? [] : conceptRegions
+        guard active, !conceptTrail.contains(id), regions.contains(where: { $0.regionId == id }) else { return }
+        conceptTrail.append(id)
+        focusValidated(id, preserveConceptTrail: true)
+        loadChildConcepts(id, cursor: nil)
+    }
+
+    func backFromConcept() {
+        guard active, !conceptTrail.isEmpty else { return }
+        conceptTrail.removeLast()
+        if let parent = conceptTrail.last {
+            focusValidated(parent, preserveConceptTrail: true)
+            loadChildConcepts(parent, cursor: nil)
+        } else {
+            showOverview()
+        }
+    }
+
+    private func resetConceptTrail() {
+        conceptTrail = []
+        channel.reset(childConceptScope)
+        childConcepts = nil
+        childConceptLoading = false
+        childConceptError = nil
+    }
+
+    private func loadChildConcepts(_ parent: String, cursor: String?) {
+        channel.reset(childConceptScope)
+        if cursor == nil { childConcepts = nil }
+        childConceptLoading = true
+        childConceptError = nil
+        var fields: [String: Any] = ["limit": 32, "parentRegionId": parent]
+        if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+        if let cursor { fields["cursor"] = cursor }
+        channel.send("graphConceptRegions", fields, as: GraphConceptPage.self, scope: childConceptScope,
+                     failed: { [weak self] error in
+                         self?.childConceptLoading = false
+                         self?.childConcepts = nil
+                         self?.childConceptError = error
+                     }) { [weak self] page in
+            guard let self, active, conceptTrail.last == parent else { return }
+            childConceptLoading = false
+            let previous = cursor == nil ? [] : childConcepts?.regions ?? []
+            childConcepts = GraphConceptPage(regionCount: page.regionCount, regions: previous + page.regions,
+                                            nextCursor: page.nextCursor, revision: page.revision)
         }
     }
 
@@ -360,6 +425,15 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func showOverview() {
+        resetConceptTrail()
+        if active {
+            channel.reset(conceptScope)
+            conceptRegions = []
+            conceptRegionCount = 0
+            conceptNextCursor = nil
+            conceptError = nil
+            loadConcepts(cursor: nil)
+        }
         requestedFocusId = nil
         recenterNodeId = nil
         channel.reset(neighborhoodScope)
@@ -412,8 +486,9 @@ final class GraphWorkbenchModel: ObservableObject {
         if active { focusValidated(id) } else { requestedFocusId = id }
     }
 
-    private func focusValidated(_ id: String) {
+    private func focusValidated(_ id: String, preserveConceptTrail: Bool = false) {
         guard active else { return }
+        if !preserveConceptTrail { resetConceptTrail() }
         channel.reset(neighborhoodScope)
         clearInspection()
         focusId = id
@@ -701,6 +776,7 @@ final class GraphWorkbenchModel: ObservableObject {
             loading = false
             outcome = page.outcome
             if page.outcome == "unavailable" {
+                showOverview()
                 nodes = []
                 edges = []
                 seeds.removeAll { $0.entityId == id }
