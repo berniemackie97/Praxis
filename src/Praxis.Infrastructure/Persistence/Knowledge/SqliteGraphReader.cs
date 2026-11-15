@@ -290,7 +290,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
                 command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
                 command.Parameters.AddWithValue("$type", query.EntityType);
-                command.Parameters.AddWithValue("$take", query.Limit + 1);
+                command.Parameters.AddWithValue("$take", Math.Min(query.Limit, RegionEdgeBudget - offset) + 1);
                 command.Parameters.AddWithValue("$offset", offset);
                 using SqliteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
@@ -300,7 +300,8 @@ public sealed class SqliteGraphReader : IGraphReader
                 }
             }
 
-            bool more = rows.Count > query.Limit;
+            int pageLimit = Math.Min(query.Limit, RegionEdgeBudget - offset);
+            bool more = rows.Count > pageLimit;
             if (more)
             {
                 rows.RemoveAt(rows.Count - 1);
@@ -653,7 +654,7 @@ public sealed class SqliteGraphReader : IGraphReader
             return 0;
         }
         string value = CursorValue(cursor, version, signature);
-        if (int.TryParse(value, out int offset) && offset is > 0 and <= RegionEdgeBudget &&
+        if (int.TryParse(value, out int offset) && offset is > 0 and < RegionEdgeBudget &&
             offset % pageSize == 0)
         {
             return offset;
