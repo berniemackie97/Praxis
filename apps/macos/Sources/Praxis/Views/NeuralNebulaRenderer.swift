@@ -148,9 +148,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         })
         placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
                                               edges: graphEdges, regionType: visibleRegion)
-        var points: [NeuralNebulaVertex] = []
-        var links: [NeuralNebulaVertex] = []
-        let ordered        let geometry = NeuralNebulaGeometry.build(overview: overview, placement: placement,
+        let geometry = NeuralNebulaGeometry.build(overview: overview, placement: placement,
                                                   nodes: graphNodes, edges: graphEdges,
                                                   selectedNodeId: selectedNodeId,
                                                   highContrast: highContrast)
@@ -158,7 +156,8 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         zoneLines = buffer(geometry.zoneLines)
         detailPoints = buffer(geometry.detailPoints)
         detailLines = buffer(geometry.detailLines)
-enters[$0] } ??
+        if regionType != nil || focusId != nil {
+            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
                 visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
             desiredDistance = focusId == nil ? 157 : 79
         } else {
@@ -172,8 +171,9 @@ enters[$0] } ??
         }
     }
 
-    private func appendLink(from a: SIMD3<Float>, to b: SIMD3<Float>,
-                            color: SIMD4dy * 0.006))
+    func orbit(dx: Float, dy: Float) {
+        yaw += dx * 0.006
+        pitch = max(-1.38, min(1.38, pitch - dy * 0.006))
     }
 
     func pan(dx: Float, dy: Float) {
