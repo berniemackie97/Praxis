@@ -15,16 +15,16 @@ enum NeuralNebulaGeometry {
         let detailLines: [NeuralNebulaVertex]
     }
 
-    static func build(overview: GraphZoneOverview, placement: NeuralNebulaPlacement,
+    static func build(overview: GraphVisualOverview, placement: NeuralNebulaPlacement,
                       nodes graphNodes: [GraphNode], edges graphEdges: [GraphEdge],
                       selectedNodeId: String?, selectedEdgeId: String? = nil, highContrast: Bool) -> Result {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
-        let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
+        let ordered = overview.regions.sorted { $0.entityType < $1.entityType }
         for zone in ordered {
-            guard let center = placement.zoneCenters[zone.entityType] else { continue }
-            let color = NeuralNebulaLayout.color(for: zone.entityType)
-            let size = placement.zoneSizes[zone.entityType] ?? 12
+            guard let center = placement.zoneCenters[zone.id] else { continue }
+            let color = NeuralNebulaLayout.color(for: zone.id)
+            let size = placement.zoneSizes[zone.id] ?? 12
             points.append(NeuralNebulaVertex(position: center, color: color, size: size))
             let satellites = min(72, max(10, Int(log2(Double(zone.count) + 1) * 10)))
             for number in 0..<satellites {
@@ -49,9 +49,9 @@ enum NeuralNebulaGeometry {
         }
 
         for relation in overview.links {
-            guard let a = placement.zoneCenters[relation.subjectType],
-                  let b = placement.zoneCenters[relation.objectType],
-                  relation.subjectType != relation.objectType else { continue }
+            guard let a = placement.zoneCenters[relation.subjectId],
+                  let b = placement.zoneCenters[relation.objectId],
+                  relation.subjectId != relation.objectId else { continue }
             if relation.confirmedCount > 0 {
                 appendLink(from: a, to: b, color: SIMD4<Float>(0.31, 0.77, 1, 0.47), into: &links)
             }

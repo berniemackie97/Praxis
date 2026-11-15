@@ -34,7 +34,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
     private var zoneLines = Batch()
     private var detailPoints = Batch()
     private var detailLines = Batch()
-    private var overview: GraphZoneOverview?
+    private var overview: GraphVisualOverview?
     private var graphNodes: [GraphNode] = []
     private var graphEdges: [GraphEdge] = []
     private var regionType: String?
@@ -94,7 +94,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
         view.isPaused = false
     }
 
-    func update(overview: GraphZoneOverview?, nodes: [GraphNode], edges: [GraphEdge],
+    func update(overview: GraphVisualOverview?, nodes: [GraphNode], edges: [GraphEdge],
                 regionType: String?, focusId: String?,
                 selectedNodeId: String?, selectedEdgeId: String?,
                 reduceMotion: Bool, highContrast: Bool, active: Bool) {
@@ -156,12 +156,12 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             camera.desiredDistance = 590
             return
         }
-        let visibleRegion = regionType ?? (focusId.flatMap { id in
-            graphNodes.first(where: { $0.entityId == id })?.entityType
-        })
+        let visibleRegion = focusId.flatMap { id in
+            overview.regions.contains(where: { $0.id == id }) ? id : nil
+        }
         if updateLayout {
             placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
-                                                  edges: graphEdges, regionType: visibleRegion)
+                                                  edges: graphEdges, regionId: visibleRegion)
         }
         let geometry = NeuralNebulaGeometry.build(overview: overview, placement: placement,
                                                   nodes: graphNodes, edges: graphEdges,
@@ -310,7 +310,7 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             let positions = placement.zoneCenters.reduce(into: [String: CGPoint]()) { result, entry in
                 if let point = projected(entry.value) { result[entry.key] = point }
             }
-            onFrame(positions, regionType)
+            onFrame(positions, focusId.flatMap { placement.zoneCenters[$0] == nil ? nil : $0 })
         }
     }
 

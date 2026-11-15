@@ -215,6 +215,9 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.send("graphConceptRegions", fields, as: GraphConceptPage.self, scope: conceptScope,
                      failed: { [weak self] error in
                          self?.conceptLoading = false
+                         self?.conceptRegions = []
+                         self?.conceptRegionCount = 0
+                         self?.conceptNextCursor = nil
                          self?.conceptError = error
                      }) { [weak self] page in
             guard let self, active else { return }

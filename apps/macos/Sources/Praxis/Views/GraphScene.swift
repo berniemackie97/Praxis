@@ -28,8 +28,7 @@ final class GraphScene: SKScene {
     private let atlasArtwork = GraphAtlasArtwork()
     private let zoneArtwork = GraphZoneArtwork()
     private var zoneMode = false
-    private var zoneOverview: GraphZoneOverview?
-    private var zoneFilterType: String?
+    private var zoneOverview: GraphVisualOverview?
     private var regionType: String?
     private var preserveNextFitTransition = false
     private var nodeLabels: [String: SKLabelNode] = [:]
@@ -141,12 +140,11 @@ final class GraphScene: SKScene {
         return label
     }
 
-    func configureZones(_ summary: GraphZoneOverview, type: String?) {
-        guard !zoneMode || zoneOverview != summary || zoneFilterType != type else { return }
+    func configureZones(_ summary: GraphVisualOverview) {
+        guard !zoneMode || zoneOverview != summary else { return }
         zoneMode = true
         preserveNextFitTransition = false
         zoneOverview = summary
-        zoneFilterType = type
         regionType = nil
         graphNodes = []
         graphEdges = []
@@ -164,7 +162,7 @@ final class GraphScene: SKScene {
         selectedNodeId = nil
         selectedEdgeId = nil
         focusId = nil
-        zoneArtwork.show(summary, only: type, dark: dark, highContrast: highContrast)
+        zoneArtwork.show(summary, dark: dark, highContrast: highContrast)
         fitZones()
     }
 
@@ -285,8 +283,8 @@ final class GraphScene: SKScene {
         updateStrokeWidths()
         updateVisibility()
         if zoneMode && scale < atlasFitScale * 0.48, let before,
-           let type = zoneArtwork.nearest(to: before, scale: scale) {
-            didSelectZone?(type)
+           let regionId = zoneArtwork.nearest(to: before, scale: scale) {
+            didSelectZone?(regionId)
         } else if regionType != nil && focusId == nil && scale > atlasFitScale * 2.2 {
             didReturnToZones?()
         }
@@ -304,8 +302,7 @@ final class GraphScene: SKScene {
         self.highContrast = highContrast
         backgroundColor = dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .windowBackgroundColor
         if zoneMode, let zoneOverview {
-            zoneArtwork.show(zoneOverview, only: zoneFilterType, dark: dark,
-                             highContrast: highContrast)
+            zoneArtwork.show(zoneOverview, dark: dark, highContrast: highContrast)
             return
         }
         edgeArtwork.applyAppearance(dark: dark, highContrast: highContrast,
@@ -432,7 +429,7 @@ final class GraphScene: SKScene {
     override func mouseMoved(with event: NSEvent) {
         let location = event.location(in: self)
         if zoneMode {
-            zoneArtwork.hover(zoneArtwork.type(at: location, scale: viewCamera.xScale))
+            zoneArtwork.hover(zoneArtwork.region(at: location, scale: viewCamera.xScale))
             return
         }
         let node = hitNode(at: location)
@@ -452,8 +449,8 @@ final class GraphScene: SKScene {
     override func mouseDown(with event: NSEvent) {
         guard !event.modifierFlags.contains(.option) else { return }
         if zoneMode {
-            if let type = zoneArtwork.type(at: event.location(in: self), scale: viewCamera.xScale) {
-                didSelectZone?(type)
+            if let regionId = zoneArtwork.region(at: event.location(in: self), scale: viewCamera.xScale) {
+                didSelectZone?(regionId)
             }
             return
         }

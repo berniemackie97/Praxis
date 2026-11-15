@@ -5,9 +5,9 @@ import SpriteKit
 final class GraphZoneArtwork {
     private let root = SKNode()
     private var hubs: [String: SKNode] = [:]
-    private var overview: GraphZoneOverview?
-    private var selectedType: String?
-    private var hoveredType: String?
+    private var overview: GraphVisualOverview?
+
+    private var hoveredRegionId: String?
     private var placement = GraphZonePlacement(positions: [:], radii: [:], bounds: .zero)
     private var dark = false
     private var highContrast = false
@@ -28,33 +28,25 @@ final class GraphZoneArtwork {
         root.removeAllChildren()
         hubs.removeAll(keepingCapacity: true)
         overview = nil
-        hoveredType = nil
+        hoveredRegionId = nil
         root.isHidden = true
     }
 
-    func show(_ summary: GraphZoneOverview, only type: String?, dark: Bool, highContrast: Bool) {
-        guard overview != summary || selectedType != type ||
-              self.dark != dark || self.highContrast != highContrast else {
+    func show(_ summary: GraphVisualOverview, dark: Bool, highContrast: Bool) {
+        guard overview != summary || self.dark != dark || self.highContrast != highContrast else {
             root.isHidden = false
             return
         }
         clear()
         overview = summary
-        selectedType = type
         self.dark = dark
         self.highContrast = highContrast
-        let zones = summary.zones.filter { type == nil || $0.entityType == type }
-        let ids = Set(zones.map(\.entityType))
-        let links = summary.links.filter {
-            ids.contains($0.subjectType) && ids.contains($0.objectType)
-        }
-        let visible = GraphZoneOverview(entityCount: zones.reduce(0) { $0 + $1.count },
-                                        relationshipCount: links.reduce(0) { $0 + $1.count },
-                                        zones: zones, links: links)
-        placement = GraphZoneLayout.place(visible)
+        let regions = summary.regions
+        let links = summary.links
+        placement = GraphZoneLayout.place(summary)
         for link in links where link.count > 0 {
-            guard let a = placement.positions[link.subjectType],
-                  let b = placement.positions[link.objectType] else { continue }
+            guard let a = placement.positions[link.subjectId],
+                  let b = placement.positions[link.objectId] else { continue }
             let groups: [(Int, NSColor, CGFloat)] = [
                 (link.confirmedCount, .systemTeal, 0),
                 (link.suggestedCount, .systemOrange, 9),
@@ -62,8 +54,8 @@ final class GraphZoneArtwork {
             ]
             for (count, tint, offset) in groups where count > 0 {
                 let path = CGMutablePath()
-                if link.subjectType == link.objectType {
-                    let radius = (placement.radii[link.subjectType] ?? 30) + 15 + offset
+                if link.subjectId == link.objectId {
+                    let radius = (placement.radii[link.subjectId] ?? 30) + 15 + offset
                     path.addEllipse(in: CGRect(x: a.x - radius, y: a.y - radius,
                                                width: radius * 2, height: radius * 2))
                 } else {
@@ -85,13 +77,15 @@ final class GraphZoneArtwork {
                 root.addChild(stroke)
             }
         }
-        for zone in zones {
-            guard let center = placement.positions[zone.entityType],
-                  let radius = placement.radii[zone.entityType] else { continue }
-            let tint = GraphPalette.color(for: zone.entityType, suggested: false)
+        for zone in regions {
+            guard let center = placement.positions[zone.id],
+                  let radius = placement.radii[zone.id] else { continue }
+            let hue = CGFloat(GraphRegionIdentity.hash(zone.id) % 360) / 360
+            let tint = NSColor(calibratedHue: hue, saturation: highContrast ? 0.73 : 0.61,
+                               brightness: dark ? 0.93 : 0.76, alpha: 1)
             let hub = SKNode()
             hub.position = center
-            hub.name = "zone:" + zone.entityType
+            hub.name = "zone:" + zone.id
             let halo = SKShapeNode(circleOfRadius: radius * 1.38)
             halo.fillColor = tint.withAlphaComponent(dark ? 0.065 : 0.04)
             halo.strokeColor = tint.withAlphaComponent(highContrast ? 0.55 : 0.17)
@@ -104,7 +98,7 @@ final class GraphZoneArtwork {
             ring.lineWidth = highContrast ? 3 : 1.7
             ring.zPosition = 1
             hub.addChild(ring)
-            let density = SKShapeNode(path: Self.densityPath(type: zone.entityType,
+            let density = SKShapeNode(path: Self.densityPath(regionId: zone.id,
                                                              count: zone.count, radius: radius))
             density.fillColor = tint.withAlphaComponent(dark ? 0.68 : 0.47)
             density.strokeColor = .clear
@@ -117,7 +111,7 @@ final class GraphZoneArtwork {
             core.zPosition = 2
             hub.addChild(core)
             let title = SKLabelNode(fontNamed: "Helvetica Neue Medium")
-            title.text = KnowledgeVocabulary.label(zone.entityType).uppercased()
+            title.text = String(zone.title.prefix(32)).uppercased()
             title.fontSize = 13
             title.fontColor = dark ? .white : .labelColor
             title.verticalAlignmentMode = .center
@@ -125,7 +119,7 @@ final class GraphZoneArtwork {
             title.zPosition = 3
             hub.addChild(title)
             let count = SKLabelNode(fontNamed: "Helvetica Neue")
-            count.text = "\(zone.count.formatted()) entities"
+            count.text = "\(zone.memberCount.formatted()) explicit members"
             count.fontSize = 10
             count.fontColor = dark ? NSColor.white.withAlphaComponent(0.73) : .secondaryLabelColor
             count.position = CGPoint(x: 0, y: -radius * 0.49 - 17)
@@ -137,7 +131,7 @@ final class GraphZoneArtwork {
             ])))
             hub.isPaused = reduceMotion
             root.addChild(hub)
-            hubs[zone.entityType] = hub
+            hubs[zone.id] = hub
         }
         root.isHidden = false
     }
@@ -147,36 +141,34 @@ final class GraphZoneArtwork {
         hover(nil)
     }
 
-    func hover(_ type: String?) {
-        guard hoveredType != type else { return }
-        hoveredType = type
+    func hover(_ regionId: String?) {
+        guard hoveredRegionId != regionId else { return }
+        hoveredRegionId = regionId
         for (id, hub) in hubs {
-            hub.alpha = type == nil || type == id ? 1 : 0.75
+            hub.alpha = regionId == nil || regionId == id ? 1 : 0.75
         }
     }
 
-    func type(at point: CGPoint, scale: CGFloat) -> String? {
-        var best: (type: String, distance: CGFloat)?
+    func region(at point: CGPoint, scale: CGFloat) -> String? {
+        var best: (id: String, distance: CGFloat)?
         for (id, center) in placement.positions {
             let radius = (placement.radii[id] ?? 30) + max(0, scale * 7)
             let distance = hypot(point.x - center.x, point.y - center.y)
             guard distance <= radius else { continue }
             if distance < (best?.distance ?? .infinity) { best = (id, distance) }
         }
-        return best?.type
+        return best?.id
     }
 
     func nearest(to point: CGPoint, scale: CGFloat) -> String? {
-        type(at: point, scale: scale)
+        region(at: point, scale: scale)
     }
 
-    func point(for type: String) -> CGPoint? { placement.positions[type] }
+    func point(for regionId: String) -> CGPoint? { placement.positions[regionId] }
 
-    private static func densityPath(type: String, count: Int, radius: CGFloat) -> CGPath {
+    private static func densityPath(regionId: String, count: Int, radius: CGFloat) -> CGPath {
         let path = CGMutablePath()
-        var state = type.utf8.reduce(UInt64(14_695_981_039_346_656_037)) {
-            ($0 ^ UInt64($1)) &* 1_099_511_628_211
-        }
+        var state = GraphRegionIdentity.hash(regionId)
         let samples = min(96, max(6, Int(log2(Double(count) + 1) * 12)))
         for _ in 0..<samples {
             state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407

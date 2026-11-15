@@ -7,8 +7,7 @@ import SwiftUI
 struct GraphSceneView: NSViewRepresentable {
     let nodes: [GraphNode]
     let edges: [GraphEdge]
-    let zones: GraphZoneOverview?
-    let zoneTypeFilter: String?
+    let zones: GraphVisualOverview?
     let expandZone: (String) -> Void
     let returnToZones: () -> Void
     let regionType: String?
@@ -44,7 +43,7 @@ struct GraphSceneView: NSViewRepresentable {
         scene.didSelectZone = expandZone
         scene.didReturnToZones = returnToZones
         if let zones {
-            scene.configureZones(zones, type: zoneTypeFilter)
+            scene.configureZones(zones)
         } else {
             scene.configure(nodes: nodes, edges: edges, focus: focusId, regionType: regionType)
         }
