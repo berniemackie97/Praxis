@@ -10,7 +10,7 @@ The session-based Codex and Claude Code backends receive a rendered conversation
 
 Use the existing `AgentRunLimits.CompactAfterCharacters` as a conservative **character-based CLI history guard**. The persisted transcript is not changed, summarized, deleted or reordered. The latest owner request is always preserved. Select the most recent **complete** earlier owner turns that fit, accounting for message text plus bounded framing overhead; never forward half of a previous user/tool/assistant interaction. Internal repair instructions remain attached to the turn they repaired. An already-persisted earlier summary can be included if it fits; otherwise it is omitted, never rewritten or reconstructed.
 
-The CLI renderer already omits raw tool-result messages. The omitted count covers only nonempty transcript messages that the renderer would otherwise forward. The count is returned with the reply, and native Chat identifies the excluded older messages and explains that the stored conversation remains intact. A progress event describes the bound without exposing message content. No additional catalog migration, provider permissions or remote routing are introduced.
+When history is omitted, the CLI agent also receives a system-level notice not to infer missing earlier decisions. The CLI renderer already omits raw tool-result messages. The omitted count covers only nonempty transcript messages that the renderer would otherwise forward. The count is returned with the reply, and native Chat identifies the excluded older messages and explains that the stored conversation remains intact. A progress event describes the bound without exposing message content. No additional catalog migration, provider permissions or remote routing are introduced.
 
 ## Boundaries
 

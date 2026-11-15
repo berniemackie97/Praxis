@@ -328,7 +328,7 @@ private struct ReplyDetails: View {
             }
             if let omitted = reply.omittedMessages, omitted > 0 {
                 Label("\(omitted) earlier conversation messages were not sent to this model for this response. They remain saved in the conversation.",
-                      systemImage: "text.badge.minus")
+                      systemImage: "text.alignleft")
                     .font(.meta).foregroundStyle(.secondary)
             }
             if reply.withheldResults > 0 {

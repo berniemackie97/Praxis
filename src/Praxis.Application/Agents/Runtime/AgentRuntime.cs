@@ -45,8 +45,10 @@ public sealed class AgentRuntime(
                 report("context_limited", null, $"{window.OmittedMessages} older messages omitted");
             }
 
+            string sessionSystem = window.OmittedMessages == 0 ? system : system +
+                "\n\nSome earlier conversation messages were omitted to fit this request. Do not assume their contents or invent earlier decisions; ask the owner for missing context when necessary.";
             report("thinking", null, profile.BackendId);
-            AgentTurn turn = await session.RunAsync(system, window.Messages, registry.Definitions,
+            AgentTurn turn = await session.RunAsync(sessionSystem, window.Messages, registry.Definitions,
                 (call, token) => InvokeAsync(call, context, state, report, token), cancellationToken);
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
