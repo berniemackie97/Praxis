@@ -161,7 +161,7 @@ final class GraphZoneArtwork {
             let radius = (placement.radii[id] ?? 30) + max(0, scale * 7)
             let distance = hypot(point.x - center.x, point.y - center.y)
             guard distance <= radius else { continue }
-            if best == nil || distance < best!.distance { best = (id, distance) }
+            if distance < (best?.distance ?? .infinity) { best = (id, distance) }
         }
         return best?.type
     }
