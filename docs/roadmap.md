@@ -97,7 +97,7 @@ Rules for this lane:
 - **Measure before adding machinery.** Retrieval additions (#451) stay only where they beat the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency.
 - **Single schedulers and stores.** Routines use #34; workflows use existing project/collection records; no second task database and no unattended privileged writes.
 
-`scripts/github/roadmap.json` has not yet been extended to cover issues #389 onward; reconciling those native hierarchy, priority and dependency links is tracked as a separate change.
+`scripts/github/roadmap.json` carries this lane as delivery lane L7, together with the open issues from #137 and #268 through #452 that were previously untracked (graph exploration #416–#428, Chat #431–#449, verification #427). Closed issues, and #421, whose `[Security]` title prefix is not an accepted kind, remain outside the plan.
 
 ## Quality gates
 
