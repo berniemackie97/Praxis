@@ -87,7 +87,7 @@ struct GraphPresentationTests {
         let first = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
                                       zones: zones, links: links)
         let second = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
-                                       zones: zones.reversed(), links: links.reversed())
+                                       zones: Array(zones.reversed()), links: Array(links.reversed()))
         let layout = GraphZoneLayout.place(first)
         #expect(layout.positions == GraphZoneLayout.place(second).positions)
         #expect(layout.positions.count == 4)
