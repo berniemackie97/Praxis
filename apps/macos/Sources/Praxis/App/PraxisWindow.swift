@@ -47,6 +47,7 @@ struct PraxisWindow: View {
                 model.knowledge.graph.recheckInspection()
                 model.knowledge.graph.checkKnowledgeRevision()
             }
+            if section == .chat && ticks % 2 == 0 { model.chat.refreshRecap() }
             if section == .verification || ticks % 6 == 0 { model.verification.refresh() }
         }
     }

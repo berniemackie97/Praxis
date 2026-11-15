@@ -244,6 +244,7 @@ public sealed partial class SqliteVerificationRepository
                 JOIN sources s ON s.source_id = p.source_id
                 WHERE p.source_id = $source AND p.classification = 'remote_verification'
                   AND s.status = 'active'
+                  AND NOT EXISTS (SELECT 1 FROM source_categories c WHERE c.source_id = s.source_id AND c.local_only = 1)
                 """);
             query.Transaction = transaction;
             query.Parameters.AddWithValue("$source", source);
@@ -323,10 +324,11 @@ public sealed partial class SqliteVerificationRepository
         }
 
         using var sources = connection.CreateCommand("""
-            SELECT ds.source_id, ds.policy_revision, p.revision, p.classification, s.status
+            SELECT ds.source_id, ds.policy_revision, p.revision, p.classification, s.status, COALESCE(c.local_only, 0)
             FROM verification_disclosure_sources ds
             LEFT JOIN source_verification_policy p ON p.source_id = ds.source_id
             JOIN sources s ON s.source_id = ds.source_id
+            LEFT JOIN source_categories c ON c.source_id = s.source_id
             WHERE ds.request_id = $request
             """);
         sources.Transaction = transaction;
@@ -337,7 +339,7 @@ public sealed partial class SqliteVerificationRepository
         {
             if (!required.Contains(bindings.GetString(0)) || bindings.IsDBNull(2) ||
                 bindings.GetInt32(1) != bindings.GetInt32(2) ||
-                bindings.GetString(3) != "remote_verification" || bindings.GetString(4) != "active")
+                bindings.GetString(3) != "remote_verification" || bindings.GetString(4) != "active" || bindings.GetInt32(5) != 0)
             {
                 return false;
             }

@@ -34,6 +34,7 @@ final class ChatWorkbenchModel: ObservableObject {
     @Published private(set) var backends: [AgentBackendProfile] = []
     @Published private(set) var conversations: [AgentConversation] = []
     @Published private(set) var selectedId: String?
+    @Published private(set) var recap: String?
     @Published private(set) var messages: [AgentMessage] = []
     @Published private(set) var listError: String?
     @Published private(set) var backendChoice = ""
@@ -163,6 +164,7 @@ final class ChatWorkbenchModel: ObservableObject {
         }
         refreshConversations()
         loadMessages()
+        refreshRecap()
         for id in states.keys where states[id]?.runId != nil { states[id]?.pollFailures = 0 }
         ensurePolling()
     }
@@ -188,12 +190,15 @@ final class ChatWorkbenchModel: ObservableObject {
     func select(_ conversation: AgentConversation) {
         guard selectedId != conversation.id else { return }
         selectedId = conversation.id
+        recap = nil
         messages = []
         loadMessages()
+        refreshRecap()
     }
 
     func newConversation() {
         selectedId = nil
+        recap = nil
         messages = []
         channel.reset("conversation")
     }
@@ -370,6 +375,14 @@ final class ChatWorkbenchModel: ObservableObject {
 
         if selectedId == id { loadMessages() }
         refreshConversations()
+    }
+
+    func refreshRecap() {
+        guard let id = selectedId else { return }
+        channel.send("agentRecap", ["conversationId": id], as: AgentRecapData.self, failed: { _ in }) { [weak self] data in
+            guard let self, selectedId == id else { return }
+            if recap != data.recap { recap = data.recap }
+        }
     }
 
     private func loadMessages() {

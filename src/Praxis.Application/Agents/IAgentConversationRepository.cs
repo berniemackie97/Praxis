@@ -28,6 +28,8 @@ public interface IAgentConversationRepository
 
     void Append(Guid conversationId, AgentMessage message);
 
+    void AppendFinal(Guid conversationId, AgentMessage message) => Append(conversationId, message);
+
     void RecordToolCall(AgentToolCallRecord record);
 
     IReadOnlyList<AgentToolCallRecord> ReadToolCalls(Guid conversationId, int limit);
@@ -43,6 +45,8 @@ public interface IAgentConversationRepository
     AgentMemory AddMemory(Guid? conversationId, string text, string status);
 
     IReadOnlyList<AgentMemory> ReadMemories(string? status, string? search, int limit);
+
+    bool EditMemory(Guid memoryId, string? replacement) => false;
 
     bool SetMemoryStatus(Guid memoryId, string status);
 
