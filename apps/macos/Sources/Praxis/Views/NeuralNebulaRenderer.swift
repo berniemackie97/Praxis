@@ -12,7 +12,7 @@ private struct NeuralNebulaUniforms {
 }
 
 @MainActor
-final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
+final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
     var onEnterZone: ((String) -> Void)?
     var onReturnToZones: (() -> Void)?
     var onSelectNode: ((String) -> Void)?
