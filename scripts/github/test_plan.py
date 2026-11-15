@@ -18,7 +18,18 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(203, len(items))
+        self.assertEqual(227, len(items))
+        self.assertEqual(300, items[440]["parent"])
+        self.assertEqual(97, items[452]["parent"])
+        self.assertEqual(61, items[451]["parent"])
+        self.assertEqual("retrieval", items[451]["area"])
+        self.assertEqual(436, items[433]["parent"])
+        self.assertEqual(433, items[437]["parent"])
+        self.assertEqual({431, 432, 143}, dependencies[440])
+        self.assertEqual({106, 316, 311}, dependencies[451])
+        self.assertEqual({324, 316, 353}, dependencies[452])
+        self.assertEqual("M6", items[443]["stage"])
+        self.assertEqual("P0", items[431]["priority"])
         self.assertEqual(59, items[136]["parent"])
         self.assertEqual("P2", items[136]["priority"])
         self.assertEqual("knowledge", items[136]["area"])
@@ -85,7 +96,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("P1", items[92]["priority"])
         self.assertEqual({106, 108}, dependencies[385])
         self.assertEqual(8, len(self.plan["milestones"]))
-        self.assertEqual(34, len(self.plan["features"]))
+        self.assertEqual(36, len(self.plan["features"]))
         for epic in (287, 288, 289, 290):
             self.assertEqual("epic", items[epic]["kind"])
             self.assertEqual(1, items[epic]["parent"])
