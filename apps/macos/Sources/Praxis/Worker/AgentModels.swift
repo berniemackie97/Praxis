@@ -37,7 +37,20 @@ struct AgentConversation: Decodable, Identifiable, Equatable {
     let title: String
     let createdUtc: String
     let updatedUtc: String
+    let model: String?
+    let effort: String?
     var id: String { conversationId }
+
+    init(conversationId: String, backendId: String, title: String, createdUtc: String, updatedUtc: String,
+         model: String? = nil, effort: String? = nil) {
+        self.conversationId = conversationId
+        self.backendId = backendId
+        self.title = title
+        self.createdUtc = createdUtc
+        self.updatedUtc = updatedUtc
+        self.model = model
+        self.effort = effort
+    }
 }
 
 struct AgentToolCall: Decodable, Equatable {
