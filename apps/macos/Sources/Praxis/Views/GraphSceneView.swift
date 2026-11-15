@@ -7,6 +7,11 @@ import SwiftUI
 struct GraphSceneView: NSViewRepresentable {
     let nodes: [GraphNode]
     let edges: [GraphEdge]
+    let zones: GraphZoneOverview?
+    let zoneTypeFilter: String?
+    let expandZone: (String) -> Void
+    let returnToZones: () -> Void
+    let regionType: String?
     let focusId: String?
     let highlightedNodeIds: Set<String>
     let recenterNodeId: String?
@@ -36,7 +41,13 @@ struct GraphSceneView: NSViewRepresentable {
     func updateNSView(_ view: SKView, context: Context) {
         let scene = context.coordinator.scene
         view.window?.acceptsMouseMovedEvents = true
-        scene.configure(nodes: nodes, edges: edges, focus: focusId)
+        scene.didSelectZone = expandZone
+        scene.didReturnToZones = returnToZones
+        if let zones {
+            scene.configureZones(zones, type: zoneTypeFilter)
+        } else {
+            scene.configure(nodes: nodes, edges: edges, focus: focusId, regionType: regionType)
+        }
         scene.updateAppearance(dark: colorScheme == .dark, highContrast: highContrast)
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
         scene.setHighlights(highlightedNodeIds)

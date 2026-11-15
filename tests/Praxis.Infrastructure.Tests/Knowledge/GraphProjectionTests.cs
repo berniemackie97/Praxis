@@ -46,6 +46,115 @@ public sealed class GraphProjectionTests : IDisposable
     }
 
     [Fact]
+    public async Task ZoneOverviewRepresentsEntireScopedCatalogAndOnlyRealRelations()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal technical = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, technical);
+
+        relations.Clear();
+        relations.Add(("Alex Rivera", "works_on", "Client"));
+        CapturedOriginal personal = await Enrich(catalog, "people.md", "Alex Rivera works on Client.");
+        await Accept(catalog, personal);
+
+        GraphZoneOverview all = catalog.Graph.Zones(new GraphQuery());
+        Assert.Equal(4, all.EntityCount);
+        Assert.Equal(2, all.RelationshipCount);
+        Assert.Equal(all.EntityCount, all.Zones.Sum(zone => zone.Count));
+        Assert.Equal(all.RelationshipCount, all.Links.Sum(link =>
+            link.ConfirmedCount + link.SuggestedCount + link.ContradictedCount));
+        Assert.Contains(all.Links, link => link.SubjectType == "project" && link.ObjectType == "technology"
+            && link.ConfirmedCount == 1);
+        Assert.Contains(all.Links, link => link.SubjectType == "person" && link.ObjectType == "project"
+            && link.ConfirmedCount == 1);
+        Assert.DoesNotContain(all.Links, link => link.SubjectType == "technology" && link.ObjectType == "person");
+
+        GraphZoneOverview scoped = catalog.Graph.Zones(new GraphQuery(SourceId: technical.SourceId));
+        Assert.Equal(2, scoped.EntityCount);
+        Assert.Single(scoped.Links);
+        Assert.Equal(1, scoped.RelationshipCount);
+        Assert.DoesNotContain(scoped.Zones, zone => zone.EntityType == "person");
+
+        Guid collection = catalog.Collections.Create("Technical only").CollectionId;
+        Assert.True(catalog.Collections.AddSource(collection, technical.SourceId));
+        GraphZoneOverview collectionZones = catalog.Graph.Zones(new GraphQuery(CollectionId: collection));
+        Assert.Equal(2, collectionZones.EntityCount);
+        Assert.Equal(1, collectionZones.RelationshipCount);
+        Assert.DoesNotContain(collectionZones.Zones, zone => zone.EntityType == "person");
+        Assert.True(catalog.Collections.Archive(collection));
+        Assert.Equal(0, catalog.Graph.Zones(new GraphQuery(CollectionId: collection)).EntityCount);
+
+        GraphZoneOverview predicate = catalog.Graph.Zones(new GraphQuery(Predicate: "parses"));
+        Assert.Equal(4, predicate.EntityCount);
+        Assert.Single(predicate.Links);
+        Assert.Equal(1, predicate.RelationshipCount);
+
+        Assert.True(catalog.Sources.Revoke(technical.SourceId));
+        GraphZoneOverview revoked = catalog.Graph.Zones(new GraphQuery());
+        Assert.Equal(2, revoked.EntityCount);
+        Assert.Single(revoked.Links);
+        Assert.Empty(catalog.Graph.Zones(new GraphQuery(SourceId: technical.SourceId)).Links);
+    }
+
+    [Fact]
+    public async Task ZoneOverviewNeverTurnsPendingOrRejectedEdgesIntoConfirmedLinks()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal source = await Enrich(catalog, "draft.md", "C3Reader parses PHY.");
+
+        Assert.Equal(0, catalog.Graph.Zones(new GraphQuery()).RelationshipCount);
+        GraphZoneOverview proposed = catalog.Graph.Zones(new GraphQuery(IncludeSuggestions: true));
+        Assert.Equal(2, proposed.EntityCount);
+        Assert.Equal(1, proposed.RelationshipCount);
+        GraphZoneLink pending = Assert.Single(proposed.Links);
+        Assert.Equal(0, pending.ConfirmedCount);
+        Assert.Equal(1, pending.SuggestedCount);
+        Assert.Equal(0, pending.ContradictedCount);
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Zones(new GraphQuery(Cursor: "invalid")));
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Zones(new GraphQuery(EntityType: "project")));
+        Assert.Throws<ArgumentException>(() => catalog.Graph.Zones(new GraphQuery(EvidenceStatus: "suggested")));
+
+        await Accept(catalog, source);
+        GraphZoneLink accepted = Assert.Single(catalog.Graph.Zones(new GraphQuery()).Links);
+        Assert.Equal(1, accepted.ConfirmedCount);
+        Assert.Equal(0, accepted.SuggestedCount);
+
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+        Assert.Empty(catalog.Graph.Zones(new GraphQuery(IncludeSuggestions: true)).Links);
+    }
+
+    [Fact]
+    public async Task DesktopZoneOverviewUsesTheSameAuthorityAsGraphAtlas()
+    {
+        using SqliteCatalog catalog = Open();
+        relations.Add(("C3Reader", "parses", "PHY"));
+        CapturedOriginal source = await Enrich(catalog, "reader.md", "C3Reader parses PHY.");
+        await Accept(catalog, source);
+        DesktopProtocol desktop = TestDesktop.Protocol(catalog);
+        string request = JsonSerializer.Serialize(new
+        {
+            requestId = "zones",
+            action = "graphZones",
+            sourceId = source.SourceId
+        });
+
+        using JsonDocument ready = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(ready.RootElement.GetProperty("ok").GetBoolean());
+        JsonElement data = ready.RootElement.GetProperty("data");
+        Assert.Equal(2, data.GetProperty("entityCount").GetInt32());
+        Assert.Equal(1, data.GetProperty("relationshipCount").GetInt32());
+        Assert.Single(data.GetProperty("links").EnumerateArray());
+
+        Assert.True(catalog.Sources.Revoke(source.SourceId));
+        using JsonDocument denied = JsonDocument.Parse(await desktop.HandleAsync(request));
+        Assert.True(denied.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, denied.RootElement.GetProperty("data").GetProperty("entityCount").GetInt32());
+        Assert.Empty(denied.RootElement.GetProperty("data").GetProperty("links").EnumerateArray());
+    }
+
+    [Fact]
     public async Task UnifiedOverviewCountsScopedCurrentEntitiesRatherThanRandomSeeds()
     {
         using SqliteCatalog catalog = Open();
@@ -586,6 +695,12 @@ public sealed class GraphProjectionTests : IDisposable
         GraphOverview overview = catalog.Graph.Overview(new GraphQuery());
         Assert.Equal(121, overview.EntityCount);
         Assert.Equal(121, overview.Types.Sum(type => type.Count));
+
+        GraphZoneOverview zones = catalog.Graph.Zones(new GraphQuery());
+        Assert.Equal(121, zones.EntityCount);
+        Assert.Equal(120, zones.RelationshipCount);
+        Assert.Equal(120, zones.Links.Sum(link =>
+            link.ConfirmedCount + link.SuggestedCount + link.ContradictedCount));
 
         GraphPage atlasFirst = catalog.Graph.Atlas(new GraphQuery(Limit: 100));
         Assert.Equal(100, atlasFirst.Edges.Count);

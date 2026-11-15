@@ -18,6 +18,20 @@ struct KnowledgeGraphView: View {
     @State private var confirmRejection = false
     @State private var showContexts = true
 
+    private var visibleZones: GraphZoneOverview? {
+        guard graph.focusId == nil,
+              graph.selectedZoneType == nil || graph.atlasLoading,
+              let summary = graph.zoneOverview else { return nil }
+        guard !graph.entityType.isEmpty else { return summary }
+        let zones = summary.zones.filter { $0.entityType == graph.entityType }
+        let links = summary.links.filter {
+            $0.subjectType == graph.entityType && $0.objectType == graph.entityType
+        }
+        return GraphZoneOverview(entityCount: zones.reduce(0) { $0 + $1.count },
+                                 relationshipCount: links.reduce(0) { $0 + $1.count },
+                                 zones: zones, links: links)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -32,12 +46,20 @@ struct KnowledgeGraphView: View {
                     if graph.focusId == nil, let atlasError = graph.atlasError {
                         EmptyState(systemImage: "exclamationmark.triangle",
                                    title: "Current brain graph unavailable", message: atlasError)
-                    } else if graph.visibleNodes.isEmpty && !graph.atlasLoading && !graph.loading {
+                    } else if (visibleZones == nil || visibleZones?.zones.isEmpty == true) &&
+                              graph.visibleNodes.isEmpty && !graph.zoneLoading &&
+                              !graph.atlasLoading && !graph.loading {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
                                    title: "No current graph evidence",
                                    message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
                     } else {
-                        GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges, focusId: graph.focusId,
+                        GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges,
+                                       zones: visibleZones,
+                                       zoneTypeFilter: graph.entityType.isEmpty ? nil : graph.entityType,
+                                       expandZone: { graph.enterZone($0) },
+                                       returnToZones: { graph.showZones() },
+                                       regionType: graph.selectedZoneType,
+                                       focusId: graph.focusId,
                                        highlightedNodeIds: graph.highlightedNodeIds,
                                        recenterNodeId: graph.recenterNodeId, recenterRevision: graph.recenterRevision,
                                        selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
@@ -47,15 +69,25 @@ struct KnowledgeGraphView: View {
                             .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(graph.focusId == nil ? "ONE BRAIN · GLOBAL ATLAS" : "FOCUSED CONNECTIONS")
+                                    Text(visibleZones != nil ? "ONE BRAIN · KNOWLEDGE ZONES" :
+                                         graph.focusId == nil ? "REGIONAL CONNECTIONS" : "FOCUSED CONNECTIONS")
                                         .font(.caption2.weight(.semibold))
-                                    Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    if graph.focusId == nil {
-                                        Text("\(graph.overview?.entityCount ?? 0) current entities in scope · rendered relationship sample")
+                                    if let zones = visibleZones {
+                                        Text("\(zones.zones.count) regions · " +
+                                             "\(zones.relationshipCount.formatted()) real relation observations")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        Text("\(zones.entityCount.formatted()) current entities · " +
+                                             "grouped by recorded type, not inferred communities")
                                             .font(.caption2).foregroundStyle(.tertiary)
-                                        Text("Drag to pan · Scroll/pinch to zoom · Option-drag to rotate")
+                                        Text("Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
                                             .font(.caption2).foregroundStyle(.secondary)
+                                    } else {
+                                        Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) real connections")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                        if graph.focusId == nil {
+                                            Text("Bounded region sample · zoom outward to return to Whole Brain")
+                                                .font(.caption2).foregroundStyle(.tertiary)
+                                        }
                                     }
                                 }
                                 .padding(Spacing.s)
@@ -65,8 +97,9 @@ struct KnowledgeGraphView: View {
                                 .allowsHitTesting(false)
                             }
                     }
-                    if graph.loading || graph.atlasLoading {
-                        ProgressView(graph.focusId == nil ? "Loading current atlas" : "Loading neighborhood")
+                    if graph.loading || graph.atlasLoading || graph.zoneLoading {
+                        ProgressView(graph.zoneLoading ? "Preparing knowledge zones" :
+                                     graph.focusId == nil ? "Loading current region" : "Loading neighborhood")
                             .padding(Spacing.m)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.m))
                     }
@@ -121,9 +154,15 @@ struct KnowledgeGraphView: View {
             .accessibilityLabel(showContexts ? "Hide knowledge contexts" : "Show knowledge contexts")
             if graph.focusId != nil {
                 Button { graph.showOverview() } label: {
-                    Label("All knowledge", systemImage: "arrow.left")
+                    Label(graph.selectedZoneType == nil ? "All zones" : "Back to region",
+                          systemImage: "arrow.left")
                 }
-                .help("Return to the full scoped knowledge overview")
+                .help("Return to the previous level")
+            } else if graph.selectedZoneType != nil {
+                Button { graph.showZones() } label: {
+                    Label("Whole Brain", systemImage: "arrow.left")
+                }
+                .help("Return to all current knowledge zones")
             }
             TextField("Search knowledge", text: $graph.search)
                 .textFieldStyle(.roundedBorder)
@@ -233,9 +272,29 @@ struct KnowledgeGraphView: View {
                         .disabled(graph.loading)
                 }
             }
+            if graph.focusId == nil, graph.selectedZoneType == nil,
+               let zones = visibleZones {
+                Divider()
+                Text("Knowledge zones").font(.subheadline.weight(.semibold))
+                List {
+                    ForEach(zones.zones) { zone in
+                        Button { graph.enterZone(zone.entityType) } label: {
+                            HStack {
+                                Image(systemName: EntitySymbol.of(zone.entityType))
+                                Text(KnowledgeVocabulary.label(zone.entityType).capitalized)
+                                Spacer()
+                                Text(zone.count.formatted()).foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityLabel("Explore \(zone.count) \(zone.entityType) entities")
+                    }
+                }
+                .frame(minHeight: 110, maxHeight: 210)
+                .listStyle(.plain)
+            }
             if !graph.visibleNodes.isEmpty {
                 Divider()
-                Text(graph.focusId == nil ? "Visible atlas items" : "Focused neighborhood")
+                Text(graph.focusId == nil ? "Visible region items" : "Focused neighborhood")
                     .font(.subheadline.weight(.semibold))
                 List {
                     ForEach(graph.visibleNodes) { node in

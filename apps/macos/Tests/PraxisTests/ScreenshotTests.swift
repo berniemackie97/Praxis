@@ -77,6 +77,12 @@ struct ScreenshotTests {
                          size: CGSize(width: 780, height: 540),
                          name: "graph-synthetic-compact-reduced-motion", to: outputURL)
         for dark in [false, true] {
+            try await render(SyntheticGraphZonesPreview(),
+                             size: CGSize(width: 1200, height: 780),
+                             name: "brain-zones-synthetic\(dark ? "-dark" : "")",
+                             dark: dark, to: outputURL)
+        }
+        for dark in [false, true] {
             try await render(SyntheticGraphAtlasPreview(),
                              size: CGSize(width: 1200, height: 780),
                              name: "brain-atlas-synthetic\(dark ? "-dark" : "")",
@@ -177,7 +183,9 @@ private struct SyntheticGraphPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
-            GraphSceneView(nodes: nodes, edges: edges, focusId: "project",
+            GraphSceneView(nodes: nodes, edges: edges,
+                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: "project",
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: reduceMotion || forceReducedMotion, active: true,
@@ -217,7 +225,61 @@ private struct SyntheticGraphAtlasPreview: View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             PageHeader(title: "One Brain · Global Atlas",
                        subtitle: "Synthetic, bounded multi-component topology; no real user data")
-            GraphSceneView(nodes: nodes, edges: edges, focusId: nil,
+            GraphSceneView(nodes: nodes, edges: edges,
+                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: nil,
+                           highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
+                           selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
+                           reduceMotion: true, active: true, highContrast: false,
+                           colorScheme: scheme, zoom: 1, zoomRevision: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .padding(Spacing.l)
+    }
+}
+
+
+@MainActor
+private struct SyntheticGraphZonesPreview: View {
+    @Environment(\.colorScheme) private var scheme
+    @State private var selectedNode: String?
+    @State private var selectedEdge: String?
+
+    private let summary = GraphZoneOverview(entityCount: 2_400, relationshipCount: 1_440, zones: [
+        GraphTypeCount(entityType: "project", count: 140),
+        GraphTypeCount(entityType: "concept", count: 580),
+        GraphTypeCount(entityType: "technology", count: 290),
+        GraphTypeCount(entityType: "class", count: 670),
+        GraphTypeCount(entityType: "function", count: 510),
+        GraphTypeCount(entityType: "document", count: 120),
+        GraphTypeCount(entityType: "person", count: 50),
+        GraphTypeCount(entityType: "data_asset", count: 40)
+    ], links: [
+        GraphZoneLink(subjectType: "project", objectType: "class",
+                      confirmedCount: 290, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "class", objectType: "function",
+                      confirmedCount: 600, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "project", objectType: "technology",
+                      confirmedCount: 75, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "concept", objectType: "technology",
+                      confirmedCount: 120, suggestedCount: 15, contradictedCount: 0),
+        GraphZoneLink(subjectType: "document", objectType: "concept",
+                      confirmedCount: 58, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "function", objectType: "data_asset",
+                      confirmedCount: 80, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "person", objectType: "project",
+                      confirmedCount: 25, suggestedCount: 0, contradictedCount: 0),
+        GraphZoneLink(subjectType: "class", objectType: "class",
+                      confirmedCount: 160, suggestedCount: 15, contradictedCount: 2)
+    ])
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            PageHeader(title: "One Brain · Knowledge Zones",
+                       subtitle: "Synthetic source-type aggregates; no private knowledge")
+            GraphSceneView(nodes: [], edges: [], zones: summary,
+                           zoneTypeFilter: nil, expandZone: { _ in },
+                           returnToZones: {}, regionType: nil, focusId: nil,
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
                            reduceMotion: true, active: true, highContrast: false,

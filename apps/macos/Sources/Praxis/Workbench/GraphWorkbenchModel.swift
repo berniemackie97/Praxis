@@ -17,6 +17,7 @@ final class GraphWorkbenchModel: ObservableObject {
     private var active = false
     private var currentExpansion: String?
     private var requestedFocusId: String?
+    private var pendingLocateNodeId: String?
     private var atlasBufferNodes: [GraphNode] = []
     private var atlasBufferEdges: [GraphEdge] = []
 
@@ -29,6 +30,9 @@ final class GraphWorkbenchModel: ObservableObject {
     @Published var includeSuggestions = false
     @Published private(set) var seeds: [GraphNode] = []
     @Published private(set) var overview: GraphOverview?
+    @Published private(set) var zoneOverview: GraphZoneOverview?
+    @Published private(set) var zoneLoading = false
+    @Published private(set) var selectedZoneType: String?
     @Published private(set) var atlasNodes: [GraphNode] = []
     @Published private(set) var atlasEdges: [GraphEdge] = []
     @Published private(set) var atlasLoading = false
@@ -57,13 +61,16 @@ final class GraphWorkbenchModel: ObservableObject {
 
     var visibleNodes: [GraphNode] {
         guard focusId == nil else { return nodes }
-        guard !atlasLoading else { return [] }
+        guard selectedZoneType != nil, !atlasLoading else { return [] }
         let ids = Set(atlasNodes.map(\.entityId))
         return atlasNodes + Array(seeds.filter { !ids.contains($0.entityId) }
             .prefix(GraphBudget.seedCount))
     }
 
-    var visibleEdges: [GraphEdge] { focusId == nil ? atlasEdges : edges }
+    var visibleEdges: [GraphEdge] {
+        if focusId != nil { return edges }
+        return selectedZoneType == nil ? [] : atlasEdges
+    }
 
     var highlightedNodeIds: Set<String> {
         guard !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
@@ -91,6 +98,10 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
+        zoneOverview = nil
+        zoneLoading = false
+        selectedZoneType = nil
+        pendingLocateNodeId = nil
         atlasNodes = []
         atlasEdges = []
         atlasBufferNodes = []
@@ -119,6 +130,10 @@ final class GraphWorkbenchModel: ObservableObject {
         channel.reset(neighborhoodScope)
         clearInspection()
         overview = nil
+        zoneOverview = nil
+        zoneLoading = false
+        selectedZoneType = nil
+        pendingLocateNodeId = nil
         atlasNodes = []
         atlasEdges = []
         atlasBufferNodes = []
@@ -138,24 +153,32 @@ final class GraphWorkbenchModel: ObservableObject {
         error = nil
         message = nil
         loading = true
+        zoneLoading = true
 
-        var overviewFields: [String: Any] = [:]
-        if !collectionId.isEmpty { overviewFields["collectionId"] = collectionId }
-        if !sourceId.isEmpty { overviewFields["sourceId"] = sourceId }
-        if includeSuggestions { overviewFields["includeSuggestions"] = true }
-        channel.send("graphOverview", overviewFields, as: GraphOverview.self, scope: overviewScope,
-                     failed: { [weak self] error in self?.error = error }) { [weak self] summary in
+        var fields: [String: Any] = [:]
+        if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+        if includeSuggestions { fields["includeSuggestions"] = true }
+        if !predicate.isEmpty { fields["predicate"] = predicate }
+        if !evidenceStatus.isEmpty { fields["evidenceStatus"] = evidenceStatus }
+        channel.send("graphZones", fields, as: GraphZoneOverview.self, scope: overviewScope,
+                     failed: { [weak self] error in
+                         self?.zoneLoading = false
+                         self?.error = error
+                     }) { [weak self] summary in
             guard let self, active else { return }
-            overview = summary
+            zoneLoading = false
+            zoneOverview = summary
+            overview = GraphOverview(entityCount: summary.entityCount, types: summary.zones)
         }
         loadSeeds(cursor: nil)
-        loadAtlas(cursor: nil)
     }
 
     private func loadAtlas(cursor: String?) {
-        guard active else { return }
+        guard active, let selectedZoneType else { return }
         atlasLoading = true
         var fields = scope()
+        fields["entityType"] = selectedZoneType
         fields["limit"] = GraphBudget.atlasPageSize
         if let cursor { fields["cursor"] = cursor }
         if !predicate.isEmpty { fields["predicate"] = predicate }
@@ -188,6 +211,14 @@ final class GraphWorkbenchModel: ObservableObject {
                 atlasNodes = atlasBufferNodes
                 atlasEdges = atlasBufferEdges
                 atlasLoading = false
+                if let pendingLocateNodeId {
+                    self.pendingLocateNodeId = nil
+                    if visibleNodes.contains(where: { $0.entityId == pendingLocateNodeId }) {
+                        highlightNode(pendingLocateNodeId)
+                    } else {
+                        focusValidated(pendingLocateNodeId)
+                    }
+                }
             }
         }
     }
@@ -201,7 +232,17 @@ final class GraphWorkbenchModel: ObservableObject {
     }
 
     func highlightNode(_ id: String) {
-        guard focusId == nil, visibleNodes.contains(where: { $0.entityId == id }) else {
+        guard focusId == nil else {
+            focus(id)
+            return
+        }
+        if selectedZoneType == nil, let node = seeds.first(where: { $0.entityId == id }),
+           let type = node.entityType, zoneOverview?.zones.contains(where: { $0.entityType == type }) == true {
+            pendingLocateNodeId = id
+            enterZone(type)
+            return
+        }
+        guard visibleNodes.contains(where: { $0.entityId == id }) else {
             focus(id)
             return
         }
@@ -209,6 +250,46 @@ final class GraphWorkbenchModel: ObservableObject {
         selectedEdgeId = nil
         recenterNodeId = id
         recenterRevision += 1
+    }
+
+    func enterZone(_ type: String) {
+        guard active, selectedZoneType != type,
+              zoneOverview?.zones.contains(where: { $0.entityType == type }) == true else { return }
+        channel.reset(atlasScope)
+        channel.reset(seedScope)
+        clearInspection()
+        selectedZoneType = type
+        selectedNodeId = nil
+        selectedEdgeId = nil
+        atlasNodes = []
+        atlasEdges = []
+        atlasBufferNodes = []
+        atlasBufferEdges = []
+        atlasTruncated = false
+        atlasError = nil
+        seeds = []
+        nextSeedCursor = nil
+        loadSeeds(cursor: nil)
+        loadAtlas(cursor: nil)
+    }
+
+    func showZones() {
+        guard active else { return }
+        showOverview()
+        channel.reset(atlasScope)
+        selectedZoneType = nil
+        pendingLocateNodeId = nil
+        atlasNodes = []
+        atlasEdges = []
+        atlasBufferNodes = []
+        atlasBufferEdges = []
+        atlasLoading = false
+        atlasTruncated = false
+        atlasError = nil
+        channel.reset(seedScope)
+        seeds = []
+        nextSeedCursor = nil
+        loadSeeds(cursor: nil)
     }
 
     func loadMoreSeeds() {
@@ -236,6 +317,7 @@ final class GraphWorkbenchModel: ObservableObject {
     private func loadSeeds(cursor: String?) {
         loading = true
         var fields = scope()
+        if let selectedZoneType { fields["entityType"] = selectedZoneType }
         let text = search.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { fields["search"] = String(text.prefix(120)) }
         fields["limit"] = min(GraphBudget.seedCount, GraphBudget.maximumNodes - seeds.count)
