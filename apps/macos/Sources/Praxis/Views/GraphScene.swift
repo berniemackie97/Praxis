@@ -5,8 +5,12 @@ import SpriteKit
 final class GraphScene: SKScene {
     var didSelectNode: ((String?) -> Void)?
     var didSelectEdge: ((String?) -> Void)?
+    var didSelectZone: ((String) -> Void)?
     var reduceMotion = false {
-        didSet { atlasArtwork.reduceMotion = reduceMotion }
+        didSet {
+            atlasArtwork.reduceMotion = reduceMotion
+            zoneArtwork.reduceMotion = reduceMotion
+        }
     }
 
     private var graphNodes: [GraphNode] = []
@@ -21,6 +25,10 @@ final class GraphScene: SKScene {
     private var hoveredEdgeId: String?
     private var nodeShapes: [String: SKShapeNode] = [:]
     private let atlasArtwork = GraphAtlasArtwork()
+    private let zoneArtwork = GraphZoneArtwork()
+    private var zoneMode = false
+    private var zoneOverview: GraphZoneOverview?
+    private var zoneFilterType: String?
     private var nodeLabels: [String: SKLabelNode] = [:]
     private let nodeHighlights = SKShapeNode()
     private let edgeArtwork = GraphEdgeArtwork()
@@ -41,6 +49,7 @@ final class GraphScene: SKScene {
         camera = viewCamera
         addChild(viewCamera)
         edgeArtwork.attach(to: self)
+        zoneArtwork.attach(to: self)
         nodeHighlights.zPosition = 4
         nodeHighlights.fillColor = .clear
         addChild(nodeHighlights)
@@ -49,7 +58,10 @@ final class GraphScene: SKScene {
     required init?(coder: NSCoder) { return nil }
 
     func configure(nodes: [GraphNode], edges: [GraphEdge], focus: String?) {
-        guard graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
+        guard zoneMode || graphNodes != nodes || graphEdges != edges || focusId != focus else { return }
+        let fromZones = zoneMode
+        zoneMode = false
+        zoneArtwork.hide()
         let previousFocus = focusId
         if previousFocus != focus { lastToolbarZoom = 1 }
         graphNodes = nodes
@@ -82,7 +94,7 @@ final class GraphScene: SKScene {
         if focus == nil {
             atlasArtwork.draw(nodes: nodes, positions: layout.positions, radii: nodeRadii,
                               degree: degree, in: self)
-            fitAtlas()
+            fitAtlas(animated: fromZones)
         } else {
             for node in nodes {
                 let shape = SKShapeNode(circleOfRadius: nodeRadii[node.entityId] ?? 11)
@@ -117,12 +129,52 @@ final class GraphScene: SKScene {
         return label
     }
 
-    override func didChangeSize(_ oldSize: CGSize) {
-        super.didChangeSize(oldSize)
-        if focusId == nil { fitAtlas() }
+    func configureZones(_ summary: GraphZoneOverview, type: String?) {
+        guard !zoneMode || zoneOverview != summary || zoneFilterType != type else { return }
+        zoneMode = true
+        zoneOverview = summary
+        zoneFilterType = type
+        graphNodes = []
+        graphEdges = []
+        nodesById.removeAll(keepingCapacity: true)
+        nodeRadii.removeAll(keepingCapacity: true)
+        for shape in nodeShapes.values { shape.removeFromParent() }
+        for label in nodeLabels.values { label.removeFromParent() }
+        nodeShapes.removeAll(keepingCapacity: true)
+        nodeLabels.removeAll(keepingCapacity: true)
+        atlasArtwork.clear()
+        edgeArtwork.rebuild(edges: [], positions: [:], focused: false, selected: nil, hovered: nil)
+        nodeHighlights.path = nil
+        hoveredNodeId = nil
+        hoveredEdgeId = nil
+        selectedNodeId = nil
+        selectedEdgeId = nil
+        focusId = nil
+        zoneArtwork.show(summary, only: type, dark: dark, highContrast: highContrast)
+        fitZones()
     }
 
-    private func fitAtlas() {
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        if zoneMode {
+            fitZones()
+        } else if focusId == nil {
+            fitAtlas()
+        }
+    }
+
+    private func fitZones() {
+        let bounds = zoneArtwork.bounds
+        guard bounds.width > 0, bounds.height > 0, size.width > 0, size.height > 0 else { return }
+        atlasFitScale = max(1, bounds.width / (size.width * 0.88),
+                              bounds.height / (size.height * 0.88))
+        viewCamera.removeAllActions()
+        viewCamera.zRotation = 0
+        viewCamera.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        viewCamera.setScale(atlasFitScale)
+    }
+
+    private func fitAtlas(animated: Bool = false) {
         guard !layout.positions.isEmpty, size.width > 0, size.height > 0 else { return }
         let points = Array(layout.positions.values)
         let minX = points.map(\.x).min() ?? 0
@@ -131,9 +183,19 @@ final class GraphScene: SKScene {
         let maxY = points.map(\.y).max() ?? 0
         atlasFitScale = max(1, (maxX - minX + 100) / (size.width * 0.82),
                                (maxY - minY + 100) / (size.height * 0.82))
-        viewCamera.zRotation = 0
-        viewCamera.position = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
-        viewCamera.setScale(atlasFitScale)
+        let target = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+        viewCamera.removeAllActions()
+        if animated && !reduceMotion {
+            viewCamera.run(.group([
+                .move(to: target, duration: 0.28),
+                .scale(to: atlasFitScale, duration: 0.28),
+                .rotate(toAngle: 0, duration: 0.28, shortestUnitArc: true)
+            ]))
+        } else {
+            viewCamera.zRotation = 0
+            viewCamera.position = target
+            viewCamera.setScale(atlasFitScale)
+        }
         updateStrokeWidths()
         updateVisibility()
     }
@@ -155,7 +217,7 @@ final class GraphScene: SKScene {
         guard toolbarZoomRevision != revision else { return }
         toolbarZoomRevision = revision
         if focusId == nil && zoom == 1 {
-            fitAtlas()
+            if zoneMode { fitZones() } else { fitAtlas() }
         } else {
             let base = focusId == nil ? atlasFitScale : CGFloat(1)
             let relative = lastToolbarZoom > 0 ? zoom / lastToolbarZoom : zoom
@@ -197,6 +259,10 @@ final class GraphScene: SKScene {
         }
         updateStrokeWidths()
         updateVisibility()
+        if zoneMode && scale < atlasFitScale * 0.48, let before,
+           let type = zoneArtwork.nearest(to: before, scale: scale) {
+            didSelectZone?(type)
+        }
     }
 
     func rotate(by radians: CGFloat) {
@@ -210,6 +276,11 @@ final class GraphScene: SKScene {
         self.dark = dark
         self.highContrast = highContrast
         backgroundColor = dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .windowBackgroundColor
+        if zoneMode, let zoneOverview {
+            zoneArtwork.show(zoneOverview, only: zoneFilterType, dark: dark,
+                             highContrast: highContrast)
+            return
+        }
         edgeArtwork.applyAppearance(dark: dark, highContrast: highContrast,
                                     cameraScale: viewCamera.xScale)
         nodeHighlights.strokeColor = .controlAccentColor
@@ -252,6 +323,7 @@ final class GraphScene: SKScene {
     }
 
     private func updateVisibility() {
+        if zoneMode { return }
         if focusId == nil {
             let detailed = viewCamera.xScale < atlasFitScale * 0.38
             let visibleRadius = hypot(size.width * viewCamera.xScale,
@@ -309,6 +381,7 @@ final class GraphScene: SKScene {
     }
 
     private func hitNode(at location: CGPoint) -> String? {
+        if zoneMode { return nil }
         if focusId != nil {
             return nodes(at: location).first(where: { $0.name?.hasPrefix("node:") == true })?.name
                 .map { String($0.dropFirst(5)) }
@@ -331,6 +404,10 @@ final class GraphScene: SKScene {
 
     override func mouseMoved(with event: NSEvent) {
         let location = event.location(in: self)
+        if zoneMode {
+            zoneArtwork.hover(zoneArtwork.type(at: location, scale: viewCamera.xScale))
+            return
+        }
         let node = hitNode(at: location)
         let edge = node == nil ? closestEdge(to: location) : nil
         guard node != hoveredNodeId || edge != hoveredEdgeId else { return }
@@ -347,6 +424,12 @@ final class GraphScene: SKScene {
 
     override func mouseDown(with event: NSEvent) {
         guard !event.modifierFlags.contains(.option) else { return }
+        if zoneMode {
+            if let type = zoneArtwork.type(at: event.location(in: self), scale: viewCamera.xScale) {
+                didSelectZone?(type)
+            }
+            return
+        }
         if let id = hitNode(at: event.location(in: self)) {
             if focusId != nil { draggingNode = id }
             didSelectNode?(id)
