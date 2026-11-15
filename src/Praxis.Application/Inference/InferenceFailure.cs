@@ -20,5 +20,7 @@ public enum InferenceFailure
     /// <summary>The provider's sign-in is missing or expired; the owner must sign in again.</summary>
     Unauthenticated,
     /// <summary>The response was malformed or exceeded its size bound.</summary>
-    InvalidResponse
+    InvalidResponse,
+    /// <summary>A noninteractive provider could not request an approval.</summary>
+    ApprovalRequired
 }

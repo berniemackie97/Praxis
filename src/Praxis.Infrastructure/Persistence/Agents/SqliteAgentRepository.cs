@@ -53,11 +53,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     {
         AgentBackendProfile backend = ReadBackends().FirstOrDefault(profile => profile.BackendId == backendId && profile.Enabled)
             ?? throw new ArgumentException("Connect and enable this chat model before starting a conversation.", nameof(backendId));
-        if (model is not null && (model.Length is < 1 or > 200 || model.Any(char.IsWhiteSpace) || model.Any(char.IsControl)) ||
-            !ModelEffort.IsValid(effort))
-        {
-            throw new ArgumentException("The conversation model or effort is invalid.");
-        }
+        ValidateModelChoice(backend, model, effort);
 
         string bounded = string.IsNullOrWhiteSpace(title) ? "New conversation" : title.Trim().Length > 200 ? title.Trim()[..200] : title.Trim();
         DateTimeOffset now = clock.GetUtcNow();
@@ -72,6 +68,30 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     }
 
     public AgentConversation? Read(Guid conversationId) => Conversations("WHERE conversation_id = $id", 1, ("$id", conversationId.ToString("D"))).FirstOrDefault();
+
+    public AgentConversation SetModel(Guid conversationId, string model, string? effort)
+    {
+        AgentConversation conversation = Read(conversationId) ?? throw new ArgumentException("Unknown conversation.");
+        AgentBackendProfile backend = ReadBackends().FirstOrDefault(profile => profile.BackendId == conversation.BackendId && profile.Enabled)
+            ?? throw new ArgumentException("Enable this conversation's connection in Models first.");
+        ValidateModelChoice(backend, model, effort);
+        if (Write("UPDATE agent_conversations SET model = $model, effort = $effort WHERE conversation_id = $id",
+                ("$model", model), ("$effort", effort), ("$id", conversationId.ToString("D"))) != 1)
+        {
+            throw new ArgumentException("Unknown conversation.");
+        }
+
+        return conversation with { Model = model, Effort = effort };
+    }
+
+    private static void ValidateModelChoice(AgentBackendProfile backend, string? model, string? effort)
+    {
+        if (model is not null && (model.Length is < 1 or > 200 || model.Any(char.IsWhiteSpace) || model.Any(char.IsControl)) ||
+            !ModelEffort.IsValid(effort) || effort is not null && !AgentBackendKinds.IsSession(backend.Kind))
+        {
+            throw new ArgumentException("The conversation model or effort is invalid.");
+        }
+    }
 
     public bool Rename(Guid conversationId, string title)
     {

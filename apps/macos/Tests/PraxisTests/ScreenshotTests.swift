@@ -60,6 +60,7 @@ struct ScreenshotTests {
         if let hit = model.search.hits.first { model.search.select(hit) }
         try await Task.sleep(for: .milliseconds(600))
 
+        try await seedChat(model, in: fixture)
         await settle(model)
         for section in AppSection.allCases {
             for dark in [false, true] {
@@ -101,6 +102,43 @@ struct ScreenshotTests {
                          size: CGSize(width: 760, height: 1_900), name: "settings-models-full", wait: 3, to: outputURL)
         try await render(SectionHost(section: .library).environmentObject(model), size: CGSize(width: 780, height: 560),
                    name: "library-narrow", to: outputURL)
+    }
+
+    private func seedChat(_ model: WorkbenchModel, in fixture: URL) async throws {
+        let cli = fixture.appendingPathComponent("chat-screenshot-fixture")
+        try """
+        #!/bin/sh
+        while [ "$#" -gt 0 ]; do
+          if [ "$1" = -o ]; then shift; answer="$1"; fi
+          shift
+        done
+        cat >/dev/null
+        cat > "$answer" <<'ANSWER'
+        A simple plan for the **south garden bed**:
+
+        1. Measure the fence line and mark the bed corners.
+        2. Leave a path wide enough to reach the plants.
+        3. Set the drip line in place before adding mulch.
+        ANSWER
+        printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":742,"output_tokens":67}}'
+        """.write(to: cli, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cli.path)
+
+        model.privacy.saveBackend(AgentBackendProfile(backendId: "demo-chat", kind: "codex", endpoint: nil, model: "demo-model",
+                                                     keyAccount: nil, executable: cli.path, enabled: true), apiKey: "")
+        model.chat.refresh()
+        let deadline = ContinuousClock.now + .seconds(10)
+        while model.chat.backendChoice != "demo-chat" && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        model.chat.useTools = false
+        model.chat.draft = "Make a short checklist for planting the south garden bed."
+        try #require(model.chat.canSend)
+        model.chat.send()
+        while model.chat.latestReply == nil && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try #require(model.chat.latestReply != nil)
     }
 
     /// Waits until the worker has answered earlier requests, so captures show loaded data.

@@ -13,7 +13,7 @@ struct AgentPresentationTests {
                "toolCalls":[{"callId":"a","name":"data_query","argumentsJson":"{}"}],
                "citations":[{"sourceId":"s","itemId":"i","revision":1,"locator":"stmttrn:2","sourceName":"download.qfx"}],
                "withheldResults":2,"check":{"unsupportedFigures":[],"missingCitations":false,"repaired":true,"clean":true},
-               "inputTokens":900,"outputTokens":40}}}
+               "inputTokens":900,"outputTokens":40,"omittedMessages":3}}}
             """
         let reply = try JSONDecoder().decode(WorkerReply<AgentRunStatus>.self, from: Data(json.utf8))
         let status = try #require(reply.data)
@@ -22,6 +22,10 @@ struct AgentPresentationTests {
         let answer = try #require(status.reply)
         #expect(answer.check.clean)
         #expect(answer.withheldResults == 2)
+        #expect(answer.omittedMessages == 3)
+        let olderJson = json.replacingOccurrences(of: ",\"omittedMessages\":3", with: "")
+        let older = try JSONDecoder().decode(WorkerReply<AgentRunStatus>.self, from: Data(olderJson.utf8))
+        #expect(older.data?.reply?.omittedMessages == nil)
         #expect(answer.citations.first?.sourceName == "download.qfx")
     }
 

@@ -1,3 +1,5 @@
+using Praxis.Application.Agents.Tools;
+using Praxis.Application.Inference;
 using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 
@@ -14,9 +16,13 @@ public sealed class AgentRuntime(
     IAgentConversationRepository conversations, AgentToolRegistry registry, IAgentBackendFactory backends, PolicyService policy,
     DisclosureGate gate, TimeProvider clock)
 {
+    private const int MaximumBoundedTranscriptCharacters = 24_000;
+    private const int MaximumCliToolCalls = 12;
+
     public async Task<AgentReply> RunAsync(Guid conversationId, string userText, Action<string, string?, string?> report, CancellationToken cancellationToken,
-        AgentRunLimits? limits = null)
+        AgentRunLimits? limits = null, bool useTools = true)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         AgentRunLimits bounds = limits ?? new AgentRunLimits();
         if (string.IsNullOrWhiteSpace(userText) || userText.Length > 32_000)
         {
@@ -32,15 +38,59 @@ public sealed class AgentRuntime(
         string permission = policy.Current().ToolPermission;
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose);
-        string system = AgentSystemPrompt.Build(clock.GetUtcNow(), permission, conversations.ReadMemories(AgentMemory.Active, null, 12));
+        string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
+            profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : []) : AgentSystemPrompt.Direct;
         conversations.Append(conversationId, AgentMessage.FromUser(userText));
 
-        RunState state = new(new CitationLedger());
-        if (backends.CreateSessionBackend(profile) is { } session)
+        RunState state = new(useTools);
+        AgentToolDefinition[] definitions = useTools ? registry.Definitions
+            .Where(tool => profile.IsLocal || tool.Name != MemoryRecallTool.ToolName).ToArray() : [];
+        ISessionAgentBackend? session = backends.CreateSessionBackend(profile);
+        IReadOnlyList<AgentMessage>? boundedTranscript = null;
+        if (session is not null || !useTools)
+        {
+            IReadOnlyList<AgentMessage> history = Transcript(conversationId);
+            if (!useTools)
+            {
+                // Keep ordinary dialogue as context; leave out tool traffic and system-generated repairs.
+                history = [.. history.Take(history.Count - 1).Where(message =>
+                    (message.Role is AgentRoles.User or AgentRoles.Assistant) &&
+                    message.ToolCalls.Count == 0 && !message.Content.StartsWith("Answer check failed.", StringComparison.Ordinal)), history[^1]];
+            }
+
+            AgentContextWindow window = AgentContextWindow.Select(history, Math.Min(bounds.CompactAfterCharacters, MaximumBoundedTranscriptCharacters));
+            boundedTranscript = window.Messages;
+            state.OmittedMessages = window.OmittedMessages;
+            if (window.OmittedMessages > 0)
+            {
+                report("context_limited", null, $"{window.OmittedMessages} older messages omitted");
+                system += "\n\nSome earlier conversation messages were omitted. Ask the owner for missing context when needed.";
+            }
+        }
+
+        if (session is not null)
         {
             report("thinking", null, profile.BackendId);
-            AgentTurn turn = await session.RunAsync(system, Transcript(conversationId), registry.Definitions,
-                (call, token) => InvokeAsync(call, context, state, report, token), cancellationToken);
+            AgentToolDefinition[] permitted = definitions.Where(tool => ToolTiers.Permits(permission, tool.Tier)).ToArray();
+            int toolLimit = useTools ? Math.Min(bounds.MaximumToolCalls, MaximumCliToolCalls) : 0;
+            SemaphoreSlim toolGate = new(1);
+            async Task<string> InvokeSessionTool(AgentToolCall call, CancellationToken token)
+            {
+                await toolGate.WaitAsync(token);
+                try
+                {
+                    return state.ToolCalls.Count >= toolLimit
+                        ? """{"error":"tool_budget_exhausted","message":"Answer with what you have."}"""
+                        : await InvokeAsync(call, context, state, report, token);
+                }
+                finally
+                {
+                    toolGate.Release();
+                }
+            }
+
+            AgentTurn turn = await session.RunAsync(system, boundedTranscript!, permitted, InvokeSessionTool, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
             conversations.Append(conversationId, AgentMessage.FromAssistant(turn.Text, []));
@@ -48,7 +98,11 @@ public sealed class AgentRuntime(
         }
 
         IAgentBackend backend = backends.CreateTurnBackend(profile) ?? throw new InvalidOperationException("The backend kind is not supported.");
-        await CompactIfNeededAsync(conversationId, backend, system, bounds, report, cancellationToken);
+        if (useTools)
+        {
+            await CompactIfNeededAsync(conversationId, backend, system, bounds, report, cancellationToken);
+        }
+
         bool repaired = false;
         for (int step = 0; step < bounds.MaximumSteps; step++)
         {
@@ -59,12 +113,23 @@ public sealed class AgentRuntime(
             }
 
             report("thinking", null, null);
-            AgentTurn turn = await backend.CompleteAsync(system, Transcript(conversationId), registry.Definitions, cancellationToken);
+            AgentTurn turn = await backend.CompleteAsync(system, boundedTranscript ?? Transcript(conversationId), definitions, cancellationToken);
+            if ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text)))
+            {
+                throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
+            }
+
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
+            cancellationToken.ThrowIfCancellationRequested();
             conversations.Append(conversationId, AgentMessage.FromAssistant(turn.Text, turn.ToolCalls));
             if (turn.ToolCalls.Count == 0)
             {
+                if (!useTools)
+                {
+                    return Finish(conversationId, userText, turn.Text, AgentReply.Completed, state, report, repaired: false);
+                }
+
                 AnswerCheck check = Check(turn.Text, userText, state, repaired);
                 if (!check.Clean && !repaired)
                 {
@@ -103,10 +168,14 @@ public sealed class AgentRuntime(
 
     private AgentReply Finish(Guid conversationId, string userText, string text, string stop, RunState state, Action<string, string?, string?> report, bool repaired)
     {
-        report("checking", null, null);
-        AnswerCheck check = Check(text, userText, state, repaired);
+        if (state.UseTools)
+        {
+            report("checking", null, null);
+        }
+
+        AnswerCheck check = state.UseTools ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
-        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens);
+        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens, state.OmittedMessages);
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
@@ -162,13 +231,15 @@ public sealed class AgentRuntime(
         }
     }
 
-    private sealed class RunState(CitationLedger citations)
+    private sealed class RunState(bool useTools)
     {
-        public CitationLedger Citations { get; } = citations;
+        public bool UseTools { get; } = useTools;
+        public CitationLedger Citations { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<string> ToolResults { get; } = [];
         public int Withheld { get; set; }
         public int InputTokens { get; set; }
         public int OutputTokens { get; set; }
+        public int OmittedMessages { get; set; }
     }
 }

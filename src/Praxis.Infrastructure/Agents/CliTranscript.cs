@@ -23,7 +23,6 @@ internal static class CliTranscript
             }
         }
 
-        text.Append("Use the praxis tools to answer the owner's latest request.");
         return text.ToString();
     }
 }

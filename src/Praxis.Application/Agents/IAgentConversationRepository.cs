@@ -16,6 +16,8 @@ public interface IAgentConversationRepository
 
     AgentConversation? Read(Guid conversationId);
 
+    AgentConversation SetModel(Guid conversationId, string model, string? effort);
+
     bool Rename(Guid conversationId, string title);
 
     bool Delete(Guid conversationId);

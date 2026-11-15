@@ -1,10 +1,11 @@
 using System.Text;
+using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Desktop;
 
 namespace Praxis.Worker.Desktop;
 
 /// <summary>Serves the desktop protocol over the parent process's stdin and stdout pipes until EOF or a stop request.</summary>
-internal sealed class DesktopStdioSession(DesktopProtocol protocol)
+internal sealed class DesktopStdioSession(DesktopProtocol protocol, AgentRunCoordinator runs)
 {
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -14,16 +15,23 @@ internal sealed class DesktopStdioSession(DesktopProtocol protocol)
             AutoFlush = true
         };
         DesktopRequestReader frames = new(reader);
-        while (!cancellationToken.IsCancellationRequested && !protocol.StopRequested)
+        try
         {
-            string? request = await frames.ReadAsync(cancellationToken);
-            if (request is null)
+            while (!cancellationToken.IsCancellationRequested && !protocol.StopRequested)
             {
-                return;
-            }
+                string? request = await frames.ReadAsync(cancellationToken);
+                if (request is null)
+                {
+                    return;
+                }
 
-            string response = await protocol.HandleAsync(request, cancellationToken);
-            await writer.WriteLineAsync(response.AsMemory(), cancellationToken);
+                string response = await protocol.HandleAsync(request, cancellationToken);
+                await writer.WriteLineAsync(response.AsMemory(), cancellationToken);
+            }
+        }
+        finally
+        {
+            await runs.StopAsync();
         }
     }
 }

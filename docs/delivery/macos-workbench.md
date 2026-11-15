@@ -199,7 +199,11 @@ The development app uses an **ad-hoc local signature in Xcode** (the CLI staging
 
 ## Chat, Approvals and Privacy & Agents — #370 (ADR 0043)
 
-**Chat** is the first workspace. Pick a chat model, ask a question, and Praxis answers through its tools with numbered sources. Each message runs in the background (`agentSend`, then `agentRun` polled every 0.4 s), so the rest of the app stays responsive and **Stop** cancels. Under the answer the app shows the sources, any figures the answer check could not find in a tool result, and how many items your disclosure policy withheld from that model, with a shortcut to the policy. Messages are limited to 12,000 characters (the worker pipe accepts 16 KB requests).
+**Chat** is the first workspace. Choose a connection for a new chat; change its model and supported effort in the chat header while idle. These choices persist and apply to the next message. A model edit keeps the connection and its disclosure rules. The conversation list marks active chats. Switching chats keeps each unsent draft, progress, and error with that conversation for the current app session.
+
+Turn off **Use Praxis tools** for a lower-overhead general chat. Praxis sends recent conversation text to the same model but skips tool definitions, tool-result replay and saved preferences. It can't look up sources or take actions in this mode. The switch starts on and is remembered per chat until quitting the app.
+
+The worker accepts two active responses across conversations, one per chat, with a 15-minute run deadline and any shorter provider deadlines. Capacity rejection leaves the draft in the composer. The app polls each run independently, with one status request in flight per run. **Stop** cancels the selected chat; stopping the worker cancels all unfinished runs. Check the saved transcript before resending after a worker restart. Messages are limited to 12,000 characters and must fit the 16 KB request pipe. Sources are collapsed under the answer; expand them for citations and available video clips. The answer check and policy notices remain visible. See the [Chat verification procedure](chat-verification.md).
 
 **Approvals** collects everything waiting for you, and its sidebar item shows the count:
 - disclosure holds from intake (*Send once*, *Always allow <category>*, *Keep local*, *Skip*); a hold you ignore continues down its fallback chain at its deadline;

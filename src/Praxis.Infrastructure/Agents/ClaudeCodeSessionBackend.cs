@@ -19,20 +19,21 @@ public sealed class ClaudeCodeSessionBackend(string executable, string model, Ag
     public async Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         Func<AgentToolCall, CancellationToken, Task<string>> invoke, CancellationToken cancellationToken)
     {
-        await using AgentToolSocketHost host = new(socketParent, new McpServerProtocol(tools, invoke));
+        await using AgentToolSocketHost? host = tools.Count == 0 ? null : new(socketParent, new McpServerProtocol(tools, invoke));
         using CliWorkspace workspace = new();
         string config = Path.Combine(workspace.Path, "mcp.json");
-        await File.WriteAllTextAsync(config, JsonSerializer.Serialize(new
+        var servers = new Dictionary<string, object>();
+        if (host is not null)
         {
-            mcpServers = new Dictionary<string, object>
-            {
-                ["praxis"] = new { type = "stdio", command = relay.Executable, args = relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray() }
-            }
-        }), cancellationToken);
+            servers["praxis"] = new { type = "stdio", command = relay.Executable, args = relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray() };
+        }
+
+        await File.WriteAllTextAsync(config, JsonSerializer.Serialize(new { mcpServers = servers }), cancellationToken);
         string allowed = string.Join(",", tools.Select(tool => "mcp__praxis__" + tool.Name));
         CliResult result = await CliProcess.RunAsync(executable,
         [
-            "-p", "--output-format", "json", "--mcp-config", config, "--strict-mcp-config", "--tools", "", "--allowedTools", allowed,
+            "-p", "--output-format", "json", "--mcp-config", config, "--strict-mcp-config", "--tools", "",
+            .. (host is null ? Array.Empty<string>() : ["--allowedTools", allowed]),
             "--setting-sources", "", "--disable-slash-commands",
             "--permission-mode", "dontAsk", "--no-session-persistence",
             .. (model == "default" ? Array.Empty<string>() : ["--model", model]),
