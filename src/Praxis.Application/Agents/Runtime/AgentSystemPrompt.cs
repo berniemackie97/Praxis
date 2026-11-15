@@ -6,6 +6,9 @@ namespace Praxis.Application.Agents.Runtime;
 /// <summary>The versioned operating instructions every backend receives.</summary>
 public static class AgentSystemPrompt
 {
+    public const string Direct = "Answer the latest request directly. You have no tools or access to the owner's library in this turn. " +
+        "If the request needs library evidence or an action, say so. Do not invent sources or claim to have taken an action.";
+
     public const string Version = "praxis-agent-v1";
 
     public static string Build(DateTimeOffset now, string toolPermission, IReadOnlyList<AgentMemory> memories)

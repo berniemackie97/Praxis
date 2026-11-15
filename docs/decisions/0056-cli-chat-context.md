@@ -18,7 +18,7 @@ A character limit is **not a tokenizer** and does not represent a provider's con
 
 ## Usage and tool access
 
-Simple replies and general questions are instructed to skip library tools. CLI sessions advertise only tools allowed by the current permission tier and stop executing new Praxis calls after 12 calls (or a lower caller limit). This caps Praxis tool execution, not work inside the provider harness. Saved preferences have no per-source grant; Praxis no longer injects or recalls them for remote models. Previously saved transcript text is not scrubbed by this change.
+Simple replies and general questions are instructed to skip library tools. With **Use Praxis tools** off, the next request omits tool schemas and the CLI relay entirely. It keeps a bounded dialogue history, excludes prior tool traffic and stored preferences, and does not run source-grounding checks. This is a per-conversation composer choice for the current app session, not a provider or disclosure-policy change. CLI sessions advertise only tools allowed by the current permission tier and stop executing new Praxis calls after 12 calls (or a lower caller limit). This caps Praxis tool execution, not work inside the provider harness. Saved preferences have no per-source grant; Praxis no longer injects or recalls them for remote models. Previously saved transcript text is not scrubbed by this change.
 
 Codex collects the reported input and output counts from `turn.completed` JSON events. The app shows counts when the provider supplies them. They include provider-side context and are not a subscription charge estimate; the reported usage-window drop cannot be inferred from them. See [Codex JSON event usage](https://developers.openai.com/blog/eval-skills).
 

@@ -12,6 +12,7 @@ final class ChatWorkbenchModel: ObservableObject {
     private let channel: WorkerChannel
     private struct ConversationState {
         var draft = ""
+        var useTools = true
         var busy = false
         var runId: String?
         var polling = false
@@ -62,6 +63,10 @@ final class ChatWorkbenchModel: ObservableObject {
     var draft: String {
         get { current.draft }
         set { states[key, default: ConversationState()].draft = newValue }
+    }
+    var useTools: Bool {
+        get { current.useTools }
+        set { states[key, default: ConversationState()].useTools = newValue }
     }
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,9 +242,10 @@ final class ChatWorkbenchModel: ObservableObject {
     func send() {
         guard canSend else { return }
         let original = draft
+        let tools = useTools
         let text = original.trimmingCharacters(in: .whitespacesAndNewlines)
         if let selectedId {
-            start(selectedId, text, originalDraft: original)
+            start(selectedId, text, originalDraft: original, useTools: tools)
             return
         }
 
@@ -253,9 +259,9 @@ final class ChatWorkbenchModel: ObservableObject {
             states[""]?.busy = false
             if states[""]?.draft == original { states[""]?.draft = "" }
             updateConversation(conversation)
-            states[conversation.id] = ConversationState(draft: original)
+            states[conversation.id] = ConversationState(draft: original, useTools: tools)
             if selectedId == nil { select(conversation) }
-            start(conversation.id, text, originalDraft: original)
+            start(conversation.id, text, originalDraft: original, useTools: tools)
         }
     }
 
@@ -282,10 +288,10 @@ final class ChatWorkbenchModel: ObservableObject {
         }
     }
 
-    private func start(_ id: String, _ text: String, originalDraft: String) {
+    private func start(_ id: String, _ text: String, originalDraft: String, useTools: Bool) {
         states[id, default: ConversationState()].busy = true
         feedback(nil, for: id)
-        channel.send("agentSend", ["conversationId": id, "message": text], as: AgentRunStartedData.self,
+        channel.send("agentSend", ["conversationId": id, "message": text, "useTools": useTools], as: AgentRunStartedData.self,
                      failed: { [weak self] in self?.failOperation(id, $0) }) { [weak self] data in
             guard let self else { return }
             if states[id]?.draft == originalDraft { states[id]?.draft = "" }

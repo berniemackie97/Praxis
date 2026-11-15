@@ -17,7 +17,7 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
     private readonly ConcurrentDictionary<Guid, Run> runs = new();
     private bool stopping;
 
-    public Guid Start(Guid conversationId, string text)
+    public Guid Start(Guid conversationId, string text, bool useTools = true)
     {
         lock (admission)
         {
@@ -39,7 +39,7 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
             Run run = new(Guid.NewGuid(), conversationId, clock.GetUtcNow());
             runs[run.RunId] = run;
             Prune();
-            run.Execution = Task.Run(() => ExecuteAsync(run, text));
+            run.Execution = Task.Run(() => ExecuteAsync(run, text, useTools));
             return run.RunId;
         }
     }
@@ -57,14 +57,14 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         await Task.WhenAll(active.Select(run => run.Execution));
     }
 
-    private async Task ExecuteAsync(Run run, string text)
+    private async Task ExecuteAsync(Run run, string text, bool useTools)
     {
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(run.Cancellation.Token);
         deadline.CancelAfter(RunDeadline);
         try
         {
             AgentReply reply = await runtime.RunAsync(run.ConversationId, text,
-                (kind, tool, detail) => run.Add(kind, tool, detail, clock.GetUtcNow()), deadline.Token);
+                (kind, tool, detail) => run.Add(kind, tool, detail, clock.GetUtcNow()), deadline.Token, useTools: useTools);
             run.Finish(AgentRunStatus.Completed, reply, null, clock.GetUtcNow());
         }
         catch (OperationCanceledException) when (run.Cancellation.IsCancellationRequested)

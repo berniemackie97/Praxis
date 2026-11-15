@@ -228,12 +228,14 @@ struct WorkerSessionTests {
         try """
         #!/bin/sh
         json=no
+        mcp=no
         while [ "$#" -gt 0 ]; do
           case "$1" in
             --json) json=yes ;;
             -m) shift; model="$1" ;;
             -o) shift; answer="$1" ;;
             model_reasoning_effort=*) effort="$1" ;;
+            mcp_servers.praxis.command=*) mcp=yes ;;
           esac
           shift
         done
@@ -246,6 +248,7 @@ struct WorkerSessionTests {
             printf '%s\\n' '{"type":"turn.failed","error":{"message":"tool requires approval: fixture-private"}}'
             exit 1 ;;
           *)
+            case "$latest" in *"VERIFY B CHOICE"*) [ "$mcp" = no ] || exit 6 ;; esac
             printf 'PING %s %s\\n' "$model" "$effort" > "$answer"
             printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":123,"cached_input_tokens":23,"output_tokens":7}}' ;;
         esac
@@ -322,6 +325,7 @@ struct WorkerSessionTests {
         #expect(model.notice == nil)
         #expect(model.selected?.id == second.id)
         #expect(model.activeModel == "fixture-v2")
+        model.useTools = false
         model.draft = "VERIFY B CHOICE"
         // B's history includes FAIL B, so the fixture treats only the last owner request as the trigger.
         model.send()

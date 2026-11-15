@@ -247,7 +247,7 @@ private struct Welcome: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: Spacing.m)], spacing: Spacing.m) {
                 ForEach(Self.prompts, id: \.1) { symbol, prompt in
                     Button {
-                        _ = model.prepareDraft(prompt)
+                        if model.prepareDraft(prompt) { model.useTools = true }
                     } label: {
                         HStack(spacing: Spacing.s) {
                             Image(systemName: symbol).foregroundStyle(Color.accentColor).frame(width: 18)
@@ -414,8 +414,13 @@ private struct Composer: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
                 .strokeBorder(focused ? Color.accentColor.opacity(0.6) : Surface.stroke))
             HStack {
+                Toggle("Use Praxis tools", isOn: $model.useTools)
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .disabled(model.busy)
+                    .help("Turn off for general questions. Recent conversation text still goes to the selected model.")
                 if model.activeBackend?.isLocal == false {
-                    Text("Messages go to \(model.activeBackendId). Source access follows your disclosure policy.")
+                    Text("Messages go to \(model.activeBackendId).")
                 }
                 Spacer()
                 if tooLong {

@@ -131,6 +131,7 @@ struct ScreenshotTests {
         while model.chat.backendChoice != "demo-chat" && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(100))
         }
+        model.chat.useTools = false
         model.chat.draft = "Make a short checklist for planting the south garden bed."
         try #require(model.chat.canSend)
         model.chat.send()

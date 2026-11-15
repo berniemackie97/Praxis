@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Domain.Agents;
@@ -86,6 +87,37 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(150, reply.InputTokens);
         Assert.Equal(12, catalog.Agents.ReadToolCalls(conversation.ConversationId, 100).Count);
         Assert.Equal(4, catalog.Agents.ReadMessages(conversation.ConversationId).Count);
+    }
+
+    [Fact]
+    public async Task DirectChatOmitsToolSchemasHistoryAndMemoryFromTheHttpRequest()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local();
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation conversation = catalog.Agents.Create(profile.BackendId, "direct");
+        catalog.Agents.AddMemory(conversation.ConversationId, "private standing preference", AgentMemory.Active);
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromUser("Previous question"));
+        AgentToolCall tool = Call("knowledge_search", """{"query":"previous query"}""");
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromAssistant("Searching", [tool]));
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromTool(tool.CallId, "tool-only evidence", []));
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromAssistant("Earlier answer", []));
+        CapturingHandler handler = new("""{"choices":[{"message":{"content":"PING"}}],"usage":{"prompt_tokens":83,"completion_tokens":2}}""");
+        using HttpClient http = new(handler);
+        var backend = new OpenAiCompatibleAgentBackend(http, new Uri(profile.Endpoint + "/"), profile.Model, null);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Reply with PING only.", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+
+        using JsonDocument payload = JsonDocument.Parse(handler.Body!);
+        Assert.False(payload.RootElement.TryGetProperty("tools", out _));
+        Assert.DoesNotContain("tool-only evidence", handler.Body!, StringComparison.Ordinal);
+        Assert.DoesNotContain("private standing preference", handler.Body!, StringComparison.Ordinal);
+        Assert.Contains("Earlier answer", handler.Body!, StringComparison.Ordinal);
+        Assert.Equal("PING", reply.Text);
+        Assert.Equal(83, reply.InputTokens);
+        Assert.Empty(catalog.Agents.ReadToolCalls(conversation.ConversationId, 20));
+        Assert.Equal("PING", catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
 
     [Fact]

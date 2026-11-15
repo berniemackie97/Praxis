@@ -64,7 +64,7 @@ public sealed class AgentActions(
                 repository.ReadMessages(id), repository.ReadToolCalls(id, 200));
         }),
         DesktopAction.Of("agentSend", fields => new AgentRunStartedResponse(runs.Start(fields.RequireGuid("conversationId"),
-            fields.RequireString("message", 32_000)))),
+            fields.RequireString("message", 32_000), fields.OptionalBoolean("useTools") ?? true))),
         DesktopAction.Of("agentRun", fields => runs.Status(fields.RequireGuid("runId"), fields.IntegerOrDefault("after", 0, 0, int.MaxValue))
                                                ?? throw new ArgumentException("Unknown run.")),
         DesktopAction.Of("agentCancel", fields => new ChangedResponse(runs.Cancel(fields.RequireGuid("runId")))),

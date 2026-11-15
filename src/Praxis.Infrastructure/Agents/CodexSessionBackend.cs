@@ -25,16 +25,20 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     public async Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         Func<AgentToolCall, CancellationToken, Task<string>> invoke, CancellationToken cancellationToken)
     {
-        await using AgentToolSocketHost host = new(socketParent, new McpServerProtocol(tools, invoke));
+        await using AgentToolSocketHost? host = tools.Count == 0 ? null : new(socketParent, new McpServerProtocol(tools, invoke));
         using CliWorkspace workspace = new();
         string answer = Path.Combine(workspace.Path, "answer.txt");
-        string arguments = JsonSerializer.Serialize(relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray());
+        string[] serverOptions = host is null ? [] :
+        [
+            "-c", $"mcp_servers.praxis.command={JsonSerializer.Serialize(relay.Executable)}",
+            "-c", $"mcp_servers.praxis.args={JsonSerializer.Serialize(relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray())}"
+        ];
         CliResult result = await CliProcess.RunAsync(executable,
         [
             "exec", "--json", "--sandbox", "read-only", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
             "--disable", "shell_tool", "--disable", "view_image", "--disable", "apps", "--disable", "multi_agent",
             "-c", "web_search=\"disabled\"",
-            "-c", $"mcp_servers.praxis.command={JsonSerializer.Serialize(relay.Executable)}", "-c", $"mcp_servers.praxis.args={arguments}",
+            .. serverOptions,
             // Codex cannot prompt in exec. Only Praxis read tools get this override, and every call
             // still crosses Praxis's permission and disclosure checks. Never approve shell or writes.
             .. tools.Where(tool => tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)).SelectMany(tool => new[]

@@ -2,23 +2,19 @@ using Praxis.Domain.Agents;
 
 namespace Praxis.Application.Agents.Runtime;
 
-/// <summary>Limits CLI history without altering saved messages or splitting earlier user turns.</summary>
+/// <summary>Limits chat history without altering saved messages or splitting earlier user turns.</summary>
 internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, int OmittedMessages)
 {
-    internal static AgentContextWindow ForCli(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
+    internal static AgentContextWindow Select(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCharacters);
         if (transcript.Count == 0 || transcript[^1].Role != AgentRoles.User)
         {
-            throw new ArgumentException("A CLI request must end with the current owner message.", nameof(transcript));
+            throw new ArgumentException("A chat request must end with the current owner message.", nameof(transcript));
         }
 
         int start = transcript.Count - 1;
         int remaining = maximumCharacters - Characters(transcript[start]);
-        if (remaining < 0)
-        {
-            throw new ArgumentException("The current request exceeds the chat context limit.", nameof(transcript));
-        }
 
         while (start > 0)
         {
