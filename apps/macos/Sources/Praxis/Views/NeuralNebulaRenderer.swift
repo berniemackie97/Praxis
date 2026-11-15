@@ -69,7 +69,8 @@ final class NeuralNebulaRenderer: NSObject, MTKViewDelegate {
             attachment.rgbBlendOperation = .add
             attachment.alphaBlendOperation = .add
             attachment.sourceRGBBlendFactor = .sourceAlpha
-            attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            // Additive light: overlapping stars and gas brighten like real exposure.
+            attachment.destinationRGBBlendFactor = .one
             attachment.sourceAlphaBlendFactor = .one
             attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
             return try? device.makeRenderPipelineState(descriptor: descriptor)

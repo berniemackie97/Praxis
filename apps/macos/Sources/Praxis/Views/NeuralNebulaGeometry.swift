@@ -25,51 +25,11 @@ enum NeuralNebulaGeometry {
             let forming = zone.memberCount == 0
             let color = NeuralNebulaLayout.regionColor(index, forming: forming)
             let size = placement.zoneSizes[zone.id] ?? 12
-            var random = CortexRandom(seed: GraphRegionIdentity.hash(zone.id))
-            // Each galaxy lies in its own tilted plane.
-            // Mostly face-on discs with a small individual tilt, like galaxies seen across a sky map.
-            let tilt = random.next() * 0.9 - 0.45, turn = random.next() * 6.283
-            let axisA = SIMD3<Float>(cos(turn), sin(turn), sin(tilt) * 0.5)
-            let axisB = simd_normalize(simd_cross(SIMD3<Float>(sin(tilt) * 0.4, 0, 1), axisA))
-            if forming {
-                // Uncondensed nebula: gas only, no stars, until its sources become knowledge.
-                for _ in 0..<26 {
-                    let offset = (axisA * (random.next() * 2 - 1) + axisB * (random.next() * 2 - 1)) * size * 2.2
-                    points.append(NeuralNebulaVertex(position: center + offset,
-                        color: SIMD4<Float>(color.x, color.y, color.z, highContrast ? 0.22 : 0.10), size: size * (0.8 + random.next())))
-                }
-                continue
-            }
-            points.append(NeuralNebulaVertex(position: center, color: SIMD4<Float>(color.x, color.y, color.z, 0.55), size: size * 1.6))
-            points.append(NeuralNebulaVertex(position: center, color: SIMD4<Float>(1, 0.97, 0.92, 0.95), size: size * 0.45))
-            let arms = 2 + Int(random.next() * 2)
-            let stars = min(300, max(36, Int(log2(Double(zone.count) + 1) * 26)))
-            for number in 0..<stars {
-                let arm = number % arms
-                let along = pow(random.next(), 0.7)
-                let angle = Float(arm) * (6.283 / Float(arms)) + along * 4.2 + (random.next() - 0.5) * 0.5 * (1.2 - along)
-                let radius = along * size * 1.9
-                let offset = axisA * cos(angle) * radius + axisB * sin(angle) * radius * 0.92
-                    + simd_cross(axisA, axisB) * (random.next() - 0.5) * size * 0.25
-                let bright = number % 5 == 0
-                points.append(NeuralNebulaVertex(position: center + offset,
-                    color: bright ? SIMD4<Float>(0.95, 0.96, 1, highContrast ? 0.95 : 0.8)
-                                  : SIMD4<Float>(color.x, color.y, color.z, highContrast ? 0.75 : 0.55),
-                    size: bright ? 2.6 : (highContrast ? 2.4 : 1.8)))
-            }
+            points.append(contentsOf: Galaxy.stars(id: zone.id, center: center, size: size, members: zone.count,
+                                                    tint: SIMD3<Float>(color.x, color.y, color.z), forming: forming,
+                                                    highContrast: highContrast))
         }
-        var sky = CortexRandom(seed: 99)
-        // Ornamental nebula clouds behind the universe.
-        for cloud in 0..<9 {
-            let tint: SIMD3<Float> = cloud % 3 == 0 ? [0.42, 0.20, 0.75] : cloud % 3 == 1 ? [0.10, 0.32, 0.55] : [0.45, 0.12, 0.45]
-            let direction = simd_normalize(SIMD3<Float>(sky.next() * 2 - 1, sky.next() - 0.5, -0.6 - sky.next()))
-            points.append(NeuralNebulaVertex(position: direction * 700, color: SIMD4<Float>(tint, 0.10), size: 520 + sky.next() * 420))
-        }
-        for _ in 0..<900 {
-            let direction = simd_normalize(SIMD3<Float>(sky.next() * 2 - 1, sky.next() * 2 - 1, sky.next() * 2 - 1))
-            points.append(NeuralNebulaVertex(position: direction * (520 + sky.next() * 400),
-                color: SIMD4<Float>(0.82, 0.86, 1.0, (highContrast ? 0.35 : 0.18) + sky.next() * 0.25), size: 1 + sky.next() * 1.6))
-        }
+        points.append(contentsOf: Galaxy.sky(highContrast: highContrast))
 
         let strongest = Float(max(1, overview.links.map(\.count).max() ?? 1))
         let colors = Dictionary(uniqueKeysWithValues: overview.regions.enumerated().map {
@@ -97,7 +57,7 @@ enum NeuralNebulaGeometry {
                         let u = 1 - t
                         let point = u * u * a + 2 * u * t * control + t * t * b
                         var color = fixed ?? (colorA * u + colorB * t)
-                        color.w = (highContrast ? 0.5 : 0.22) + 0.5 * weight
+                        color.w = (highContrast ? 0.45 : 0.10) + 0.32 * weight
                         links.append(NeuralNebulaVertex(position: point, color: color, size: 1))
                     }
                 }
