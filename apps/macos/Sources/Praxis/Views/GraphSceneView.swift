@@ -25,10 +25,10 @@ struct GraphSceneView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> SKView {
-        let view = SKView()
+        let view = GraphInputView()
         view.ignoresSiblingOrder = true
         view.shouldCullNonVisibleNodes = true
-        view.preferredFramesPerSecond = 30
+        view.preferredFramesPerSecond = 60
         view.presentScene(context.coordinator.scene)
         return view
     }
@@ -62,3 +62,34 @@ struct GraphSceneView: NSViewRepresentable {
     }
 }
 
+
+@MainActor
+private final class GraphInputView: SKView {
+    override func scrollWheel(with event: NSEvent) {
+        guard let graph = scene as? GraphScene else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let delta = max(-80, min(80, event.scrollingDeltaY))
+        let sensitivity: CGFloat = event.hasPreciseScrollingDeltas ? 0.012 : 0.12
+        graph.zoom(by: exp(-delta * sensitivity),
+                   at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard let graph = scene as? GraphScene else {
+            super.magnify(with: event)
+            return
+        }
+        graph.zoom(by: exp(-CGFloat(event.magnification)),
+                   at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func rotate(with event: NSEvent) {
+        guard let graph = scene as? GraphScene else {
+            super.rotate(with: event)
+            return
+        }
+        graph.rotate(by: -CGFloat(event.rotation) * .pi / 180)
+    }
+}

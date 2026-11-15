@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SpriteKit
 import Testing
 @testable import Praxis
 
@@ -219,4 +220,28 @@ struct GraphPresentationTests {
         layout.move("b", to: CGPoint(x: 50, y: 25))
         #expect(layout.positions["b"] == CGPoint(x: 50, y: 25))
     }
+
+    @MainActor
+    @Test func globalAtlasBatchesDrawablesAndKeepsCameraInteractionsBounded() {
+        let nodes = (0..<GraphBudget.atlasNodes).map { node("atlas-\($0)", type: "project") }
+        let edges = (0..<GraphBudget.atlasEdges).map { index in
+            edge("edge-\(index)", "atlas-\(index)", "atlas-\(index + 1)")
+        }
+        let scene = GraphScene()
+        scene.configure(nodes: nodes, edges: edges, focus: nil)
+        let drawingLayers = scene.children.compactMap { $0 as? SKShapeNode }
+        let labels = scene.children.compactMap { $0 as? SKLabelNode }
+
+        #expect(drawingLayers.count < 24)
+        #expect(labels.count == 1)
+        #expect(scene.camera?.xScale == scene.camera?.yScale)
+
+        let initialScale = scene.camera?.xScale ?? 0
+        scene.zoom(by: 0.6, at: .zero)
+        #expect((scene.camera?.xScale ?? 0) < initialScale)
+        scene.rotate(by: .pi / 4)
+        #expect(abs((scene.camera?.zRotation ?? 0) - .pi / 4) < 0.001)
+        scene.reduceMotion = true
+    }
+
 }

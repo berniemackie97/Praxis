@@ -54,12 +54,15 @@ struct KnowledgeGraphView: View {
                                     if graph.focusId == nil {
                                         Text("\(graph.overview?.entityCount ?? 0) current entities in scope · rendered relationship sample")
                                             .font(.caption2).foregroundStyle(.tertiary)
+                                        Text("Drag to pan · Scroll/pinch to zoom · Option-drag to rotate")
+                                            .font(.caption2).foregroundStyle(.secondary)
                                     }
                                 }
                                 .padding(Spacing.s)
                                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.s))
                                 .padding(Spacing.m)
                                 .accessibilityHidden(true)
+                                .allowsHitTesting(false)
                             }
                     }
                     if graph.loading || graph.atlasLoading {
