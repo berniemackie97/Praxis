@@ -101,19 +101,33 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         self.reduceMotion = reduceMotion
         let levelChanged = self.regionType != regionType || self.focusId != focusId
         let focusWasMissing = focusId != nil && focusId.flatMap { placement.nodeCenters[$0] } == nil
-        let changed = self.overview != overview || graphNodes != nodes || graphEdges != edges ||
-            levelChanged || self.selectedNodeId != selectedNodeId ||
-            self.selectedEdgeId != selectedEdgeId || self.highContrast != highContrast
+        let topologyChanged = self.overview != overview || graphNodes != nodes ||
+            graphEdges != edges || levelChanged
+        let contrastChanged = self.highContrast != highContrast
+        let nodeSelectionChanged = self.selectedNodeId != selectedNodeId
+        let edgeSelectionChanged = self.selectedEdgeId != selectedEdgeId
+        self.overview = overview
+        graphNodes = nodes
+        graphEdges = edges
+        self.regionType = regionType
+        self.focusId = focusId
+        self.selectedNodeId = selectedNodeId
+        self.selectedEdgeId = selectedEdgeId
         self.highContrast = highContrast
-        if changed {
-            self.overview = overview
-            graphNodes = nodes
-            graphEdges = edges
-            self.regionType = regionType
-            self.focusId = focusId
-            self.selectedNodeId = selectedNodeId
-            self.selectedEdgeId = selectedEdgeId
-            rebuild(reposition: levelChanged, focusWasMissing: focusWasMissing)
+        if topologyChanged || contrastChanged {
+            rebuild(reposition: levelChanged, focusWasMissing: focusWasMissing,
+                    updateLayout: topologyChanged)
+        } else {
+            if nodeSelectionChanged {
+                detailPoints = buffer(NeuralNebulaGeometry.detailPoints(
+                    nodes: nodes, placement: placement,
+                    selectedNodeId: selectedNodeId, highContrast: highContrast))
+            }
+            if edgeSelectionChanged {
+                detailLines = buffer(NeuralNebulaGeometry.detailLines(
+                    edges: edges, placement: placement,
+                    selectedEdgeId: selectedEdgeId, highContrast: highContrast))
+            }
         }
         view?.enableSetNeedsDisplay = reduceMotion
         view?.isPaused = !active
@@ -130,7 +144,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         return Batch(buffer: value, count: value == nil ? 0 : vertices.count)
     }
 
-    private func rebuild(reposition: Bool, focusWasMissing: Bool) {
+    private func rebuild(reposition: Bool, focusWasMissing: Bool, updateLayout: Bool) {
         guard let overview else {
             placement = NeuralNebulaPlacement(zoneCenters: [:], zoneSizes: [:], nodeCenters: [:])
             zonePoints = Batch()
@@ -145,11 +159,14 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         let visibleRegion = regionType ?? (focusId.flatMap { id in
             graphNodes.first(where: { $0.entityId == id })?.entityType
         })
-        placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
-                                              edges: graphEdges, regionType: visibleRegion)
+        if updateLayout {
+            placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
+                                                  edges: graphEdges, regionType: visibleRegion)
+        }
         let geometry = NeuralNebulaGeometry.build(overview: overview, placement: placement,
                                                   nodes: graphNodes, edges: graphEdges,
                                                   selectedNodeId: selectedNodeId,
+                                                  selectedEdgeId: selectedEdgeId,
                                                   highContrast: highContrast)
         zonePoints = buffer(geometry.zonePoints)
         zoneLines = buffer(geometry.zoneLines)
