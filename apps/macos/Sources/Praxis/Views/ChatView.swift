@@ -413,16 +413,3 @@ enum AnswerCheckText {
     }
 }
 
-/// How a chat model reads in the picker: provider and model, never a bare icon.
-enum ChatBackendLabel {
-    static func of(_ backend: AgentBackendProfile) -> String {
-        let provider = switch backend.kind {
-        case "claude_code": "Claude Code"
-        case "codex": "Codex"
-        case "anthropic": "Anthropic"
-        default: backend.isLocal ? "Local" : backend.backendId
-        }
-        let model = backend.model == "default" ? "plan default" : backend.model
-        return "\(provider) · \(model)"
-    }
-}
