@@ -12,6 +12,8 @@ final class GraphWorkbenchModel: ObservableObject {
     private var conceptTrail: [String] = []
     private let atlasScope = "graph-atlas"
     private let neighborhoodScope = "graph-neighborhood"
+    private let regionMapScope = "graph-region-map"
+    private let regionMembersScope = "graph-region-members"
     private let inspectionScope = "graph-inspection"
     private let previewScope = "graph-preview"
     private let watchScope = "graph-watch"
@@ -75,10 +77,24 @@ final class GraphWorkbenchModel: ObservableObject {
     /// Knowledge changed since the graph was loaded (intake, reviews, revisions). The view offers a
     /// refresh instead of resetting the camera under the owner.
     @Published private(set) var knowledgeChanged = false
+    /// The brain's regions from the owner's folders and repositories, at one knowledge revision.
+    @Published private(set) var regionMap: GraphRegionMap?
+    @Published private(set) var regionMapLoading = false
+    @Published private(set) var regionMapError: String?
+    /// The territory the owner entered, whose members and relations are shown.
+    @Published private(set) var openRegionId: String?
+    @Published private(set) var regionNodes: [GraphNode] = []
+    @Published private(set) var regionEdges: [GraphEdge] = []
+    @Published private(set) var regionMembersLoading = false
     private var loadedRevision: Int64?
+
+    /// Territories the whole-brain views draw, and the evidence links between them.
+    var territories: [GraphKnowledgeRegion] { BrainTerritories.select(regionMap) }
+    var territoryOverview: GraphVisualOverview { BrainTerritories.overview(regionMap) }
 
     var visibleNodes: [GraphNode] {
         guard focusId == nil else { return nodes }
+        if openRegionId != nil { return regionNodes }
         guard selectedZoneType != nil, !atlasLoading else { return [] }
         let ids = Set(atlasNodes.map(\.entityId))
         return atlasNodes + Array(seeds.filter { !ids.contains($0.entityId) }
@@ -87,6 +103,7 @@ final class GraphWorkbenchModel: ObservableObject {
 
     var visibleEdges: [GraphEdge] {
         if focusId != nil { return edges }
+        if openRegionId != nil { return regionEdges }
         return selectedZoneType == nil ? [] : atlasEdges
     }
 
@@ -214,7 +231,66 @@ final class GraphWorkbenchModel: ObservableObject {
         loadConcepts(cursor: nil)
         knowledgeChanged = false
         loadedRevision = nil
-        checkKnowledgeRevision()
+        closeRegion()
+        loadRegionMap()
+    }
+
+    private func loadRegionMap() {
+        guard active else { return }
+        channel.reset(regionMapScope)
+        regionMapLoading = true
+        var fields: [String: Any] = [:]
+        if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+        if includeSuggestions { fields["includeSuggestions"] = true }
+        channel.send("graphKnowledgeRegions", fields, as: GraphRegionMap.self, scope: regionMapScope,
+                     failed: { [weak self] error in
+                         self?.regionMapLoading = false
+                         self?.regionMapError = error
+                     }) { [weak self] map in
+            guard let self, active else { return }
+            regionMapLoading = false
+            regionMapError = nil
+            regionMap = map
+            loadedRevision = map.revision
+        }
+    }
+
+    /// Enters a region: its best-connected members and the confirmed relations among them.
+    func openRegion(_ id: String) {
+        guard active, regionMap?.regions.contains(where: { $0.regionId == id }) == true else { return }
+        clearInspection()
+        focusId = nil
+        selectedZoneType = nil
+        selectedNodeId = nil
+        selectedEdgeId = nil
+        openRegionId = id
+        regionNodes = []
+        regionEdges = []
+        regionMembersLoading = true
+        channel.reset(regionMembersScope)
+        var fields: [String: Any] = ["regionId": id, "limit": 100]
+        if !collectionId.isEmpty { fields["collectionId"] = collectionId }
+        if !sourceId.isEmpty { fields["sourceId"] = sourceId }
+        if includeSuggestions { fields["includeSuggestions"] = true }
+        channel.send("graphRegionMembers", fields, as: GraphPage.self, scope: regionMembersScope,
+                     failed: { [weak self] error in
+                         self?.regionMembersLoading = false
+                         self?.error = error
+                     }) { [weak self] page in
+            guard let self, active, openRegionId == id else { return }
+            regionMembersLoading = false
+            regionNodes = page.nodes
+            regionEdges = page.edges
+        }
+    }
+
+    func closeRegion() {
+        channel.reset(regionMembersScope)
+        openRegionId = nil
+        regionNodes = []
+        regionEdges = []
+        regionMembersLoading = false
     }
 
     /// Polls the cheap knowledge watermark; the first answer after a load becomes the baseline.
@@ -447,6 +523,7 @@ final class GraphWorkbenchModel: ObservableObject {
 
     func showOverview() {
         resetConceptTrail()
+        closeRegion()
         if active {
             channel.reset(conceptScope)
             conceptRegions = []

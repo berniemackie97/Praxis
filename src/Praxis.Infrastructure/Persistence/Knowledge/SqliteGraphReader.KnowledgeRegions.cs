@@ -307,10 +307,67 @@ public sealed partial class SqliteGraphReader
                 region.Relations, [.. hubIds[region.Id].Where(hubNodes.ContainsKey).Select(id => hubNodes[id])]));
         }
 
+        // Every pair of kept regions where neither contains the other: confirmed relations between
+        // their entities (top-level pairs also count shared entities). Views credit these to the
+        // territories they draw; the strongest pairs are kept.
+        Dictionary<Guid, List<string>> regionsByEntity = [];
+        foreach (RegionBuild region in kept)
+        {
+            foreach (Guid entity in region.Mentions.Keys)
+            {
+                (regionsByEntity.TryGetValue(entity, out List<string>? list) ? list : regionsByEntity[entity] = []).Add(region.Key);
+            }
+        }
+
+        bool Nested(string a, string b)
+        {
+            for (string? cursor = regions[a].ParentKey; cursor is not null; cursor = regions[cursor].ParentKey)
+            {
+                if (cursor == b)
+                {
+                    return true;
+                }
+            }
+
+            for (string? cursor = regions[b].ParentKey; cursor is not null; cursor = regions[cursor].ParentKey)
+            {
+                if (cursor == a)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        foreach (RegionRelation relation in relations.Where(relation => !relation.Glue))
+        {
+            if (!regionsByEntity.TryGetValue(relation.Subject, out List<string>? from) || !regionsByEntity.TryGetValue(relation.Object, out List<string>? to))
+            {
+                continue;
+            }
+
+            foreach (string a in from)
+            {
+                foreach (string b in to)
+                {
+                    if (a == b || (regions[a].ParentKey is null && regions[b].ParentKey is null) || Nested(a, b)
+                        || regions[a].Mentions.ContainsKey(relation.Object) || regions[b].Mentions.ContainsKey(relation.Subject))
+                    {
+                        continue;
+                    }
+
+                    (string x, string y) = string.CompareOrdinal(a, b) < 0 ? (a, b) : (b, a);
+                    links[(x, y)] = (links.GetValueOrDefault((x, y)).Relations + 1, links.GetValueOrDefault((x, y)).Shared);
+                }
+            }
+        }
+
         List<GraphRegionLink> regionLinks = [.. links
-            .Where(entry => keptKeys.Contains(entry.Key.Item1) && keptKeys.Contains(entry.Key.Item2)
-                            && regions[entry.Key.Item1].ParentKey is null && regions[entry.Key.Item2].ParentKey is null)
-            .OrderBy(entry => entry.Key.Item1, StringComparer.Ordinal).ThenBy(entry => entry.Key.Item2, StringComparer.Ordinal)
+            .Where(entry => keptKeys.Contains(entry.Key.Item1) && keptKeys.Contains(entry.Key.Item2))
+            .OrderByDescending(entry => entry.Value.Relations + entry.Value.Shared)
+            .ThenBy(entry => entry.Key.Item1, StringComparer.Ordinal).ThenBy(entry => entry.Key.Item2, StringComparer.Ordinal)
+            .Take(400)
             .Select(entry => new GraphRegionLink(RegionPaths.Id(entry.Key.Item1), RegionPaths.Id(entry.Key.Item2),
                 entry.Value.Relations, entry.Value.Shared))];
         GraphRegionMap map = new(revision, entities.Count, entities.Count - placedEntities.Count, result, regionLinks);
