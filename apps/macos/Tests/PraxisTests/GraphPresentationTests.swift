@@ -200,9 +200,15 @@ struct GraphPresentationTests {
         // One curved 18-segment lane per evidence status present: confirmed, suggested, contradicted.
         #expect(geometry.zoneLines.count == 3 * 18 * 2)
         #expect(geometry.detailLines.count == 2)
-        #expect(geometry.detailPoints.count == 2)
-        // Two galaxies (glows, bulge, disc, knots, haze, each bounded) plus bounded ornamental sky.
-        #expect(geometry.zonePoints.count <= 2 * (2 + 420 + 1_600 + 32 + 28) + 1_500 + 1_200 + 9)
+        // Each member star is a corona plus a core.
+        #expect(geometry.detailPoints.count == 2 * 2)
+        // Members of an entered galaxy sit inside its disc.
+        let center = placement.zoneCenters["project-a"] ?? .zero
+        let reach = (placement.zoneSizes["project-a"] ?? 12) * 2.4
+        #expect(placement.nodeCenters.values.allSatisfy { simd_length($0 - center) <= reach * 1.01 })
+        // Two galaxies (glows, bulge, disc, knots, dust lanes, haze, each bounded) plus bounded sky.
+        #expect(geometry.zonePoints.count <= 2 * (2 + 420 + 1_600 + 32 + 4 * 26 + 28) + 1_500 + 1_200 + 9)
+        #expect(geometry.zoneRanges.count == 2)
         let disconnected = NeuralNebulaGeometry.build(
             overview: GraphVisualOverview(regions: zones.regions),
             placement: placement, nodes: nodes, edges: [],

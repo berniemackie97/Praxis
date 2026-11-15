@@ -155,6 +155,7 @@ final class GraphScene: SKScene {
         guard !zoneMode || zoneOverview != summary else { return }
         zoneMode = true
         preserveNextFitTransition = false
+        cellInterior.clear()
         zoneOverview = summary
         regionType = nil
         graphNodes = []
@@ -212,7 +213,7 @@ final class GraphScene: SKScene {
             // Entering a cell continues the zoom: the camera starts far out and dives in.
             if diveIn {
                 viewCamera.position = target
-                viewCamera.setScale(atlasFitScale * 3.5)
+                viewCamera.setScale(atlasFitScale * 1.9)
             }
             let duration = diveIn ? 0.75 : 0.28
             let move = SKAction.move(to: target, duration: duration)
@@ -263,7 +264,7 @@ final class GraphScene: SKScene {
             updateVisibility()
         }
         lastToolbarZoom = zoom
-        if regionType != nil, focusId == nil,
+        if regionType != nil, focusId == nil, !viewCamera.hasActions(),
            viewCamera.xScale > atlasFitScale * 2.2 {
             didReturnToZones?()
         }
@@ -302,7 +303,7 @@ final class GraphScene: SKScene {
         if zoneMode && scale < atlasFitScale * 0.48, let before,
            let regionId = zoneArtwork.nearest(to: before, scale: scale) {
             didSelectZone?(regionId)
-        } else if regionType != nil && focusId == nil && scale > atlasFitScale * 2.2 {
+        } else if regionType != nil && focusId == nil && !viewCamera.hasActions() && scale > atlasFitScale * 2.2 {
             didReturnToZones?()
         }
     }

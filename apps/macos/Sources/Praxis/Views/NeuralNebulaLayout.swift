@@ -20,21 +20,36 @@ enum NeuralNebulaLayout {
         guard !nodes.isEmpty else {
             return NeuralNebulaPlacement(zoneCenters: centers, zoneSizes: sizes, nodeCenters: [:])
         }
-        let center = regionId.flatMap { centers[$0] } ?? .zero
-
         let flat = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
         let extent = max(1, flat.values.reduce(CGFloat(0)) { maximum, point in
             max(maximum, hypot(point.x, point.y))
         })
-        let radius = min(Float(85), 20 + sqrt(Float(nodes.count)) * 2.6)
-        let positions = Dictionary(uniqueKeysWithValues: nodes.compactMap { node -> (String, SIMD3<Float>)? in
-            guard let point = flat[node.entityId] else { return nil }
-            let x = Float(point.x / extent) * radius
-            let y = Float(point.y / extent) * radius
-            let depth = sqrt(max(0, radius * radius - x * x - y * y))
-            let sign: Float = GraphRegionIdentity.hash(node.entityId) & 1 == 0 ? 1 : -1
-            return (node.entityId, center + SIMD3<Float>(x, y, depth * sign * 0.65))
-        })
+        let positions: [String: SIMD3<Float>]
+        if let regionId, let center = centers[regionId] {
+            // Inside a galaxy: members become its stars. The evidence layout keeps related entities
+            // together; it is laid into the galaxy's own disc and wound along its spiral, so the
+            // camera flies into the same galaxy it showed from afar.
+            let shape = Galaxy.shape(id: regionId, center: center, size: sizes[regionId] ?? 12)
+            positions = Dictionary(uniqueKeysWithValues: nodes.compactMap { node -> (String, SIMD3<Float>)? in
+                guard let point = flat[node.entityId] else { return nil }
+                let fraction = Float(hypot(point.x, point.y) / extent)
+                let r = shape.radius * (0.1 + 0.86 * fraction)
+                let theta = Float(atan2(point.y, point.x)) + shape.armAngle(0, at: r) * 0.55
+                let hash = GraphRegionIdentity.hash(node.entityId)
+                let lift = (Float(hash & 0xFFFF) / 65_535 - 0.5) * shape.radius * 0.07 * (1.2 - fraction)
+                return (node.entityId, shape.place(cos(theta) * r, sin(theta) * r, lift))
+            })
+        } else {
+            let radius = min(Float(85), 20 + sqrt(Float(nodes.count)) * 2.6)
+            positions = Dictionary(uniqueKeysWithValues: nodes.compactMap { node -> (String, SIMD3<Float>)? in
+                guard let point = flat[node.entityId] else { return nil }
+                let x = Float(point.x / extent) * radius
+                let y = Float(point.y / extent) * radius
+                let depth = sqrt(max(0, radius * radius - x * x - y * y))
+                let sign: Float = GraphRegionIdentity.hash(node.entityId) & 1 == 0 ? 1 : -1
+                return (node.entityId, SIMD3<Float>(x, y, depth * sign * 0.65))
+            })
+        }
         return NeuralNebulaPlacement(zoneCenters: centers, zoneSizes: sizes, nodeCenters: positions)
     }
 

@@ -47,7 +47,7 @@ enum GraphZoneLayout {
                     let dy = points[second].y - points[first].y
                     let distance = max(1, hypot(dx, dy))
                     let spacing = (radii[regions[first].id] ?? 30) +
-                        (radii[regions[second].id] ?? 30) + 46
+                        (radii[regions[second].id] ?? 30) + 92
                     let key = RegionPair(regions[first].id, regions[second].id)
                     let weight = CGFloat(weights[key, default: 0])
                     let repel = max(0, spacing - distance) * 0.45
@@ -62,9 +62,10 @@ enum GraphZoneLayout {
                     impulses[second].dy += y
                 }
             }
+            // Gentle gravity keeps unlinked cells in the tissue instead of drifting off alone.
             for index in points.indices {
-                points[index].x = (points[index].x + impulses[index].dx) * 0.999
-                points[index].y = (points[index].y + impulses[index].dy) * 0.999
+                points[index].x = (points[index].x + impulses[index].dx) * 0.994
+                points[index].y = (points[index].y + impulses[index].dy) * 0.994
             }
         }
         // Cells never overlap: a final pass separates any pair closer than their membranes allow.
@@ -75,7 +76,7 @@ enum GraphZoneLayout {
                     let dx = points[second].x - points[first].x
                     let dy = points[second].y - points[first].y
                     let distance = max(0.5, hypot(dx, dy))
-                    let spacing = (radii[regions[first].id] ?? 30) + (radii[regions[second].id] ?? 30) + 40
+                    let spacing = (radii[regions[first].id] ?? 30) + (radii[regions[second].id] ?? 30) + 84
                     guard distance < spacing else { continue }
                     let push = (spacing - distance) / 2
                     points[first].x -= dx / distance * push
