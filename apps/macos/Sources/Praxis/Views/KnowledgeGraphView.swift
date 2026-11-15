@@ -17,6 +17,7 @@ struct KnowledgeGraphView: View {
     @State private var zoomRevision = 0
     @State private var confirmRejection = false
     @State private var showContexts = true
+    @AppStorage("brain.graph.style") private var graphStyle = GraphStyle.cellularAtlas.rawValue
 
     private var visibleZones: GraphZoneOverview? {
         guard graph.focusId == nil,
@@ -48,25 +49,44 @@ struct KnowledgeGraphView: View {
                                    title: "Current brain graph unavailable", message: atlasError)
                     } else if (visibleZones == nil || visibleZones?.zones.isEmpty == true) &&
                               graph.visibleNodes.isEmpty && !graph.zoneLoading &&
-                              !graph.atlasLoading && !graph.loading {
+                              !graph.atlasLoading && !graph.loading &&
+                              !(graphStyle == GraphStyle.neuralNebula.rawValue &&
+                                graph.zoneOverview?.zones.isEmpty == false) {
                         EmptyState(systemImage: "point.3.connected.trianglepath.dotted",
                                    title: "No current graph evidence",
                                    message: graph.atlasError ?? "No source-backed relationships or visible entities are available in this scope.")
                     } else {
-                        GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges,
-                                       zones: visibleZones,
-                                       zoneTypeFilter: graph.entityType.isEmpty ? nil : graph.entityType,
-                                       expandZone: { graph.enterZone($0) },
-                                       returnToZones: { graph.showZones() },
-                                       regionType: graph.selectedZoneType,
-                                       focusId: graph.focusId,
-                                       highlightedNodeIds: graph.highlightedNodeIds,
-                                       recenterNodeId: graph.recenterNodeId, recenterRevision: graph.recenterRevision,
-                                       selectedNodeId: $graph.selectedNodeId, selectedEdgeId: $graph.selectedEdgeId,
-                                       reduceMotion: reduceMotion, active: scenePhase == .active,
-                                       highContrast: contrast == .increased,
-                                       colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
-                            .accessibilityHidden(true)
+                        Group {
+                            if graphStyle == GraphStyle.neuralNebula.rawValue {
+                                NeuralNebulaView(zones: graph.zoneOverview,
+                                                 nodes: graph.visibleNodes, edges: graph.visibleEdges,
+                                                 regionType: graph.selectedZoneType, focusId: graph.focusId,
+                                                 expandZone: { graph.enterZone($0) },
+                                                 returnToZones: { graph.showZones() },
+                                                 selectedNodeId: $graph.selectedNodeId,
+                                                 selectedEdgeId: $graph.selectedEdgeId,
+                                                 reduceMotion: reduceMotion, active: scenePhase == .active,
+                                                 highContrast: contrast == .increased,
+                                                 zoom: zoom, zoomRevision: zoomRevision)
+                            } else {
+                                GraphSceneView(nodes: graph.visibleNodes, edges: graph.visibleEdges,
+                                               zones: visibleZones,
+                                               zoneTypeFilter: graph.entityType.isEmpty ? nil : graph.entityType,
+                                               expandZone: { graph.enterZone($0) },
+                                               returnToZones: { graph.showZones() },
+                                               regionType: graph.selectedZoneType,
+                                               focusId: graph.focusId,
+                                               highlightedNodeIds: graph.highlightedNodeIds,
+                                               recenterNodeId: graph.recenterNodeId,
+                                               recenterRevision: graph.recenterRevision,
+                                               selectedNodeId: $graph.selectedNodeId,
+                                               selectedEdgeId: $graph.selectedEdgeId,
+                                               reduceMotion: reduceMotion, active: scenePhase == .active,
+                                               highContrast: contrast == .increased,
+                                               colorScheme: scheme, zoom: zoom, zoomRevision: zoomRevision)
+                            }
+                        }
+                        .accessibilityHidden(true)
                             .overlay(alignment: .topLeading) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(visibleZones != nil ? "ONE BRAIN · KNOWLEDGE ZONES" :
@@ -79,7 +99,9 @@ struct KnowledgeGraphView: View {
                                         Text("\(zones.entityCount.formatted()) current entities · " +
                                              "grouped by recorded type, not inferred communities")
                                             .font(.caption2).foregroundStyle(.tertiary)
-                                        Text("Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
+                                        Text(graphStyle == GraphStyle.neuralNebula.rawValue
+                                                 ? "Click or zoom toward a zone · Drag to orbit · Option-drag to pan"
+                                                 : "Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
                                             .font(.caption2).foregroundStyle(.secondary)
                                     } else {
                                         Text("\(graph.visibleNodes.count) visible nodes · " +
@@ -177,6 +199,13 @@ struct KnowledgeGraphView: View {
                 .accessibilityLabel("Find a knowledge entity")
             Button { graph.searchNames() } label: { Label("Find", systemImage: "magnifyingglass") }
                 .disabled(graph.loading)
+            Picker("Graph style", selection: $graphStyle) {
+                ForEach(GraphStyle.allCases) { style in
+                    Text(style.title).tag(style.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityLabel("Knowledge graph visualization")
             Spacer()
             Toggle(isOn: $graph.includeSuggestions) {
                 Label("Suggestions", systemImage: "questionmark.circle")
