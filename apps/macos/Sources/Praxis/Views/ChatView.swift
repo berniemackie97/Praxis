@@ -80,12 +80,16 @@ private struct ConversationList: View {
                 .padding(.vertical, Spacing.xxs)
                 .tag(conversation.conversationId)
                 .contextMenu {
-                    Button("Rename…", systemImage: "pencil") {
+                    Button {
                         renaming = conversation
                         renameTitle = conversation.title
+                    } label: {
+                        Label("Rename…", systemImage: "pencil")
                     }
-                    Button("Delete…", systemImage: "trash", role: .destructive) {
+                    Button(role: .destructive) {
                         deleting = conversation
+                    } label: {
+                        Label("Delete…", systemImage: "trash")
                     }
                 }
             }
