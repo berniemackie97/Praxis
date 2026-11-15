@@ -10,6 +10,8 @@ struct GraphSceneView: NSViewRepresentable {
     let zones: GraphZoneOverview?
     let zoneTypeFilter: String?
     let expandZone: (String) -> Void
+    let returnToZones: () -> Void
+    let regionType: String?
     let focusId: String?
     let highlightedNodeIds: Set<String>
     let recenterNodeId: String?
@@ -40,10 +42,11 @@ struct GraphSceneView: NSViewRepresentable {
         let scene = context.coordinator.scene
         view.window?.acceptsMouseMovedEvents = true
         scene.didSelectZone = expandZone
+        scene.didReturnToZones = returnToZones
         if let zones {
             scene.configureZones(zones, type: zoneTypeFilter)
         } else {
-            scene.configure(nodes: nodes, edges: edges, focus: focusId)
+            scene.configure(nodes: nodes, edges: edges, focus: focusId, regionType: regionType)
         }
         scene.updateAppearance(dark: colorScheme == .dark, highContrast: highContrast)
         scene.setSelection(node: selectedNodeId, edge: selectedEdgeId)
