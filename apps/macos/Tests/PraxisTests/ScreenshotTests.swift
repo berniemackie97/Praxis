@@ -78,7 +78,7 @@ struct ScreenshotTests {
                          size: CGSize(width: 780, height: 540),
                          name: "graph-synthetic-compact-reduced-motion", to: outputURL)
         for dark in [false, true] {
-            try await render(SyntheticGraphZonesPreview(),
+            try await render(SyntheticGraphRegionsPreview(),
                              size: CGSize(width: 1200, height: 780),
                              name: "brain-zones-synthetic\(dark ? "-dark" : "")",
                              dark: dark, to: outputURL)
@@ -222,7 +222,7 @@ private struct SyntheticGraphPreview: View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             PageHeader(title: "Knowledge Graph", subtitle: "Synthetic fixture; no owner sources loaded")
             GraphSceneView(nodes: nodes, edges: edges,
-                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           zones: nil, expandZone: { _ in },
                            returnToZones: {}, regionType: nil, focusId: "project",
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
@@ -264,7 +264,7 @@ private struct SyntheticGraphAtlasPreview: View {
             PageHeader(title: "One Brain · Global Atlas",
                        subtitle: "Synthetic, bounded multi-component topology; no real user data")
             GraphSceneView(nodes: nodes, edges: edges,
-                           zones: nil, zoneTypeFilter: nil, expandZone: { _ in },
+                           zones: nil, expandZone: { _ in },
                            returnToZones: {}, regionType: nil, focusId: nil,
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
@@ -278,45 +278,27 @@ private struct SyntheticGraphAtlasPreview: View {
 
 
 @MainActor
-private struct SyntheticGraphZonesPreview: View {
+private struct SyntheticGraphRegionsPreview: View {
     @Environment(\.colorScheme) private var scheme
     @State private var selectedNode: String?
     @State private var selectedEdge: String?
 
-    private let summary = GraphZoneOverview(entityCount: 2_400, relationshipCount: 1_440, zones: [
-        GraphTypeCount(entityType: "project", count: 140),
-        GraphTypeCount(entityType: "concept", count: 580),
-        GraphTypeCount(entityType: "technology", count: 290),
-        GraphTypeCount(entityType: "class", count: 670),
-        GraphTypeCount(entityType: "function", count: 510),
-        GraphTypeCount(entityType: "document", count: 120),
-        GraphTypeCount(entityType: "person", count: 50),
-        GraphTypeCount(entityType: "data_asset", count: 40)
-    ], links: [
-        GraphZoneLink(subjectType: "project", objectType: "class",
-                      confirmedCount: 290, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "class", objectType: "function",
-                      confirmedCount: 600, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "project", objectType: "technology",
-                      confirmedCount: 75, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "concept", objectType: "technology",
-                      confirmedCount: 120, suggestedCount: 15, contradictedCount: 0),
-        GraphZoneLink(subjectType: "document", objectType: "concept",
-                      confirmedCount: 58, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "function", objectType: "data_asset",
-                      confirmedCount: 80, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "person", objectType: "project",
-                      confirmedCount: 25, suggestedCount: 0, contradictedCount: 0),
-        GraphZoneLink(subjectType: "class", objectType: "class",
-                      confirmedCount: 160, suggestedCount: 15, contradictedCount: 2)
+    private let summary = GraphVisualOverview(regions: [
+        GraphVisualRegion(id: "sample-a", title: "Synthetic Project A", memberCount: 139, relatedCount: 150),
+        GraphVisualRegion(id: "sample-b", title: "Synthetic Project B", memberCount: 579, relatedCount: 610),
+        GraphVisualRegion(id: "sample-c", title: "Synthetic Project C", memberCount: 289, relatedCount: 312),
+        GraphVisualRegion(id: "sample-d", title: "Synthetic Project D", memberCount: 669, relatedCount: 701),
+        GraphVisualRegion(id: "sample-e", title: "Synthetic Project E", memberCount: 509, relatedCount: 533),
+        GraphVisualRegion(id: "sample-f", title: "Synthetic Project F", memberCount: 119, relatedCount: 136),
+        GraphVisualRegion(id: "sample-g", title: "Synthetic Project G", memberCount: 49, relatedCount: 55),
+        GraphVisualRegion(id: "sample-h", title: "Synthetic Project H", memberCount: 39, relatedCount: 42)
     ])
-
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
-            PageHeader(title: "One Brain · Knowledge Zones",
-                       subtitle: "Synthetic source-type aggregates; no private knowledge")
+            PageHeader(title: "One Brain · Confirmed Project Regions",
+                       subtitle: "Synthetic confirmed project anchors; no private knowledge")
             GraphSceneView(nodes: [], edges: [], zones: summary,
-                           zoneTypeFilter: nil, expandZone: { _ in },
+                           expandZone: { _ in },
                            returnToZones: {}, regionType: nil, focusId: nil,
                            highlightedNodeIds: [], recenterNodeId: nil, recenterRevision: 0,
                            selectedNodeId: $selectedNode, selectedEdgeId: $selectedEdge,
