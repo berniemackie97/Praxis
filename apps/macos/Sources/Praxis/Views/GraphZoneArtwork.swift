@@ -55,26 +55,30 @@ final class GraphZoneArtwork {
         for link in links where link.count > 0 {
             guard let a = placement.positions[link.subjectType],
                   let b = placement.positions[link.objectType] else { continue }
-            if link.subjectType == link.objectType {
-                let radius = (placement.radii[link.subjectType] ?? 30) + 15
-                let loop = SKShapeNode(circleOfRadius: radius)
-                loop.position = a
-                loop.fillColor = .clear
-                loop.strokeColor = (link.confirmedCount > 0 ? NSColor.systemTeal : .systemOrange)
-                    .withAlphaComponent(highContrast ? 0.65 : 0.28)
-                loop.lineWidth = min(5, max(1.5, sqrt(CGFloat(link.count)) * 0.9))
-                loop.zPosition = -1
-                root.addChild(loop)
-            } else {
+            let groups: [(Int, NSColor, CGFloat)] = [
+                (link.confirmedCount, .systemTeal, 0),
+                (link.suggestedCount, .systemOrange, 9),
+                (link.contradictedCount, .systemRed, -9)
+            ]
+            for (count, tint, offset) in groups where count > 0 {
                 let path = CGMutablePath()
-                path.move(to: a)
-                path.addLine(to: b)
-                let line = SKShapeNode(path: path)
-                line.strokeColor = (link.confirmedCount > 0 ? NSColor.lightGray : .systemOrange)
-                    .withAlphaComponent(highContrast ? 0.7 : 0.3)
-                line.lineWidth = min(6, max(1.2, sqrt(CGFloat(link.count)) * 0.85))
-                line.zPosition = -2
-                root.addChild(line)
+                if link.subjectType == link.objectType {
+                    let radius = (placement.radii[link.subjectType] ?? 30) + 15 + offset
+                    path.addEllipse(in: CGRect(x: a.x - radius, y: a.y - radius,
+                                               width: radius * 2, height: radius * 2))
+                } else {
+                    let dx = b.x - a.x
+                    let dy = b.y - a.y
+                    let length = max(1, hypot(dx, dy))
+                    let side = CGPoint(x: -dy / length * offset, y: dx / length * offset)
+                    path.move(to: CGPoint(x: a.x + side.x, y: a.y + side.y))
+                    path.addLine(to: CGPoint(x: b.x + side.x, y: b.y + side.y))
+                }
+                let stroke = SKShapeNode(path: path)
+                stroke.strokeColor = tint.withAlphaComponent(highContrast ? 0.7 : 0.34)
+                stroke.lineWidth = min(5, max(1.1, sqrt(CGFloat(count)) * 0.78))
+                stroke.zPosition = -2
+                root.addChild(stroke)
             }
         }
         for zone in zones {
