@@ -25,6 +25,7 @@
 		00000000000000000000E00E /* GraphScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00D /* GraphScene.swift */; };
 		00000000000000000000E00A /* KnowledgeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E009 /* KnowledgeGraphView.swift */; };
 		00000000000000000000E01A /* EntityRelationGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E019 /* EntityRelationGroup.swift */; };
+		00000000000000000000E055 /* LivingCortexSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E054 /* LivingCortexSnapshotTests.swift */; };
 		00000000000000000000E00C /* GraphPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E00B /* GraphPresentationTests.swift */; };
 		00000000000000000000D018 /* IntakePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D017 /* IntakePanel.swift */; };
 		00000000000000000000D020 /* ModelsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000D01F /* ModelsSettingsView.swift */; };
@@ -89,6 +90,13 @@
 		00000000000000000000E026 /* GraphStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E025 /* GraphStyle.swift */; };
 		00000000000000000000E028 /* NeuralNebulaLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E027 /* NeuralNebulaLayout.swift */; };
 		00000000000000000000E02A /* NeuralNebula.metal in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E029 /* NeuralNebula.metal */; };
+		00000000000000000000E047 /* LivingCortex.metal in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E046 /* LivingCortex.metal */; };
+		00000000000000000000E049 /* LivingCortexShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E048 /* LivingCortexShape.swift */; };
+		00000000000000000000E04B /* LivingCortexGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E04A /* LivingCortexGeometry.swift */; };
+		00000000000000000000E04D /* LivingCortexCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E04C /* LivingCortexCamera.swift */; };
+		00000000000000000000E04F /* LivingCortexRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E04E /* LivingCortexRenderer.swift */; };
+		00000000000000000000E051 /* LivingCortexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E050 /* LivingCortexView.swift */; };
+		00000000000000000000E053 /* LivingCortexHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E052 /* LivingCortexHUD.swift */; };
 		00000000000000000000E02C /* NeuralNebulaRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02B /* NeuralNebulaRenderer.swift */; };
 		00000000000000000000E02E /* NeuralNebulaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02D /* NeuralNebulaView.swift */; };
 		00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E02F /* NeuralNebulaGeometry.swift */; };
@@ -129,6 +137,7 @@
 		00000000000000000000E00D /* GraphScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphScene.swift; sourceTree = "<group>"; };
 		00000000000000000000E009 /* KnowledgeGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeGraphView.swift; sourceTree = "<group>"; };
 		00000000000000000000E019 /* EntityRelationGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityRelationGroup.swift; sourceTree = "<group>"; };
+		00000000000000000000E054 /* LivingCortexSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexSnapshotTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E00B /* GraphPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphPresentationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000D017 /* IntakePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntakePanel.swift; sourceTree = "<group>"; };
 		00000000000000000000D01F /* ModelsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsSettingsView.swift; sourceTree = "<group>"; };
@@ -195,6 +204,13 @@
 		00000000000000000000E025 /* GraphStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphStyle.swift; sourceTree = "<group>"; };
 		00000000000000000000E027 /* NeuralNebulaLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaLayout.swift; sourceTree = "<group>"; };
 		00000000000000000000E029 /* NeuralNebula.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeuralNebula.metal; sourceTree = "<group>"; };
+		00000000000000000000E046 /* LivingCortex.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LivingCortex.metal; sourceTree = "<group>"; };
+		00000000000000000000E048 /* LivingCortexShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexShape.swift; sourceTree = "<group>"; };
+		00000000000000000000E04A /* LivingCortexGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexGeometry.swift; sourceTree = "<group>"; };
+		00000000000000000000E04C /* LivingCortexCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexCamera.swift; sourceTree = "<group>"; };
+		00000000000000000000E04E /* LivingCortexRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexRenderer.swift; sourceTree = "<group>"; };
+		00000000000000000000E050 /* LivingCortexView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexView.swift; sourceTree = "<group>"; };
+		00000000000000000000E052 /* LivingCortexHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivingCortexHUD.swift; sourceTree = "<group>"; };
 		00000000000000000000E02B /* NeuralNebulaRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaRenderer.swift; sourceTree = "<group>"; };
 		00000000000000000000E02D /* NeuralNebulaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaView.swift; sourceTree = "<group>"; };
 		00000000000000000000E02F /* NeuralNebulaGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralNebulaGeometry.swift; sourceTree = "<group>"; };
@@ -262,6 +278,7 @@
 				00000000000000000000A061 /* CanonicalPathTests.swift */,
 				00000000000000000000A063 /* PayloadReviewTests.swift */,
 				00000000000000000000A065 /* PresentationTests.swift */,
+				00000000000000000000E054 /* LivingCortexSnapshotTests.swift */,
 				00000000000000000000E00B /* GraphPresentationTests.swift */,
 				00000000000000000000A067 /* WorkerSessionTests.swift */,
 				00000000000000000000C015 /* AgentPresentationTests.swift */,
@@ -313,6 +330,13 @@
 				00000000000000000000E02F /* NeuralNebulaGeometry.swift */,
 				00000000000000000000E031 /* NeuralNebulaCamera.swift */,
 				00000000000000000000E029 /* NeuralNebula.metal */,
+				00000000000000000000E046 /* LivingCortex.metal */,
+				00000000000000000000E048 /* LivingCortexShape.swift */,
+				00000000000000000000E04A /* LivingCortexGeometry.swift */,
+				00000000000000000000E04C /* LivingCortexCamera.swift */,
+				00000000000000000000E04E /* LivingCortexRenderer.swift */,
+				00000000000000000000E050 /* LivingCortexView.swift */,
+				00000000000000000000E052 /* LivingCortexHUD.swift */,
 				00000000000000000000E02B /* NeuralNebulaRenderer.swift */,
 				00000000000000000000E02D /* NeuralNebulaView.swift */,
 		00000000000000000000E00D /* GraphScene.swift */,
@@ -536,6 +560,13 @@
 				00000000000000000000E030 /* NeuralNebulaGeometry.swift in Sources */,
 				00000000000000000000E032 /* NeuralNebulaCamera.swift in Sources */,
 				00000000000000000000E02A /* NeuralNebula.metal in Sources */,
+				00000000000000000000E047 /* LivingCortex.metal in Sources */,
+				00000000000000000000E049 /* LivingCortexShape.swift in Sources */,
+				00000000000000000000E04B /* LivingCortexGeometry.swift in Sources */,
+				00000000000000000000E04D /* LivingCortexCamera.swift in Sources */,
+				00000000000000000000E04F /* LivingCortexRenderer.swift in Sources */,
+				00000000000000000000E051 /* LivingCortexView.swift in Sources */,
+				00000000000000000000E053 /* LivingCortexHUD.swift in Sources */,
 				00000000000000000000E02C /* NeuralNebulaRenderer.swift in Sources */,
 				00000000000000000000E02E /* NeuralNebulaView.swift in Sources */,
 		00000000000000000000E00E /* GraphScene.swift in Sources */,
@@ -606,6 +637,7 @@
 				00000000000000000000A062 /* CanonicalPathTests.swift in Sources */,
 				00000000000000000000A064 /* PayloadReviewTests.swift in Sources */,
 				00000000000000000000A066 /* PresentationTests.swift in Sources */,
+				00000000000000000000E055 /* LivingCortexSnapshotTests.swift in Sources */,
 				00000000000000000000E00C /* GraphPresentationTests.swift in Sources */,
 				00000000000000000000A068 /* WorkerSessionTests.swift in Sources */,
 				00000000000000000000D00C /* ScreenshotTests.swift in Sources */,

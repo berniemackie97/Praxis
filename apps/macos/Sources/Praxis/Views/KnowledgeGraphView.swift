@@ -17,6 +17,8 @@ struct KnowledgeGraphView: View {
     @State private var zoomRevision = 0
     @State private var confirmRejection = false
     @State private var showContexts = true
+    @State private var cortexTier = 0
+    @State private var cortexFit = 0
     @AppStorage("brain.graph.style") private var graphStyle = GraphStyle.cellularAtlas.rawValue
 
     private var conceptMap: GraphVisualOverview { graph.territoryOverview }
@@ -52,7 +54,30 @@ struct KnowledgeGraphView: View {
                                        : "No knowledge is visible in this scope."))
                     } else {
                         Group {
-                            if graphStyle == GraphStyle.neuralNebula.rawValue {
+                            if graphStyle == GraphStyle.livingCortex.rawValue {
+                                LivingCortexView(regions: graph.territories, map: graph.regionMap,
+                                                 links: graph.territoryOverview.links,
+                                                 openRegionId: graph.openRegionId,
+                                                 nodes: graph.openRegionId == nil ? [] : graph.visibleNodes,
+                                                 edges: graph.openRegionId == nil ? [] : graph.visibleEdges,
+                                                 enterRegion: { graph.openRegion($0) },
+                                                 returnToBrain: { graph.showZones() },
+                                                 selectedNodeId: $graph.selectedNodeId,
+                                                 selectedEdgeId: $graph.selectedEdgeId,
+                                                 reduceMotion: reduceMotion, active: scenePhase == .active,
+                                                 highContrast: contrast == .increased,
+                                                 fitRevision: cortexFit,
+                                                 onTier: { cortexTier = $0 })
+                                    .overlay(alignment: .bottom) {
+                                        LivingCortexHUD(tier: cortexTier, fit: { cortexFit += 1 }, up: {
+                                            if graph.selectedNodeId != nil || graph.selectedEdgeId != nil {
+                                                graph.selectNode(nil)
+                                            } else {
+                                                graph.showZones()
+                                            }
+                                        })
+                                    }
+                            } else if graphStyle == GraphStyle.neuralNebula.rawValue {
                                 NeuralNebulaView(zones: conceptMap,
                                                  nodes: graph.visibleNodes, edges: graph.visibleEdges,
                                                  regionType: drawnLevel, focusId: graph.focusId,
