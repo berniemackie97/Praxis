@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Praxis.Application.Desktop;
 using Praxis.Application.Knowledge;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Knowledge;
