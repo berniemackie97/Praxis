@@ -311,6 +311,7 @@ struct KnowledgeGraphView: View {
                         .disabled(graph.loading)
                 }
             }
+            GroundedProjectSection(graph: graph)
             if graph.focusId == nil, graph.selectedZoneType == nil,
                let zones = visibleZones {
                 Divider()
