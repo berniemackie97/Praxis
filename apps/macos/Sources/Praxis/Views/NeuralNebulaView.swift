@@ -23,7 +23,7 @@ struct NeuralNebulaView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NeuralNebulaInputView {
-        let view = NeuralNebulaInputView()
+        let view = NeuralNebulaInputView(frame: .zero, device: nil)
         if let renderer = NeuralNebulaRenderer(view: view) {
             context.coordinator.renderer = renderer
             view.graphRenderer = renderer
