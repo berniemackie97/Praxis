@@ -157,6 +157,50 @@ struct GraphPresentationTests {
         #expect(MemoryLayout<NeuralNebulaVertex>.stride == 48)
     }
 
+    @Test func neuralNebulaDrawsOnlyRecordedLinksAndBoundsDecorativeLight() {
+        let zones = GraphZoneOverview(entityCount: 7, relationshipCount: 3, zones: [
+            GraphTypeCount(entityType: "project", count: 5),
+            GraphTypeCount(entityType: "concept", count: 2)
+        ], links: [
+            GraphZoneLink(subjectType: "project", objectType: "concept",
+                          confirmedCount: 1, suggestedCount: 1, contradictedCount: 1)
+        ])
+        let nodes = [node("first", type: "project"), node("second", type: "concept")]
+        let edges = [edge("one", "first", "second")]
+        let placement = NeuralNebulaLayout.place(zones: zones, nodes: nodes,
+                                                 edges: edges, regionType: "project")
+        let geometry = NeuralNebulaGeometry.build(overview: zones, placement: placement,
+                                                  nodes: nodes, edges: edges,
+                                                  selectedNodeId: nil, highContrast: false)
+        #expect(geometry.zoneLines.count == 6)
+        #expect(geometry.detailLines.count == 2)
+        #expect(geometry.detailPoints.count == 2)
+        #expect(geometry.zonePoints.count <= 2 * 73 + 220)
+        let disconnected = NeuralNebulaGeometry.build(
+            overview: GraphZoneOverview(entityCount: 7, relationshipCount: 0,
+                                        zones: zones.zones, links: []),
+            placement: placement, nodes: nodes, edges: [],
+            selectedNodeId: nil, highContrast: false)
+        #expect(disconnected.zoneLines.isEmpty)
+        #expect(disconnected.detailLines.isEmpty)
+    }
+
+    @Test func neuralNebulaCameraInterpolatesInsteadOfTeleportingBetweenLevels() {
+        var camera = NeuralNebulaCamera()
+        camera.desiredCenter = SIMD3<Float>(180, 42, -55)
+        camera.desiredDistance = 157
+        let before = camera.projection(aspect: 1.5)
+        camera.settle(weight: 0.14)
+        #expect(camera.distance < 590 && camera.distance > 157)
+        #expect(camera.center != camera.desiredCenter)
+        camera.orbit(dx: 12, dy: -6)
+        let after = camera.projection(aspect: 1.5)
+        #expect(before != after)
+        camera.settle(weight: 1)
+        #expect(camera.center == camera.desiredCenter)
+        #expect(camera.distance == 157)
+    }
+
     @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
         let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
         let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
