@@ -68,7 +68,7 @@ struct WorkbenchSplitView: View {
     @ViewBuilder
     private var workspace: some View {
         switch section {
-        case .chat: ChatView(model: model.chat) { SettingsOpener.open(.models) }
+        case .chat: ChatView(model: model.chat, setup: model.modelSetup) { SettingsOpener.open(.models) }
         case .approvals: ApprovalsView(model: model.approvals)
         case .library: LibraryView { section = .quickNote }
         case .quickNote: QuickNoteView()

@@ -25,6 +25,22 @@ struct AgentPresentationTests {
         #expect(answer.citations.first?.sourceName == "download.qfx")
     }
 
+    @Test func persistedConversationIncludesPinnedModelAndEffort() throws {
+        let json = """
+            {"conversationId":"c1","backendId":"codex","title":"Chat","createdUtc":"2026-11-14T12:00:00Z",
+             "updatedUtc":"2026-11-14T12:00:00Z","model":"gpt-6","effort":"high"}
+            """
+        let conversation = try JSONDecoder().decode(AgentConversation.self, from: Data(json.utf8))
+        #expect(conversation.model == "gpt-6")
+        #expect(conversation.effort == "high")
+        let legacy = """
+            {"conversationId":"c2","backendId":"ollama","title":"Old","createdUtc":"","updatedUtc":""}
+            """
+        let older = try JSONDecoder().decode(AgentConversation.self, from: Data(legacy.utf8))
+        #expect(older.model == nil)
+        #expect(older.effort == nil)
+    }
+
     @Test func policyDecodesWithRulesFallbacksAndPendingChanges() throws {
         let json = """
             {"ok":true,"data":{"policy":{"mode":"standing_grants","toolPermission":"read_only","holdDuration":"3.00:00:00",

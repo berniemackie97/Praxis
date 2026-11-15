@@ -4,7 +4,23 @@ import SwiftUI
 /// with numbered citations, the answer check's verdict, and anything disclosure policy withheld.
 struct ChatView: View {
     @ObservedObject var model: ChatWorkbenchModel
+    @ObservedObject var setup: ModelSetupModel
     let openAgentSettings: () -> Void
+
+    private var modelOptions: [ModelChoice] {
+        let available = setup.models(for: model.backendChoice, installed: setup.machine?.installed ?? [])
+        if !model.modelChoice.isEmpty && !available.contains(where: { $0.id == model.modelChoice }) {
+            return available + [ModelChoice(id: model.modelChoice, label: model.modelChoice, efforts: [], defaultEffort: nil)]
+        }
+        return available
+    }
+
+    private var effortOptions: [String] {
+        guard let backend = model.backends.first(where: { $0.backendId == model.backendChoice }),
+              backend.kind == "codex" || backend.kind == "claude_code",
+              let selected = modelOptions.first(where: { $0.id == model.modelChoice }) else { return [] }
+        return Array(Set(selected.efforts + (model.effortChoice.isEmpty ? [] : [model.effortChoice]))).sorted()
+    }
 
     var body: some View {
         Group {
@@ -20,21 +36,47 @@ struct ChatView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if model.selectedId == nil && !model.backends.isEmpty {
-                    Picker("Model", selection: $model.backendChoice) {
+                    Picker("Connection", selection: Binding(
+                        get: { model.backendChoice },
+                        set: { model.chooseBackend($0) })) {
                         ForEach(model.backends.filter(\.enabled)) { backend in
-                            Text(ChatBackendLabel.of(backend)).tag(backend.backendId)
+                            Text("\(backend.backendId) · \(backend.kindLabel)").tag(backend.backendId)
                         }
                     }
-                    .help("Model for the new conversation. Remote models see only what your disclosure policy grants for chat.")
+                    .help("Connection for this new conversation. Source disclosure still applies.")
+                    if !modelOptions.isEmpty {
+                        Picker("Model", selection: Binding(
+                            get: { model.modelChoice },
+                            set: { choice in
+                                let selected = modelOptions.first(where: { $0.id == choice })
+                                model.chooseModel(choice, defaultEffort: selected?.defaultEffort)
+                            })) {
+                            ForEach(modelOptions) { option in
+                                Text(option.label).tag(option.id)
+                            }
+                        }
+                    }
+                    if !effortOptions.isEmpty {
+                        Picker("Effort", selection: Binding(
+                            get: { model.effortChoice },
+                            set: { model.chooseEffort($0) })) {
+                            Text("Provider default").tag("")
+                            ForEach(effortOptions, id: \.self) { effort in Text(effort.capitalized).tag(effort) }
+                        }
+                    }
                 } else if let conversation = model.selected {
-                    StatusPill(text: conversation.backendId, tone: .neutral, systemImage: "cpu")
-                        .help("Each conversation stays on the model it started with.")
+                    StatusPill(text: [conversation.backendId, conversation.model ?? "legacy default", conversation.effort]
+                        .compactMap { $0 }.joined(separator: " · "), tone: .neutral, systemImage: "cpu")
+                        .help("This conversation retains its model and reasoning effort when connection defaults change.")
                 }
                 Button { model.newConversation() } label: { Label("New Conversation", systemImage: "square.and.pencil") }
                     .help("New conversation (⌘N)")
             }
         }
-        .onAppear { model.refresh() }
+        .onAppear {
+            model.refresh()
+            setup.refresh()
+        }
     }
 
     private var conversations: some View {
@@ -74,7 +116,7 @@ private struct ConversationList: View {
             ForEach(model.conversations) { conversation in
                 VStack(alignment: .leading, spacing: Spacing.xxs) {
                     Text(conversation.title).font(.rowTitle).lineLimit(2)
-                    Text("\(conversation.backendId) · \(DateText.relative(conversation.updatedUtc))")
+                    Text("\(conversation.backendId) · \(conversation.model ?? "default") · \(DateText.relative(conversation.updatedUtc))")
                         .font(.meta).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .padding(.vertical, Spacing.xxs)
@@ -371,16 +413,3 @@ enum AnswerCheckText {
     }
 }
 
-/// How a chat model reads in the picker: provider and model, never a bare icon.
-enum ChatBackendLabel {
-    static func of(_ backend: AgentBackendProfile) -> String {
-        let provider = switch backend.kind {
-        case "claude_code": "Claude Code"
-        case "codex": "Codex"
-        case "anthropic": "Anthropic"
-        default: backend.isLocal ? "Local" : backend.backendId
-        }
-        let model = backend.model == "default" ? "plan default" : backend.model
-        return "\(provider) · \(model)"
-    }
-}

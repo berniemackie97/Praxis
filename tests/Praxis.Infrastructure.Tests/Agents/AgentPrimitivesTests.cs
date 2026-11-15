@@ -192,7 +192,7 @@ public sealed class AgentPrimitivesTests
         public void RecordToolCall(AgentToolCallRecord record) => Records.Add(record);
         public IReadOnlyList<AgentBackendProfile> ReadBackends() => throw new NotSupportedException();
         public void SaveBackend(AgentBackendProfile profile) => throw new NotSupportedException();
-        public AgentConversation Create(string backendId, string title) => throw new NotSupportedException();
+        public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null) => throw new NotSupportedException();
         public AgentConversation? Read(Guid conversationId) => throw new NotSupportedException();
         public bool Rename(Guid conversationId, string title) => throw new NotSupportedException();
         public bool Delete(Guid conversationId) => throw new NotSupportedException();

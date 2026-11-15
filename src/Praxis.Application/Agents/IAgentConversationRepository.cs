@@ -12,7 +12,7 @@ public interface IAgentConversationRepository
 
     void SaveBackend(AgentBackendProfile profile);
 
-    AgentConversation Create(string backendId, string title);
+    AgentConversation Create(string backendId, string title, string? model = null, string? effort = null);
 
     AgentConversation? Read(Guid conversationId);
 

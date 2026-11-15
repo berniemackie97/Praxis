@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Agents;
 using Praxis.Domain.Agents;
+using Praxis.Domain.Models;
 
 namespace Praxis.Infrastructure.Persistence.Agents;
 
@@ -48,19 +49,25 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
             ("$key", profile.KeyAccount), ("$executable", profile.Executable), ("$enabled", profile.Enabled ? 1 : 0), ("$now", Now()));
     }
 
-    public AgentConversation Create(string backendId, string title)
+    public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null)
     {
-        if (string.IsNullOrWhiteSpace(backendId) || backendId.Length > 64)
+        AgentBackendProfile backend = ReadBackends().FirstOrDefault(profile => profile.BackendId == backendId && profile.Enabled)
+            ?? throw new ArgumentException("Connect and enable this chat model before starting a conversation.", nameof(backendId));
+        if (model is not null && (model.Length is < 1 or > 200 || model.Any(char.IsWhiteSpace) || model.Any(char.IsControl)) ||
+            !ModelEffort.IsValid(effort))
         {
-            throw new ArgumentException("A backend is required.", nameof(backendId));
+            throw new ArgumentException("The conversation model or effort is invalid.");
         }
 
         string bounded = string.IsNullOrWhiteSpace(title) ? "New conversation" : title.Trim().Length > 200 ? title.Trim()[..200] : title.Trim();
         DateTimeOffset now = clock.GetUtcNow();
-        AgentConversation conversation = new(Guid.NewGuid(), backendId, bounded, now, now);
+        AgentConversation conversation = new(Guid.NewGuid(), backendId, bounded, now, now,
+            model ?? backend.Model, model is null ? backend.Effort : effort);
         Write("""
-            INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc) VALUES ($id, $backend, $title, $now, $now)
-            """, ("$id", conversation.ConversationId.ToString("D")), ("$backend", backendId), ("$title", bounded), ("$now", CatalogValues.Timestamp(now)));
+            INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc, model, effort)
+            VALUES ($id, $backend, $title, $now, $now, $model, $effort)
+            """, ("$id", conversation.ConversationId.ToString("D")), ("$backend", backendId), ("$title", bounded),
+            ("$now", CatalogValues.Timestamp(now)), ("$model", conversation.Model), ("$effort", conversation.Effort));
         return conversation;
     }
 
@@ -238,9 +245,10 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentArtifact> ReadArtifacts(int limit) => Artifacts("", Math.Clamp(limit, 1, 500));
 
     private IReadOnlyList<AgentConversation> Conversations(string where, int limit, params (string, object?)[] parameters) => Query(
-        $"SELECT conversation_id, backend_id, title, created_utc, updated_utc FROM agent_conversations {where} ORDER BY updated_utc DESC LIMIT {limit}",
+        $"SELECT conversation_id, backend_id, title, created_utc, updated_utc, model, effort FROM agent_conversations {where} ORDER BY updated_utc DESC LIMIT {limit}",
         reader => new AgentConversation(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-            CatalogValues.ParseTimestamp(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4))), parameters);
+            CatalogValues.ParseTimestamp(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4)),
+            Text(reader, 5), Text(reader, 6)), parameters);
 
     private IReadOnlyList<AgentProposal> Proposals(string where, int limit, params (string, object?)[] parameters) => Query(
         $"SELECT proposal_id, conversation_id, kind, payload, rationale, status, created_utc FROM agent_proposals {where} ORDER BY created_utc DESC LIMIT {limit}",

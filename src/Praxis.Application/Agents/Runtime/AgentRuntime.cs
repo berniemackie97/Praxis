@@ -24,8 +24,11 @@ public sealed class AgentRuntime(
         }
 
         AgentConversation conversation = conversations.Read(conversationId) ?? throw new ArgumentException("Unknown conversation.");
-        AgentBackendProfile profile = conversations.ReadBackends().FirstOrDefault(item => item.BackendId == conversation.BackendId && item.Enabled)
+        AgentBackendProfile configured = conversations.ReadBackends().FirstOrDefault(item => item.BackendId == conversation.BackendId && item.Enabled)
             ?? throw new InvalidOperationException("This conversation's backend is not configured or is disabled.");
+        AgentBackendProfile profile = conversation.Model is { } pinnedModel
+            ? configured with { Model = pinnedModel, Effort = conversation.Effort }
+            : configured;
         string permission = policy.Current().ToolPermission;
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose);

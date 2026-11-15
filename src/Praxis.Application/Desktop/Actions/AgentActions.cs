@@ -40,7 +40,9 @@ public sealed class AgentActions(
         }),
         DesktopAction.Of("agentSecretClear", fields => new ChangedResponse(secrets.Remove(fields.RequireString("account", 128)))),
         DesktopAction.Of("agentConversationStart", fields => repository.Create(fields.RequireString("backendId", 64),
-            fields.OptionalText("title", 200, "The title field is invalid.") ?? "New conversation")),
+            fields.OptionalText("title", 200, "The title field is invalid.") ?? "New conversation",
+            fields.OptionalText("model", 200, "The model is invalid."),
+            fields.OptionalText("effort", 16, "The reasoning effort is invalid."))),
         DesktopAction.Of("agentConversationRename", fields => new ChangedResponse(repository.Rename(fields.RequireGuid("conversationId"),
             fields.RequireString("title", 200)))),
         DesktopAction.Of("agentConversationDelete", fields =>
