@@ -80,7 +80,12 @@ final class GraphScene: SKScene {
         } else {
             if previousFocus == nil { layout = GraphLayout() }
             layout.configure(nodes: nodes, focus: focus)
-            if previousFocus != focus { viewCamera.position = .zero; viewCamera.zRotation = 0 }
+            if previousFocus != focus {
+                viewCamera.removeAllActions()
+                viewCamera.position = .zero
+                viewCamera.zRotation = 0
+                viewCamera.setScale(1)
+            }
         }
 
         for shape in nodeShapes.values { shape.removeFromParent() }
