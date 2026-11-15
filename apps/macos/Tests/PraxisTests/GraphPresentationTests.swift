@@ -118,6 +118,45 @@ struct GraphPresentationTests {
         #expect(scene.camera != nil)
     }
 
+    @Test func brainGraphStylesHaveDistinctStablePreferences() {
+        #expect(GraphStyle.allCases.count == 2)
+        #expect(GraphStyle(rawValue: "neuralNebula") == .neuralNebula)
+        #expect(GraphStyle(rawValue: "cellularAtlas") == .cellularAtlas)
+        #expect(GraphStyle.neuralNebula.title != GraphStyle.cellularAtlas.title)
+    }
+
+    @Test func neuralNebulaPlacementIsThreeDimensionalStableAndScopeBound() {
+        let summary = GraphZoneOverview(entityCount: 1003, relationshipCount: 1, zones: [
+            GraphTypeCount(entityType: "project", count: 800),
+            GraphTypeCount(entityType: "concept", count: 200),
+            GraphTypeCount(entityType: "other", count: 3)
+        ], links: [
+            GraphZoneLink(subjectType: "project", objectType: "concept",
+                          confirmedCount: 1, suggestedCount: 0, contradictedCount: 0)
+        ])
+        let nodes = [node("alpha", type: "project"), node("beta", type: "concept"),
+                     node("disconnected", type: "other")]
+        let links = [edge("actual", "alpha", "beta")]
+        let first = NeuralNebulaLayout.place(zones: summary, nodes: nodes,
+                                              edges: links, regionType: "project")
+        let again = NeuralNebulaLayout.place(zones: summary, nodes: nodes.reversed(),
+                                              edges: links.reversed(), regionType: "project")
+        #expect(first.zoneCenters == again.zoneCenters)
+        #expect(first.nodeCenters == again.nodeCenters)
+        #expect(first.zoneCenters.count == summary.zones.count)
+        #expect(first.nodeCenters.count == nodes.count)
+        #expect(Set(first.nodeCenters.keys) == Set(nodes.map(\.entityId)))
+        #expect(Set(first.zoneCenters.values.map(\.z)).count > 1)
+        #expect(first.nodeCenters.values.allSatisfy {
+            $0.x.isFinite && $0.y.isFinite && $0.z.isFinite
+        })
+        #expect(NeuralNebulaLayout.place(zones: summary, nodes: [], edges: [],
+                                         regionType: nil).nodeCenters.isEmpty)
+        #expect(NeuralNebulaLayout.place(zones: summary, nodes: [node("focused")], edges: [],
+                                         regionType: nil).nodeCenters.count == 1)
+        #expect(MemoryLayout<NeuralNebulaVertex>.stride == 48)
+    }
+
     @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
         let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
         let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
