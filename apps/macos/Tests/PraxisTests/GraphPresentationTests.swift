@@ -71,6 +71,52 @@ struct GraphPresentationTests {
         #expect(EntityRelationSection.collapsedRows == 6)
     }
 
+    @Test func neuralZoneLayoutIsStableAndUsesOnlyScopedAggregateLinks() {
+        let zones = [
+            GraphTypeCount(entityType: "concept", count: 250),
+            GraphTypeCount(entityType: "project", count: 12),
+            GraphTypeCount(entityType: "technology", count: 40),
+            GraphTypeCount(entityType: "person", count: 2)
+        ]
+        let links = [
+            GraphZoneLink(subjectType: "project", objectType: "concept",
+                          confirmedCount: 23, suggestedCount: 0, contradictedCount: 0),
+            GraphZoneLink(subjectType: "concept", objectType: "technology",
+                          confirmedCount: 5, suggestedCount: 2, contradictedCount: 0)
+        ]
+        let first = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
+                                      zones: zones, links: links)
+        let second = GraphZoneOverview(entityCount: 304, relationshipCount: 30,
+                                       zones: zones.reversed(), links: links.reversed())
+        let layout = GraphZoneLayout.place(first)
+        #expect(layout.positions == GraphZoneLayout.place(second).positions)
+        #expect(layout.positions.count == 4)
+        #expect(layout.bounds.width > 0 && layout.bounds.height > 0)
+        #expect(layout.positions.values.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+        #expect(layout.positions["person"] != layout.positions["project"])
+        #expect(GraphZoneLayout.place(GraphZoneOverview(entityCount: 0, relationshipCount: 0,
+                                                       zones: [], links: [])).positions.isEmpty)
+    }
+
+    @MainActor
+    @Test func wholeBrainSceneUsesAggregatedZonesWithoutEndpointSprites() {
+        let zones = GraphZoneOverview(entityCount: 52, relationshipCount: 7, zones: [
+            GraphTypeCount(entityType: "project", count: 2),
+            GraphTypeCount(entityType: "concept", count: 50)
+        ], links: [
+            GraphZoneLink(subjectType: "project", objectType: "concept",
+                          confirmedCount: 7, suggestedCount: 0, contradictedCount: 0)
+        ])
+        let scene = GraphScene()
+        scene.size = CGSize(width: 800, height: 600)
+        scene.configureZones(zones, type: nil)
+        #expect(scene.camera?.xScale == scene.camera?.yScale)
+        #expect(scene.children.filter { $0.name?.hasPrefix("node:") == true }.isEmpty)
+        scene.reduceMotion = true
+        scene.configure(nodes: [node("a"), node("b")], edges: [edge("r", "a", "b")], focus: nil)
+        #expect(scene.camera != nil)
+    }
+
     @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
         let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
         let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]
