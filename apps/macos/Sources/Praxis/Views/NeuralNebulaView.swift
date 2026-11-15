@@ -67,7 +67,6 @@ struct NeuralNebulaView: NSViewRepresentable {
 final class NeuralNebulaInputView: MTKView {
     weak var graphRenderer: NeuralNebulaRenderer?
     private var labels: [String: NebulaZoneLabel] = [:]
-    private var unavailable: NSTextField?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -78,13 +77,11 @@ final class NeuralNebulaInputView: MTKView {
         label.alignment = .center
         label.frame = CGRect(x: 0, y: 0, width: 440, height: 30)
         addSubview(label)
-        unavailable = label
     }
 
     func showLabels(_ positions: [String: CGPoint], selectedRegion: String?) {
-        for (type, label) in labels where positions[type] == nil {
-            label.removeFromSuperview()
-            labels.removeValue(forKey: type)
+        for type in labels.keys.filter({ positions[$0] == nil }) {
+            labels.removeValue(forKey: type)?.removeFromSuperview()
         }
         for (type, point) in positions {
             let label: NebulaZoneLabel
