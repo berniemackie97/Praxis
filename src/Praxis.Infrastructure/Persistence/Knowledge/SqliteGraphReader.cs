@@ -80,7 +80,7 @@ public sealed class SqliteGraphReader : IGraphReader
                     JOIN visible_entities object ON object.entity_id = r.object_id
                     LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
                     LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
-                    WHERE {RelationPolicy(query)}
+                    WHERE {RelationPolicy()}
                 )
                 SELECT subject_type, object_type,
                        SUM(CASE WHEN status NOT IN ('suggested', 'contradicted') THEN 1 ELSE 0 END),
@@ -263,7 +263,7 @@ public sealed class SqliteGraphReader : IGraphReader
                 WHERE ($focus IS NULL OR r.subject_id = $focus OR r.object_id = $focus)
                   AND ($relationId IS NULL OR r.relation_id = $relationId)
                   AND r.relation_id > $after
-                  AND {RelationPolicy(query)}
+                  AND {RelationPolicy()}
                   AND {NodeVisible("subject", query)}
                   AND {NodeVisible("object", query)}
                   AND ($type IS NULL OR
@@ -338,21 +338,21 @@ public sealed class SqliteGraphReader : IGraphReader
         });
     }
 
-    private static string RelationPolicy(GraphQuery query) => $"""
+    private static string RelationPolicy() => $"""
         ({ConfirmedRelation} OR ($suggestions = 1
-                      AND r.origin = 'model' AND p.proposal_id IS NOT NULL
-                      AND p.status <> 'rejected' AND p.flags IS NULL
-                      AND (v.verdict = 'unsupported' OR
-                           (p.status = 'pending'
-                            AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
+            AND r.origin = 'model' AND p.proposal_id IS NOT NULL
+            AND p.status <> 'rejected' AND p.flags IS NULL
+            AND (v.verdict = 'unsupported' OR
+                 (p.status = 'pending'
+                  AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
         AND ($predicate IS NULL OR r.predicate = $predicate)
-                  AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
+        AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
         AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
-                  AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
-                      SELECT 1 FROM source_collection_memberships cm
-                      JOIN source_collections c ON c.collection_id = cm.collection_id
-                      WHERE cm.source_id = p.source_id
-                        AND cm.collection_id = $collection AND c.archived_utc IS NULL))
+        AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
+            SELECT 1 FROM source_collection_memberships cm
+            JOIN source_collections c ON c.collection_id = cm.collection_id
+            WHERE cm.source_id = p.source_id
+              AND cm.collection_id = $collection AND c.archived_utc IS NULL))
         """;
 
     private static string ScopeFilter(string alias) => $"""
