@@ -51,32 +51,91 @@ public sealed class SqliteGraphReader : IGraphReader
         {
             throw new ArgumentException("Overview accepts a source and collection scope, not a page or type filter.", nameof(query));
         }
+        return database.Execute(connection => ReadOverview(connection, query, cancellationToken));
+    }
+
+    public GraphZoneOverview Zones(GraphQuery query, CancellationToken cancellationToken = default)
+    {
+        Validate(query, allowEdges: true);
+        if (query.Cursor is not null || query.EntityType is not null)
+        {
+            throw new ArgumentException("Zone overview does not accept a cursor or entity type.", nameof(query));
+        }
 
         return database.Execute(connection =>
         {
             cancellationToken.ThrowIfCancellationRequested();
+            GraphOverview overview = ReadOverview(connection, query, cancellationToken);
             using SqliteCommand command = connection.CreateCommand($"""
-                SELECT kind, COUNT(*) AS count FROM (
-                    SELECT COALESCE({EffectiveType("e", query)}, 'other') AS kind
+                WITH visible_entities AS MATERIALIZED (
+                    SELECT e.entity_id, COALESCE({EffectiveType("e", query)}, 'other') AS kind
                     FROM knowledge_entities e
                     WHERE {NodeVisible("e", query)}
+                ),
+                visible_relations AS (
+                    SELECT subject.kind AS subject_type, object.kind AS object_type,
+                           {RelationStatus} AS status
+                    FROM knowledge_relations r
+                    JOIN visible_entities subject ON subject.entity_id = r.subject_id
+                    JOIN visible_entities object ON object.entity_id = r.object_id
+                    LEFT JOIN eligible_enrichment_proposals p ON p.proposal_id = r.proposal_id
+                    LEFT JOIN proposal_verdicts v ON v.proposal_id = p.proposal_id
+                    WHERE {RelationPolicy(query)}
                 )
-                GROUP BY kind
-                ORDER BY count DESC, kind
+                SELECT subject_type, object_type,
+                       SUM(CASE WHEN status NOT IN ('suggested', 'contradicted') THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN status = 'suggested' THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN status = 'contradicted' THEN 1 ELSE 0 END)
+                FROM visible_relations
+                GROUP BY subject_type, object_type
+                ORDER BY subject_type, object_type
                 """);
             Scope(command, query);
-            List<GraphTypeCount> types = [];
-            int total = 0;
+            command.Parameters.AddWithValue("$suggestions", query.IncludeSuggestions ? 1 : 0);
+            command.Parameters.AddWithValue("$predicate", (object?)query.Predicate ?? DBNull.Value);
+            command.Parameters.AddWithValue("$evidenceStatus", (object?)query.EvidenceStatus ?? DBNull.Value);
+            List<GraphZoneLink> links = [];
+            int relationships = 0;
             using SqliteDataReader reader = command.ExecuteReader();
             while (reader.Read())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int count = reader.GetInt32(1);
-                types.Add(new GraphTypeCount(reader.GetString(0), count));
-                total += count;
+                int confirmed = reader.GetInt32(2);
+                int suggested = reader.GetInt32(3);
+                int contradicted = reader.GetInt32(4);
+                relationships += confirmed + suggested + contradicted;
+                links.Add(new GraphZoneLink(reader.GetString(0), reader.GetString(1),
+                    confirmed, suggested, contradicted));
             }
-            return new GraphOverview(total, types);
+            return new GraphZoneOverview(overview.EntityCount, relationships, overview.Types, links);
         });
+    }
+
+    private static GraphOverview ReadOverview(SqliteConnection connection, GraphQuery query,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using SqliteCommand command = connection.CreateCommand($"""
+            SELECT kind, COUNT(*) AS count FROM (
+                SELECT COALESCE({EffectiveType("e", query)}, 'other') AS kind
+                FROM knowledge_entities e
+                WHERE {NodeVisible("e", query)}
+            )
+            GROUP BY kind
+            ORDER BY count DESC, kind
+            """);
+        Scope(command, query);
+        List<GraphTypeCount> types = [];
+        int total = 0;
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int count = reader.GetInt32(1);
+            types.Add(new GraphTypeCount(reader.GetString(0), count));
+            total += count;
+        }
+        return new GraphOverview(total, types);
     }
 
     public GraphPage Seeds(string? search, GraphQuery query, CancellationToken cancellationToken = default)
@@ -204,27 +263,14 @@ public sealed class SqliteGraphReader : IGraphReader
                 WHERE ($focus IS NULL OR r.subject_id = $focus OR r.object_id = $focus)
                   AND ($relationId IS NULL OR r.relation_id = $relationId)
                   AND r.relation_id > $after
-                  AND ({ConfirmedRelation} OR ($suggestions = 1
-                      AND r.origin = 'model' AND p.proposal_id IS NOT NULL
-                      AND p.status <> 'rejected' AND p.flags IS NULL
-                      AND (v.verdict = 'unsupported' OR
-                           (p.status = 'pending'
-                            AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
+                  AND {RelationPolicy(query)}
                   AND {NodeVisible("subject", query)}
                   AND {NodeVisible("object", query)}
-                  AND ($predicate IS NULL OR r.predicate = $predicate)
-                  AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
                   AND ($type IS NULL OR
                       ($focus IS NULL AND ({EffectiveType("subject", query)} = $type OR {EffectiveType("object", query)} = $type))
                       OR ($focus IS NOT NULL AND
                           (CASE WHEN r.subject_id = $focus THEN {EffectiveType("object", query)}
                                 ELSE {EffectiveType("subject", query)} END) = $type))
-                  AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
-                  AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
-                      SELECT 1 FROM source_collection_memberships cm
-                      JOIN source_collections c ON c.collection_id = cm.collection_id
-                      WHERE cm.source_id = p.source_id
-                        AND cm.collection_id = $collection AND c.archived_utc IS NULL))
                 ORDER BY r.relation_id
                 LIMIT $take
                 """))
@@ -291,6 +337,23 @@ public sealed class SqliteGraphReader : IGraphReader
                 more ? WriteCursor(version, signature, rows[^1].RelationId) : null);
         });
     }
+
+    private static string RelationPolicy(GraphQuery query) => $"""
+        ({ConfirmedRelation} OR ($suggestions = 1
+                      AND r.origin = 'model' AND p.proposal_id IS NOT NULL
+                      AND p.status <> 'rejected' AND p.flags IS NULL
+                      AND (v.verdict = 'unsupported' OR
+                           (p.status = 'pending'
+                            AND COALESCE(v.verdict, '') IN ('', 'uncertain')))))
+        AND ($predicate IS NULL OR r.predicate = $predicate)
+                  AND ($evidenceStatus IS NULL OR {RelationStatus} = $evidenceStatus)
+        AND ($source IS NULL OR r.origin = 'owner' OR p.source_id = $source)
+                  AND ($collection IS NULL OR r.origin = 'owner' OR EXISTS (
+                      SELECT 1 FROM source_collection_memberships cm
+                      JOIN source_collections c ON c.collection_id = cm.collection_id
+                      WHERE cm.source_id = p.source_id
+                        AND cm.collection_id = $collection AND c.archived_utc IS NULL))
+        """;
 
     private static string ScopeFilter(string alias) => $"""
         AND ($source IS NULL OR {alias}.source_id = $source)
