@@ -149,8 +149,11 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
             desiredDistance = 590
             return
         }
+        let visibleRegion = regionType ?? (focusId.flatMap { id in
+            graphNodes.first(where: { $0.entityId == id })?.entityType
+        })
         placement = NeuralNebulaLayout.place(zones: overview, nodes: graphNodes,
-                                              edges: graphEdges, regionType: regionType)
+                                              edges: graphEdges, regionType: visibleRegion)
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
         let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
@@ -220,8 +223,9 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         zoneLines = buffer(links)
         detailPoints = buffer(localPoints)
         detailLines = buffer(localLinks)
-        if let regionType, let point = placement.zoneCenters[regionType] {
-            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ?? point
+        if regionType != nil || focusId != nil {
+            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
+                visibleRegion.flatMap { placement.zoneCenters[$0] } ?? .zero
             desiredDistance = focusId == nil ? 157 : 79
         } else {
             desiredCenter = .zero
@@ -230,7 +234,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         if reduceMotion {
             center = desiredCenter
             distance = desiredDistance
-            detailOpacity = regionType != nil && !graphNodes.isEmpty ? 1 : 0
+            detailOpacity = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
         }
     }
 
@@ -253,10 +257,12 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
 
     func zoom(by factor: Float, at point: CGPoint?) {
         desiredDistance = max(48, min(1_400, desiredDistance * factor))
-        if regionType == nil, desiredDistance < 325,
-           let point, let zone = zone(at: point) {
-            onEnterZone?(zone)
-        } else if regionType != nil && desiredDistance > 415 {
+        if regionType == nil, focusId == nil, let point, let zone = zone(at: point) {
+            if let anchor = placement.zoneCenters[zone] {
+                desiredCenter += (anchor - desiredCenter) * 0.16
+            }
+            if desiredDistance < 325 { onEnterZone?(zone) }
+        } else if (regionType != nil || focusId != nil) && desiredDistance > 415 {
             onReturnToZones?()
         }
     }
@@ -267,15 +273,16 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         lastToolbarZoom = zoom
         zoomRevision = revision
         if zoom == 1 {
-            desiredCenter = regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
-            desiredDistance = regionType == nil ? 590 : 157
+            desiredCenter = focusId.flatMap { placement.nodeCenters[$0] } ??
+                regionType.flatMap { placement.zoneCenters[$0] } ?? .zero
+            desiredDistance = focusId != nil ? 79 : regionType == nil ? 590 : 157
         } else {
             self.zoom(by: ratio, at: nil)
         }
     }
 
     func click(at point: CGPoint) {
-        if regionType != nil {
+        if regionType != nil || focusId != nil {
             if let node = nearestNode(to: point) { onSelectNode?(node); return }
             if let edge = nearestEdge(to: point) { onSelectEdge?(edge); return }
         } else if let type = zone(at: point) {
@@ -334,7 +341,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         let weight = reduceMotion ? Float(1) : 1 - exp(-elapsed * 5.3)
         center += (desiredCenter - center) * weight
         distance += (desiredDistance - distance) * weight
-        let desiredOpacity: Float = regionType != nil && !graphNodes.isEmpty ? 1 : 0
+        let desiredOpacity: Float = (regionType != nil || focusId != nil) && !graphNodes.isEmpty ? 1 : 0
         detailOpacity += (desiredOpacity - detailOpacity) * weight
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
