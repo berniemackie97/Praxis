@@ -8,6 +8,16 @@ struct GraphZonePlacement {
 }
 
 enum GraphZoneLayout {
+    private struct TypePair: Hashable {
+        let first: String
+        let second: String
+
+        init(_ a: String, _ b: String) {
+            first = min(a, b)
+            second = max(a, b)
+        }
+    }
+
     static func place(_ overview: GraphZoneOverview) -> GraphZonePlacement {
         let zones = overview.zones.filter { $0.count > 0 }.sorted {
             $0.count == $1.count ? $0.entityType < $1.entityType : $0.count > $1.count
@@ -24,9 +34,9 @@ enum GraphZoneLayout {
             let theta = CGFloat(index) * goldenAngle
             return CGPoint(x: cos(theta) * radius, y: sin(theta) * radius)
         }
-        var weights: [String: Int] = [:]
+        var weights: [TypePair: Int] = [:]
         for link in overview.links where link.count > 0 && link.subjectType != link.objectType {
-            let key = [link.subjectType, link.objectType].sorted().joined(separator: "\u{1F}")
+            let key = TypePair(link.subjectType, link.objectType)
             weights[key, default: 0] += link.count
         }
         for _ in 0..<90 {
@@ -38,8 +48,7 @@ enum GraphZoneLayout {
                     let distance = max(1, hypot(dx, dy))
                     let spacing = (radii[zones[first].entityType] ?? 30) +
                         (radii[zones[second].entityType] ?? 30) + 32
-                    let key = [zones[first].entityType, zones[second].entityType].sorted()
-                        .joined(separator: "\u{1F}")
+                    let key = TypePair(zones[first].entityType, zones[second].entityType)
                     let weight = CGFloat(weights[key, default: 0])
                     let repel = max(0, spacing - distance) * 0.22
                     let attract = weight == 0 ? CGFloat(0) :
