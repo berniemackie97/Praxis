@@ -26,9 +26,10 @@ enum NeuralNebulaLayout {
         let sizes = Dictionary(uniqueKeysWithValues: ordered.map {
             ($0.entityType, min(29, 9 + log2(Float($0.count) + 1) * 2.2))
         })
-        guard let regionType, let center = centers[regionType], !nodes.isEmpty else {
+        guard !nodes.isEmpty else {
             return NeuralNebulaPlacement(zoneCenters: centers, zoneSizes: sizes, nodeCenters: [:])
         }
+        let center = regionType.flatMap { centers[$0] } ?? .zero
 
         let flat = GraphAtlasLayout.positions(nodes: nodes, edges: edges)
         let extent = max(1, flat.values.reduce(CGFloat(0)) { maximum, point in
