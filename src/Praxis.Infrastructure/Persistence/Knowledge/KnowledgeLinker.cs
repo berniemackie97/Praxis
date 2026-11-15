@@ -45,6 +45,7 @@ internal static class KnowledgeLinker
         }
 
         RecomputeInferredTypes(connection, transaction, affected, now);
+        ReconsolidationQueue.Enqueue(connection, transaction, affected, Domain.Knowledge.RevisionVocabulary.Mentions, now);
     }
 
     /// <summary>Moves an entity mention to the entity named by an owner correction.</summary>

@@ -77,3 +77,21 @@ struct EntityListData: Decodable { let entities: [EntitySummary] }
 struct EntityData: Decodable { let entity: EntityDetail? }
 struct ChangeData: Decodable { let changed: Bool }
 struct RelationCreatedData: Decodable { let relationId: String }
+
+/// A change Praxis made to, or proposes for, its own classification of an entity.
+struct KnowledgeRevision: Decodable, Identifiable, Equatable {
+    let revisionId: Int
+    let entityId: String
+    let entityName: String
+    let field: String
+    let before: String?
+    let after: String
+    let trigger: String
+    let basis: String
+    let state: String
+    let createdUtc: String
+    let decidedUtc: String?
+    var id: Int { revisionId }
+}
+
+struct KnowledgeRevisionsData: Decodable { let revisions: [KnowledgeRevision] }

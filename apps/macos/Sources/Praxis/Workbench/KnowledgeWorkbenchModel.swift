@@ -14,6 +14,8 @@ final class KnowledgeWorkbenchModel: ObservableObject {
     @Published var includeSuggestions = false
     @Published private(set) var entities: [EntitySummary] = []
     @Published private(set) var selected: EntityDetail?
+    /// Corrections Praxis applied to its own classifications and the ones it proposes, newest first.
+    @Published private(set) var revisions: [KnowledgeRevision] = []
     /// The latest failure or confirmation; setting one clears the other.
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
     @Published private(set) var notice: String? { didSet { if notice != nil { error = nil } } }
@@ -74,6 +76,27 @@ final class KnowledgeWorkbenchModel: ObservableObject {
                      as: RelationCreatedData.self, failed: report) { [weak self] _ in
             self?.notice = "Added: \(entity.name) \(KnowledgeVocabulary.label(predicate)) \(target.name)."
             self?.refresh()
+        }
+    }
+
+    func refreshRevisions() {
+        channel.send("knowledgeRevisions", ["limit": 200], as: KnowledgeRevisionsData.self,
+                     scope: "revisions", failed: report) { [weak self] data in
+            self?.revisions = data.revisions
+        }
+    }
+
+    /// Accepting applies the proposal as your own type decision; dismissing means it is never proposed again.
+    func decide(_ revision: KnowledgeRevision, accept: Bool) {
+        channel.send("knowledgeRevisionDecide",
+                     ["revisionId": revision.revisionId, "decision": accept ? "accepted" : "dismissed"],
+                     as: ChangeData.self, failed: report) { [weak self] data in
+            guard let self else { return }
+            notice = !data.changed ? "That proposal was already decided."
+                : accept ? "\(revision.entityName) is now \(KnowledgeVocabulary.label(revision.after)). Similar entities will be checked."
+                : "Dismissed. Praxis will not propose it again."
+            refreshRevisions()
+            refresh()
         }
     }
 
