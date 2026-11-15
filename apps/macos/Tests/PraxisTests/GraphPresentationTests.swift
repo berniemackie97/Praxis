@@ -51,6 +51,26 @@ struct GraphPresentationTests {
         #expect(grouped.flatMap(\.observations).count == 3)
     }
 
+    @Test func entityRelationsPlaceStructureBeforeCallsAndPreserveObservations() {
+        let observations = [
+            EntityRelation(relationId: "call-2", predicate: "calls", outgoing: true,
+                           otherEntityId: "callee", otherName: "Render", origin: "model", evidence: "second call"),
+            EntityRelation(relationId: "part", predicate: "part_of", outgoing: true,
+                           otherEntityId: "class", otherName: "CRadar", origin: "model", evidence: "member"),
+            EntityRelation(relationId: "call-1", predicate: "calls", outgoing: true,
+                           otherEntityId: "callee", otherName: "Render", origin: "model", evidence: "first call"),
+            EntityRelation(relationId: "called", predicate: "calls", outgoing: false,
+                           otherEntityId: "caller", otherName: "CRadar_Draw", origin: "owner", evidence: nil),
+            EntityRelation(relationId: "inherits", predicate: "inherits_from", outgoing: false,
+                           otherEntityId: "derived", otherName: "DerivedRadar", origin: "model", evidence: "inherits")
+        ]
+        let sections = EntityRelationSection.sections(EntityRelationGroup.group(observations))
+        #expect(sections.map(\.title) == ["Inherited by", "Part of", "Calls", "Called by"])
+        #expect(sections.flatMap(\.groups).flatMap(\.observations).count == observations.count)
+        #expect(sections.first(where: { $0.title == "Calls" })?.groups.first?.observations.map(\.relationId) == ["call-1", "call-2"])
+        #expect(EntityRelationSection.collapsedRows == 6)
+    }
+
     @Test func globalAtlasLayoutIsStableAndKeepsRealComponentsSeparate() {
         let nodes = [node("a"), node("b"), node("c"), node("d"), node("isolated")]
         let edges = [edge("one", "a", "b"), edge("two", "b", "c"), edge("three", "c", "d")]

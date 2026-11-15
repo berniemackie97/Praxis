@@ -4,7 +4,14 @@ import SwiftUI
 /// reviews the payload, optionally excludes items or redacts phrases, and approves.
 struct VerificationView: View {
     @ObservedObject var model: VerificationWorkbenchModel
-    let providers: [VerificationProvider]
+    @ObservedObject var setup: ModelSetupModel
+
+    private var providers: [VerificationProvider] { setup.providers.filter(\.enabled) }
+
+    private func syncPreferredProvider() {
+        model.setPreferredProvider(VerificationProviderDefault.choice(
+            checkingProvider: setup.tier("strongest")?.providerId, providers: providers))
+    }
 
     var body: some View {
         MasterDetail(listWidth: (260, 320, 440)) {
@@ -48,7 +55,7 @@ struct VerificationView: View {
             }
         } detail: {
             if let request = model.selected {
-                VerificationDetailView(request: request, model: model, providers: providers.filter(\.enabled))
+                VerificationDetailView(request: request, model: model, providers: providers)
             } else {
                 EmptyState(systemImage: "doc.text.magnifyingglass", title: "Select a request",
                            message: "Review exactly what would be sent, remove items, and redact phrases before approving.")
@@ -61,7 +68,13 @@ struct VerificationView: View {
                 Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
         }
-        .onAppear { model.refresh() }
+        .onAppear {
+            syncPreferredProvider()
+            setup.refresh()
+            model.refresh()
+        }
+        .onChange(of: setup.tiers) { _ in syncPreferredProvider() }
+        .onChange(of: setup.providers) { _ in syncPreferredProvider() }
     }
 }
 
@@ -110,6 +123,10 @@ private struct VerificationDetailView: View {
 
     private var remoteSelected: Bool {
         !model.providerChoice.isEmpty && model.providerChoice != VerificationProvider.ollama
+    }
+
+    private var selectedProviderAvailable: Bool {
+        VerificationProviderDefault.available(model.providerChoice, providers: providers)
     }
 
     private var selectedExternalProvider: VerificationProvider? {
@@ -258,9 +275,11 @@ private struct VerificationDetailView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
-                    Picker("Send to", selection: $model.providerChoice) {
+                    Picker("Send to", selection: Binding(
+                        get: { model.providerChoice },
+                        set: { model.chooseProvider($0) })) {
                         Text("Local Ollama (if enabled)").tag("")
-                        ForEach(providers) { provider in
+                        ForEach(providers.filter { $0.providerId != VerificationProvider.ollama }) { provider in
                             Text(VerificationProvider.displayName(provider.providerId)).tag(provider.providerId)
                         }
                     }
@@ -269,20 +288,18 @@ private struct VerificationDetailView: View {
                     Button("Decline") { model.decline() }
                     Button("Approve and Send") { model.approve() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(providers.isEmpty || model.excluded.count >= items.count ||
-                            (model.providerChoice.isEmpty &&
-                             !providers.contains(where: { $0.providerId == VerificationProvider.ollama })) ||
+                        .disabled(!selectedProviderAvailable || model.excluded.count >= items.count ||
                             (remoteSelected && (!model.remoteConsent || !remoteReady)))
                 }
                 if model.providerChoice == "" {
-                    Text("With no provider selected, only an enabled local Ollama verifier may run. Remote CLIs are never chosen automatically.")
+                    Text("Local Ollama is selected. The Checking model can be changed under Settings → Models; selecting a remote provider never sends data without approval.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if model.providerChoice != VerificationProvider.ollama {
-                    Text("External disclosure requires every included source to be independently classified for remote verification and this request's explicit consent. No other provider is selected automatically.")
+                    Text("The configured Checking provider is suggested when available. External disclosure still requires each included source's permission and your explicit approval of the redacted payload.")
                         .font(.caption).foregroundColor(.orange)
                 }
-                if providers.isEmpty {
-                    Text("Enable a local Ollama verifier or an explicitly selected CLI under Models first.")
+                if !selectedProviderAvailable {
+                    Text("The selected verifier is not enabled. Choose an available provider under Send to, or connect one in Models.")
                         .font(.caption).foregroundColor(.orange)
                 }
             }

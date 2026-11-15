@@ -85,7 +85,7 @@ struct WorkbenchSplitView: View {
                                             section = .library
                                             return true
                                         })
-        case .verification: VerificationView(model: model.verification, providers: model.intelligence.providers)
+        case .verification: VerificationView(model: model.verification, setup: model.modelSetup)
         case .activity: ActivityView(model: model.activity)
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
