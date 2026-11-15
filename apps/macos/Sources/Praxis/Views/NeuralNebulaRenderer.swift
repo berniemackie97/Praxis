@@ -22,6 +22,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
     var onReturnToZones: (() -> Void)?
     var onSelectNode: ((String) -> Void)?
     var onSelectEdge: ((String) -> Void)?
+    var onFrame: (([String: CGPoint], String?) -> Void)?
 
     private struct Batch {
         var buffer: (any MTLBuffer)?
@@ -153,7 +154,7 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         var points: [NeuralNebulaVertex] = []
         var links: [NeuralNebulaVertex] = []
         let ordered = overview.zones.sorted { $0.entityType < $1.entityType }
-        for (index, zone) in ordered.enumerated() {
+        for zone in ordered {
             guard let center = placement.zoneCenters[zone.entityType] else { continue }
             let color = NeuralNebulaLayout.color(for: zone.entityType)
             let size = placement.zoneSizes[zone.entityType] ?? 12
@@ -170,7 +171,6 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
                     color: SIMD4<Float>(color.x, color.y, color.z, highContrast ? 0.52 : 0.25),
                     size: highContrast ? 2.6 : 1.7))
             }
-            _ = index
         }
         for number in 0..<220 {
             let latitude = 1 - 2 * ((Float(number) + 0.5) / 220)
@@ -353,6 +353,12 @@ final class NeuralNebulaRenderer: NSObject, @preconcurrency MTKViewDelegate {
         encoder.endEncoding()
         command.present(drawable)
         command.commit()
+        if let onFrame {
+            let positions = placement.zoneCenters.reduce(into: [String: CGPoint]()) { result, entry in
+                if let point = projected(entry.value) { result[entry.key] = point }
+            }
+            onFrame(positions, regionType)
+        }
     }
 
     private func draw(_ batch: Batch, lines: Bool, opacity: Float,
