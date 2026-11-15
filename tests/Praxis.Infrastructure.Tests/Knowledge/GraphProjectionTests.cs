@@ -687,6 +687,12 @@ public sealed class GraphProjectionTests : IDisposable
         Assert.Equal(121, overview.EntityCount);
         Assert.Equal(121, overview.Types.Sum(type => type.Count));
 
+        GraphZoneOverview zones = catalog.Graph.Zones(new GraphQuery());
+        Assert.Equal(121, zones.EntityCount);
+        Assert.Equal(120, zones.RelationshipCount);
+        Assert.Equal(120, zones.Links.Sum(link =>
+            link.ConfirmedCount + link.SuggestedCount + link.ContradictedCount));
+
         GraphPage atlasFirst = catalog.Graph.Atlas(new GraphQuery(Limit: 100));
         Assert.Equal(100, atlasFirst.Edges.Count);
         Assert.NotNull(atlasFirst.NextCursor);
