@@ -76,7 +76,8 @@ struct KnowledgeGraphView: View {
                                         Text("\(zones.zones.count) regions · " +
                                              "\(zones.relationshipCount.formatted()) real relation observations")
                                             .font(.caption).foregroundStyle(.secondary)
-                                        Text("\(zones.entityCount.formatted()) current entities · grouped by recorded type, not inferred communities")
+                                        Text("\(zones.entityCount.formatted()) current entities · " +
+                                             "grouped by recorded type, not inferred communities")
                                             .font(.caption2).foregroundStyle(.tertiary)
                                         Text("Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
                                             .font(.caption2).foregroundStyle(.secondary)
