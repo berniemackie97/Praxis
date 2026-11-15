@@ -48,6 +48,8 @@ struct KnowledgeGraphView: View {
                                        zones: visibleZones,
                                        zoneTypeFilter: graph.entityType.isEmpty ? nil : graph.entityType,
                                        expandZone: { graph.enterZone($0) },
+                                       returnToZones: { graph.showZones() },
+                                       regionType: graph.selectedZoneType,
                                        focusId: graph.focusId,
                                        highlightedNodeIds: graph.highlightedNodeIds,
                                        recenterNodeId: graph.recenterNodeId, recenterRevision: graph.recenterRevision,
