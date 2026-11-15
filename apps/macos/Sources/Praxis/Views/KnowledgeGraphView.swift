@@ -82,11 +82,13 @@ struct KnowledgeGraphView: View {
                                         Text("Click a zone or zoom inward · Drag to pan · Option-drag to rotate")
                                             .font(.caption2).foregroundStyle(.secondary)
                                     } else {
-                                        Text("\(graph.visibleNodes.count) visible nodes · \(graph.visibleEdges.count) relation observations")
+                                        Text("\(graph.visibleNodes.count) visible nodes · " +
+                                             "\(graph.visibleEdges.count) relation observations")
                                             .font(.caption).foregroundStyle(.secondary)
                                         if graph.focusId == nil {
                                             if let total = graph.regionalRelationshipCount {
-                                                Text("\(graph.visibleEdges.count.formatted()) of \(total.formatted()) current regional relations rendered")
+                                                Text("\(graph.visibleEdges.count.formatted()) of " +
+                                                     "\(total.formatted()) current regional relations rendered")
                                                     .font(.caption2).foregroundStyle(.tertiary)
                                             }
                                             Text("Hub-diversified sample · zoom outward to return to Whole Brain")
