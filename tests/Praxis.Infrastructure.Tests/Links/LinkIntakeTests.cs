@@ -241,27 +241,51 @@ public sealed class LinkIntakeTests : IDisposable
     [Fact]
     public async Task UpgradingToVersion24QueuesAFetchForLinksCapturedBefore()
     {
-        string path;
-        using (SqliteCatalog catalog = SqliteCatalog.Open(dataRoot))
-        {
-            await Capture(catalog, "old.url", "[InternetShortcut]\nURL=https://example.org/old\n");
-            Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
-            path = catalog.DatabasePath;
-        }
+        string path = Path.Combine(dataRoot, "catalog.sqlite");
+        Guid source = Guid.NewGuid();
+        Guid item = Guid.NewGuid();
+        const string recorded = "2026-11-01T00:00:00Z";
+        const string link = "[InternetShortcut]\nURL=https://example.org/old\n";
+        byte[] content = Encoding.UTF8.GetBytes(link);
+        string digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content)).ToLowerInvariant();
 
         using (Microsoft.Data.Sqlite.SqliteConnection connection = new($"Data Source={path};Pooling=False"))
         {
             connection.Open();
-            using Microsoft.Data.Sqlite.SqliteCommand downgrade = connection.CreateCommand();
-            downgrade.CommandText = """
-                DELETE FROM processing_jobs WHERE processor_key = 'link-fetch-v1';
-                DROP TABLE link_snapshots; DROP TABLE link_settings; DROP TABLE text_timings; DROP TABLE intake_projects;
-                PRAGMA user_version = 23;
+            for (int version = 1; version <= 23; version++)
+            {
+                using Stream resource = typeof(SqliteCatalog).Assembly.GetManifestResourceStream($"Praxis.Infrastructure.Catalog.V{version}.sql")
+                    ?? throw new InvalidOperationException("The catalog migration resource is missing.");
+                using StreamReader reader = new(resource);
+                using Microsoft.Data.Sqlite.SqliteCommand migration = connection.CreateCommand();
+                migration.CommandText = reader.ReadToEnd();
+                migration.ExecuteNonQuery();
+            }
+
+            using Microsoft.Data.Sqlite.SqliteCommand seed = connection.CreateCommand();
+            seed.CommandText = """
+                INSERT INTO original_objects (digest, byte_length, recorded_utc) VALUES ($digest, $length, $recorded);
+                INSERT INTO sources (source_id, source_kind, locator, created_utc)
+                VALUES ($source, 'file', '/notes/old.url', $recorded);
+                INSERT INTO items (item_id, source_id) VALUES ($item, $source);
+                INSERT INTO item_versions (item_id, revision, digest, observed_utc)
+                VALUES ($item, 1, $digest, $recorded);
+                INSERT INTO processing_jobs (item_id, revision, processor_key, state, attempt, total_attempts, created_utc, updated_utc)
+                VALUES ($item, 1, 'source-text-v1', 'completed', 1, 1, $recorded, $recorded);
+                INSERT INTO text_derivatives (item_id, revision, processor_key, source_digest, outcome, content, created_utc)
+                VALUES ($item, 1, 'source-text-v1', $digest, 'completed', $link, $recorded);
                 """;
-            downgrade.ExecuteNonQuery();
+            seed.Parameters.AddWithValue("$source", source.ToString("D"));
+            seed.Parameters.AddWithValue("$item", item.ToString("D"));
+            seed.Parameters.AddWithValue("$digest", digest);
+            seed.Parameters.AddWithValue("$length", content.Length);
+            seed.Parameters.AddWithValue("$recorded", recorded);
+            seed.Parameters.AddWithValue("$link", link);
+            seed.ExecuteNonQuery();
         }
 
         using SqliteCatalog upgraded = SqliteCatalog.Open(dataRoot);
+        Assert.Equal(CatalogSchema.CurrentVersion, upgraded.SchemaVersion);
         FakeFetcher fetcher = new(new FetchedPage(new Uri("https://example.org/old"), 200, "text/plain", "Old page."u8.ToArray(), null));
         Assert.True(await new ProcessingDriver(upgraded, new LinkFetchHandler(upgraded.Links, fetcher, new FakeWriter(workspace), [], TimeProvider.System))
             .ProcessNextAsync());
