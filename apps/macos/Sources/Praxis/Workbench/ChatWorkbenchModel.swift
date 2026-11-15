@@ -396,6 +396,7 @@ enum ChatFailureText {
         case "model_unavailable": return "The model is unreachable. Check the connection in Models, then retry."
         case "model_unauthenticated": return "The provider sign-in expired. Sign in again under Models."
         case "model_quota_exhausted": return "The provider reached its usage limit. Choose another model if the connection supports it, or wait for the limit to reset."
+        case "model_chat_unsupported": return "This model cannot generate chat replies. Choose a chat model."
         case "model_missing": return "The selected model is unavailable. Review its configuration under Models."
         case "backend_configuration_error": return "This chat model is not configured correctly. Review Models before retrying."
         case "model_approval_required": return "Codex could not request an approval in Praxis. Try a read-only question or use the provider directly for the action."

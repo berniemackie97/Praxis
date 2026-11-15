@@ -89,8 +89,10 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(4, catalog.Agents.ReadMessages(conversation.ConversationId).Count);
     }
 
-    [Fact]
-    public async Task DirectChatOmitsToolSchemasHistoryAndMemoryFromTheHttpRequest()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DirectChatOmitsToolSchemasHistoryAndMemoryFromTheHttpRequest(bool requestTools)
     {
         using SqliteCatalog catalog = await SeededAsync();
         AgentBackendProfile profile = Local();
@@ -105,9 +107,10 @@ public sealed partial class AgentRuntimeTests
         CapturingHandler handler = new("""{"choices":[{"message":{"content":"PING"}}],"usage":{"prompt_tokens":83,"completion_tokens":2}}""");
         using HttpClient http = new(handler);
         var backend = new OpenAiCompatibleAgentBackend(http, new Uri(profile.Endpoint + "/"), profile.Model, null);
-        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(requestTools ? new PlainChatBackend(backend) : backend, null), clock);
         AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Reply with PING only.", (_, _, _) => { },
-            CancellationToken.None, useTools: false);
+            CancellationToken.None, useTools: requestTools);
 
         using JsonDocument payload = JsonDocument.Parse(handler.Body!);
         Assert.False(payload.RootElement.TryGetProperty("tools", out _));
@@ -116,6 +119,7 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains("Earlier answer", handler.Body!, StringComparison.Ordinal);
         Assert.Equal("PING", reply.Text);
         Assert.Equal(83, reply.InputTokens);
+        Assert.Equal(requestTools, reply.ToolsUnavailable);
         Assert.Empty(catalog.Agents.ReadToolCalls(conversation.ConversationId, 20));
         Assert.Equal("PING", catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
@@ -159,5 +163,13 @@ public sealed partial class AgentRuntimeTests
         var error = CodexSessionBackend.ClassifyFailure(failure, "");
         Assert.Equal("model_approval_required", error.Code);
         Assert.DoesNotContain("sensitive-source", error.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class PlainChatBackend(IAgentBackend inner) : IAgentBackend
+    {
+        public ValueTask<bool> SupportsToolsAsync(CancellationToken cancellationToken) => ValueTask.FromResult(false);
+
+        public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
+            CancellationToken cancellationToken) => inner.CompleteAsync(systemPrompt, transcript, tools, cancellationToken);
     }
 }

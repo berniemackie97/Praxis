@@ -20,12 +20,12 @@ public static class MachineTuning
             <= 36 * GiB => (MachinePlan.Balanced, 7L * GiB, LocalDraftModes.Auto, 40, false),
             _ => (MachinePlan.Performance, 16L * GiB, LocalDraftModes.Always, 120, true)
         };
-        InstalledModel[] generative = installed.Where(model => !IsEmbedding(model.Name)).ToArray();
+        InstalledModel[] generative = installed.Where(model => model.SupportsChat).ToArray();
         // The largest model that fits the budget gives the best quality the machine can keep loaded;
         // when none fits, the smallest is the least harmful.
         InstalledModel? local = generative.Where(model => model.SizeBytes <= modelBudget).MaxBy(model => model.SizeBytes)
                                 ?? generative.MinBy(model => model.SizeBytes);
-        InstalledModel? embedding = installed.Where(model => IsEmbedding(model.Name)).MinBy(model => model.SizeBytes);
+        InstalledModel? embedding = installed.Where(model => model.SupportsEmbedding).MinBy(model => model.SizeBytes);
         List<string> notes = [];
         if (local is not null && local.SizeBytes > modelBudget)
         {
@@ -44,6 +44,4 @@ public static class MachineTuning
 
         return new MachinePlan(profile, memoryBytes, local?.Name, embedding?.Name, draftMode, draftBudget, enrichment, notes);
     }
-
-    public static bool IsEmbedding(string name) => name.Contains("embed", StringComparison.OrdinalIgnoreCase);
 }

@@ -17,7 +17,7 @@ public sealed class AgentBackendFactory(HttpClient http, ISecretStore secrets, A
             // The managed Ollama connection favors visible answers over default model thinking.
             // Other OpenAI-compatible servers do not necessarily support this request field.
             AgentBackendKinds.OpenAiCompatible => new OpenAiCompatibleAgentBackend(http, Base(profile.Endpoint!), profile.Model, key,
-                reasoningEffort: profile.BackendId == VerificationProvider.Ollama && profile.IsLocal ? "none" : null),
+                isLocalOllama: profile.BackendId == VerificationProvider.Ollama && profile.IsLocal),
             AgentBackendKinds.Anthropic => new AnthropicAgentBackend(http, Base(profile.Endpoint!), profile.Model,
                 key ?? throw new InvalidOperationException("The Anthropic backend needs an API key in the Keychain.")),
             _ => null

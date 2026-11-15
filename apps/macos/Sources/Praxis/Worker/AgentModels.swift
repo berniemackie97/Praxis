@@ -93,6 +93,7 @@ struct AgentReply: Decodable, Equatable {
     let inputTokens: Int
     let outputTokens: Int
     let omittedMessages: Int?
+    let toolsUnavailable: Bool?
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {

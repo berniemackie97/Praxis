@@ -53,8 +53,10 @@ final class ModelSetupModel: ObservableObject {
         case ModelTool.claudeCode, ModelTool.codex:
             return tool(connection)?.models ?? [ModelChoice(id: "default", label: "Plan default", efforts: [], defaultEffort: nil)]
         case ModelTool.ollama:
-            let names = installed.map(\.name)
-            let current = provider(connection)?.model.map { [$0] } ?? []
+            let names = installed.filter(\.supportsChat).map(\.name)
+            let current = provider(connection)?.model.flatMap { name in
+                (InstalledModel.matching(name, in: installed)?.supportsChat ?? InstalledModel.mayBeChat(name)) ? [name] : nil
+            } ?? []
             return Array(Set(names + current)).sorted().map { ModelChoice(id: $0, label: $0, efforts: [], defaultEffort: nil) }
         default:
             return backend(connection).map { [ModelChoice(id: $0.model, label: $0.model, efforts: [], defaultEffort: nil)] } ?? []
