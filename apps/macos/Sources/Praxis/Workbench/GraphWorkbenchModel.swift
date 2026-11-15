@@ -214,7 +214,8 @@ final class GraphWorkbenchModel: ObservableObject {
             if let next = page.nextCursor, !full {
                 loadAtlas(cursor: next)
             } else {
-                atlasTruncated = atlasTruncated || page.nextCursor != nil
+                atlasTruncated = atlasTruncated || page.nextCursor != nil ||
+                    (regionalRelationshipCount.map { $0 > merged.edges.count } ?? false)
                 atlasNodes = atlasBufferNodes
                 atlasEdges = atlasBufferEdges
                 atlasLoading = false
