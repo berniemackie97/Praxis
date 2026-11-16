@@ -302,7 +302,8 @@
         442,
         445,
         452,
-        463
+        463,
+        510
       ]
     },
     {
@@ -394,7 +395,9 @@
         315,
         316,
         427,
-        507
+        507,
+        511,
+        512
       ]
     },
     {
@@ -1361,6 +1364,16 @@
     "504": [
       311,
       313
+    ],
+    "510": [
+      115,
+      116
+    ],
+    "511": [
+      102
+    ],
+    "512": [
+      511
     ]
   },
   "priorities": {
@@ -1502,6 +1515,9 @@
     "379": "P1",
     "381": "P1",
     "507": "P1",
+    "510": "P1",
+    "511": "P1",
+    "512": "P1",
     "383": "P1",
     "384": "P1",
     "385": "P1",
@@ -1595,7 +1611,8 @@
     "501": "knowledge",
     "502": "automation",
     "503": "intelligence",
-    "504": "intelligence"
+    "504": "intelligence",
+    "512": "clients"
   },
   "decision_queue": [
     30,
@@ -1821,7 +1838,8 @@
         115,
         116,
         29,
-        463
+        463,
+        510
       ],
       "exit": "Configured folder monitoring, bounded rich-media metadata, reviewed suggestions and cross-source collections survive rebuild/reprocessing without inventing source facts."
     },
@@ -1888,6 +1906,8 @@
         179,
         379,
         507,
+        511,
+        512,
         383,
         388,
         455
