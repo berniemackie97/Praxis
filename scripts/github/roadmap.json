@@ -300,7 +300,8 @@
         116,
         442,
         445,
-        452
+        452,
+        463
       ]
     },
     {
@@ -513,7 +514,9 @@
         417,
         418,
         420,
-        428
+        428,
+        455,
+        456
       ]
     },
     {
@@ -1166,6 +1169,12 @@
       386,
       387
     ],
+    "455": [
+      387
+    ],
+    "456": [
+      455
+    ],
     "432": [
       431
     ],
@@ -1396,7 +1405,10 @@
     "447": "P2",
     "449": "P1",
     "451": "P2",
-    "452": "P3"
+    "452": "P3",
+    "455": "P1",
+    "456": "P1",
+    "463": "P1"
   },
   "area_overrides": {
     "24": "clients",
@@ -1432,7 +1444,9 @@
     "268": "capture",
     "440": "retrieval",
     "441": "retrieval",
-    "451": "retrieval"
+    "451": "retrieval",
+    "455": "knowledge",
+    "463": "intelligence"
   },
   "decision_queue": [
     30,
@@ -1656,7 +1670,8 @@
         114,
         115,
         116,
-        29
+        29,
+        463
       ],
       "exit": "Configured folder monitoring, bounded rich-media metadata, reviewed suggestions and cross-source collections survive rebuild/reprocessing without inventing source facts."
     },
@@ -1723,7 +1738,8 @@
         179,
         379,
         383,
-        388
+        388,
+        455
       ],
       "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate secure, accessible native interactive knowledge graph with exact source/relation provenance (#383/#388), semantic/structural retrieval, bounded agent investigation, approved actions, efficient contexts, measured local-or-consented-remote model routing, provider outage/denial and privacy/revocation/cost tests. Optional Obsidian/Markdown portability #57/#171 is not a release gate."
     },
