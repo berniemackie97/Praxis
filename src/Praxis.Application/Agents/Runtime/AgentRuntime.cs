@@ -112,12 +112,13 @@ public sealed class AgentRuntime(
 
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText);
-        if (AgentClipRequest.Query(command) is { } clipQuery && registry.Definitions.Any(tool => tool.Name == MediaFindTool.ToolName))
+        if (registry.Definitions.Any(tool => tool.Name == MediaFindTool.ToolName) && ClipRequest(conversationId, command) is { } clipRequest)
         {
             RunState clipState = new(false, false);
             report("recalling_media", null, null);
             AgentToolOutput clips = await registry.InvokeAsync(new AgentToolCall(Guid.NewGuid().ToString("N"), MediaFindTool.ToolName,
-                ToolJson.Serialize(new { query = clipQuery, limit = 2, exactTopic = true })), context, cancellationToken);
+                ToolJson.Serialize(new { query = clipRequest.Query, sourceId = clipRequest.SourceId, limit = 2, exactTopic = true })),
+                context, cancellationToken);
             clipState.Withheld += clips.Withheld.Sum(item => item.Count);
             AgentCitation[] playable = clips.Citations.Where(citation => scope.MayDisclose(citation.SourceId) &&
                 (citation.PlaybackSourceId is not { } media || scope.MayDisclose(media))).ToArray();
@@ -128,12 +129,16 @@ public sealed class AgentRuntime(
                     ? "I couldn’t search your recordings just now. Try again in a moment."
                     : clipState.Withheld > 0
                         ? "No playable clip was available for this chat. Your privacy settings held back some recordings."
-                        : "I couldn’t find a playable clip for that topic in your Brain. Try another phrase, or add a recording with searchable captions.", clipState);
+                        : clipRequest.Refinement
+                            ? "I don’t have other clips on that topic beyond the ones I already showed. Try different words for the topic, or ask for the full video."
+                            : "I couldn’t find a playable clip for that topic in your Brain. Try another phrase, or add a recording with searchable captions.", clipState);
             }
 
             clipState.Citations.Wrap(clips with { Citations = playable });
-            return CompleteLocally(playable.Length == 1 ? "I found a matching clip in your Brain. [1]"
-                : "I found these matching clips in your Brain. [1] [2]", clipState);
+            string found = clipRequest.Refinement
+                ? playable.Length == 1 ? "Here’s a different clip on that topic. [1]" : "Here are different clips on that topic. [1] [2]"
+                : playable.Length == 1 ? "I found a matching clip in your Brain. [1]" : "I found these matching clips in your Brain. [1] [2]";
+            return CompleteLocally(found, clipState);
         }
 
         int historyBudget = Math.Min(bounds.CompactAfterCharacters, AgentContextPreset.HistoryCharacters(conversation.ContextPreset));
@@ -479,6 +484,33 @@ public sealed class AgentRuntime(
         AnswerVerifier.Check(text, state.ToolResults, userText, state.Citations.All.Count > 0, repaired);
 
     /// <summary>The transcript from the latest compaction summary onward.</summary>
+    /// <summary>
+    /// A direct clip request, or a request to replace clips already shown in this chat (re-run with the earlier topic; the
+    /// media tool skips the clips already cited). Null when the message is not about clips.
+    /// </summary>
+    private ClipLookup? ClipRequest(Guid conversationId, string command)
+    {
+        if (AgentClipRequest.Query(command) is { } query)
+        {
+            return new ClipLookup(query, null, false);
+        }
+
+        if (!AgentClipRequest.IsRefinement(command, out bool sameRecording))
+        {
+            return null;
+        }
+
+        // Look back over the recent turns (excluding this message) for the clip request and the clips it produced.
+        AgentMessage[] recent = conversations.ReadMessages(conversationId).SkipLast(1).TakeLast(16).Reverse().ToArray();
+        AgentCitation? lastClip = recent.SelectMany(message => message.Citations)
+            .FirstOrDefault(citation => citation.Locator.StartsWith(Praxis.Domain.Media.TimeLocator.Prefix, StringComparison.Ordinal));
+        string? previous = AgentClipRequest.PreviousQuery(recent.Where(message => message.Role == AgentRoles.User).Select(message => message.Content));
+        return lastClip is null || previous is null ? null
+            : new ClipLookup(previous, sameRecording ? lastClip.SourceId.ToString() : null, true);
+    }
+
+    private sealed record ClipLookup(string Query, string? SourceId, bool Refinement);
+
     private IReadOnlyList<AgentMessage> Transcript(Guid conversationId, IReadOnlyDictionary<string, string>? transient = null)
     {
         IReadOnlyList<AgentMessage> messages = conversations.ReadMessages(conversationId);

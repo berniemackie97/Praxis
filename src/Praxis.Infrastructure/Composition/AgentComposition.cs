@@ -46,7 +46,7 @@ public static class AgentComposition
             new SkillProposeTool(library),
             new KnowledgeSearchTool(catalog.Search, catalog.Embeddings, catalog.Models, embeddings, catalog.Knowledge, catalog.Policy),
             new KnowledgeOpenTool(catalog.Text, catalog.Sources, catalog.Originals, pdf, moments),
-            new MediaFindTool(retriever, moments, catalog.Sources),
+            new MediaFindTool(retriever, moments, catalog.Sources, catalog.Agents),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
             new KnowledgeProjectTool(catalog.Projects),
