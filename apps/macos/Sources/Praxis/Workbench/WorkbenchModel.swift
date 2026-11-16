@@ -85,7 +85,7 @@ final class WorkbenchModel: ObservableObject {
                 onExit: { [weak self] error in self?.workerExited(error: error) }
             )
             watchedInboxes = launch.watchedRoots
-            approvedRootIdentities = try WatchedFolderSettings.approvals(rootApprovals)
+            approvedRootIdentities = launch.rootApprovals
             running = true
             message = "Praxis started. Checking the approved Inbox; preserved sources remain available if it is offline."
             refresh()
@@ -372,8 +372,8 @@ final class WorkbenchModel: ObservableObject {
                 message = "Folder reapproved. Intake will reconcile its contents."
             } else {
                 for root in intakeRoots where root.status.state == "reapproval_required" {
-                    let current = WatchedFolderSettings.identity(URL(fileURLWithPath: root.path))
-                    if current != nil && current == approvedRootIdentities[root.path] {
+                    if WatchedFolderSettings.matches(approvedRootIdentities[root.path],
+                                                       folder: URL(fileURLWithPath: root.path)) {
                         send(.intakeApproveRoot, ["path": root.path])
                     }
                 }

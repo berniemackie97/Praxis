@@ -32,7 +32,7 @@ public sealed class WatchedFolderIntake
     private int requiresApproval;
     private long approvedCreationTicks;
 
-    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null, Action<string>? onStateTransition = null)
+    public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null, Action<string>? onStateTransition = null, bool requireInitialApproval = false)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -56,9 +56,18 @@ public sealed class WatchedFolderIntake
         }
 
         // Watcher events, scans and stored locators must agree on one spelling of the folder.
-        root = FileSystemPaths.Canonicalize(intakeDirectory);
+        root = requireInitialApproval ? Path.GetFullPath(intakeDirectory) : FileSystemPaths.Canonicalize(intakeDirectory);
         this.status = new IntakeStatusTracker(onStateTransition);
-        approvedCreationTicks = Directory.Exists(root) ? Directory.GetCreationTimeUtc(root).Ticks : 0;
+        requiresApproval = requireInitialApproval ? 1 : 0;
+        if (requireInitialApproval)
+        {
+            this.status.SetState(Directory.Exists(root) ? "reapproval_required" : "offline",
+                Directory.Exists(root) ? "Confirm this folder before resuming intake." : OfflineProblem);
+        }
+        else
+        {
+            approvedCreationTicks = Directory.Exists(root) ? Directory.GetCreationTimeUtc(root).Ticks : 0;
+        }
         this.sharedScanLock = sharedScanLock;
         report = status ?? (_ => { });
         notifyCaptured = onCaptured ?? (() => { });

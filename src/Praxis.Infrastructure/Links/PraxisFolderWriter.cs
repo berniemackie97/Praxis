@@ -10,7 +10,7 @@ namespace Praxis.Infrastructure.Links;
 /// owner-only) and captures it at once, so it becomes a source with provenance like anything the
 /// owner drops there.
 /// </summary>
-internal sealed class PraxisFolderWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory, string folderName)
+internal sealed class PraxisFolderWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory, string folderName, Action? ensureInboxApproved)
 {
     private const long MaximumBytes = 16 * 1024 * 1024;
     private readonly FileSourceIntake intake = new(originals, catalogDirectory);
@@ -22,6 +22,7 @@ internal sealed class PraxisFolderWriter(IOriginalStore originals, string catalo
             throw new ArgumentException("The file is too large or its type is invalid.");
         }
 
+        ensureInboxApproved?.Invoke();
         string root = intake.ValidateSourcePath(intakeDirectory, expectDirectory: true);
         string folder = Path.Combine(root, folderName);
         Directory.CreateDirectory(folder);

@@ -33,6 +33,81 @@ enum WorkerFixture {
 @MainActor
 @Suite("Bundled worker transport")
 struct WorkerSessionTests {
+    @Test("A pending Primary Inbox cannot capture or receive writes; other roots keep working")
+    func pendingInbox() async throws {
+        let files = FileManager.default
+        let fixture = CanonicalPath.of(files.temporaryDirectory.path)
+            .appendingPathComponent("praxis-pending-\(UUID().uuidString)")
+        let catalog = fixture.appendingPathComponent("Catalog")
+        let inbox = fixture.appendingPathComponent("Inbox")
+        let secondary = fixture.appendingPathComponent("Secondary")
+        defer { try? files.removeItem(at: fixture) }
+        for directory in [catalog, inbox, secondary] {
+            try files.createDirectory(at: directory, withIntermediateDirectories: true,
+                                      attributes: [.posixPermissions: 0o700])
+        }
+        let filesInInbox = ["fixture.md"]
+        try "PraxisPendingPrimary".write(to: inbox.appendingPathComponent(filesInInbox[0]),
+                                        atomically: true, encoding: .utf8)
+        try "PraxisHealthySecondary".write(to: secondary.appendingPathComponent("fixture.md"),
+                                           atomically: true, encoding: .utf8)
+
+        let session = WorkerSession()
+        var exited = false
+        func start() throws {
+            exited = false
+            try session.start(executable: URL(fileURLWithPath: try #require(WorkerFixture.dotnetPath)),
+                              arguments: [try #require(WorkerFixture.workerPath), "--data-root", catalog.path,
+                                          "--intake-pending", inbox.path,
+                                          "--intake", secondary.path, "--stdio"],
+                              onDiagnostic: { _ in }, onExit: { _ in exited = true })
+        }
+        defer { session.stop() }
+
+        func request(_ action: String, _ fields: [String: Any] = [:]) async throws -> WorkerResponse {
+            var response: WorkerResponse?
+            try session.send(action, fields: fields) { response = $0 }
+            try await waitFor(action) { response != nil }
+            return try #require(response)
+        }
+
+        func waitForHit(_ term: String) async throws {
+            let deadline = ContinuousClock.now + .seconds(15)
+            while try await request("search", ["query": term]).data?.hits?.isEmpty != false {
+                guard ContinuousClock.now < deadline else { throw Failure.timeout(term) }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+
+        try start()
+        let status = try await request("intakeStatus")
+        #expect(status.data?.roots?.first?.path == inbox.path)
+        #expect(status.data?.roots?.first?.status.state == "reapproval_required")
+        try await waitForHit("PraxisHealthySecondary")
+        let excluded = try await request("search", ["query": "PraxisPendingPrimary"])
+        #expect(excluded.data?.hits?.isEmpty == true)
+        let denied = try await request("noteCapture", ["captureId": UUID().uuidString, "text": "Must not write"])
+        #expect(denied.error?.contains("requires folder reapproval") == true)
+        let deniedLink = try await request("saveLink", ["url": "https://example.invalid", "title": "Must not write"])
+        #expect(deniedLink.error?.contains("requires folder reapproval") == true)
+        #expect(try files.contentsOfDirectory(atPath: inbox.path) == filesInInbox)
+
+        let approval = try await request("intakeApproveRoot", ["path": inbox.path])
+        #expect(approval.ok)
+        try await waitForHit("PraxisPendingPrimary")
+        session.stop()
+        try await waitFor("pending Inbox worker exit") { exited }
+
+        try start()
+        // Previously captured originals and index results survive later loss of approval.
+        let preserved = try await request("search", ["query": "PraxisPendingPrimary"])
+        #expect(preserved.data?.hits?.count == 1)
+        let restarted = try await request("intakeStatus")
+        #expect(restarted.data?.roots?.first?.status.state == "reapproval_required")
+        session.stop()
+        try await waitFor("restarted worker exit") { exited }
+    }
+
     @Test("Capture, search, typed replies, denied requests, restart and malformed responses")
     func workerTransport() async throws {
         let executable = URL(fileURLWithPath: try #require(WorkerFixture.dotnetPath))

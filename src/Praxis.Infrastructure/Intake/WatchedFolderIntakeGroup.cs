@@ -20,7 +20,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
     public WatchedFolderIntakeGroup(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, IReadOnlyList<string> approvedRoots,
         Action<string>? status = null, Action? onCaptured = null,
         TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, TimeProvider? clock = null,
-        IIntakeIncidentJournal? incidents = null)
+        IIntakeIncidentJournal? incidents = null, IReadOnlySet<string>? pendingRoots = null)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(originals);
@@ -32,7 +32,7 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
         }
 
         string dataRoot = FileSystemPaths.Canonicalize(catalogDirectory);
-        List<string> roots = new(approvedRoots.Count);
+        List<(string Path, bool Pending)> roots = new(approvedRoots.Count);
         foreach (string candidate in approvedRoots)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
@@ -41,25 +41,28 @@ public sealed class WatchedFolderIntakeGroup : IIntakeSupervisor
                 throw new ArgumentException("Every approved intake directory must be absolute.", nameof(approvedRoots));
             }
 
-            string path = FileSystemPaths.Canonicalize(candidate);
+            bool pending = pendingRoots?.Contains(candidate) == true;
+            // Pending paths identify the original configured location. Do not follow a
+            // replacement link and accidentally register its target as a watched folder.
+            string path = pending ? Path.GetFullPath(candidate) : FileSystemPaths.Canonicalize(candidate);
             if (PathScope.Contains(dataRoot, path) || PathScope.Contains(path, dataRoot) ||
-                roots.Any(existing => PathScope.Contains(existing, path) || PathScope.Contains(path, existing)))
+                roots.Any(existing => PathScope.Contains(existing.Path, path) || PathScope.Contains(path, existing.Path)))
             {
                 throw new ArgumentException("Watched folders cannot overlap each other or the private catalog.", nameof(approvedRoots));
             }
 
-            if (Directory.Exists(candidate) && (File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
+            if (!pending && Directory.Exists(candidate) && (File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
             {
                 throw new ArgumentException("An approved watched folder cannot be a symbolic link.", nameof(approvedRoots));
             }
 
-            roots.Add(path);
+            roots.Add((path, pending));
         }
 
         SemaphoreSlim sharedScanLock = new(1, 1);
-        monitors = roots.Select(path => new WatchedFolderIntake(sources, originals, catalogDirectory, path, quietPeriod, rescanInterval,
+        monitors = roots.Select(root => new WatchedFolderIntake(sources, originals, catalogDirectory, root.Path, quietPeriod, rescanInterval,
             status, onCaptured, sharedScanLock, clock,
-            state => incidents?.RecordState(path, state))).ToArray();
+            state => incidents?.RecordState(root.Path, state), requireInitialApproval: root.Pending)).ToArray();
     }
 
     public IReadOnlyList<string> AvailableRoots() =>

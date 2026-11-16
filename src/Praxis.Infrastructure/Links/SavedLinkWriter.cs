@@ -9,10 +9,10 @@ namespace Praxis.Infrastructure.Links;
 /// Saves a link the owner asked for as a standard <c>.webloc</c> file in "Praxis Links" inside the
 /// primary intake folder, so it is a real file the owner can open in a browser, and captures it.
 /// </summary>
-public sealed class SavedLinkWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory) : ISavedLinkWriter
+public sealed class SavedLinkWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory, Action? ensureInboxApproved = null) : ISavedLinkWriter
 {
     public const string FolderName = "Praxis Links";
-    private readonly PraxisFolderWriter writer = new(originals, catalogDirectory, intakeDirectory, FolderName);
+    private readonly PraxisFolderWriter writer = new(originals, catalogDirectory, intakeDirectory, FolderName, ensureInboxApproved);
 
     public Task<string> SaveAsync(Uri url, string? title, CancellationToken cancellationToken)
     {

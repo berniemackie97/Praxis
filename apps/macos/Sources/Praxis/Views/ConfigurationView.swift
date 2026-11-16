@@ -77,7 +77,7 @@ struct ConfigurationView: View {
             } header: {
                 Text("Watched folders").font(.sectionTitle).frame(maxWidth: .infinity, alignment: .leading).padding(.top, Spacing.l)
             } footer: {
-                Text("Captured originals stay preserved when a folder disappears. A reconnected or replaced folder isn't scanned until its identity is confirmed.")
+                Text("Your catalog stays available while a watched folder is paused. If the folder changed, reapprove it here or stop Praxis to choose another folder.")
                     .font(.meta).foregroundStyle(.secondary)
             }
 
@@ -106,6 +106,8 @@ struct ConfigurationView: View {
         picker.canChooseDirectories = true
         picker.canChooseFiles = false
         picker.allowsMultipleSelection = false
+        picker.message = "Select this watched folder to resume intake: \(path)"
+        picker.directoryURL = URL(fileURLWithPath: path).deletingLastPathComponent()
         guard picker.runModal() == .OK, let selected = picker.url else { return }
         let actual = CanonicalPath.of(selected.path)
         guard actual.path == path, let identity = WatchedFolderSettings.identity(actual) else {

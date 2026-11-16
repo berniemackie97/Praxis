@@ -23,8 +23,8 @@ enum CanonicalPath {
     }
 }
 
-/// Owner-selected folder identity captured by Foundation; changing device or inode requires
-/// a new explicit choice, even when the filesystem path has been reused.
+/// Bind approval to a directory on a persistent volume, not to the kernel's temporary
+/// mount number. A replacement at the same path still has to be approved.
 enum WatchedFolderSettings {
     static func folders(_ value: String) throws -> [String] {
         try JSONDecoder().decode([String].self, from: Data(value.utf8))
@@ -39,11 +39,35 @@ enum WatchedFolderSettings {
     }
 
     static func identity(_ url: URL) -> String? {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let device = attributes[.systemNumber] as? NSNumber,
-              let inode = attributes[.systemFileNumber] as? NSNumber else {
-            return nil
+        signatures(url)?.current
+    }
+
+    static func matches(_ approval: String?, folder url: URL) -> Bool {
+        guard let approval, let signatures = signatures(url) else { return false }
+        return approval == signatures.current || approval == signatures.legacy
+    }
+
+    private static func signatures(_ url: URL) -> (current: String, legacy: String)? {
+        guard CanonicalPath.of(url.path).path == url.path else { return nil }
+        var before = stat()
+        guard lstat(url.path, &before) == 0,
+              before.st_mode & S_IFMT == S_IFDIR, before.st_ino != 0 else { return nil }
+
+        let legacy = "\(UInt32(bitPattern: before.st_dev)):\(before.st_ino)"
+        guard let uuid = (try? url.resourceValues(forKeys: [.volumeUUIDStringKey]))?.volumeUUIDString,
+              let volume = UUID(uuidString: uuid), before.st_birthtimespec.tv_sec > 0 else {
+            // Filesystems without a persistent volume or creation identity retain the stricter
+            // mount-specific approval. Do not turn a legacy match into a persistent grant.
+            return (legacy, legacy)
         }
-        return "\(device.uint64Value):\(inode.uint64Value)"
+
+        var after = stat()
+        guard lstat(url.path, &after) == 0, before.st_dev == after.st_dev,
+              before.st_ino == after.st_ino, before.st_mode & S_IFMT == after.st_mode & S_IFMT,
+              before.st_birthtimespec.tv_sec == after.st_birthtimespec.tv_sec,
+              before.st_birthtimespec.tv_nsec == after.st_birthtimespec.tv_nsec else { return nil }
+
+        let birth = "\(before.st_birthtimespec.tv_sec):\(before.st_birthtimespec.tv_nsec)"
+        return ("volume:\(volume.uuidString):\(before.st_ino):\(birth)", legacy)
     }
 }

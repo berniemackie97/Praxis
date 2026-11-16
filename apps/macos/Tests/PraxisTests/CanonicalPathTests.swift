@@ -36,10 +36,18 @@ struct CanonicalPathTests {
         defer { try? FileManager.default.removeItem(at: selected) }
         let canonical = CanonicalPath.of(selected.path)
         let identity = try #require(WatchedFolderSettings.identity(canonical))
-        #expect(identity == WatchedFolderSettings.identity(canonical))
+        #expect(identity.hasPrefix("volume:"))
+        let note = selected.appendingPathComponent("note.md")
+        let sorted = selected.appendingPathComponent("Sorted")
+        try Data("test note".utf8).write(to: note)
+        try FileManager.default.createDirectory(at: sorted, withIntermediateDirectories: false)
+        try FileManager.default.moveItem(at: note, to: sorted.appendingPathComponent("note.md"))
+        #expect(WatchedFolderSettings.matches(identity, folder: canonical))
+        let wrongVolume = "volume:\(UUID().uuidString):" + identity.split(separator: ":").dropFirst(2).joined(separator: ":")
+        #expect(!WatchedFolderSettings.matches(wrongVolume, folder: canonical))
     }
 
-    @Test func approvedFoldersLaunchAndUnapprovedOrReplacedFoldersFailClosed() throws {
+    @Test func existingCatalogOpensWithPendingIntakeButSetupStillRequiresApproval() throws {
         let files = FileManager.default
         let parent = files.temporaryDirectory.appendingPathComponent("praxis-launch-\(UUID().uuidString)")
         let source = parent.appendingPathComponent("inbox")
@@ -65,15 +73,16 @@ struct CanonicalPathTests {
             }
         }
 
-        expectDenied(.approvalRequired) {
-            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
-                additionalInboxes: "[]", rootApprovals: "{}", initialize: false,
+        func prepare(_ saved: String, initialize: Bool = false) throws -> WorkerLaunch {
+            try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
+                additionalInboxes: "[]", rootApprovals: saved, initialize: initialize,
                 dotnetExecutable: "/usr/bin/true")
         }
-        expectDenied(.approvalRequired) {
-            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
-                additionalInboxes: "[]", rootApprovals: WatchedFolderSettings.encode([sourcePath: "untrusted"]),
-                initialize: false, dotnetExecutable: "/usr/bin/true")
+
+        expectDenied(.approvalRequired) { _ = try prepare("{}", initialize: true) }
+        for saved in ["{}", "corrupt", WatchedFolderSettings.encode([sourcePath: "untrusted"])] {
+            let pending = try prepare(saved)
+            #expect(pending.arguments.suffix(3) == ["--intake-pending", sourcePath, "--stdio"])
         }
         expectDenied(.overlappingPaths) {
             _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
@@ -90,17 +99,17 @@ struct CanonicalPathTests {
             additionalInboxes: "[]", rootApprovals: approvals,
             initialize: false, dotnetExecutable: "/usr/bin/true")
         #expect(launch.executable.path == "/usr/bin/true")
-        #expect(launch.watchedRoots.map(\.path) == [sourcePath])
-        #expect(launch.arguments.contains(sourcePath))
+        #expect(launch.arguments.suffix(3) == ["--intake", sourcePath, "--stdio"])
 
         let moved = parent.appendingPathComponent("moved")
         try files.moveItem(at: source, to: moved)
         try files.createDirectory(at: source, withIntermediateDirectories: false, attributes: privateMode)
-        expectDenied(.approvalRequired) {
-            _ = try WorkerLaunch.prepare(dataRoot: catalog.path, inbox: sourcePath,
-                additionalInboxes: "[]", rootApprovals: approvals,
-                initialize: false, dotnetExecutable: "/usr/bin/true")
-        }
-    }
+        let pending = try prepare(approvals)
+        #expect(pending.arguments.suffix(3) == ["--intake-pending", sourcePath, "--stdio"])
 
+        try files.removeItem(at: source)
+        try files.createSymbolicLink(at: source, withDestinationURL: catalog)
+        let linked = try prepare(approvals)
+        #expect(linked.arguments.suffix(3) == ["--intake-pending", sourcePath, "--stdio"])
+    }
 }
