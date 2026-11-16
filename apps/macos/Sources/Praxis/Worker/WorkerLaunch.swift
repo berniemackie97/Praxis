@@ -3,8 +3,8 @@ import Foundation
 struct WorkerLaunch {
     let executable: URL
     let arguments: [String]
-    let inbox: URL
     let watchedRoots: [URL]
+    let rootApprovals: [String: String]
 
     static func prepare(
         dataRoot: String, inbox: String, additionalInboxes: String,
@@ -12,9 +12,14 @@ struct WorkerLaunch {
     ) throws -> WorkerLaunch {
         let data = CanonicalPath.of(dataRoot)
         let additional = try WatchedFolderSettings.folders(additionalInboxes)
-        let approvals = try WatchedFolderSettings.approvals(rootApprovals)
-        let roots = ([inbox] + additional).map(CanonicalPath.of)
-        guard roots.count >= 1 && roots.count <= 4 else { throw LaunchError.invalidRoots }
+        let approvals = (try? WatchedFolderSettings.approvals(rootApprovals)) ?? [:]
+        let paths = [inbox] + additional
+        guard paths.count <= 4, paths.allSatisfy({ path in
+            path.hasPrefix("/") && !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." })
+        }) else { throw LaunchError.invalidRoots }
+        // Stored selections are already canonical. Do not resolve a newly introduced link
+        // here, or use URL.standardizedFileURL, which strips /private on macOS.
+        let roots = paths.map { URL(fileURLWithPath: $0) }
         for (index, root) in roots.enumerated() {
             guard !data.pathComponents.starts(with: root.pathComponents),
                   !root.pathComponents.starts(with: data.pathComponents),
@@ -24,23 +29,15 @@ struct WorkerLaunch {
                   }) else {
                 throw LaunchError.overlappingPaths
             }
-
-            guard approvals[root.path] != nil else { throw LaunchError.approvalRequired }
-            var directory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: root.path, isDirectory: &directory) {
-                guard directory.boolValue,
-                      let identity = WatchedFolderSettings.identity(root),
-                      approvals[root.path] == identity else {
-                    throw LaunchError.approvalRequired
-                }
-            }
         }
 
         let files = FileManager.default
+        let approvedRoots = roots.map { WatchedFolderSettings.matches(approvals[$0.path], folder: $0) }
         if initialize {
             guard roots.allSatisfy({ files.fileExists(atPath: $0.path) }) else {
                 throw LaunchError.missingInbox
             }
+            guard approvedRoots.allSatisfy({ $0 }) else { throw LaunchError.approvalRequired }
             if !files.fileExists(atPath: data.path) {
                 try files.createDirectory(at: data, withIntermediateDirectories: false,
                                           attributes: [.posixPermissions: 0o700])
@@ -67,9 +64,8 @@ struct WorkerLaunch {
         return WorkerLaunch(
             executable: URL(fileURLWithPath: executable),
             arguments: [worker.path, "--data-root", data.path] +
-                roots.flatMap { ["--intake", $0.path] } + ["--stdio"],
-            inbox: roots[0],
-            watchedRoots: roots
+                zip(roots, approvedRoots).flatMap { [$0.1 ? "--intake" : "--intake-pending", $0.0.path] } + ["--stdio"],
+            watchedRoots: roots, rootApprovals: approvals
         )
     }
 
@@ -81,7 +77,7 @@ struct WorkerLaunch {
             switch self {
             case .overlappingPaths: "Catalog and watched folders must not overlap."
             case .invalidRoots: "Select between one and four watched folders."
-            case .approvalRequired: "A watched folder identity changed or has not been approved. Re-select the folder before starting."
+            case .approvalRequired: "Confirm each watched folder to finish setup."
             case .missingInbox: "Choose an available Inbox for first-time setup."
             case .missingCatalog: "The configured catalog is missing. Reconnect or restore it."
             case .missingWorker: "Praxis.Worker.dll is missing from the app bundle."

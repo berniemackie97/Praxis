@@ -57,7 +57,9 @@ First-run path selection is explicit. Choose a parent folder for a new private `
 
 After launching, drop Markdown, UTF-8 text, and an unsupported binary into the selected Inbox without issuing an import command. Verify that the Library shows separate source identities, version, byte length, SHA-256 and supported/unsupported extraction outcomes. Search a known term; inspect a source-backed preview; verify the stored original. Modify the text and check revision behavior after reconciliation. Exit and relaunch to check durable identity and search.
 
-A watched root that disconnects after launch is handled by the worker's existing offline/retry logic; source originals are retained. Real unplug/reconnect identity, overflow and intermittent-write testing remain open (#105/#130).
+On volumes that report a persistent UUID, folder approval uses that UUID plus the directory's file ID and creation time. A drive can remount with a different temporary device number, and sorting files within the approved folder does not change this identity. Older approvals contain only the device number and file ID. If an old approval no longer matches, confirm the folder once in **Settings → General → Watched folders** to record the current identity.
+
+An existing catalog opens even if an Inbox is offline or needs approval. Only that folder's intake waits; other approved folders and preserved sources stay available. Writes that require the primary Inbox wait for its approval. Praxis never follows a replacement link or grants a new folder access based on its path alone.
 
 ## Offline catalog recovery
 

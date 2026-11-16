@@ -5,8 +5,13 @@ struct QuickNoteView: View {
     @FocusState private var bodyFocused: Bool
 
     private static let limit = 8_000
+    private var inboxNeedsAttention: Bool {
+        guard let state = model.intakeRoots.first?.status.state else { return false }
+        return state == "offline" || state == "reapproval_required"
+    }
+
     private var canSave: Bool {
-        !model.savingNote && !model.noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !inboxNeedsAttention && !model.savingNote && !model.noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             model.noteText.count <= Self.limit && model.noteTitle.count <= 80
     }
 
@@ -41,6 +46,16 @@ struct QuickNoteView: View {
                 .frame(maxWidth: .infinity)
             }
             Divider()
+            if inboxNeedsAttention {
+                HStack {
+                    Text("Quick Notes need your Primary Inbox. Your draft is still here.")
+                        .font(.callout)
+                    Spacer()
+                    Button("Open Folder Settings") { SettingsOpener.open(.general) }
+                }
+                .padding(.horizontal, Spacing.l)
+                .padding(.vertical, Spacing.s)
+            }
             HStack(spacing: Spacing.m) {
                 Label("Saved as a private Markdown original in your Inbox. Nothing reads your clipboard or goes to a model.", systemImage: "lock")
                     .font(.meta).foregroundStyle(.secondary).lineLimit(2)

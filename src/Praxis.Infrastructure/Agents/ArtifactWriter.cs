@@ -11,7 +11,7 @@ namespace Praxis.Infrastructure.Agents;
 /// (atomic replace, owner-only permissions) and captures it, so each write is a source revision
 /// with provenance like any other note.
 /// </summary>
-public sealed class ArtifactWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory) : IArtifactWriter
+public sealed class ArtifactWriter(IOriginalStore originals, string catalogDirectory, string intakeDirectory, Action? ensureInboxApproved = null) : IArtifactWriter
 {
     private const int MaximumBytes = 256 * 1024;
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -31,6 +31,7 @@ public sealed class ArtifactWriter(IOriginalStore originals, string catalogDirec
             throw new ArgumentException("The artifact is too large.");
         }
 
+        ensureInboxApproved?.Invoke();
         string root = intake.ValidateSourcePath(intakeDirectory, expectDirectory: true);
         string folder = Path.Combine(root, "Praxis Artifacts");
         Directory.CreateDirectory(folder);

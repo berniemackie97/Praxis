@@ -83,7 +83,7 @@ internal static class WorkerServiceRegistration
             status: Report(provider, "Praxis.Processing"),
             clock: provider.GetRequiredService<TimeProvider>(),
             models: provider.GetRequiredService<IVerifierModelFactory>(),
-            linkSnapshots: new LinkSnapshotWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot)));
+            linkSnapshots: new LinkSnapshotWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot, RequirePrimaryInbox(provider))));
         services.AddSingleton<VerificationApproval>();
         services.AddSingleton<VerificationProviderConfiguration>();
         services.AddSingleton<IModelToolDetector, ModelToolDetector>();
@@ -111,9 +111,9 @@ internal static class WorkerServiceRegistration
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
         services.AddSingleton(_ => new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) });
-        services.AddSingleton<ISavedLinkWriter>(provider => new SavedLinkWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
+        services.AddSingleton<ISavedLinkWriter>(provider => new SavedLinkWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot, RequirePrimaryInbox(provider)));
         services.AddSingleton<ILinkRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Links);
-        services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
+        services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot, RequirePrimaryInbox(provider)));
         services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
             provider.GetRequiredService<ISecretStore>(), RelayCommand(), Path.GetTempPath()));
         services.AddSingleton(provider => AgentComposition.Capabilities(provider.GetRequiredService<SqliteCatalog>()));
@@ -133,7 +133,7 @@ internal static class WorkerServiceRegistration
             options.IntakeRoots, status: Report(provider, "Praxis.Intake"),
             onCaptured: provider.GetRequiredService<ProcessingPipeline>().Wake,
             clock: provider.GetRequiredService<TimeProvider>(),
-            incidents: provider.GetRequiredService<IIntakeIncidentJournal>()));
+            incidents: provider.GetRequiredService<IIntakeIncidentJournal>(), pendingRoots: options.PendingIntakeRoots));
         services.AddSingleton<IIntakeSupervisor>(provider => provider.GetRequiredService<WatchedFolderIntakeGroup>());
         services.AddSingleton<IQuickNoteCapture>(provider => new QuickNoteCapture(
             provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
@@ -174,6 +174,10 @@ internal static class WorkerServiceRegistration
         services.AddHostedService<ProjectUnderstandingService>();
         return services;
     }
+
+    // Resolve at the point of writing: the intake supervisor itself wakes the processing pipeline.
+    private static Action RequirePrimaryInbox(IServiceProvider provider) =>
+        () => provider.GetRequiredService<IIntakeSupervisor>().EnsurePrimaryRootApproved();
 
     /// <summary>How CLI agents launch this worker as their Praxis MCP relay (apphost, or dotnet plus the worker assembly).</summary>
     private static AgentRelayCommand RelayCommand()
