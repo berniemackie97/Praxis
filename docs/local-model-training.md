@@ -19,4 +19,18 @@ Example of an eligible synthetic training row:
 {"messages":[{"role":"user","content":"Does the attached procedure say to unplug the device first?"},{"role":"assistant","content":"The excerpt does not say. I need the safety section or a source that covers that step."}]}
 ```
 
+## Praxis Chat G1 candidate staging (#483)
+
+The first importer is [scripts/training/curate_chat.py](../scripts/training/curate_chat.py). It admits only the Hugging Face-reviewed **safe** Tulu 3 Personas Parquet file at revision `76c414d` with SHA-256 `19a16c5f1649d367f69899b3cfadbbeb5ffef91f24e20c6617588bdd87cd3e60` (ODC-BY). It never clones repositories, runs dataset-supplied scripts or downloads other dataset files. [Source and file scan](https://huggingface.co/datasets/allenai/tulu-3-sft-personas-instruction-following/tree/main/data).
+
+Use a workspace outside the repository and watched intake folders. Parquet conversion requires `pyarrow` in the chosen Python environment:
+
+```bash
+python3 -m unittest discover -s scripts/training -p 'test_*.py'
+python3 scripts/training/curate_chat.py fetch --workspace "$PRAXIS_TRAINING_DATA"
+python3 scripts/training/curate_chat.py curate --workspace "$PRAXIS_TRAINING_DATA" --limit 2000
+```
+
+`raw/` contains the verified source; `candidates/` contains split conversation JSONL, a separate row-level provenance map and a digest manifest explicitly marked **unreviewed**. Repeating the same output name fails rather than overwriting. Selection is deterministic, but this first slice does not check near-duplicates, personally identifying content, model-specific token lengths, upstream authorizations beyond the declared dataset license, or factual correctness. Its small internal test split is **not** the independent golden evaluation gate (#311). No files are training-approved until quality, rights and leakage review; tool-convention conversion (Hermes), broader datasets and preference training are separate slices.
+
 No training or export of private data has been run. The next input is a reviewed example set and a held-out acceptance set, not a copy of the Inbox.

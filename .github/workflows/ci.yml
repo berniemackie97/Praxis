@@ -91,5 +91,7 @@ jobs:
         if: matrix.os == 'Linux'
       - run: python3 -m unittest discover -s scripts/research -p 'test_*.py' -v
         if: matrix.os == 'Linux'
+      - run: python3 -m unittest discover -s scripts/training -p 'test_*.py' -v
+        if: matrix.os == 'Linux'
       - run: python3 scripts/research/local_catalog_probe.py
         if: matrix.os == 'Linux'
