@@ -25,6 +25,19 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("retrieval", items[451]["area"])
         self.assertEqual(436, items[433]["parent"])
         self.assertEqual(433, items[437]["parent"])
+        self.assertEqual(383, items[455]["parent"])
+        self.assertEqual(383, items[456]["parent"])
+        self.assertEqual(97, items[463]["parent"])
+        self.assertEqual(("M3", "P1", "knowledge"),
+                         (items[455]["stage"], items[455]["priority"], items[455]["area"]))
+        self.assertEqual(("M3", "P1", "clients"),
+                         (items[456]["stage"], items[456]["priority"], items[456]["area"]))
+        self.assertEqual(("M5", "P1", "intelligence"),
+                         (items[463]["stage"], items[463]["priority"], items[463]["area"]))
+        self.assertEqual({455}, dependencies[456])
+        self.assertEqual({387}, dependencies[455])
+        self.assertIn(455, self.plan["delivery_lanes"][6]["issues"])
+        self.assertIn(463, self.plan["delivery_lanes"][2]["issues"])
         self.assertEqual({431, 432, 143}, dependencies[440])
         self.assertEqual({106, 316, 311}, dependencies[451])
         self.assertEqual({324, 316, 353}, dependencies[452])
