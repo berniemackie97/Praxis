@@ -22,7 +22,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual(293, items[507]["parent"])
         self.assertEqual(("M5", "P1", "knowledge"),
                          (items[507]["stage"], items[507]["priority"], items[507]["area"]))
-        self.assertEqual({306, 115, 116}, dependencies[314])
+        self.assertEqual({306, 115, 116, 507}, dependencies[314])
         self.assertEqual({314, 507}, dependencies[315])
         self.assertNotIn(315, dependencies[314])
         self.assertIn(507, self.plan["delivery_lanes"][6]["issues"])
