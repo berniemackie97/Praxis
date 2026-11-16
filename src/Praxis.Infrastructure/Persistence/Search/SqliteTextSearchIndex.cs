@@ -29,7 +29,10 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
     public IReadOnlyList<SearchHit> QueryPassages(string query, int limit, bool anyTerm = false) =>
         Run(BuildTextQuery(query, anyTerm ? " OR " : " AND "), limit, null, snippetColumn: 1);
 
-    private IReadOnlyList<SearchHit> Run(string expression, int limit, Guid? collectionId, int snippetColumn = -1)
+    public IReadOnlyList<SearchHit> QueryTimedText(string query, int limit, Guid? collectionId, bool anyTerm) =>
+        Run(BuildTextQuery(query, anyTerm ? " OR " : " AND "), limit, collectionId, snippetColumn: 1, timedOnly: true);
+
+    private IReadOnlyList<SearchHit> Run(string expression, int limit, Guid? collectionId, int snippetColumn = -1, bool timedOnly = false)
     {
         if (limit is < 1 or > 100)
         {
@@ -58,6 +61,10 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                        AND j.processor_key = d.processor_key AND j.state = 'completed'
                                                                    WHERE text_search MATCH $query
                                                                      AND s.status = 'active'
+                                                                     AND ($timedOnly = 0 OR lower(s.locator) GLOB '*.vtt'
+                                                                          OR lower(s.locator) GLOB '*.srt' OR EXISTS (
+                                                                             SELECT 1 FROM text_timings timings WHERE timings.item_id = d.item_id
+                                                                                 AND timings.revision = d.revision AND timings.processor_key = d.processor_key))
                                                                      AND ($collection IS NULL OR EXISTS (
                                                                                      SELECT 1 FROM source_collection_memberships membership
                                                                                      JOIN source_collections scope ON scope.collection_id = membership.collection_id
@@ -73,6 +80,7 @@ public sealed class SqliteTextSearchIndex : ITextSearchIndex
                                                                    """);
             command.CommandTimeout = 5;
             command.Parameters.AddWithValue("$snippetColumn", snippetColumn);
+            command.Parameters.AddWithValue("$timedOnly", timedOnly ? 1 : 0);
             command.Parameters.AddWithValue("$query", expression);
             command.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
             command.Parameters.AddWithValue("$limit", limit);

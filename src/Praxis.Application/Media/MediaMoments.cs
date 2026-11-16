@@ -28,7 +28,7 @@ public sealed class MediaMoments(ITextDerivativeRepository text, MediaEvidence? 
     public bool IsMedia(SearchHit hit) => Timeline(hit.ItemId, hit.Revision, hit.SourceLocator, hit.SourceId) is not null;
 
     /// <summary>The best non-overlapping moments for <paramref name="query"/> in one source, most relevant first.</summary>
-    public IReadOnlyList<MediaMoment> Locate(SearchHit hit, string query, int maximum)
+    public IReadOnlyList<MediaMoment> Locate(SearchHit hit, string query, int maximum, bool exactTopic = false)
     {
         if (Timeline(hit.ItemId, hit.Revision, hit.SourceLocator, hit.SourceId) is not { } timeline)
         {
@@ -36,7 +36,7 @@ public sealed class MediaMoments(ITextDerivativeRepository text, MediaEvidence? 
         }
 
         string[] terms = Terms(query);
-        int? anchor = SnippetAnchor(timeline, hit.Snippet);
+        int? anchor = exactTopic ? null : SnippetAnchor(timeline, hit.Snippet);
         List<(int First, int Last, double Score)> windows = [];
         for (int first = 0; first < timeline.Spans.Count; first++)
         {
@@ -136,7 +136,9 @@ public sealed class MediaMoments(ITextDerivativeRepository text, MediaEvidence? 
         int index = 0;
         while ((index = text.IndexOf(stem, index, StringComparison.OrdinalIgnoreCase)) >= 0)
         {
-            if (index == 0 || !char.IsLetterOrDigit(text[index - 1]))
+            int end = index + stem.Length;
+            if ((index == 0 || !char.IsLetterOrDigit(text[index - 1])) &&
+                (stem.Length > 3 || end == text.Length || !char.IsLetterOrDigit(text[end])))
             {
                 return true;
             }

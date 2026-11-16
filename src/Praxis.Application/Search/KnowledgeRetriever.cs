@@ -21,6 +21,12 @@ public sealed class KnowledgeRetriever(ITextSearchIndex lexical, ISemanticVector
         return hits.Count > 0 ? (hits, mode) : (lexical.RetainCurrent(lexical.QueryAny(query, limit, collection), collection), "partial");
     }
 
+    public IReadOnlyList<SearchHit> SearchTimedText(string query, int limit, Guid? collection)
+    {
+        IReadOnlyList<SearchHit> hits = lexical.RetainCurrent(lexical.QueryTimedText(query, limit, collection, anyTerm: false), collection);
+        return hits.Count > 0 ? hits : lexical.RetainCurrent(lexical.QueryTimedText(query, limit, collection, anyTerm: true), collection);
+    }
+
     private async Task<(IReadOnlyList<SearchHit> Hits, string Mode)> AllTermsAsync(string query, int limit, Guid? collection, CancellationToken cancellationToken)
     {
         if (profiles.Get(ModelProfile.LocalEmbedding) is { Enabled: true } profile)

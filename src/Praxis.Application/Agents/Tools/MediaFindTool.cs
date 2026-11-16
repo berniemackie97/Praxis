@@ -16,16 +16,18 @@ namespace Praxis.Application.Agents.Tools;
 /// </summary>
 public sealed class MediaFindTool(KnowledgeRetriever retriever, MediaMoments moments, ISourceRepository sources) : IAgentTool
 {
-    public AgentToolDefinition Definition { get; } = new("media_find",
+    public const string ToolName = "media_find";
+
+    public AgentToolDefinition Definition { get; } = new(ToolName,
         """
-        Find moments in the owner's videos, recordings and linked online videos where something is said or shown in speech. Returns clips
+        Find moments in the owner's videos, recordings and linked online videos where something is said. Returns clips
         (sourceId, start/end seconds, transcript text) cited with time:START-END locators; the owner sees each cited clip as a player in
         chat and can expand it to the full video. Give query to find moments (optionally within one sourceId); give only sourceId to get the
         whole recording. Cite the clips you mean with [n]. Do not describe what is on screen; you only see the transcript.
         """,
         ToolArguments.Schema("""
             {"type":"object","properties":{"query":{"type":"string"},"sourceId":{"type":"string"},"collectionId":{"type":"string"},
-              "limit":{"type":"integer","minimum":1,"maximum":10}}}
+              "limit":{"type":"integer","minimum":1,"maximum":10},"exactTopic":{"type":"boolean"}}}
             """), ToolTiers.Read);
 
     public async Task<AgentToolOutput> InvokeAsync(JsonElement arguments, AgentToolContext context, CancellationToken cancellationToken)
@@ -33,6 +35,7 @@ public sealed class MediaFindTool(KnowledgeRetriever retriever, MediaMoments mom
         ToolArguments args = new(arguments);
         string? query = args.Text("query", 256);
         Guid? sourceId = args.Guid("sourceId");
+        bool exactTopic = args.Boolean("exactTopic", false);
         int limit = args.Integer("limit", 5, 1, 10);
         if (query is null && sourceId is null)
         {
@@ -58,12 +61,15 @@ public sealed class MediaFindTool(KnowledgeRetriever retriever, MediaMoments mom
             else
             {
                 SearchHit self = new(id, current.ItemId, current.Revision, Path.GetFileName(current.Locator), current.Locator, current.Digest, string.Empty);
-                found.AddRange(moments.Locate(self, query, limit));
+                found.AddRange(moments.Locate(self, query, limit, exactTopic));
             }
         }
         else
         {
-            (IReadOnlyList<SearchHit> hits, string _) = await retriever.SearchAsync(query!, 100, args.Guid("collectionId"), cancellationToken);
+            Guid? collection = args.Guid("collectionId");
+            IReadOnlyList<SearchHit> hits = exactTopic
+                ? retriever.SearchTimedText(query!, 100, collection)
+                : (await retriever.SearchAsync(query!, 100, collection, cancellationToken)).Hits;
             foreach (SearchHit hit in hits)
             {
                 if (found.Count >= limit)
@@ -82,10 +88,12 @@ public sealed class MediaFindTool(KnowledgeRetriever retriever, MediaMoments mom
                     continue;
                 }
 
-                found.AddRange(moments.Locate(hit, query!, Math.Min(2, limit - found.Count)));
+                found.AddRange(moments.Locate(hit, query!, Math.Min(2, limit - found.Count), exactTopic));
             }
         }
 
+        int pairedWithheld = found.RemoveAll(moment => moment.MediaSourceId != moment.SourceId && !context.MayDisclose(moment.MediaSourceId));
+        withheld += pairedWithheld;
         return AgentToolOutput.Of(new
         {
             moments = found.Select(moment => new
@@ -102,7 +110,10 @@ public sealed class MediaFindTool(KnowledgeRetriever retriever, MediaMoments mom
             }),
             note = found.Count == 0 ? "No spoken moment matched. Try other words, or knowledge_search with kind=media." : null
         },
-        found.Select(moment => new AgentCitation(moment.SourceId, moment.ItemId, moment.Revision, moment.Locator, moment.SourceName)).ToArray(),
+        found.Select(moment => new AgentCitation(moment.SourceId, moment.ItemId, moment.Revision, moment.Locator, moment.SourceName,
+            moment.MediaSourceId == moment.SourceId ? null : moment.MediaSourceId,
+            moment.SourceId == moment.MediaSourceId && MediaPlayback.UsesAudioSampleClock(Path.GetExtension(moment.SourceName))
+                ? MediaPlayback.AudioSampleTimebase : MediaPlayback.CurrentTimebase)).ToArray(),
         withheld > 0 ? [new WithheldNotice(withheld, WithheldNotice.DisclosurePolicy)] : null);
     }
 

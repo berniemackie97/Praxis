@@ -9,7 +9,7 @@ namespace Praxis.Application.Desktop.Actions;
 /// Owner controls for disclosure, tiers, categories and holds. These actions are reachable only
 /// through the first-party private pipe, so they act as the owner; they are never registered as
 /// agent tools. Agents request changes through <see cref="PolicyService.Request"/> as
-/// <see cref="PolicyActors.Agent"/>, where widening changes wait for confirmation here.
+/// <see cref="PolicyActors.Agent"/>, where every request waits for confirmation here.
 /// </summary>
 public sealed class PolicyActions(PolicyService policy, IPolicyRepository repository) : IDesktopActionGroup
 {

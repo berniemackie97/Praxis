@@ -22,7 +22,7 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
                     decisions[citation.SourceId] = permit = allowed(citation.SourceId);
                 }
 
-                return !permit;
+                return !permit || citation.PlaybackSourceId is { } media && !allowed(media);
             });
             visible.AddRange(withheld ? turn.Where(message => message.Role == AgentRoles.User &&
                 !message.Content.StartsWith("Answer check failed.", StringComparison.Ordinal)) : turn);

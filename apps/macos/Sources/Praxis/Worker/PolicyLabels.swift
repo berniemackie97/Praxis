@@ -33,15 +33,24 @@ enum PolicyLabels {
 
     static func category(_ category: String) -> String { category.prefix(1).uppercased() + category.dropFirst() }
 
-    static func change(_ change: PolicyChangeSummary) -> String {
+    static func change(_ change: PolicyChangeSummary, rules: [DisclosureRule] = []) -> String {
         if let mode = change.mode { return "Change mode to \(Self.mode(mode))" }
         if let permission = change.toolPermission { return "Change agent permission to \(toolPermission(permission))" }
         if let rule = change.addRule {
-            return "\(rule.allow ? "Allow" : "Deny") \(category(rule.category)) → \(rule.providerId) for \(rule.purpose)"
+            return ruleText(rule)
         }
-        if change.removeRuleId != nil { return "Remove a disclosure rule" }
-        if let category = change.fallbackCategory { return "Change fallbacks for \(Self.category(category))" }
+        if let id = change.removeRuleId {
+            return rules.first { $0.ruleId == id }.map { "Remove rule: \(ruleText($0))" } ?? "Remove rule \(id) (no longer listed)"
+        }
+        if let category = change.fallbackCategory, let chain = change.fallbackChain {
+            return "Change fallbacks for \(Self.category(category)): \(chain.map(fallback).joined(separator: " → "))"
+        }
         return "Policy change"
+    }
+
+    private static func ruleText(_ rule: DisclosureRule) -> String {
+        let expiration = rule.expiresUtc.map { " (expires \($0))" } ?? " (no expiration)"
+        return "\(rule.allow ? "Allow" : "Deny") \(category(rule.category)) → \(rule.providerId) for \(rule.purpose)\(expiration)"
     }
 
     static func step(_ processorKey: String) -> String {

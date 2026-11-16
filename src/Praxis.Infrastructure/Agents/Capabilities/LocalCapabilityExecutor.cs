@@ -21,10 +21,14 @@ public sealed class LocalCapabilityExecutor : ICapabilityExecutor
 
         switch (request.Operation)
         {
+            case CapabilityService.BrewInstall or CapabilityService.NpmInstall:
+                return await PackageCapabilityInstaller.InstallAsync(request, workspace.Path, environment, cancellationToken);
             case CapabilityService.BrowserOpen when OperatingSystem.IsMacOS():
                 return await RunAsync("/usr/bin/open", [request.Target!], workspace.Path, environment,
                     "Opened the approved address in your default browser.", cancellationToken);
             case CapabilityService.Terminal when OperatingSystem.IsMacOS() && File.Exists("/usr/bin/sandbox-exec"):
+                environment["PATH"] = InstalledProgramProbe.SearchPath;
+                environment["OPENSSL_CONF"] = "/dev/null";
                 return await RunAsync("/usr/bin/sandbox-exec",
                     ["-p", TerminalProfile(workspace.Path), "/bin/sh", "-c", "ulimit -t 8 -f 8192 -n 64; exec /bin/sh -c \"$1\"", "praxis", request.Target!],
                     workspace.Path, environment, "The command completed without output.", cancellationToken);
@@ -40,7 +44,7 @@ public sealed class LocalCapabilityExecutor : ICapabilityExecutor
         return Result(result, success);
     }
 
-    private static CapabilityExecution Result(CliResult result, string success)
+    internal static CapabilityExecution Result(CliResult result, string success)
     {
         string output = (result.Stdout.Trim() + "\n" + result.Stderr.Trim()).Trim();
         string detail = output.Length == 0 ? success : output[..Math.Min(5_800, output.Length)];
@@ -55,10 +59,13 @@ public sealed class LocalCapabilityExecutor : ICapabilityExecutor
         (deny default)
         (allow process-exec process-fork)
         (allow signal (target self))
+        (allow sysctl-read (sysctl-name-regex #"^hw\.") (sysctl-name-regex #"^kern\.(os|host|version)"))
         (allow file-read*)
         (deny file-read-data file-read-xattr
           (require-not (require-any
             (subpath "/System") (subpath "/usr/lib") (subpath "/usr/bin") (subpath "/usr/share") (subpath "/bin")
+            (subpath "/opt/homebrew/bin") (subpath "/opt/homebrew/Cellar") (subpath "/opt/homebrew/opt") (subpath "/opt/homebrew/lib")
+            (subpath "/usr/local/bin") (subpath "/usr/local/lib") (subpath "/usr/local/Cellar") (subpath "/usr/local/opt")
             (literal "/") (literal "/private") (literal "/private/tmp") (literal "/dev/null") (literal "/dev/urandom")
             (subpath "{{root}}"))))
         (allow file-write* (subpath "{{root}}") (literal "/dev/null"))

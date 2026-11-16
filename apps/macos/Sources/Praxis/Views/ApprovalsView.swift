@@ -50,10 +50,10 @@ struct ApprovalsView: View {
                         }
                         if !model.pending.isEmpty {
                             QueueSection(title: "Permission changes requested in chat", systemImage: "lock.open",
-                                         caption: "The agent asked to widen what may leave this Mac or what it may change. Only you can confirm.",
+                                         caption: "Review the exact change. Nothing takes effect until you confirm.",
                                          count: model.pending.count) {
                                 ForEach(model.pending) { change in
-                                    DecisionCard(systemImage: "hand.raised", title: PolicyLabels.change(change.change),
+                                    DecisionCard(systemImage: "hand.raised", title: PolicyLabels.change(change.change, rules: model.policyRules),
                                                  detail: change.rationale.isEmpty ? "Requested by \(change.requestedBy)" : "“\(change.rationale)”",
                                                  accept: "Confirm", reject: "Reject") { model.resolve(change, confirm: $0) }
                                 }
@@ -70,7 +70,7 @@ struct ApprovalsView: View {
                         }
                         if !model.memories.isEmpty {
                             QueueSection(title: "Things to remember", systemImage: "brain",
-                                         caption: "Preferences the agent heard in conversation.", count: model.memories.count) {
+                                         caption: "Facts, preferences, and corrections to review.", count: model.memories.count) {
                                 ForEach(model.memories) { memory in
                                     DecisionCard(systemImage: "text.quote", title: memory.text, detail: nil,
                                                  accept: "Remember", reject: "Discard") { model.resolve(memory, accept: $0) }

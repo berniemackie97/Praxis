@@ -72,7 +72,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
             _ => new AgentTurn("You spent $9,999.99 [1].", [], 10, 10),
             transcript =>
             {
-                Assert.Contains("9,999.99", transcript[^1].Content, StringComparison.Ordinal);
+                Assert.Equal("How much did I spend?", transcript.Last(message => message.Role == AgentRoles.User).Content);
                 return new AgentTurn("You spent $1,270.20 [1].", [], 10, 10);
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
@@ -80,6 +80,9 @@ public sealed partial class AgentRuntimeTests : IDisposable
         Assert.True(reply.Check.Repaired);
         Assert.True(reply.Check.Clean);
         Assert.Equal("You spent $1,270.20 [1].", reply.Text);
+        Assert.Contains("9,999.99", backend.SystemPrompts[2], StringComparison.Ordinal);
+        Assert.DoesNotContain(catalog.Agents.ReadMessages(conversation.ConversationId),
+            message => message.Content.Contains("9,999.99", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -133,7 +136,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task AgentsCanNarrowSettingsButWideningWaitsForTheOwner()
+    public async Task MemoryRequestCannotProposeSettingsAndExplicitChatChangesNeedOwnerConfirmation()
     {
         using SqliteCatalog catalog = await SeededAsync();
         ScriptedBackend backend = new(
@@ -141,10 +144,36 @@ public sealed partial class AgentRuntimeTests : IDisposable
                 Call("settings_propose", """{"change":"mode","mode":"local_only","rationale":"owner asked"}""")),
             _ => new AgentTurn("Done.", [], 1, 1));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
-        await runtime.RunAsync(conversation.ConversationId, "Lock everything down", (_, _, _) => { }, CancellationToken.None);
         Application.Policy.PolicyService policy = new(catalog.Policy);
+        await runtime.RunAsync(conversation.ConversationId, "Update my company name in memory", (_, _, _) => { }, CancellationToken.None);
+        Assert.Empty(policy.Pending());
+        Assert.Contains("explicit_settings_request_required", catalog.Agents.ReadMessages(conversation.ConversationId)[2].Content, StringComparison.Ordinal);
+
+        AgentRuntime direct = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, null), clock);
+        Guid chatId = conversation.ConversationId;
+        string original = policy.Current().Mode;
+        AgentReply prompt = await direct.RunAsync(chatId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        await direct.RunAsync(chatId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        Assert.Contains("Confirm", prompt.Text, StringComparison.Ordinal);
+        Assert.Equal(0, prompt.InputTokens);
+        Assert.Equal(original, policy.Current().Mode);
+        PendingPolicyChange requested = Assert.Single(policy.Pending());
+        Assert.Equal(DisclosureModes.LocalOnly, requested.Change.Mode);
+        Assert.True(policy.ResolvePending(requested.ChangeId, confirm: true));
         Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
-        Assert.Single(policy.Pending());
+
+        await direct.RunAsync(chatId, "Can you change my privacy mode to allow all?", (_, _, _) => { }, CancellationToken.None);
+        Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
+        PendingPolicyChange grant = Assert.Single(policy.Pending());
+        Assert.Equal(DisclosureModes.AllowAll, grant.Change.Mode);
+        Assert.True(policy.ResolvePending(grant.ChangeId, confirm: false));
+        Assert.False(policy.ResolvePending(grant.ChangeId, confirm: true));
+        Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
+
+        AgentReply disabled = await direct.RunAsync(chatId, "Set chat tool permissions to allow edits", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+        Assert.Contains("Turn on Allow tools", disabled.Text, StringComparison.Ordinal);
+        Assert.Empty(policy.Pending());
     }
 
     [Fact]

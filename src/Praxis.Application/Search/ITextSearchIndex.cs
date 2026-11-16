@@ -18,6 +18,10 @@ public interface ITextSearchIndex
     IReadOnlyList<SearchHit> QueryPassages(string query, int limit, bool anyTerm = false) =>
         anyTerm ? QueryAny(query, limit) : Query(query, limit);
 
+    /// <summary>Lexical search scoped to sources with timed text or candidate caption sidecars.</summary>
+    IReadOnlyList<SearchHit> QueryTimedText(string query, int limit, Guid? collectionId, bool anyTerm) =>
+        anyTerm ? QueryAny(query, limit, collectionId) : Query(query, limit, collectionId);
+
     /// <summary>Rebuilds the index from canonical text within the given bounds; returns the documents indexed.</summary>
     int Rebuild(int maxDocuments, long maxTextBytes);
 

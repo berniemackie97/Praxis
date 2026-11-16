@@ -3,9 +3,8 @@ using Praxis.Domain.Policy;
 namespace Praxis.Application.Policy;
 
 /// <summary>
-/// The only way policy changes. The owner acting in the first-party UI applies any change. Any
-/// other requester (the agent, on behalf of a chat message) applies narrowing changes at once;
-/// widening changes wait for the owner to confirm in the UI. Nothing a model emits can confirm.
+/// The owner can change policy directly in the first-party UI. An agent request is always queued
+/// for the owner to confirm or reject. Nothing sent in chat or emitted by a model can confirm it.
 /// </summary>
 public sealed class PolicyService(IPolicyRepository repository)
 {
@@ -25,7 +24,7 @@ public sealed class PolicyService(IPolicyRepository repository)
             throw new ArgumentException("The rationale is too long.", nameof(rationale));
         }
 
-        if (actor == PolicyActors.Owner || !change.Widens(repository.ReadPolicy()))
+        if (actor == PolicyActors.Owner)
         {
             repository.ApplyChange(change, actor);
             return new PolicyChangeOutcome(true, null);

@@ -58,11 +58,11 @@ A **mode** sets the default for remote disclosure:
 
 Default chain: `local_if_verified → hold → index_only`.
 
-**Changes from chat.** The agent may *propose* policy changes. Changes that narrow disclosure or permissions apply immediately. Changes that widen them become a pending change the owner must confirm in the first-party UI; a model, a document or a tool result can never confirm one. Every disclosure and policy change is appended to an audit log.
+**Changes from chat.** The agent may *propose* policy changes. Every chat request becomes a pending change the owner must confirm in the first-party UI; a model, a document or a tool result can never confirm one. Every disclosure and policy change is appended to an audit log.
 
 ### 5. Agent tool permissions
 
-Independent of disclosure: `read_only`, `propose_edits` (writes become reviewable proposals), `allow_edits` (writes to Praxis-owned derived knowledge). System actions (#297) are out of scope here and remain default-deny. Widening follows the same confirmation rule.
+Independent of disclosure: `read_only`, `propose_edits` (writes become reviewable proposals), `allow_edits` (writes to Praxis-owned derived knowledge). System actions (#297) are out of scope here and remain default-deny. Every policy change requested by an agent waits for the owner to confirm or reject it in Approvals.
 
 ### 6. Intake ladder (by signal)
 

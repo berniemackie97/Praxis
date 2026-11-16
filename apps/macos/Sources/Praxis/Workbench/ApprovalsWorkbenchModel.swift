@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-/// Everything waiting for the owner: disclosure holds from intake, permission widenings the agent
+/// Everything waiting for the owner: disclosure holds from intake, permission changes the agent
 /// requested, the agent's knowledge proposals, and memories it wants to keep. Decisions made here
 /// come from the owner's own app over the private pipe; nothing a model emits can make them.
 @MainActor
@@ -14,6 +14,7 @@ final class ApprovalsWorkbenchModel: ObservableObject {
     @Published private(set) var actions: [CapabilityItem] = []
     @Published private(set) var decidingActions: Set<String> = []
     @Published private(set) var pending: [PendingPolicyChange] = []
+    @Published private(set) var policyRules: [DisclosureRule] = []
     @Published private(set) var proposals: [AgentProposal] = []
     @Published private(set) var memories: [AgentMemory] = []
     @Published private(set) var error: String? { didSet { if error != nil { notice = nil } } }
@@ -35,6 +36,7 @@ final class ApprovalsWorkbenchModel: ObservableObject {
             self?.holds = data.holds
         }
         channel.send("policyGet", as: PolicyData.self, failed: report) { [weak self] data in
+            self?.policyRules = data.policy.rules
             self?.pending = data.pending
         }
         channel.send("agentProposals", ["status": "pending", "limit": 200], as: AgentProposalsData.self, failed: report) { [weak self] data in
@@ -53,7 +55,8 @@ final class ApprovalsWorkbenchModel: ObservableObject {
             self?.refresh()
         }) { [weak self] item in
             self?.decidingActions.remove(action.id)
-            self?.notice = item.status == "accepted" ? "Action completed." : item.status == "rejected" ? "Action rejected." : nil
+            self?.notice = item.status == "accepted" ? "Action completed." : item.status == "rejected" ? "Action rejected." :
+                item.status == "running" ? "Installation started. Check Recent Chat actions for the result." : nil
             self?.error = item.status == "failed" ? "Action failed. See the action history for details." : nil
             self?.refresh()
         }
@@ -82,8 +85,8 @@ final class ApprovalsWorkbenchModel: ObservableObject {
     }
 
     func resolve(_ memory: AgentMemory, accept: Bool) {
-        channel.send("agentMemoryResolve", ["memoryId": memory.memoryId, "accept": accept], as: ChangedFlag.self, failed: report) { [weak self] _ in
-            self?.notice = accept ? "Praxis will remember that." : "Discarded."
+        channel.send("agentMemoryResolve", ["memoryId": memory.memoryId, "accept": accept], as: ChangedFlag.self, failed: report) { [weak self] data in
+            self?.notice = data.changed ? (accept ? "Praxis will remember that." : "Discarded.") : "That memory was already resolved."
             self?.refresh()
         }
     }

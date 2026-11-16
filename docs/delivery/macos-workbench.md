@@ -207,7 +207,7 @@ The worker accepts two active responses across conversations, one per chat, with
 
 **Approvals** collects everything waiting for you, and its sidebar item shows the count:
 - disclosure holds from intake (*Send once*, *Always allow <category>*, *Keep local*, *Skip*); a hold you ignore continues down its fallback chain at its deadline;
-- permission widenings the agent requested in chat (*Confirm* / *Reject*), which only you can apply;
+- permission changes requested in chat (*Confirm* / *Reject*), which only you can apply;
 - knowledge suggestions and memories proposed by the agent.
 
 **Settings → Privacy** and **Settings → Agents** set the disclosure mode, the agent's tool permission, grants and denials (per category, provider and purpose, optionally expiring), per-category fallback chains, the intake model tiers, and chat models. API keys are stored in the login Keychain under service `Praxis` (this device only, readable by Praxis). When the worker starts, and whenever a key is saved or removed, the app hands it to the worker over the private pipe; the worker keeps keys in memory only, so they never reach the catalog, disk, logs or a command line. Keys provisioned for the system `security` tool remain a fallback. A collapsible list shows recent model calls, the remote ones being the disclosure audit.

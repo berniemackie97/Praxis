@@ -1,10 +1,12 @@
 using System.Text;
 using System.Text.Json;
 using Praxis.Application.Agents;
+using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Tools;
 using Praxis.Application.Media;
 using Praxis.Application.Search;
 using Praxis.Application.Text;
+using Praxis.Domain.Agents;
 using Praxis.Domain.Media;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Composition;
@@ -90,6 +92,7 @@ public sealed class MediaMomentTests : IDisposable
 
         Praxis.Domain.Agents.AgentCitation citation = Assert.Single(output.Citations);
         Assert.Equal(video.SourceId, citation.SourceId);
+        Assert.Equal(MediaPlayback.AudioSampleTimebase, citation.PlaybackTimebase);
         Assert.True(TimeLocator.TryParse(citation.Locator, out long start, out long end));
         Assert.Equal(3_960 - MediaMoments.LeadInMilliseconds, start);
         Assert.True(end - start >= MediaMoments.MinimumMilliseconds);
@@ -137,13 +140,81 @@ public sealed class MediaMomentTests : IDisposable
         Assert.False(File.Exists(reference.Path));
     }
 
+    [Fact]
+    public async Task CitedVideoCannotPlayAnUnverifiedClockOrReplacementRevision()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal first = await Capture(catalog, "movable.mp4", "original bytes");
+        MediaPlayback playback = new(catalog.Sources, catalog.Originals, new MediaEvidence(catalog.Sources, catalog.Search, catalog.Text, catalog.Originals));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => playback.ResolveAsync(first.SourceId, CancellationToken.None,
+            first.ItemId, first.Revision, citedClip: true));
+
+        MediaPlaybackReference playable = await playback.ResolveAsync(first.SourceId, CancellationToken.None,
+            first.ItemId, first.Revision, MediaPlayback.AudioSampleTimebase, citedClip: true);
+        Assert.Equal("original bytes", await File.ReadAllTextAsync(playable.Path!));
+
+        CapturedOriginal second = await Capture(catalog, "movable.mp4", "replacement bytes", "replacement revision");
+        Assert.Equal(first.SourceId, second.SourceId);
+        Assert.NotEqual(first.Revision, second.Revision);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => playback.ResolveAsync(first.SourceId, CancellationToken.None,
+            first.ItemId, first.Revision, MediaPlayback.AudioSampleTimebase, citedClip: true));
+    }
+
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PlainLanguageClipRequestFindsTimedRamPassageWithoutAProvider(bool hasMatch)
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal video = await Capture(catalog, "computers.mp4", "fixture movie");
+        string spoken = hasMatch ? "RAM keeps temporary data available for the processor." : "The ramp makes a cabinet easier to load.";
+        ProcessingDriver reader = new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing,
+            CatalogProcessing.Readers(new VisionOcrEngine()), new FakeTranscriber(TranscriptionResult.Recognized([new(16_000, 21_000, spoken)]))));
+        Assert.True(await reader.ProcessNextAsync());
+
+        MediaFindTool tool = new(new KnowledgeRetriever(catalog.Search, catalog.Embeddings, catalog.Models, new OllamaEmbeddingModelConnector()),
+            new MediaMoments(catalog.Text), catalog.Sources);
+        AgentBackendProfile local = new("ollama", AgentBackendKinds.OpenAiCompatible, "http://127.0.0.1:11434/v1", "tiny-fixture", null, null, true);
+        catalog.Agents.SaveBackend(local);
+        AgentConversation conversation = catalog.Agents.Create(local.BackendId, "previous and new topic");
+        catalog.Agents.Append(conversation.ConversationId, AgentMessage.FromUser("What company does the owner run?"));
+        catalog.Agents.AppendFinal(conversation.ConversationId, AgentMessage.FromAssistant("An entirely different topic.", []));
+        AgentRuntime chat = AgentComposition.Runtime(catalog, [tool], new UnavailableBackendFactory(), TimeProvider.System);
+
+        AgentReply reply = await chat.RunAsync(conversation.ConversationId, "can you give me a clip on how ram works", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+
+        Assert.Equal(0, reply.InputTokens);
+        Assert.DoesNotContain("company", reply.Text, StringComparison.Ordinal);
+        Assert.Single(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10));
+        if (!hasMatch)
+        {
+            Assert.Empty(reply.Citations);
+            Assert.Contains("couldn’t find a playable clip", reply.Text, StringComparison.Ordinal);
+            return;
+        }
+
+        AgentCitation clip = Assert.Single(reply.Citations);
+        Assert.Equal(video.SourceId, clip.SourceId);
+        Assert.Equal("time:14.5-22.5", clip.Locator);
+        Assert.Contains("[1]", reply.Text, StringComparison.Ordinal);
+        Assert.Equal(clip, Assert.Single(catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Citations));
+    }
+
+    private sealed class UnavailableBackendFactory : IAgentBackendFactory
+    {
+        public IAgentBackend? CreateTurnBackend(AgentBackendProfile profile) => throw new InvalidOperationException("No model should be called for this request.");
+        public ISessionAgentBackend? CreateSessionBackend(AgentBackendProfile profile) => throw new InvalidOperationException("No model should be called for this request.");
+    }
+
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
-    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string filename, string contents)
+    private async Task<CapturedOriginal> Capture(SqliteCatalog catalog, string filename, string contents, string? requestKey = null)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(contents);
         using MemoryStream source = new(bytes);
-        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", filename), source, bytes.Length + 1, filename);
+        return await catalog.Originals.CaptureFileAsync(Path.Combine(workspace, "incoming", filename), source, bytes.Length + 1, requestKey ?? filename);
     }
 
     public void Dispose()

@@ -32,17 +32,35 @@ struct AgentPresentationTests {
     @Test func persistedConversationIncludesPinnedModelAndEffort() throws {
         let json = """
             {"conversationId":"c1","backendId":"codex","title":"Chat","createdUtc":"2026-11-14T12:00:00Z",
-             "updatedUtc":"2026-11-14T12:00:00Z","model":"gpt-6","effort":"high"}
+             "updatedUtc":"2026-11-14T12:00:00Z","model":"gpt-6","effort":"high","contextPreset":"compact"}
             """
         let conversation = try JSONDecoder().decode(AgentConversation.self, from: Data(json.utf8))
         #expect(conversation.model == "gpt-6")
         #expect(conversation.effort == "high")
+        #expect(conversation.contextPreset == "compact")
         let legacy = """
             {"conversationId":"c2","backendId":"ollama","title":"Old","createdUtc":"","updatedUtc":""}
             """
         let older = try JSONDecoder().decode(AgentConversation.self, from: Data(legacy.utf8))
         #expect(older.model == nil)
         #expect(older.effort == nil)
+    }
+
+    @Test func reopenedChatOnlyRendersCitedTimedEvidence() throws {
+        let json = """
+            {"role":"assistant","content":"Here is the relevant clip [2].","toolCalls":[],"toolCallId":null,
+             "citations":[{"sourceId":"s","itemId":"i","revision":2,"locator":"time:12-18","sourceName":"unused.mp4"},
+                          {"sourceId":"t","itemId":"j","revision":3,"locator":"time:2.95-9","sourceName":"relevant.mp4","playbackTimebase":"media-clock-v1"}]}
+            """
+        let message = try JSONDecoder().decode(AgentMessage.self, from: Data(json.utf8))
+        let line = try #require(ChatLine.lines([message]).first)
+        let clips = InlineChatClips.cited(in: line.text, citations: line.citations)
+        #expect(clips.count == 1)
+        #expect(clips.first?.number == 2)
+        #expect(clips.first?.range.start == 2.95)
+        #expect(clips.first?.citation.revision == 3)
+        #expect(clips.first?.citation.playbackTimebase == "media-clock-v1")
+        #expect(MediaTimeRange(locator: "time:0-inf") == nil)
     }
 
     @Test func policyDecodesWithRulesFallbacksAndPendingChanges() throws {
@@ -59,6 +77,22 @@ struct AgentPresentationTests {
         #expect(data.policy.fallbacks(for: "health") == DisclosurePolicy.defaultFallbacks)
         #expect(PolicyLabels.change(data.pending[0].change).contains("Allow all"))
         #expect(data.tiers.first?.providerId == "claude-code")
+    }
+
+    @Test func approvalDescribesTheExactDisclosureRuleAndFallbackOrder() throws {
+        let grant = """
+            {"addRule":{"ruleId":"r","category":"health","providerId":"claude-code","purpose":"chat",
+             "allow":true,"expiresUtc":"2026-11-20T00:00:00Z"}}
+            """
+        let change = try JSONDecoder().decode(PolicyChangeSummary.self, from: Data(grant.utf8))
+        let description = PolicyLabels.change(change)
+        #expect(description.contains("Allow Health → claude-code for chat"))
+        #expect(description.contains("expires 2026-11-20T00:00:00Z"))
+        let removal = try JSONDecoder().decode(PolicyChangeSummary.self, from: Data("{\"removeRuleId\":\"r\"}".utf8))
+        #expect(PolicyLabels.change(removal, rules: [try #require(change.addRule)]) == "Remove rule: \(description)")
+        let order = Data("{\"fallbackCategory\":\"health\",\"fallbackChain\":[\"hold\",\"skip\"]}".utf8)
+        let fallback = try JSONDecoder().decode(PolicyChangeSummary.self, from: order)
+        #expect(PolicyLabels.change(fallback).contains("Hold for my decision → Skip"))
     }
 
     @Test func transcriptHidesRepairPromptsAndSummarizesToolTraffic() {

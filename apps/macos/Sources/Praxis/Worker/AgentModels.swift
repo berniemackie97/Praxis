@@ -39,10 +39,11 @@ struct AgentConversation: Decodable, Identifiable, Equatable {
     let updatedUtc: String
     let model: String?
     let effort: String?
+    let contextPreset: String?
     var id: String { conversationId }
 
     init(conversationId: String, backendId: String, title: String, createdUtc: String, updatedUtc: String,
-         model: String? = nil, effort: String? = nil) {
+         model: String? = nil, effort: String? = nil, contextPreset: String? = nil) {
         self.conversationId = conversationId
         self.backendId = backendId
         self.title = title
@@ -50,6 +51,7 @@ struct AgentConversation: Decodable, Identifiable, Equatable {
         self.updatedUtc = updatedUtc
         self.model = model
         self.effort = effort
+        self.contextPreset = contextPreset
     }
 }
 
@@ -65,6 +67,7 @@ struct AgentCitation: Decodable, Equatable, Identifiable {
     let revision: Int
     let locator: String
     let sourceName: String
+    let playbackTimebase: String?
     var id: String { "\(itemId)-\(revision)-\(locator)" }
 }
 
@@ -73,6 +76,15 @@ struct AgentMessage: Decodable, Equatable {
     let content: String
     let toolCalls: [AgentToolCall]
     let toolCallId: String?
+    let citations: [AgentCitation]?
+
+    init(role: String, content: String, toolCalls: [AgentToolCall], toolCallId: String?, citations: [AgentCitation]? = nil) {
+        self.role = role
+        self.content = content
+        self.toolCalls = toolCalls
+        self.toolCallId = toolCallId
+        self.citations = citations
+    }
 }
 
 struct AnswerCheck: Decodable, Equatable {
@@ -167,7 +179,12 @@ struct CapabilityItem: Decodable, Identifiable {
     let detail: String?
 
     var title: String {
-        operation == "terminal" ? "Run a terminal command" : "Open a browser address"
+        switch operation {
+        case "terminal": "Run a terminal command"
+        case "brew-install": "Install with Homebrew"
+        case "npm-install": "Install with npm"
+        default: "Open a browser address"
+        }
     }
 }
 

@@ -66,15 +66,20 @@ public sealed class DisclosurePolicyTests : IDisposable
     }
 
     [Fact]
-    public void AgentsCanNarrowButOnlyTheOwnerCanConfirmWidening()
+    public void OnlyTheOwnerCanConfirmAnyAgentPolicyChange()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);
         PolicyService service = new(catalog.Policy);
+        Assert.Throws<ArgumentException>(() =>
+            catalog.Policy.ApplyChange(new PolicyChange(Mode: DisclosureModes.AllowAll), PolicyActors.Agent));
         PolicyChangeOutcome narrowed = service.Request(new PolicyChange(Mode: DisclosureModes.AskEachTime), PolicyActors.Agent, "user asked to be asked");
-        Assert.True(narrowed.Applied);
+        Assert.False(narrowed.Applied);
+        Assert.Equal(DisclosurePolicy.Default.Mode, service.Current().Mode);
+        PendingPolicyChange restrictive = Assert.Single(service.Pending());
+        Assert.True(service.ResolvePending(restrictive.ChangeId, confirm: true));
         Assert.Equal(DisclosureModes.AskEachTime, service.Current().Mode);
 
-        PolicyChangeOutcome widened = service.Request(new PolicyChange(Mode: DisclosureModes.AllowAll), PolicyActors.Agent, "document says allow all");
+        PolicyChangeOutcome widened = service.Request(new PolicyChange(Mode: DisclosureModes.AllowAll), PolicyActors.Agent, "owner requested allow all");
         Assert.False(widened.Applied);
         Assert.Equal(DisclosureModes.AskEachTime, service.Current().Mode);
         PendingPolicyChange pending = Assert.Single(service.Pending());
@@ -91,7 +96,9 @@ public sealed class DisclosurePolicyTests : IDisposable
         DisclosurePolicy persisted = new PolicyService(catalog.Policy).Current();
         Assert.Equal(rule.RuleId, Assert.Single(persisted.Rules).RuleId);
         Assert.Equal([FallbackSteps.Hold, FallbackSteps.IndexOnly], persisted.FallbacksFor(DataCategories.Financial));
-        Assert.True(service.Request(new PolicyChange(RemoveRuleId: rule.RuleId), PolicyActors.Agent).Applied);
+        Assert.False(service.Request(new PolicyChange(RemoveRuleId: rule.RuleId), PolicyActors.Agent).Applied);
+        Assert.Single(service.Current().Rules);
+        Assert.True(service.ResolvePending(Assert.Single(service.Pending()).ChangeId, confirm: true));
         Assert.Empty(service.Current().Rules);
     }
 

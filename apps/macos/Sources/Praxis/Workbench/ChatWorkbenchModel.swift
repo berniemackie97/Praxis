@@ -41,6 +41,7 @@ final class ChatWorkbenchModel: ObservableObject {
     @Published private(set) var backendChoice = ""
     @Published private(set) var modelChoice = ""
     @Published private(set) var effortChoice = ""
+    @Published private(set) var contextChoice = "balanced"
     private var customModelChoice = false
 
     init(channel: WorkerChannel) {
@@ -91,6 +92,27 @@ final class ChatWorkbenchModel: ObservableObject {
         return effortChoice
     }
 
+    var activeContextPreset: String {
+        selectedId == nil ? contextChoice : selected?.contextPreset ?? "balanced"
+    }
+
+    func chooseContextPreset(_ preset: String) {
+        guard !busy, ["compact", "balanced", "expanded"].contains(preset) else { return }
+        guard let id = selectedId else {
+            contextChoice = preset
+            return
+        }
+
+        states[id, default: ConversationState()].busy = true
+        channel.send("agentConversationContext", ["conversationId": id, "contextPreset": preset],
+                     as: AgentConversation.self, failed: { [weak self] message in
+            self?.failOperation(id, message)
+        }) { [weak self] conversation in
+            self?.states[id]?.busy = false
+            self?.updateConversation(conversation)
+        }
+    }
+
     func chooseBackend(_ backendId: String) {
         guard selectedId == nil, !busy,
               let profile = backends.first(where: { $0.backendId == backendId && $0.enabled }) else { return }
@@ -130,8 +152,10 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     /// Asks the worker how to play a cited media source; the reply arrives on the main actor.
-    func playback(for sourceId: String, completion: @escaping (Result<MediaPlayback, MediaPlaybackError>) -> Void) {
-        let sent = channel.send("mediaPlayback", ["sourceId": sourceId], as: MediaPlaybackData.self,
+    func playback(for citation: AgentCitation, completion: @escaping (Result<MediaPlayback, MediaPlaybackError>) -> Void) {
+        var fields: [String: Any] = ["sourceId": citation.sourceId, "itemId": citation.itemId, "revision": citation.revision]
+        if let timebase = citation.playbackTimebase { fields["timebase"] = timebase }
+        let sent = channel.send("mediaPlayback", fields, as: MediaPlaybackData.self,
                                 failed: { message in completion(.failure(MediaPlaybackError(message: message))) }) { data in
             completion(.success(data.playback))
         }
@@ -265,6 +289,7 @@ final class ChatWorkbenchModel: ObservableObject {
         feedback(nil, for: "")
         var fields: [String: Any] = ["backendId": backendChoice, "title": String(text.prefix(60)), "model": modelChoice]
         if !effortChoice.isEmpty { fields["effort"] = effortChoice }
+        fields["contextPreset"] = contextChoice
         channel.send("agentConversationStart", fields, as: AgentConversation.self,
                      failed: { [weak self] in self?.failOperation("", $0) }) { [weak self] conversation in
             guard let self else { return }
@@ -436,6 +461,7 @@ struct ChatLine: Identifiable, Equatable {
     let id: Int
     let kind: Kind
     let text: String
+    var citations: [AgentCitation] = []
 
     static func lines(_ messages: [AgentMessage]) -> [ChatLine] {
         var lines: [ChatLine] = []
@@ -446,9 +472,8 @@ struct ChatLine: Identifiable, Equatable {
             case "assistant":
                 if !message.toolCalls.isEmpty {
                     lines.append(ChatLine(id: index * 2, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
-                }
-                if !message.content.isEmpty {
-                    lines.append(ChatLine(id: index * 2 + 1, kind: message.toolCalls.isEmpty ? .agent : .activity, text: message.content))
+                } else if !message.content.isEmpty {
+                    lines.append(ChatLine(id: index * 2 + 1, kind: .agent, text: message.content, citations: message.citations ?? []))
                 }
             case "summary":
                 lines.append(ChatLine(id: index * 2, kind: .summary, text: "Earlier conversation summarized."))
@@ -465,6 +490,7 @@ enum ChatActivity {
     static func label(_ tool: String) -> String {
         switch tool {
         case "knowledge_search": "search"
+        case "media_find": "video and recording moments"
         case "knowledge_open": "read a source"
         case "knowledge_entity": "entity lookup"
         case "knowledge_related": "connections"
@@ -489,6 +515,7 @@ enum ChatActivity {
         guard let event else { return "Starting…" }
         switch event.kind {
         case "recalling_brain": return "Finding relevant library notes…"
+        case "recalling_media": return "Finding playable moments…"
         case "thinking": return "Thinking…"
         case "tool_started": return "Using \(label(event.tool ?? ""))…"
         case "tool_finished": return "Finished \(label(event.tool ?? ""))."

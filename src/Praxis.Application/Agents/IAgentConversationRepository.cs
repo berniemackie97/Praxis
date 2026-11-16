@@ -12,11 +12,14 @@ public interface IAgentConversationRepository
 
     void SaveBackend(AgentBackendProfile profile);
 
-    AgentConversation Create(string backendId, string title, string? model = null, string? effort = null);
+    AgentConversation Create(string backendId, string title, string? model = null, string? effort = null,
+        string contextPreset = AgentContextPreset.Balanced);
 
     AgentConversation? Read(Guid conversationId);
 
     AgentConversation SetModel(Guid conversationId, string model, string? effort);
+
+    AgentConversation SetContext(Guid conversationId, string contextPreset);
 
     bool Rename(Guid conversationId, string title);
 
@@ -45,6 +48,11 @@ public interface IAgentConversationRepository
     AgentMemory AddMemory(Guid? conversationId, string text, string status);
 
     IReadOnlyList<AgentMemory> ReadMemories(string? status, string? search, int limit);
+
+    AgentMemory SaveNameCorrection(Guid conversationId, AgentNameCorrection correction, bool apply) =>
+        throw new NotSupportedException("Name corrections are not supported by this store.");
+
+    IReadOnlyList<AgentNameCorrection> ReadNameCorrections() => [];
 
     bool EditMemory(Guid memoryId, string? replacement) => false;
 

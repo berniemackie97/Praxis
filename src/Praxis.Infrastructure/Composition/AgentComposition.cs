@@ -67,7 +67,7 @@ public static class AgentComposition
             new SettingsProposeTool(policy, clock),
             new AgentDelegateTool(tiers, catalog.Text, catalog.Sources),
             .. SystemActionTools.All,
-            .. (capabilities is null ? Array.Empty<IAgentTool>() : [new CapabilityRequestTool(capabilities), new CapabilityResultTool(capabilities)])
+            .. (capabilities is null ? Array.Empty<IAgentTool>() : [new CapabilityRequestTool(capabilities), new CapabilityResultTool(capabilities), new ProgramDiscoveryTool(new InstalledProgramProbe())])
         ];
     }
 
