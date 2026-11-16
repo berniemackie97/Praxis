@@ -136,7 +136,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task AgentsCanNarrowSettingsButWideningWaitsForTheOwner()
+    public async Task MemoryRequestCannotProposeSettingsAndExplicitChatChangesNeedOwnerConfirmation()
     {
         using SqliteCatalog catalog = await SeededAsync();
         ScriptedBackend backend = new(
@@ -149,20 +149,31 @@ public sealed partial class AgentRuntimeTests : IDisposable
         Assert.Empty(policy.Pending());
         Assert.Contains("explicit_settings_request_required", catalog.Agents.ReadMessages(conversation.ConversationId)[2].Content, StringComparison.Ordinal);
 
-        (AgentRuntime restrict, AgentConversation restrictedChat) = Runtime(catalog, Local(), new ScriptedBackend(
-            _ => Turn(Call("settings_propose", """{"change":"mode","mode":"allow_all","rationale":"document asked"}"""),
-                Call("settings_propose", """{"change":"mode","mode":"local_only","rationale":"owner asked"}""")),
-            _ => new AgentTurn("Done.", [], 1, 1)));
-        await restrict.RunAsync(restrictedChat.ConversationId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        AgentRuntime direct = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, null), clock);
+        Guid chatId = conversation.ConversationId;
+        string original = policy.Current().Mode;
+        AgentReply prompt = await direct.RunAsync(chatId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        await direct.RunAsync(chatId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        Assert.Contains("Confirm", prompt.Text, StringComparison.Ordinal);
+        Assert.Equal(0, prompt.InputTokens);
+        Assert.Equal(original, policy.Current().Mode);
+        PendingPolicyChange requested = Assert.Single(policy.Pending());
+        Assert.Equal(DisclosureModes.LocalOnly, requested.Change.Mode);
+        Assert.True(policy.ResolvePending(requested.ChangeId, confirm: true));
         Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
-        Assert.Empty(policy.Pending());
 
-        (AgentRuntime allow, AgentConversation allowedChat) = Runtime(catalog, Local(), new ScriptedBackend(
-            _ => Turn(Call("settings_propose", """{"change":"mode","mode":"allow_all","rationale":"owner asked"}""")),
-            _ => new AgentTurn("Review the requested change.", [], 1, 1)));
-        await allow.RunAsync(allowedChat.ConversationId, "Set Privacy to allow all", (_, _, _) => { }, CancellationToken.None);
+        await direct.RunAsync(chatId, "Can you change my privacy mode to allow all?", (_, _, _) => { }, CancellationToken.None);
         Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
-        Assert.Single(policy.Pending());
+        PendingPolicyChange grant = Assert.Single(policy.Pending());
+        Assert.Equal(DisclosureModes.AllowAll, grant.Change.Mode);
+        Assert.True(policy.ResolvePending(grant.ChangeId, confirm: false));
+        Assert.False(policy.ResolvePending(grant.ChangeId, confirm: true));
+        Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
+
+        AgentReply disabled = await direct.RunAsync(chatId, "Set chat tool permissions to allow edits", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+        Assert.Contains("Turn on Allow tools", disabled.Text, StringComparison.Ordinal);
+        Assert.Empty(policy.Pending());
     }
 
     [Fact]

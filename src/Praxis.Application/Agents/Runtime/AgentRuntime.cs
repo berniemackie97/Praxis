@@ -6,6 +6,7 @@ using Praxis.Application.Inference;
 using Praxis.Application.Policy;
 using Praxis.Application.Search;
 using Praxis.Domain.Agents;
+using Praxis.Domain.Policy;
 using Praxis.Domain.Search;
 using Praxis.Domain.Verification;
 
@@ -57,6 +58,25 @@ public sealed class AgentRuntime(
             RunState result = completed ?? new(false, false);
             conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(text, []) with { Citations = result.Citations.All.ToArray() });
             return Finish(conversationId, userText, text, AgentReply.Completed, result, report, repaired: false);
+        }
+
+        if (SettingsProposeTool.ReadDirectRequest(command) is { } requested)
+        {
+            string label = requested.Mode is not null ? "Privacy" : "Chat tool permission";
+            string value = (requested.Mode ?? requested.ToolPermission!).Replace('_', ' ');
+            if (!useTools)
+            {
+                return CompleteLocally($"I haven’t changed {label}. Turn on Allow tools to request this change from chat, or change it directly in Settings.");
+            }
+
+            DisclosurePolicy current = policy.Current();
+            if (requested.Mode == current.Mode || requested.ToolPermission == current.ToolPermission)
+            {
+                return CompleteLocally($"{label} is already set to **{value}**.");
+            }
+
+            policy.Request(requested, PolicyActors.Agent, $"You asked to set {label} to {value}.");
+            return CompleteLocally($"Set {label} to **{value}**? Open **Approvals → Permission changes requested in chat** and choose **Confirm** or **Reject**. Nothing has changed yet.");
         }
 
         if (OwnerNameCorrection.Parse(command) is { } correction)

@@ -50,10 +50,10 @@ struct ApprovalsView: View {
                         }
                         if !model.pending.isEmpty {
                             QueueSection(title: "Permission changes requested in chat", systemImage: "lock.open",
-                                         caption: "The agent asked to widen what may leave this Mac or what it may change. Only you can confirm.",
+                                         caption: "Review the exact change. Nothing takes effect until you confirm.",
                                          count: model.pending.count) {
                                 ForEach(model.pending) { change in
-                                    DecisionCard(systemImage: "hand.raised", title: PolicyLabels.change(change.change),
+                                    DecisionCard(systemImage: "hand.raised", title: PolicyLabels.change(change.change, rules: model.policyRules),
                                                  detail: change.rationale.isEmpty ? "Requested by \(change.requestedBy)" : "“\(change.rationale)”",
                                                  accept: "Confirm", reject: "Reject") { model.resolve(change, confirm: $0) }
                                 }

@@ -64,7 +64,11 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
     public void ApplyChange(PolicyChange change, string actor)
     {
         change.Validate();
-        Actor(actor);
+        if (actor != PolicyActors.Owner)
+        {
+            throw new ArgumentException("Only the owner can apply a policy change directly.", nameof(actor));
+        }
+
         database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -82,17 +86,31 @@ public sealed class SqlitePolicyRepository : IPolicyRepository
     {
         change.Validate();
         Actor(actor);
-        Guid id = Guid.NewGuid();
-        database.Execute(connection =>
+        return database.Execute(connection =>
         {
+            string payload = Serialize(change);
             using SqliteTransaction transaction = connection.BeginTransaction();
+            using SqliteCommand existing = connection.CreateCommand("""
+                SELECT change_id FROM policy_changes WHERE payload = $payload AND requested_by = $actor AND status = 'pending'
+                ORDER BY requested_utc LIMIT 1
+                """);
+            existing.Transaction = transaction;
+            existing.Parameters.AddWithValue("$payload", payload);
+            existing.Parameters.AddWithValue("$actor", actor);
+            if (existing.ExecuteScalar() is string pendingId)
+            {
+                transaction.Commit();
+                return Guid.Parse(pendingId);
+            }
+
+            Guid id = Guid.NewGuid();
             connection.Run(transaction, """
                 INSERT INTO policy_changes (change_id, payload, requested_by, rationale, status, requested_utc)
                 VALUES ($id, $payload, $actor, $rationale, 'pending', $now)
-                """, ("$id", id.ToString("D")), ("$payload", Serialize(change)), ("$actor", actor), ("$rationale", rationale), ("$now", Now()));
+                """, ("$id", id.ToString("D")), ("$payload", payload), ("$actor", actor), ("$rationale", rationale), ("$now", Now()));
             transaction.Commit();
+            return id;
         });
-        return id;
     }
 
     public IReadOnlyList<PendingPolicyChange> ReadPendingChanges() => database.ExecuteRead(connection =>

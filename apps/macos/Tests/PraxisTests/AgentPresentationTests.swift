@@ -79,6 +79,22 @@ struct AgentPresentationTests {
         #expect(data.tiers.first?.providerId == "claude-code")
     }
 
+    @Test func approvalDescribesTheExactDisclosureRuleAndFallbackOrder() throws {
+        let grant = """
+            {"addRule":{"ruleId":"r","category":"health","providerId":"claude-code","purpose":"chat",
+             "allow":true,"expiresUtc":"2026-11-20T00:00:00Z"}}
+            """
+        let change = try JSONDecoder().decode(PolicyChangeSummary.self, from: Data(grant.utf8))
+        let description = PolicyLabels.change(change)
+        #expect(description.contains("Allow Health → claude-code for chat"))
+        #expect(description.contains("expires 2026-11-20T00:00:00Z"))
+        let removal = try JSONDecoder().decode(PolicyChangeSummary.self, from: Data("{\"removeRuleId\":\"r\"}".utf8))
+        #expect(PolicyLabels.change(removal, rules: [try #require(change.addRule)]) == "Remove rule: \(description)")
+        let order = Data("{\"fallbackCategory\":\"health\",\"fallbackChain\":[\"hold\",\"skip\"]}".utf8)
+        let fallback = try JSONDecoder().decode(PolicyChangeSummary.self, from: order)
+        #expect(PolicyLabels.change(fallback).contains("Hold for my decision → Skip"))
+    }
+
     @Test func transcriptHidesRepairPromptsAndSummarizesToolTraffic() {
         let messages = [
             AgentMessage(role: "user", content: "What did I spend?", toolCalls: [], toolCallId: nil),

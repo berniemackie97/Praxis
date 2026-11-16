@@ -1,8 +1,7 @@
 namespace Praxis.Domain.Policy;
 
 /// <summary>
-/// One requested change to the policy. Exactly one field group is set. A change that widens
-/// disclosure or tool permissions needs owner confirmation; a narrowing change applies at once.
+/// One requested change to the policy. Exactly one field group is set.
 /// </summary>
 public sealed record PolicyChange(
     string? Mode = null, DisclosureRule? AddRule = null, Guid? RemoveRuleId = null,
