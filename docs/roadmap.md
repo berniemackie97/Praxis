@@ -116,3 +116,31 @@ Rules for this lane:
 An epic closes only after its feature outcomes are demonstrated and dependency links have no unsatisfied release blockers. A milestone closes when its acceptance evidence is present—not merely because all PRs are green or child issues have been administratively closed.
 
 See [work item rules](tracking.md) for Definition of Ready/Done, classification, priority and WIP policy.
+
+
+## November 16, 2026 — owner-directed source acquisition and local specialist training
+
+**Owner goal:** Ask Praxis to study an approved YouTube channel, playlist, university course, documentation site or source collection; have it discover available material, process what may lawfully and technically be acquired, form source-backed relationships, and report what remains unavailable or insufficiently understood. This is an auditable **collection workflow**, not a claim that the current app can autonomously watch any channel.
+
+### Parallel delivery lane L8 — collection intelligence
+
+[Feature #496](https://github.com/berniemackie97/Praxis/issues/496) (M5/P1 first slice under ingestion epic #288) adds collection-directed acquisition while **reusing** the existing ADR 0044 reader/triage/verified-understanding pipeline, canonical original/source identity, connector authorization, permissions and native Brain. Work is broken down into:
+
+| Work | Outcome | Priority |
+| --- | --- | --- |
+| [#498](https://github.com/berniemackie97/Praxis/issues/498) | Bound and identify channel/course/site collection manifests without blind crawl | P1 |
+| [#499](https://github.com/berniemackie97/Praxis/issues/499) | Authorized HTML/PDF and permitted media/caption acquisition with exact original receipts, SSRF and rights protections | P1 |
+| [#500](https://github.com/berniemackie97/Praxis/issues/500) | Durable resumable collection jobs with per-item status, quotas, approval and revocation | P1 |
+| [#501](https://github.com/berniemackie97/Praxis/issues/501) | Source-backed course/playlist/module/page/time relationships and truthful evidence coverage | P2 |
+| [#502](https://github.com/berniemackie97/Praxis/issues/502) | Approved research/acquisition tool contracts and versioned, owner-reviewed `study-source-collection` skill | P2 |
+| [#503](https://github.com/berniemackie97/Praxis/issues/503) | Measured end-to-end quality, local/remote cost, security and restart acceptance on a representative course | P1 |
+
+**Existing boundaries:** #104/#111 cover URL/browser capture, #294/#317–#319 connector security and owner rules, #329 audio/video caption/transcription work, #296/#177 playback semantics, #485 ZIP member sources, #173/#334 agent task approvals, and #298 Skills v1. The new work must not duplicate any of these, grant tool rights from imported text, or assume that arbitrary YouTube captions/media are available for download. A transcript-only import is not proof of understanding visual demonstrations. Full autonomous source acquisition is not a new #170 MVP blocker.
+
+Initial implementation sequence: audit and define #498/#499 contracts against live code; implement a small permitted course subset; add #500 durable coordination; link #501 verified source hierarchies and #502 chat/skill interaction; execute #503 owner-Mac acceptance before broadening to whole channels or periodic refresh. Broad #494 user-defined agent organizations remain separate post-MVP work, and should reuse these tools once independently approved.
+
+### Small-model evidence specialist — separate research slice
+
+[Task #504](https://github.com/berniemackie97/Praxis/issues/504) (M5/P1 research under model-family feature #490) defines **Praxis Signal 1.5B**, initially evaluating query intent, relevance, evidence sufficiency and contradiction/abstention. Preserve G1 checkpoint lineage (not a promoted model); start from pinned foundation and reviewed labels. Benchmark against prompt-only 1.5B, existing embedding models, Qwen3-Reranker-0.6B and deterministic search. Measure held-out source-family generalization, false sufficiency, citations, latency, cost and privacy before promotion (#492). Brain memory changes do not directly alter model weights; training rights are opt-in (#491).
+
+**Execution reality:** Planning issues and this versioned branch are not deployed capabilities. Project #3 Stage/Priority/Status, native parent relationships and actual source/plugin availability must be reconciled and verified separately. The P0 existing chat acceptance (#431) and foundation/MVP evidence gates (#130/#170) remain unchanged.
