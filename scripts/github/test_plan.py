@@ -18,7 +18,15 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(239, len(items))
+        self.assertEqual(240, len(items))
+        self.assertEqual(293, items[507]["parent"])
+        self.assertEqual(("M5", "P1", "knowledge"),
+                         (items[507]["stage"], items[507]["priority"], items[507]["area"]))
+        self.assertEqual({306, 115, 116}, dependencies[314])
+        self.assertEqual({314, 507}, dependencies[315])
+        self.assertNotIn(315, dependencies[314])
+        self.assertIn(507, self.plan["delivery_lanes"][6]["issues"])
+        self.assertNotIn(507, dependencies[170])
         self.assertEqual(300, items[440]["parent"])
         self.assertEqual(97, items[452]["parent"])
         # Post-MVP experience-based Brain, governed model training and agent teams.
