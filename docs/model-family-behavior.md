@@ -1,7 +1,7 @@
 # Praxis model behavior and fleet contract
 
 **Status:** Owner-approved product requirements, November 16, 2026. No training result or runtime implementation is implied.
-**Tracking:** [#481](https://github.com/berniemackie97/Praxis/issues/481). Training and promotion remain governed by [#311](https://github.com/berniemackie97/Praxis/issues/311), [#312](https://github.com/berniemackie97/Praxis/issues/312), and [#313](https://github.com/berniemackie97/Praxis/issues/313).
+**Tracking:** [#481](https://github.com/berniemackie97/Praxis/issues/481) is the completed behavioral/fleet **contract**, not training. The governed model-family lifecycle is [#490](https://github.com/berniemackie97/Praxis/issues/490), with consented dataset curation [#491](https://github.com/berniemackie97/Praxis/issues/491), candidate evaluation/promotion [#492](https://github.com/berniemackie97/Praxis/issues/492), and broader feasibility [#493](https://github.com/berniemackie97/Praxis/issues/493). Existing [#311](https://github.com/berniemackie97/Praxis/issues/311), [#312](https://github.com/berniemackie97/Praxis/issues/312), [#313](https://github.com/berniemackie97/Praxis/issues/313) keep their independent eval/few-shot/LoRA scope. Live episodic memory and correction are [#487](https://github.com/berniemackie97/Praxis/issues/487); owner-defined agent teams are [#494](https://github.com/berniemackie97/Praxis/issues/494).
 
 ## Identity and expected behavior
 
