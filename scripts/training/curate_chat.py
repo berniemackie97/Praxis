@@ -187,12 +187,18 @@ def main():
     parser.add_argument("--limit", type=int, default=2_000)
     parser.add_argument("--seed", type=int, default=20261116)
     args = parser.parse_args()
+    if not args.workspace.is_absolute():
+        parser.error("--workspace must be an absolute path outside the repository")
+    workspace = args.workspace.resolve()
+    repository = Path(__file__).resolve().parents[2]
+    if workspace == repository or repository in workspace.parents:
+        parser.error("--workspace must not be inside the repository")
     if args.limit < 100:
         parser.error("--limit must be at least 100")
     if args.command == "fetch":
-        print(fetch(args.workspace))
+        print(fetch(workspace))
     else:
-        curate(args.workspace, args.limit, args.seed)
+        curate(workspace, args.limit, args.seed)
 
 
 if __name__ == "__main__":
