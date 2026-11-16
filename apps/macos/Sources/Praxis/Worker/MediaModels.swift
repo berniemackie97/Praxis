@@ -57,10 +57,16 @@ struct MediaTimeRange: Equatable {
     let start: Double
     let end: Double
 
+    init(start: Double, end: Double) {
+        self.start = start
+        self.end = end
+    }
+
     init?(locator: String) {
         guard locator.hasPrefix("time:") else { return nil }
         let parts = locator.dropFirst(5).split(separator: "-")
-        guard parts.count == 2, let start = Double(parts[0]), let end = Double(parts[1]), start >= 0, end >= start else { return nil }
+        guard parts.count == 2, let start = Double(parts[0]), let end = Double(parts[1]), start.isFinite, end.isFinite,
+              start >= 0, end > start, end <= 86_400 else { return nil }
         self.start = start
         self.end = end
     }

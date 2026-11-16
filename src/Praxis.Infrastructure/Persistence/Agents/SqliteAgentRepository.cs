@@ -55,21 +55,23 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
             ("$key", profile.KeyAccount), ("$executable", profile.Executable), ("$enabled", profile.Enabled ? 1 : 0), ("$now", Now()));
     });
 
-    public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null)
+    public AgentConversation Create(string backendId, string title, string? model = null, string? effort = null,
+        string contextPreset = AgentContextPreset.Balanced)
     {
         AgentBackendProfile backend = ReadBackends().FirstOrDefault(profile => profile.BackendId == backendId && profile.Enabled)
             ?? throw new ArgumentException("Connect and enable this chat model before starting a conversation.", nameof(backendId));
         ValidateModelChoice(backend, model, effort);
+        AgentContextPreset.Validate(contextPreset);
 
         string bounded = string.IsNullOrWhiteSpace(title) ? "New conversation" : title.Trim().Length > 200 ? title.Trim()[..200] : title.Trim();
         DateTimeOffset now = clock.GetUtcNow();
         AgentConversation conversation = new(Guid.NewGuid(), backendId, bounded, now, now,
-            model ?? backend.Model, model is null ? backend.Effort : effort);
+            model ?? backend.Model, model is null ? backend.Effort : effort, contextPreset);
         Write("""
-            INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc, model, effort)
-            VALUES ($id, $backend, $title, $now, $now, $model, $effort)
+            INSERT INTO agent_conversations (conversation_id, backend_id, title, created_utc, updated_utc, model, effort, context_preset)
+            VALUES ($id, $backend, $title, $now, $now, $model, $effort, $context)
             """, ("$id", conversation.ConversationId.ToString("D")), ("$backend", backendId), ("$title", bounded),
-            ("$now", CatalogValues.Timestamp(now)), ("$model", conversation.Model), ("$effort", conversation.Effort));
+            ("$now", CatalogValues.Timestamp(now)), ("$model", conversation.Model), ("$effort", conversation.Effort), ("$context", contextPreset));
         return conversation;
     }
 
@@ -88,6 +90,18 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         }
 
         return conversation with { Model = model, Effort = effort };
+    }
+
+    public AgentConversation SetContext(Guid conversationId, string contextPreset)
+    {
+        AgentContextPreset.Validate(contextPreset);
+        if (Write("UPDATE agent_conversations SET context_preset = $context WHERE conversation_id = $id",
+                ("$context", contextPreset), ("$id", conversationId.ToString("D"))) != 1)
+        {
+            throw new ArgumentException("Unknown conversation.");
+        }
+
+        return Read(conversationId) ?? throw new ArgumentException("Unknown conversation.");
     }
 
     private static void ValidateModelChoice(AgentBackendProfile backend, string? model, string? effort)
@@ -256,23 +270,103 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         List<AgentMemory> memories = [];
         while (reader.Read())
         {
-            memories.Add(new AgentMemory(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-                reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4))));
+            memories.Add(ReadMemory(reader));
         }
 
         return memories;
     });
 
+    public AgentMemory SaveNameCorrection(Guid conversationId, AgentNameCorrection correction, bool apply) =>
+        database.Execute(connection =>
+        {
+            using SqliteTransaction transaction = connection.BeginTransaction();
+            AgentMemory? existing = null;
+            using (SqliteCommand select = connection.CreateCommand("""
+                SELECT memory_id, text, status, conversation_id, created_utc
+                FROM agent_memories WHERE name_key = $key AND current_name = $name AND business_name = $business
+                  AND status IN ('active', 'proposed') ORDER BY status LIMIT 1
+                """))
+            {
+                select.Transaction = transaction;
+                select.Parameters.AddWithValue("$key", correction.Key);
+                select.Parameters.AddWithValue("$name", correction.Current);
+                select.Parameters.AddWithValue("$business", correction.Business ? 1 : 0);
+                using SqliteDataReader reader = select.ExecuteReader();
+                if (reader.Read())
+                {
+                    existing = ReadMemory(reader);
+                }
+            }
+
+            if (existing?.Status == AgentMemory.Active || (!apply && existing is not null))
+            {
+                transaction.Commit();
+                return existing;
+            }
+
+            string status = apply ? AgentMemory.Active : AgentMemory.Proposed;
+            DateTimeOffset now = clock.GetUtcNow();
+            string timestamp = CatalogValues.Timestamp(now);
+            AgentMemory saved = existing is null
+                ? new(Guid.NewGuid(), correction.Describe(), status, conversationId, now)
+                : existing with { Status = status };
+            string id = saved.MemoryId.ToString("D");
+            connection.Run(transaction, """
+                UPDATE agent_memories SET status = 'rejected', updated_utc = $now WHERE name_key = $key
+                  AND memory_id <> $id AND (status = 'proposed' OR ($apply = 1 AND status = 'active'))
+                """, ("$now", timestamp), ("$key", correction.Key), ("$id", id), ("$apply", apply ? 1 : 0));
+            connection.Run(transaction, """
+                INSERT INTO agent_memories
+                    (memory_id, conversation_id, text, status, created_utc, updated_utc, previous_name, current_name, name_key, business_name)
+                VALUES ($id, $conversation, $text, $status, $now, $now, $previous, $current, $key, $business)
+                ON CONFLICT(memory_id) DO UPDATE SET status = excluded.status, updated_utc = excluded.updated_utc
+                """, ("$id", id), ("$conversation", conversationId.ToString("D")), ("$text", saved.Text), ("$status", status),
+                ("$now", timestamp), ("$previous", correction.Previous), ("$current", correction.Current), ("$key", correction.Key),
+                ("$business", correction.Business ? 1 : 0));
+            transaction.Commit();
+            return saved;
+        });
+
+    public IReadOnlyList<AgentNameCorrection> ReadNameCorrections() => Query("""
+        SELECT previous_name, current_name, business_name FROM agent_memories
+        WHERE name_key IS NOT NULL AND status = 'active' ORDER BY updated_utc DESC
+        """, reader => new AgentNameCorrection(reader.GetString(0), reader.GetString(1), reader.GetInt64(2) != 0));
+
+    // Structured corrections are changed through the owner's exact correction flow, not a raw text tool.
     public bool EditMemory(Guid memoryId, string? replacement) => replacement is null
-        ? Write("DELETE FROM agent_memories WHERE memory_id = $id", ("$id", memoryId.ToString("D"))) == 1
+        ? Write("DELETE FROM agent_memories WHERE memory_id = $id AND status = 'active' AND name_key IS NULL",
+            ("$id", memoryId.ToString("D"))) == 1
         : Write("""
-            UPDATE agent_memories SET text = $text, updated_utc = $now WHERE memory_id = $id
-              AND NOT EXISTS (SELECT 1 FROM agent_memories WHERE memory_id <> $id AND lower(trim(text)) = lower(trim($text)))
+            UPDATE agent_memories SET text = $text, updated_utc = $now
+            WHERE memory_id = $id AND status = 'active' AND name_key IS NULL
+              AND NOT EXISTS (SELECT 1 FROM agent_memories WHERE memory_id <> $id
+                  AND status = 'active' AND lower(trim(text)) = lower(trim($text)))
             """, ("$id", memoryId.ToString("D")), ("$text", replacement), ("$now", Now())) == 1;
 
-    public bool SetMemoryStatus(Guid memoryId, string status) => Write("""
-        UPDATE agent_memories SET status = $status, updated_utc = $now WHERE memory_id = $id
-        """, ("$status", status), ("$now", Now()), ("$id", memoryId.ToString("D"))) == 1;
+    public bool SetMemoryStatus(Guid memoryId, string status) => database.Execute(connection =>
+    {
+        using SqliteTransaction transaction = connection.BeginTransaction();
+        string id = memoryId.ToString("D");
+        string now = Now();
+        if (status == AgentMemory.Active)
+        {
+            connection.Run(transaction, """
+                UPDATE agent_memories SET status = 'rejected', updated_utc = $now
+                WHERE status = 'active' AND name_key =
+                    (SELECT name_key FROM agent_memories WHERE memory_id = $id AND status = 'proposed')
+                """, ("$now", now), ("$id", id));
+        }
+
+        int changed = connection.Run(transaction, """
+            UPDATE agent_memories SET status = $status, updated_utc = $now WHERE memory_id = $id AND status = 'proposed'
+            """, ("$status", status), ("$now", now), ("$id", id));
+        transaction.Commit();
+        return changed == 1;
+    });
+
+    private static AgentMemory ReadMemory(SqliteDataReader reader) =>
+        new(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
+            reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4)));
 
     public void SaveArtifact(AgentArtifact artifact) => Write("""
         INSERT INTO agent_artifacts (artifact_id, title, source_id, revision, path, conversation_id, updated_utc)
@@ -288,10 +382,10 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentArtifact> ReadArtifacts(int limit) => Artifacts("", Math.Clamp(limit, 1, 500));
 
     private IReadOnlyList<AgentConversation> Conversations(string where, int limit, params (string, object?)[] parameters) => Query(
-        $"SELECT conversation_id, backend_id, title, created_utc, updated_utc, model, effort FROM agent_conversations {where} ORDER BY updated_utc DESC LIMIT {limit}",
+        $"SELECT conversation_id, backend_id, title, created_utc, updated_utc, model, effort, context_preset FROM agent_conversations {where} ORDER BY updated_utc DESC LIMIT {limit}",
         reader => new AgentConversation(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
             CatalogValues.ParseTimestamp(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4)),
-            Text(reader, 5), Text(reader, 6)), parameters);
+            Text(reader, 5), Text(reader, 6), reader.GetString(7)), parameters);
 
     private IReadOnlyList<AgentProposal> Proposals(string where, int limit, params (string, object?)[] parameters) => Query(
         $"SELECT proposal_id, conversation_id, kind, payload, rationale, status, created_utc FROM agent_proposals {where} ORDER BY created_utc DESC LIMIT {limit}",

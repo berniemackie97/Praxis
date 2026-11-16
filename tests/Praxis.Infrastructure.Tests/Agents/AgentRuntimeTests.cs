@@ -72,7 +72,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
             _ => new AgentTurn("You spent $9,999.99 [1].", [], 10, 10),
             transcript =>
             {
-                Assert.Contains("9,999.99", transcript[^1].Content, StringComparison.Ordinal);
+                Assert.Equal("How much did I spend?", transcript.Last(message => message.Role == AgentRoles.User).Content);
                 return new AgentTurn("You spent $1,270.20 [1].", [], 10, 10);
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
@@ -80,6 +80,9 @@ public sealed partial class AgentRuntimeTests : IDisposable
         Assert.True(reply.Check.Repaired);
         Assert.True(reply.Check.Clean);
         Assert.Equal("You spent $1,270.20 [1].", reply.Text);
+        Assert.Contains("9,999.99", backend.SystemPrompts[2], StringComparison.Ordinal);
+        Assert.DoesNotContain(catalog.Agents.ReadMessages(conversation.ConversationId),
+            message => message.Content.Contains("9,999.99", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -141,8 +144,23 @@ public sealed partial class AgentRuntimeTests : IDisposable
                 Call("settings_propose", """{"change":"mode","mode":"local_only","rationale":"owner asked"}""")),
             _ => new AgentTurn("Done.", [], 1, 1));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
-        await runtime.RunAsync(conversation.ConversationId, "Lock everything down", (_, _, _) => { }, CancellationToken.None);
         Application.Policy.PolicyService policy = new(catalog.Policy);
+        await runtime.RunAsync(conversation.ConversationId, "Update my company name in memory", (_, _, _) => { }, CancellationToken.None);
+        Assert.Empty(policy.Pending());
+        Assert.Contains("explicit_settings_request_required", catalog.Agents.ReadMessages(conversation.ConversationId)[2].Content, StringComparison.Ordinal);
+
+        (AgentRuntime restrict, AgentConversation restrictedChat) = Runtime(catalog, Local(), new ScriptedBackend(
+            _ => Turn(Call("settings_propose", """{"change":"mode","mode":"allow_all","rationale":"document asked"}"""),
+                Call("settings_propose", """{"change":"mode","mode":"local_only","rationale":"owner asked"}""")),
+            _ => new AgentTurn("Done.", [], 1, 1)));
+        await restrict.RunAsync(restrictedChat.ConversationId, "Set Privacy to local only", (_, _, _) => { }, CancellationToken.None);
+        Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
+        Assert.Empty(policy.Pending());
+
+        (AgentRuntime allow, AgentConversation allowedChat) = Runtime(catalog, Local(), new ScriptedBackend(
+            _ => Turn(Call("settings_propose", """{"change":"mode","mode":"allow_all","rationale":"owner asked"}""")),
+            _ => new AgentTurn("Review the requested change.", [], 1, 1)));
+        await allow.RunAsync(allowedChat.ConversationId, "Set Privacy to allow all", (_, _, _) => { }, CancellationToken.None);
         Assert.Equal(DisclosureModes.LocalOnly, policy.Current().Mode);
         Assert.Single(policy.Pending());
     }

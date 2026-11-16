@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Praxis.Application.Agents.Memory;
 using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Policy;
@@ -9,7 +11,7 @@ namespace Praxis.Application.Agents.Tools;
 /// Changes settings on the owner's explicit request. More restrictive changes apply at once; more
 /// permissive ones are queued for confirmation in the Praxis app — nothing here can confirm them.
 /// </summary>
-public sealed class SettingsProposeTool(PolicyService policy, TimeProvider clock) : IAgentTool
+public sealed partial class SettingsProposeTool(PolicyService policy, TimeProvider clock) : IAgentTool
 {
     public AgentToolDefinition Definition { get; } = new("settings_propose",
         """
@@ -30,6 +32,13 @@ public sealed class SettingsProposeTool(PolicyService policy, TimeProvider clock
     {
         ToolArguments args = new(arguments);
         string kind = args.Choice("change", ["mode", "tool_permission", "grant", "deny", "remove_rule", "fallback"], "");
+        string owner = context.OwnerText?.Trim() ?? "";
+        if (!AllowsPolicyRequest(owner, kind, args))
+        {
+            return Task.FromResult(AgentToolOutput.Error("explicit_settings_request_required",
+                "The latest owner message must explicitly request this Privacy or tool permission change. Updating a saved fact does not authorize changing settings."));
+        }
+
         PolicyChange change = kind switch
         {
             "mode" => new PolicyChange(Mode: args.RequireText("mode", 32)),
@@ -46,4 +55,32 @@ public sealed class SettingsProposeTool(PolicyService policy, TimeProvider clock
             ? new { status = "applied", pendingChangeId = (Guid?)null }
             : new { status = "awaiting_owner_confirmation_in_app", pendingChangeId = outcome.PendingChangeId }));
     }
+
+    private static bool AllowsPolicyRequest(string owner, string kind, ToolArguments args)
+    {
+        if (owner.Length > 500 || !SettingRequest().IsMatch(owner))
+        {
+            return false;
+        }
+
+        bool Has(string value) => MemoryText.HasPhrase(owner, value);
+        bool Exact(string? value) => !string.IsNullOrWhiteSpace(value) && (Has(value) || Has(value.Replace('_', ' ')));
+        return kind switch
+        {
+            "mode" => (Has("privacy") || Has("disclosure")) && Exact(args.Text("mode", 32)),
+            "tool_permission" => (Has("tool permission") || Has("tool permissions")) && Exact(args.Text("toolPermission", 32)),
+            "grant" => (Has("grant") || Has("allow")) && Exact(args.Text("category", 32)) && Exact(args.Text("providerId", 64)) &&
+                Exact(args.Text("purpose", 16) ?? DisclosurePurposes.Chat) && (Has("disclosure") || Has("privacy")),
+            "deny" => (Has("deny") || Has("block")) && Exact(args.Text("category", 32)) && Exact(args.Text("providerId", 64)) &&
+                Exact(args.Text("purpose", 16) ?? DisclosurePurposes.Chat) && (Has("disclosure") || Has("privacy")),
+            "remove_rule" => Has("remove") && Has("rule") && Exact(args.Text("ruleId", 36)),
+            "fallback" => Has("fallback") && Exact(args.Text("category", 32)) &&
+                args.Strings("chain", 4, 32) is { } chain && chain.Any() && chain.All(Exact),
+            _ => false
+        };
+    }
+
+    [GeneratedRegex(@"^(?:please\s+)?(?:set|change|switch|grant|allow|deny|block|remove)\b[^?!\r\n]*[.!]?$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SettingRequest();
 }

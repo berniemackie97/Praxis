@@ -53,7 +53,8 @@ final class ApprovalsWorkbenchModel: ObservableObject {
             self?.refresh()
         }) { [weak self] item in
             self?.decidingActions.remove(action.id)
-            self?.notice = item.status == "accepted" ? "Action completed." : item.status == "rejected" ? "Action rejected." : nil
+            self?.notice = item.status == "accepted" ? "Action completed." : item.status == "rejected" ? "Action rejected." :
+                item.status == "running" ? "Installation started. Check Recent Chat actions for the result." : nil
             self?.error = item.status == "failed" ? "Action failed. See the action history for details." : nil
             self?.refresh()
         }

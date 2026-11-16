@@ -70,7 +70,7 @@ struct ApprovalsView: View {
                         }
                         if !model.memories.isEmpty {
                             QueueSection(title: "Things to remember", systemImage: "brain",
-                                         caption: "Preferences the agent heard in conversation.", count: model.memories.count) {
+                                         caption: "Facts, preferences, and corrections to review.", count: model.memories.count) {
                                 ForEach(model.memories) { memory in
                                     DecisionCard(systemImage: "text.quote", title: memory.text, detail: nil,
                                                  accept: "Remember", reject: "Discard") { model.resolve(memory, accept: $0) }

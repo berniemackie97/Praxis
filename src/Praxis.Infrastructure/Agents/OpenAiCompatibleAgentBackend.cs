@@ -114,7 +114,45 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         }
 
         JsonElement usage = root.TryGetProperty("usage", out JsonElement used) ? used : default;
-        return new AgentTurn(text, calls, Tokens(usage, "prompt_tokens"), Tokens(usage, "completion_tokens"));
+        return new AgentTurn(isLocalOllama ? VisibleOllamaAnswer(text, calls.Count != 0) : text,
+            calls, Tokens(usage, "prompt_tokens"), Tokens(usage, "completion_tokens"));
+    }
+
+    private static string VisibleOllamaAnswer(string reply, bool hasToolCalls)
+    {
+        if (hasToolCalls)
+        {
+            return "";
+        }
+
+        // Some local templates put analysis into the visible content field, occasionally without
+        // the opening delimiter. Never present that text or treat printed JSON as a tool call.
+        const string close = "</think>";
+        int boundary = reply.IndexOf(close, StringComparison.OrdinalIgnoreCase);
+        string text = boundary >= 0 ? reply[(boundary + close.Length)..].Trim() : reply.Trim();
+        if (text.StartsWith("<think>", StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        if (text.StartsWith('{'))
+        {
+            try
+            {
+                using JsonDocument printed = JsonDocument.Parse(text);
+                if (printed.RootElement.TryGetProperty("name", out _) &&
+                    printed.RootElement.TryGetProperty("arguments", out _))
+                {
+                    return "";
+                }
+            }
+            catch (JsonException)
+            {
+                // Ordinary prose is not required to be JSON.
+            }
+        }
+
+        return text;
     }
 
     private static JsonObject Assistant(AgentMessage message)

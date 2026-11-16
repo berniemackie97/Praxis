@@ -62,6 +62,8 @@ struct ChatView: View {
     private var recallHistory: some View {
         VStack(alignment: .leading, spacing: Spacing.m) {
             Text("Brain Context").font(.title2)
+            Text("Context budget: \(model.activeContextPreset.capitalized). Change it beside the model picker.")
+                .font(.callout)
             Text("Recent recall decisions for this chat. These are candidate excerpts, not proof the answer used them.")
                 .foregroundStyle(.secondary)
             List(model.brainRecalls) { receipt in
@@ -124,6 +126,12 @@ struct ChatView: View {
                     ForEach(effortOptions, id: \.self) { Text($0.capitalized).tag($0) }
                 }
             }
+            Picker("Context", selection: Binding(get: { model.activeContextPreset }, set: { model.chooseContextPreset($0) })) {
+                Text("Compact").tag("compact")
+                Text("Balanced").tag("balanced")
+                Text("Expanded").tag("expanded")
+            }
+            .help("Adjust how much chat history and how many Brain excerpts Praxis sends. The model’s token window and privacy rules do not change.")
             Spacer(minLength: 0)
         }
         .font(.callout)
@@ -253,7 +261,12 @@ private struct Transcript: View {
                         Welcome(model: model)
                     }
                     ForEach(model.transcript) { line in
-                        ChatBubble(line: line).id(line.id)
+                        VStack(alignment: .leading, spacing: Spacing.m) {
+                            ChatBubble(line: line)
+                            ForEach(InlineChatClips.cited(in: line.text, citations: line.citations), id: \.number) { clip in
+                                MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
+                            }
+                        }.id(line.id)
                     }
                     if model.running {
                         Thinking(model: model).id("thinking")
@@ -379,19 +392,22 @@ private struct Thinking: View {
     }
 }
 
+enum InlineChatClips {
+    static func cited(in text: String, citations: [AgentCitation]) -> [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
+        Array(citations.enumerated().compactMap { index, citation in
+            let number = index + 1
+            guard text.contains("[\(number)]"), let range = MediaTimeRange(locator: citation.locator) else { return nil }
+            return (number, citation, range)
+        }.prefix(3))
+    }
+}
+
 private struct ReplyDetails: View {
     let reply: AgentReply
     @ObservedObject var model: ChatWorkbenchModel
     let openAgentSettings: () -> Void
     @State private var showingSources = false
     @State private var showingSaveNote = false
-
-    /// Cited clips, played inline; the first few are shown as players, all stay listed as chips.
-    private var clips: [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
-        Array(reply.citations.enumerated().compactMap { index, citation in
-            MediaTimeRange(locator: citation.locator).map { (index + 1, citation, $0) }
-        }.prefix(3))
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
@@ -408,9 +424,6 @@ private struct ReplyDetails: View {
             if !reply.citations.isEmpty {
                 DisclosureGroup(Count.label(reply.citations.count, "citation"), isExpanded: $showingSources) {
                     VStack(alignment: .leading, spacing: Spacing.s) {
-                        ForEach(clips, id: \.citation.id) { clip in
-                            MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
-                        }
                         ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, citation in
                             Label(chipText(index, citation), systemImage: SourceSymbol.of(citation.sourceName))
                                 .lineLimit(1)

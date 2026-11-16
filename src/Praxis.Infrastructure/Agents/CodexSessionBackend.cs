@@ -18,7 +18,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     private static readonly HashSet<string> NoninteractiveReads = new(StringComparer.Ordinal)
     {
         "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
-        "data_describe", "data_query", "compute_evaluate", "skill_search", "skill_open", "capability_result"
+        "data_describe", "data_query", "compute_evaluate", "skill_search", "skill_open", "media_find", "capability_discover", "capability_result"
     };
 
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(15);

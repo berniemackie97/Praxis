@@ -15,6 +15,8 @@ public sealed class MediaActions(MediaEvidence media, MediaPlayback playback) : 
             new MediaInspectionResponse(await media.InspectAsync(fields.RequireGuid("sourceId"),
                 fields.OptionalInteger("revision", 1, int.MaxValue), cancellationToken))),
         DesktopAction.OfAsync("mediaPlayback", async (fields, cancellationToken) =>
-            new MediaPlaybackResponse(await playback.ResolveAsync(fields.RequireGuid("sourceId"), cancellationToken)))
+            new MediaPlaybackResponse(await playback.ResolveAsync(fields.RequireGuid("sourceId"), cancellationToken,
+                fields.RequireGuid("itemId"), fields.OptionalInteger("revision", 1, int.MaxValue) ?? throw new ArgumentException("A cited media revision is required."),
+                fields.OptionalText("timebase", 32, "The playback timebase is invalid."), citedClip: true)))
     ];
 }

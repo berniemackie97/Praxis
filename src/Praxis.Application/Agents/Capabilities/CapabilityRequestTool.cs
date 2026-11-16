@@ -9,9 +9,9 @@ public sealed class CapabilityRequestTool(CapabilityService capabilities) : IAge
     public const string ToolName = "capability_request";
 
     public AgentToolDefinition Definition { get; } = new(ToolName,
-        "Ask the owner to approve one exact action. terminal: exact shell command. browser-open: exact HTTPS URL. The action does not happen until the owner approves it in Approvals.",
+        "Ask the owner to approve one exact action. terminal: exact shell command. browser-open: exact HTTPS URL. brew-install: exact Homebrew core formula. npm-install: one package@version. Discover commands first. The action does not happen until the owner approves it in Approvals.",
         ToolArguments.Schema("""
-            {"type":"object","properties":{"operation":{"type":"string","enum":["terminal","browser-open"]},
+            {"type":"object","properties":{"operation":{"type":"string","enum":["terminal","browser-open","brew-install","npm-install"]},
               "target":{"type":"string"}},"required":["operation","target"]}
             """), ToolTiers.Propose, AuditArguments: false);
 
