@@ -197,9 +197,79 @@ public sealed class MediaMomentTests : IDisposable
 
         AgentCitation clip = Assert.Single(reply.Citations);
         Assert.Equal(video.SourceId, clip.SourceId);
-        Assert.Equal("time:14.5-22.5", clip.Locator);
+        Assert.Equal("time:14.5-44.5", clip.Locator);
         Assert.Contains("[1]", reply.Text, StringComparison.Ordinal);
         Assert.Equal(clip, Assert.Single(catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Citations));
+    }
+
+    private static readonly TranscriptSegment[] Lecture =
+    [
+        new(0, 5_000, "Today we look at how a computer is built."),
+        new(5_000, 10_000, "The RAM chip sits next to the processor on the board."),
+        new(10_000, 15_000, "But first, the power supply."),
+        new(15_000, 20_000, "It converts wall current into steady voltage."),
+        new(20_000, 25_000, "Every part depends on it."),
+        new(25_000, 30_000, "Fans keep it cool."),
+        new(30_000, 35_000, "That covers power."),
+        new(35_000, 40_000, "Cables carry it to each part."),
+        new(40_000, 45_000, "Let us move on."),
+        new(45_000, 50_000, "Now for memory."),
+        new(50_000, 55_000, "Random access memory holds the data the processor is working on,"),
+        new(55_000, 60_000, "and because it is random access memory, any address can be read just as fast."),
+        new(60_000, 65_000, "RAM forgets everything when the power goes off."),
+        new(65_000, 70_000, "That is why RAM is paired with storage."),
+        new(70_000, 75_000, "Each RAM cell is a tiny latch,"),
+        new(75_000, 80_000, "and the address picks one row of latches."),
+        new(80_000, 85_000, "That is the whole trick."),
+        new(85_000, 90_000, "Next, the disk.")
+    ];
+
+    [Fact]
+    public async Task ClipsCoverTheDensestPassageInWholeSentencesAndFollowUpsGetDifferentOnes()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        CapturedOriginal video = await Capture(catalog, "How-do-computers-work.mp4", "fixture movie");
+        ProcessingDriver reader = new(catalog, new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing,
+            CatalogProcessing.Readers(new VisionOcrEngine()), new FakeTranscriber(TranscriptionResult.Recognized(Lecture))));
+        Assert.True(await reader.ProcessNextAsync());
+
+        MediaFindTool tool = new(new KnowledgeRetriever(catalog.Search, catalog.Embeddings, catalog.Models, new OllamaEmbeddingModelConnector()),
+            new MediaMoments(catalog.Text), catalog.Sources, catalog.Agents);
+        AgentBackendProfile local = new("ollama", AgentBackendKinds.OpenAiCompatible, "http://127.0.0.1:11434/v1", "tiny-fixture", null, null, true);
+        catalog.Agents.SaveBackend(local);
+        AgentConversation conversation = catalog.Agents.Create(local.BackendId, "ram clips");
+        AgentRuntime chat = AgentComposition.Runtime(catalog, [tool], new UnavailableBackendFactory(), TimeProvider.System);
+
+        AgentReply first = await chat.RunAsync(conversation.ConversationId, "show me a clip of how ram works", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+
+        // The passage that explains RAM (spoken out as "random access memory" too) wins over the passing first mention,
+        // starts at its sentence and runs to the end of the sentence it was in.
+        AgentCitation best = first.Citations[0];
+        Assert.True(TimeLocator.TryParse(best.Locator, out long start, out long end));
+        Assert.Equal(50_000 - MediaMoments.LeadInMilliseconds, start);
+        Assert.Equal(80_000 + MediaMoments.TailMilliseconds, end);
+        Assert.Equal(2, first.Citations.Count);
+
+        AgentReply refined = await chat.RunAsync(conversation.ConversationId, "those clips are bad do you have other ones?", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+        Assert.Equal(0, refined.InputTokens);
+        Assert.Contains("different", refined.Text, StringComparison.Ordinal);
+        Assert.All(refined.Citations, citation => Assert.DoesNotContain(citation.Locator, first.Citations.Select(item => item.Locator)));
+
+        AgentReply exhausted = await chat.RunAsync(conversation.ConversationId, "same video is fine just make the clips better", (_, _, _) => { },
+            CancellationToken.None, useTools: false);
+        Assert.Empty(exhausted.Citations);
+        Assert.Contains("beyond the ones I already showed", exhausted.Text, StringComparison.Ordinal);
+
+        // A model that names the recording by its file name gets it, and can ask to include clips already shown.
+        AgentToolOutput named = await tool.InvokeAsync(Json("""{"query":"ram","sourceId":"How-do-computers-work.mp4","includeShown":true}"""),
+            AgentPrimitivesTests.Context() with { ConversationId = conversation.ConversationId }, CancellationToken.None);
+        Assert.Equal(video.SourceId, named.Citations[0].SourceId);
+        Assert.Equal(best.Locator, named.Citations[0].Locator);
+        ArgumentException unknown = await Assert.ThrowsAsync<ArgumentException>(() => tool.InvokeAsync(
+            Json("""{"query":"ram","sourceId":"missing.mp4"}"""), AgentPrimitivesTests.Context(), CancellationToken.None));
+        Assert.Contains("No recording named 'missing.mp4'", unknown.Message, StringComparison.Ordinal);
     }
 
     private sealed class UnavailableBackendFactory : IAgentBackendFactory
