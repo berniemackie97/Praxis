@@ -113,6 +113,8 @@ Rules for this lane:
 
 ## Quality gates
 
+Intake quality follows a measured sequence: [#507](https://github.com/berniemackie97/Praxis/issues/507) audits triage, standalone semantic enrichment, the local draft and stronger-tier understanding against the actual Qwen 3.5 4B baseline before consolidating any stages; [#315](https://github.com/berniemackie97/Praxis/issues/315) establishes independent, source-grouped triage/enrichment quality metrics and drift; [#311](https://github.com/berniemackie97/Praxis/issues/311) owns the shared golden promotion gate; [#379](https://github.com/berniemackie97/Praxis/issues/379) owns real-model owner-Mac evidence. [#314](https://github.com/berniemackie97/Praxis/issues/314) independently calibrates sampled re-verification before #315's downstream drift reporting; it does not depend on #315. The existing #170 MVP dependency list remains unchanged.
+
 An epic closes only after its feature outcomes are demonstrated and dependency links have no unsatisfied release blockers. A milestone closes when its acceptance evidence is present—not merely because all PRs are green or child issues have been administratively closed.
 
 See [work item rules](tracking.md) for Definition of Ready/Done, classification, priority and WIP policy.
