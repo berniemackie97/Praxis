@@ -58,6 +58,39 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(1, revoked.Withheld);
     }
 
+
+    [Theory]
+    [InlineData("Reply with rent only.")]
+    [InlineData("Say 'rent' only.")]
+    [InlineData("Hello!")]
+    public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation chat = catalog.Agents.Create(profile.BackendId, "direct reply");
+        Guid lease = Assert.Single(catalog.Search.Query("rent", 10)).SourceId;
+        catalog.Policy.SaveCategory(new SourceCategory(lease, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        PolicyService policy = new(catalog.Policy);
+        policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
+        policy.Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Documents, profile.BackendId,
+            DisclosurePurposes.Chat, true, null)), PolicyActors.Owner);
+
+        IReadOnlyList<AgentMessage> delivered = [];
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn("OK", [], 5, 2)),
+            messages => delivered = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt, (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        Assert.Equal(prompt, Assert.Single(delivered).Content);
+        Assert.Equal("OK", reply.Text);
+        Assert.Empty(reply.Citations);
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10));
+        Assert.Equal("not_needed", receipt.Outcome);
+        Assert.Equal(0, receipt.Considered);
+        Assert.Empty(receipt.Selected);
+    }
+
     [Fact]
     public async Task TerminalActionRequiresOwnerDecisionRunsOnceAndOnlyReturnsOutputToLocalChat()
     {

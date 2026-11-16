@@ -17,6 +17,11 @@ internal static partial class AgentBrainContext
     internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
         ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum)
     {
+        if (DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt))
+        {
+            return ("not_needed", 0, 0, []);
+        }
+
         string[] terms = Terms().Matches(prompt).Select(match => match.Value)
             .Where(term => !CommonWords.Contains(term)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
         if (terms.Length == 0)
@@ -51,6 +56,14 @@ internal static partial class AgentBrainContext
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return terms.Count(evidenceTerms.Contains);
     }
+
+    [GeneratedRegex("""^\s*(?:(?:please|just)\s+)?(?:reply|respond|say|print|output)\s+(?:with\s+)?(?:[\p{L}\p{N}_-]{1,40}|"[^"\r\n]{1,80}"|'[^'\r\n]{1,80}')\s+(?:only|exactly)\s*[.!]?\s*$""",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DirectReply();
+
+    [GeneratedRegex(@"^\s*(?:hi|hello|hey|thanks|thank you|good morning|good afternoon|good evening)[!.\s]*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Greeting();
 
     [GeneratedRegex(@"[\p{L}\p{N}][\p{L}\p{N}_-]{3,23}")]
     private static partial Regex Terms();

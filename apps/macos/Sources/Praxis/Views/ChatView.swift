@@ -92,6 +92,7 @@ struct ChatView: View {
         case "withheld": "Relevant excerpts were withheld by policy"
         case "weak_matches": "No strong enough match to include"
         case "no_query": "No useful lookup terms in the message"
+        case "not_needed": "No Brain lookup needed for this request"
         default: "No matching indexed excerpts"
         }
     }
@@ -392,12 +393,18 @@ private struct Thinking: View {
     }
 }
 
+enum CitationMarkers {
+    static func indices(in text: String, count: Int) -> [Int] {
+        (0..<count).filter { text.contains("[\($0 + 1)]") }
+    }
+}
+
 enum InlineChatClips {
     static func cited(in text: String, citations: [AgentCitation]) -> [(number: Int, citation: AgentCitation, range: MediaTimeRange)] {
-        Array(citations.enumerated().compactMap { index, citation in
-            let number = index + 1
-            guard text.contains("[\(number)]"), let range = MediaTimeRange(locator: citation.locator) else { return nil }
-            return (number, citation, range)
+        Array(CitationMarkers.indices(in: text, count: citations.count).compactMap { index in
+            let citation = citations[index]
+            guard let range = MediaTimeRange(locator: citation.locator) else { return nil }
+            return (index + 1, citation, range)
         }.prefix(3))
     }
 }
@@ -408,6 +415,8 @@ private struct ReplyDetails: View {
     let openAgentSettings: () -> Void
     @State private var showingSources = false
     @State private var showingSaveNote = false
+
+    private var citedIndices: [Int] { CitationMarkers.indices(in: reply.text, count: reply.citations.count) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
@@ -421,10 +430,11 @@ private struct ReplyDetails: View {
             .sheet(isPresented: $showingSaveNote) {
                 ChatNoteSheet(model: model, draft: reply.text)
             }
-            if !reply.citations.isEmpty {
-                DisclosureGroup(Count.label(reply.citations.count, "citation"), isExpanded: $showingSources) {
+            if !citedIndices.isEmpty {
+                DisclosureGroup(Count.label(citedIndices.count, "citation"), isExpanded: $showingSources) {
                     VStack(alignment: .leading, spacing: Spacing.s) {
-                        ForEach(Array(reply.citations.enumerated()), id: \.offset) { index, citation in
+                        ForEach(citedIndices, id: \.self) { index in
+                            let citation = reply.citations[index]
                             Label(chipText(index, citation), systemImage: SourceSymbol.of(citation.sourceName))
                                 .lineLimit(1)
                                 .help("[\(index + 1)] \(citation.sourceName) · \(citation.locator)")
@@ -435,13 +445,13 @@ private struct ReplyDetails: View {
                 .font(.callout)
             }
             if reply.toolsUnavailable == true {
-                Text(reply.citations.isEmpty ? "This model replied without library tools." : "Answered from read-only brain context.")
+                Text(citedIndices.isEmpty ? "This model replied without library tools." : "Answered from read-only brain context.")
                     .font(.meta).foregroundStyle(.secondary)
             }
             if reply.inputTokens > 0 || reply.outputTokens > 0 {
                 Text("Reported tokens: \(reply.inputTokens.formatted()) in · \(reply.outputTokens.formatted()) out")
                     .font(.meta).foregroundStyle(.secondary)
-                    .help("Model-reported token counts. These are not a subscription balance or charge.")
+                    .help("Provider-reported usage. CLI counts can include cached context and provider overhead; counts are not directly comparable or a subscription balance.")
             }
             if !reply.check.clean {
                 Banner(text: AnswerCheckText.describe(reply.check), tone: .warning, systemImage: "exclamationmark.triangle.fill")

@@ -63,6 +63,14 @@ struct AgentPresentationTests {
         #expect(MediaTimeRange(locator: "time:0-inf") == nil)
     }
 
+
+    @Test func chatOnlyDisplaysReferencesUsedInTheAnswer() {
+        #expect(CitationMarkers.indices(in: "PING", count: 3).isEmpty)
+        #expect(CitationMarkers.indices(in: "The lease says [2].", count: 3) == [1])
+        #expect(CitationMarkers.indices(in: "Evidence [3] and [1].", count: 3) == [0, 2])
+        #expect(CitationMarkers.indices(in: "Unsupported [4].", count: 3).isEmpty)
+    }
+
     @Test func policyDecodesWithRulesFallbacksAndPendingChanges() throws {
         let json = """
             {"ok":true,"data":{"policy":{"mode":"standing_grants","toolPermission":"read_only","holdDuration":"3.00:00:00",
