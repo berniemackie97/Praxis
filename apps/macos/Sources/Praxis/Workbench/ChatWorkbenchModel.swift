@@ -36,6 +36,7 @@ final class ChatWorkbenchModel: ObservableObject {
     @Published private(set) var selectedId: String?
     @Published private(set) var recap: String?
     @Published private(set) var messages: [AgentMessage] = []
+    @Published private(set) var brainRecalls: [BrainRecallReceipt] = []
     @Published private(set) var listError: String?
     @Published private(set) var backendChoice = ""
     @Published private(set) var modelChoice = ""
@@ -192,6 +193,7 @@ final class ChatWorkbenchModel: ObservableObject {
         selectedId = conversation.id
         recap = nil
         messages = []
+        brainRecalls = []
         loadMessages()
         refreshRecap()
     }
@@ -391,6 +393,7 @@ final class ChatWorkbenchModel: ObservableObject {
         channel.send("agentConversation", ["conversationId": id], as: AgentConversationData.self, scope: "conversation",
                      failed: { [weak self] in self?.feedback(.error($0), for: id) }) { [weak self] data in
             self?.messages = data.messages
+            self?.brainRecalls = data.brainRecalls ?? []
         }
     }
 

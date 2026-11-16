@@ -126,9 +126,9 @@ public sealed partial class AgentRuntimeTests
 
     [Theory]
     [InlineData(true, true, true)]
-    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
     [InlineData(false, true, false)]
-    public async Task BrainRecallIsBoundedLocalOnlyAndDoesNotRequireModelTools(bool local, bool useBrain, bool expected)
+    public async Task BrainRecallIsAutomaticWithOrWithoutModelTools(bool local, bool useTools, bool expected)
     {
         using SqliteCatalog catalog = await SeededAsync();
         AgentBackendProfile profile = Local() with
@@ -144,7 +144,7 @@ public sealed partial class AgentRuntimeTests
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
 
         AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "What does the lease say?", (_, _, _) => { },
-            CancellationToken.None, useTools: useBrain);
+            CancellationToken.None, useTools: useTools);
 
         Assert.Equal(expected, handler.Body!.Contains("Monthly rent", StringComparison.Ordinal));
         Assert.Equal(expected, reply.Citations.Any(citation => citation.SourceName == "lease.md"));

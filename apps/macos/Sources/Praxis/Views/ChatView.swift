@@ -6,6 +6,7 @@ struct ChatView: View {
     @ObservedObject var model: ChatWorkbenchModel
     @ObservedObject var setup: ModelSetupModel
     let openAgentSettings: () -> Void
+    @State private var showingRecall = false
 
     private var installed: [InstalledModel] { setup.machine?.installed ?? [] }
     private var localModel: InstalledModel? { InstalledModel.matching(model.activeModel, in: installed) }
@@ -47,11 +48,49 @@ struct ChatView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { model.newConversation() } label: { Label("New Conversation", systemImage: "square.and.pencil") }
                     .help("New conversation (⌘N)")
+                Button { showingRecall = true } label: { Label("Brain Context", systemImage: "brain") }
+                    .disabled(model.selectedId == nil || model.brainRecalls.isEmpty)
             }
         }
+        .sheet(isPresented: $showingRecall) { recallHistory }
         .onAppear {
             model.refresh()
             setup.refresh()
+        }
+    }
+
+    private var recallHistory: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
+            Text("Brain Context").font(.title2)
+            Text("Recent recall decisions for this chat. These are candidate excerpts, not proof the answer used them.")
+                .foregroundStyle(.secondary)
+            List(model.brainRecalls) { receipt in
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("\(DateText.short(receipt.createdUtc)) · \(receipt.backendId)").font(.headline)
+                    Text(recallLabel(receipt.outcome)).font(.callout)
+                    Text("\(receipt.considered) candidate sources · \(receipt.withheld) withheld").font(.caption)
+                    ForEach(Array(receipt.selected.enumerated()), id: \.offset) { _, citation in
+                        Text("\(citation.sourceName) · revision \(citation.revision)").font(.caption).textSelection(.enabled)
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Done") { showingRecall = false }.keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(Spacing.xl)
+        .frame(minWidth: 570, minHeight: 410)
+    }
+
+    private func recallLabel(_ outcome: String) -> String {
+        switch outcome {
+        case "full_match": "Selected excerpts matching the query"
+        case "focused_match": "Selected excerpts matching multiple terms"
+        case "withheld": "Relevant excerpts were withheld by policy"
+        case "weak_matches": "No strong enough match to include"
+        case "no_query": "No useful lookup terms in the message"
+        default: "No matching indexed excerpts"
         }
     }
 
@@ -453,14 +492,14 @@ private struct Composer: View {
             HStack {
                 if !supportsChat {
                     Text("Choose a model that supports chat.")
-                } else if supportsTools || model.activeBackendId == ModelTool.ollama {
-                    Toggle(supportsTools ? "Use library and tools" : "Use local library context", isOn: $model.useTools)
+                } else if supportsTools {
+                    Toggle("Allow tools", isOn: $model.useTools)
                         .toggleStyle(.checkbox)
                         .controlSize(.small)
                         .disabled(model.busy)
-                        .help("Turn off for general questions. Recent conversation text still goes to the selected model.")
+                        .help("Turn off tool calls. Relevant Brain context is supplied automatically when disclosure rules allow it.")
                 } else {
-                    Text("Plain chat · library tools unavailable")
+                    Text("Brain context · tool calls unavailable")
                 }
                 if model.activeBackend?.isLocal == false {
                     Text("Messages go to \(model.activeBackendId).")

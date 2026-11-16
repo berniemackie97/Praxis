@@ -14,7 +14,7 @@ namespace Praxis.Application.Desktop.Actions;
 /// </summary>
 public sealed class AgentActions(
     IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets, ModelSetup? setup = null,
-    IChatMemoryStore? memory = null)
+    IChatMemoryStore? memory = null, IAgentRecallJournal? recalls = null)
     : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
@@ -63,7 +63,7 @@ public sealed class AgentActions(
         {
             Guid id = fields.RequireGuid("conversationId");
             return new AgentConversationResponse(repository.Read(id) ?? throw new ArgumentException("Unknown conversation."),
-                repository.ReadMessages(id), repository.ReadToolCalls(id, 200));
+                repository.ReadMessages(id), repository.ReadToolCalls(id, 200), recalls?.Read(id, 12));
         }),
         DesktopAction.Of("agentRecap", fields => new AgentRecapResponse(memory?.ReadRecap(fields.RequireGuid("conversationId")))),
         DesktopAction.Of("agentSend", fields => new AgentRunStartedResponse(runs.Start(fields.RequireGuid("conversationId"),

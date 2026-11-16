@@ -17,7 +17,8 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     // These reads are either source-disclosure checked or purely computational.
     private static readonly HashSet<string> NoninteractiveReads = new(StringComparer.Ordinal)
     {
-        "knowledge_search", "knowledge_open", "data_describe", "data_query", "compute_evaluate"
+        "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
+        "data_describe", "data_query", "compute_evaluate", "skill_search", "skill_open", "capability_result"
     };
 
     private static readonly TimeSpan Deadline = TimeSpan.FromMinutes(15);
@@ -25,11 +26,16 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     public async Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         Func<AgentToolCall, CancellationToken, Task<string>> invoke, CancellationToken cancellationToken)
     {
-        await using AgentToolSocketHost? host = tools.Count == 0 ? null : new(socketParent, new McpServerProtocol(tools, invoke));
+        // The relay exposes only read operations and the owner-reviewed action queue. Codex cannot
+        // approve any action itself, even when its CLI does not need an extra relay prompt.
+        AgentToolDefinition[] exposed = tools.Where(tool => (tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)) ||
+            (tool.Tier == ToolTiers.Propose && tool.Name == "capability_request")).ToArray();
+        await using AgentToolSocketHost? host = exposed.Length == 0 ? null : new(socketParent, new McpServerProtocol(exposed, invoke));
         using CliWorkspace workspace = new();
         string answer = Path.Combine(workspace.Path, "answer.txt");
         string[] serverOptions = host is null ? [] :
         [
+            "-c", "mcp_servers.praxis.default_tools_approval_mode=\"approve\"",
             "-c", $"mcp_servers.praxis.command={JsonSerializer.Serialize(relay.Executable)}",
             "-c", $"mcp_servers.praxis.args={JsonSerializer.Serialize(relay.LeadingArguments.Concat(["mcp-relay", host.SocketPath, host.Token]).ToArray())}"
         ];
@@ -39,12 +45,6 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
             "--disable", "shell_tool", "--disable", "view_image", "--disable", "apps", "--disable", "multi_agent",
             "-c", "web_search=\"disabled\"",
             .. serverOptions,
-            // Codex cannot prompt in exec. Only Praxis read tools get this override, and every call
-            // still crosses Praxis's permission and disclosure checks. Never approve shell or writes.
-            .. tools.Where(tool => tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)).SelectMany(tool => new[]
-            {
-                "-c", $"mcp_servers.praxis.tools.{JsonSerializer.Serialize(tool.Name)}.approval_mode=\"approve\""
-            }),
             .. (model == "default" ? Array.Empty<string>() : ["-m", model]), .. (effort is null ? Array.Empty<string>() : ["-c", $"model_reasoning_effort=\"{effort}\""]), "-o", answer, "-"
         ], systemPrompt + "\n\n" + CliTranscript.Render(transcript), workspace.Path, Deadline, cancellationToken);
         var (input, output, failure) = ReadEvents(result.Stdout);

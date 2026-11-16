@@ -5,6 +5,57 @@ namespace Praxis.Application.Agents.Runtime;
 /// <summary>Limits chat history without altering saved messages or splitting earlier user turns.</summary>
 internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, int OmittedMessages)
 {
+    // A revoked citation taints the whole generated turn, including its tool results. Keep the owner's
+    // request as history, but do not replay an assistant answer that embeds currently withheld data.
+    internal static IReadOnlyList<AgentMessage> ExcludeWithheldTurns(IReadOnlyList<AgentMessage> messages, Func<Guid, bool> allowed)
+    {
+        List<AgentMessage> visible = [];
+        List<AgentMessage> turn = [];
+        Dictionary<Guid, bool> decisions = [];
+
+        void Flush()
+        {
+            bool withheld = turn.SelectMany(message => message.Citations).Any(citation =>
+            {
+                if (!decisions.TryGetValue(citation.SourceId, out bool permit))
+                {
+                    decisions[citation.SourceId] = permit = allowed(citation.SourceId);
+                }
+
+                return !permit;
+            });
+            visible.AddRange(withheld ? turn.Where(message => message.Role == AgentRoles.User &&
+                !message.Content.StartsWith("Answer check failed.", StringComparison.Ordinal)) : turn);
+            turn.Clear();
+        }
+
+        foreach (AgentMessage message in messages)
+        {
+            if (message.Role == AgentRoles.User && !message.Content.StartsWith("Answer check failed.", StringComparison.Ordinal))
+            {
+                Flush();
+            }
+
+            turn.Add(message);
+        }
+
+        Flush();
+        return visible;
+    }
+
+    internal static AgentContextWindow WithActiveToolTraffic(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
+    {
+        int owner = transcript.Count - 1;
+        while (owner > 0 && transcript[owner].Role != AgentRoles.User)
+        {
+            owner--;
+        }
+
+        IReadOnlyList<AgentMessage> traffic = transcript.Skip(owner + 1).ToArray();
+        AgentContextWindow bounded = Select(transcript.Take(owner + 1).ToArray(), Math.Max(1, maximumCharacters - traffic.Sum(Characters)));
+        return bounded with { Messages = [.. bounded.Messages, .. traffic] };
+    }
+
     internal static AgentContextWindow Select(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCharacters);
