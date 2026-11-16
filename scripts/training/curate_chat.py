@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 import urllib.request
@@ -148,26 +149,34 @@ def curate(workspace, limit, seed):
     if not splits["train"] or not splits["valid"] or not splits["test"]:
         raise ValueError("Candidate requires nonempty train, validation, and test splits")
     output = workspace / "candidates" / f'{SOURCE["id"]}-{seed}-{limit}'
-    if output.exists():
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists() or output.is_symlink():
         raise FileExistsError(f"Candidate already exists: {output}")
-    output.mkdir(parents=True)
-    for split, records in splits.items():
-        write_jsonl(output / f"{split}.jsonl", records)
-    write_jsonl(output / "provenance.jsonl", provenance)
-    manifest = {
-        "status": "unreviewed_candidate_not_approved_for_training",
-        "source": {key: value for key, value in SOURCE.items() if key != "max_bytes"},
-        "seed": seed,
-        "limit": limit,
-        "counts": {"valid_records": sum(map(len, splits.values())),
-                   "train": len(splits["train"]), "valid": len(splits["valid"]),
-                   "test": len(splits["test"]), "read": counts["read"],
-                   "rejected_schema": counts["rejected"],
-                   "duplicate_prompts": counts["duplicate_prompts"],
-                   "conflicting_prompts": counts["conflicting_prompts"]},
-        "files_sha256": {p.name: sha256_file(p) for p in sorted(output.glob("*.jsonl"))},
-    }
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))
+    try:
+        for split, records in splits.items():
+            write_jsonl(staging / f"{split}.jsonl", records)
+        write_jsonl(staging / "provenance.jsonl", provenance)
+        manifest = {
+            "status": "unreviewed_candidate_not_approved_for_training",
+            "source": {key: value for key, value in SOURCE.items() if key != "max_bytes"},
+            "seed": seed,
+            "limit": limit,
+            "counts": {"valid_records": sum(map(len, splits.values())),
+                       "train": len(splits["train"]), "valid": len(splits["valid"]),
+                       "test": len(splits["test"]), "read": counts["read"],
+                       "rejected_schema": counts["rejected"],
+                       "duplicate_prompts": counts["duplicate_prompts"],
+                       "conflicting_prompts": counts["conflicting_prompts"]},
+            "files_sha256": {p.name: sha256_file(p) for p in sorted(staging.glob("*.jsonl"))},
+        }
+        (staging / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        if output.exists() or output.is_symlink():
+            raise FileExistsError(f"Candidate already exists: {output}")
+        os.rename(staging, output)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
     print(json.dumps({"candidate": str(output), "counts": manifest["counts"]}, indent=2))
 
 
