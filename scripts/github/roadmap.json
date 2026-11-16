@@ -552,7 +552,8 @@
       "children": [
         491,
         492,
-        493
+        493,
+        504
       ]
     },
     {
@@ -560,6 +561,19 @@
       "epic": 289,
       "area": "automation",
       "children": []
+    },
+    {
+      "issue": 496,
+      "epic": 288,
+      "area": "capture",
+      "children": [
+        498,
+        499,
+        500,
+        501,
+        502,
+        503
+      ]
     }
   ],
   "direct_work": [
@@ -1198,11 +1212,9 @@
       386,
       387
     ],
-    "455": [
-      387
-    ],
-    "456": [
-      455
+    "420": [
+      417,
+      418
     ],
     "432": [
       431
@@ -1251,6 +1263,9 @@
       318,
       334
     ],
+    "449": [
+      437
+    ],
     "451": [
       106,
       316,
@@ -1261,12 +1276,11 @@
       316,
       353
     ],
-    "420": [
-      417,
-      418
+    "455": [
+      387
     ],
-    "449": [
-      437
+    "456": [
+      455
     ],
     "485": [
       101,
@@ -1304,6 +1318,49 @@
       173,
       291,
       334
+    ],
+    "498": [
+      104,
+      317
+    ],
+    "499": [
+      104,
+      102,
+      317,
+      329
+    ],
+    "500": [
+      102,
+      173,
+      304,
+      498,
+      499
+    ],
+    "501": [
+      116,
+      181,
+      500
+    ],
+    "502": [
+      160,
+      173,
+      334,
+      339,
+      498,
+      499,
+      500
+    ],
+    "503": [
+      179,
+      311,
+      379,
+      500,
+      501,
+      502
+    ],
+    "504": [
+      311,
+      313
     ]
   },
   "priorities": {
@@ -1375,6 +1432,7 @@
     "129": "P1",
     "130": "P1",
     "136": "P2",
+    "137": "P1",
     "143": "P1",
     "146": "P1",
     "149": "P1",
@@ -1403,6 +1461,7 @@
     "185": "P1",
     "215": "P1",
     "219": "P2",
+    "268": "P2",
     "287": "P1",
     "291": "P1",
     "292": "P1",
@@ -1449,8 +1508,6 @@
     "386": "P1",
     "387": "P1",
     "388": "P1",
-    "137": "P1",
-    "268": "P2",
     "416": "P1",
     "417": "P1",
     "418": "P1",
@@ -1484,7 +1541,15 @@
     "491": "P2",
     "492": "P2",
     "493": "P3",
-    "494": "P3"
+    "494": "P3",
+    "496": "P1",
+    "498": "P1",
+    "499": "P1",
+    "500": "P1",
+    "501": "P2",
+    "502": "P2",
+    "503": "P1",
+    "504": "P1"
   },
   "area_overrides": {
     "24": "clients",
@@ -1502,6 +1567,7 @@
     "177": "clients",
     "181": "retrieval",
     "184": "knowledge",
+    "268": "capture",
     "310": "retrieval",
     "318": "security",
     "324": "knowledge",
@@ -1517,12 +1583,19 @@
     "353": "knowledge",
     "362": "knowledge",
     "385": "knowledge",
-    "268": "capture",
     "440": "retrieval",
     "441": "retrieval",
     "451": "retrieval",
     "455": "knowledge",
-    "463": "intelligence"
+    "463": "intelligence",
+    "496": "capture",
+    "498": "capture",
+    "499": "capture",
+    "500": "automation",
+    "501": "knowledge",
+    "502": "automation",
+    "503": "intelligence",
+    "504": "intelligence"
   },
   "decision_queue": [
     30,
@@ -1845,6 +1918,21 @@
         494
       ],
       "exit": "Owner-run evidence that approved sources keep living topic pages current with reviewable diffs, that decisions resume across two authorized providers via supported lifecycle events, that a paused or revoked connector or grant is visible and blocks dependent routines before their next effect, and that lexical-first ranking beats the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency. Nothing here gates #130 or #170."
+    },
+    {
+      "id": "L8",
+      "name": "Owner-directed source acquisition and specialist evidence-model experiments (parallel, not MVP blockers)",
+      "issues": [
+        496,
+        498,
+        499,
+        500,
+        501,
+        502,
+        503,
+        504
+      ],
+      "exit": "Demonstrate one explicitly approved educational collection with stable discovery, secure acquisition, resumable canonical intake, source/page/time evidence and truthfully reported unavailable material; prove local-first costs and permission/revocation behavior. Separately reproduce the Signal 1.5B held-out evidence classification baseline versus adapter, with no auto-promotion or implicit training authorization. Neither workstream changes existing #130/#170 acceptance gates."
     }
   ]
 }
