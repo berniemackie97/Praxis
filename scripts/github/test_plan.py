@@ -18,9 +18,27 @@ class RoadmapValidationTests(unittest.TestCase):
     def test_complete_roadmap(self):
         items, dependencies = validate(self.plan)
 
-        self.assertEqual(230, len(items))
+        self.assertEqual(239, len(items))
         self.assertEqual(300, items[440]["parent"])
         self.assertEqual(97, items[452]["parent"])
+        # Post-MVP experience-based Brain, governed model training and agent teams.
+        self.assertEqual(59, items[485]["parent"])
+        self.assertEqual({101, 102, 103}, dependencies[485])
+        self.assertEqual(7, items[487]["parent"])
+        self.assertEqual(487, items[488]["parent"])
+        self.assertEqual(487, items[489]["parent"])
+        self.assertEqual(287, items[490]["parent"])
+        for number in (491, 492, 493):
+            self.assertEqual(490, items[number]["parent"])
+        self.assertEqual(289, items[494]["parent"])
+        self.assertEqual({488, 489, 311}, dependencies[491])
+        self.assertEqual({491, 311, 313, 303, 307}, dependencies[492])
+        self.assertEqual({173, 291, 334}, dependencies[494])
+        self.assertEqual("P3", items[493]["priority"])
+        self.assertEqual("P3", items[494]["priority"])
+        self.assertTrue(set(range(487, 495)).issubset(set(self.plan["delivery_lanes"][7]["issues"])))
+        self.assertTrue(set(range(487, 495)).isdisjoint(dependencies[170]))
+
         self.assertEqual(61, items[451]["parent"])
         self.assertEqual("retrieval", items[451]["area"])
         self.assertEqual(436, items[433]["parent"])
@@ -109,7 +127,7 @@ class RoadmapValidationTests(unittest.TestCase):
         self.assertEqual("P1", items[92]["priority"])
         self.assertEqual({106, 108}, dependencies[385])
         self.assertEqual(8, len(self.plan["milestones"]))
-        self.assertEqual(36, len(self.plan["features"]))
+        self.assertEqual(39, len(self.plan["features"]))
         for epic in (287, 288, 289, 290):
             self.assertEqual("epic", items[epic]["kind"])
             self.assertEqual(1, items[epic]["parent"])

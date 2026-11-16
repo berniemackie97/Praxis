@@ -534,6 +534,31 @@
         437,
         449
       ]
+    },
+    {
+      "issue": 487,
+      "epic": 7,
+      "area": "intelligence",
+      "children": [
+        488,
+        489
+      ]
+    },
+    {
+      "issue": 490,
+      "epic": 287,
+      "area": "intelligence",
+      "children": [
+        491,
+        492,
+        493
+      ]
+    },
+    {
+      "issue": 494,
+      "epic": 289,
+      "area": "automation",
+      "children": []
     }
   ],
   "direct_work": [
@@ -1244,6 +1269,38 @@
       101,
       102,
       103
+    ],
+    "488": [
+      432,
+      173
+    ],
+    "489": [
+      488,
+      312,
+      316,
+      463
+    ],
+    "491": [
+      488,
+      489,
+      311
+    ],
+    "492": [
+      491,
+      311,
+      313,
+      303,
+      307
+    ],
+    "493": [
+      311,
+      313,
+      492
+    ],
+    "494": [
+      173,
+      291,
+      334
     ]
   },
   "priorities": {
@@ -1415,7 +1472,15 @@
     "455": "P1",
     "456": "P1",
     "463": "P1",
-    "485": "P2"
+    "485": "P2",
+    "487": "P2",
+    "488": "P2",
+    "489": "P2",
+    "490": "P2",
+    "491": "P2",
+    "492": "P2",
+    "493": "P3",
+    "494": "P3"
   },
   "area_overrides": {
     "24": "clients",
@@ -1764,7 +1829,15 @@
         446,
         447,
         451,
-        452
+        452,
+        487,
+        488,
+        489,
+        490,
+        491,
+        492,
+        493,
+        494
       ],
       "exit": "Owner-run evidence that approved sources keep living topic pages current with reviewable diffs, that decisions resume across two authorized providers via supported lifecycle events, that a paused or revoked connector or grant is visible and blocks dependent routines before their next effect, and that lexical-first ranking beats the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency. Nothing here gates #130 or #170."
     }
