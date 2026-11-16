@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 import urllib.request
 
@@ -46,24 +47,28 @@ def fetch(workspace):
     url = (f'https://huggingface.co/datasets/{SOURCE["repository"]}'
            f'/resolve/{SOURCE["revision"]}/{SOURCE["path"]}')
     request = urllib.request.Request(url, headers={"User-Agent": "Praxis-chat-data-curation/1"})
-    temporary = target.with_name(target.name + ".part")
+    temporary = None
     digest = hashlib.sha256()
     size = 0
     try:
-        with urllib.request.urlopen(request, timeout=60) as remote, temporary.open("wb") as output:
+        with urllib.request.urlopen(request, timeout=60) as remote:
             if not remote.url.startswith("https://"):
                 raise ValueError("Refusing a non-HTTPS download")
-            while chunk := remote.read(1 << 20):
-                size += len(chunk)
-                if size > SOURCE["max_bytes"]:
-                    raise ValueError("Download exceeds allowed size")
-                output.write(chunk)
-                digest.update(chunk)
+            with tempfile.NamedTemporaryFile(mode="wb", dir=target.parent,
+                                             prefix=f".{target.name}-", delete=False) as output:
+                temporary = Path(output.name)
+                while chunk := remote.read(1 << 20):
+                    size += len(chunk)
+                    if size > SOURCE["max_bytes"]:
+                        raise ValueError("Download exceeds allowed size")
+                    output.write(chunk)
+                    digest.update(chunk)
         if digest.hexdigest() != SOURCE["sha256"]:
             raise ValueError("Downloaded bytes do not match the reviewed SHA-256")
         os.replace(temporary, target)
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return target
 
 
@@ -71,9 +76,11 @@ def normalize(row):
     messages = row.get("messages")
     if not isinstance(messages, list) or len(messages) != 2:
         return None
-    if [message.get("role") for message in messages if isinstance(message, dict)] != ["user", "assistant"]:
+    if not all(isinstance(message, dict) for message in messages):
         return None
-    prompt, response = [message["content"] for message in messages]
+    if [message.get("role") for message in messages] != ["user", "assistant"]:
+        return None
+    prompt, response = [message.get("content") for message in messages]
     if not all(isinstance(text, str) and 20 <= len(text.strip()) <= 10_000 for text in (prompt, response)):
         return None
     if row.get("prompt") != prompt:
