@@ -11,6 +11,8 @@ final class ApprovalsWorkbenchModel: ObservableObject {
     private let channel: WorkerChannel
 
     @Published private(set) var holds: [DisclosureHold] = []
+    @Published private(set) var actions: [CapabilityItem] = []
+    @Published private(set) var decidingActions: Set<String> = []
     @Published private(set) var pending: [PendingPolicyChange] = []
     @Published private(set) var proposals: [AgentProposal] = []
     @Published private(set) var memories: [AgentMemory] = []
@@ -21,9 +23,14 @@ final class ApprovalsWorkbenchModel: ObservableObject {
         self.channel = channel
     }
 
-    var count: Int { holds.count + pending.count + proposals.count + memories.count }
+    var actionRequests: [CapabilityItem] { actions.filter { $0.status == "pending" } }
+    var actionHistory: [CapabilityItem] { Array(actions.filter { $0.status != "pending" }.prefix(10)) }
+    var count: Int { holds.count + pending.count + proposals.count + memories.count + actionRequests.count }
 
     func refresh() {
+        channel.send("capabilityRequests", as: CapabilityRequestsData.self, failed: report) { [weak self] data in
+            self?.actions = data.requests
+        }
         channel.send("disclosureHolds", ["limit": 200], as: DisclosureHoldsData.self, failed: report) { [weak self] data in
             self?.holds = data.holds
         }
@@ -35,6 +42,20 @@ final class ApprovalsWorkbenchModel: ObservableObject {
         }
         channel.send("agentMemories", ["status": "proposed", "limit": 200], as: AgentMemoriesData.self, failed: report) { [weak self] data in
             self?.memories = data.memories
+        }
+    }
+
+    func decide(_ action: CapabilityItem, accept: Bool) {
+        guard decidingActions.insert(action.id).inserted else { return }
+        channel.send("capabilityDecide", ["id": action.id, "accept": accept], as: CapabilityItem.self, failed: { [weak self] error in
+            self?.decidingActions.remove(action.id)
+            self?.report(error)
+            self?.refresh()
+        }) { [weak self] item in
+            self?.decidingActions.remove(action.id)
+            self?.notice = item.status == "accepted" ? "Action completed." : item.status == "rejected" ? "Action rejected." : nil
+            self?.error = item.status == "failed" ? "Action failed. See the action history for details." : nil
+            self?.refresh()
         }
     }
 

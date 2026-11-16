@@ -351,16 +351,22 @@ public sealed class SqliteCatalogTests : IDisposable
                 VALUES ('{chat:D}', 'ollama', 'prior conversation', '2026-11-15T12:00:00Z', '2026-11-15T12:00:00Z');
                 INSERT INTO agent_chat_recaps (conversation_id, pending_through, reviewed_through, recap, retry_utc)
                 VALUES ('{chat:D}', 2, 1, 'Keep the reviewed summary.', '2026-11-15T12:01:00Z');
+                INSERT INTO agent_messages (conversation_id, sequence, role, content, tool_calls, tool_call_id, created_utc)
+                VALUES ('{chat:D}', 1, 'user', 'Keep this original message.', '[]', NULL, '2026-11-15T12:00:00Z');
                 INSERT INTO agent_identity (singleton, display_name) VALUES (1, 'Praxis');
                 """);
         }
 
         using (SqliteCatalog upgraded = SqliteCatalog.Open(root))
         {
-            Assert.Equal(35, upgraded.SchemaVersion);
+            Assert.Equal(CatalogSchema.CurrentVersion, upgraded.SchemaVersion);
             Assert.Empty(upgraded.Skills.Installed());
+            Assert.Empty(upgraded.AgentRecalls.Read(chat, 10));
+            var previous = Assert.Single(upgraded.Agents.ReadMessages(chat));
+            Assert.Equal("Keep this original message.", previous.Content);
+            Assert.Empty(previous.Citations);
             using SqliteConnection checkedCatalog = Connect(upgraded.DatabasePath);
-            Assert.Equal(35L, Scalar(checkedCatalog, "PRAGMA user_version"));
+            Assert.Equal((long)CatalogSchema.CurrentVersion, Scalar(checkedCatalog, "PRAGMA user_version"));
             Assert.Equal("Keep the reviewed summary.", Scalar(checkedCatalog,
                 "SELECT recap FROM agent_chat_recaps WHERE conversation_id = '" + chat.ToString("D") + "'"));
             Assert.Equal("Praxis", Scalar(checkedCatalog, "SELECT display_name FROM agent_identity WHERE singleton = 1"));
@@ -371,7 +377,7 @@ public sealed class SqliteCatalogTests : IDisposable
         }
 
         using SqliteCatalog reopened = SqliteCatalog.Open(root);
-        Assert.Equal(35, reopened.SchemaVersion);
+        Assert.Equal(CatalogSchema.CurrentVersion, reopened.SchemaVersion);
         Assert.Equal("Praxis", reopened.ChatMemory.ReadName());
     }
 

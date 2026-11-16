@@ -6,9 +6,9 @@ namespace Praxis.Infrastructure.Inference.Subscription;
 /// </summary>
 internal sealed class CliWorkspace : IDisposable
 {
-    internal CliWorkspace()
+    internal CliWorkspace(string? parent = null)
     {
-        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "praxis-provider-" + Guid.NewGuid().ToString("N"));
+        var path = System.IO.Path.Combine(parent ?? System.IO.Path.GetTempPath(), "praxis-provider-" + Guid.NewGuid().ToString("N"));
         if (OperatingSystem.IsWindows())
         {
             Directory.CreateDirectory(path);

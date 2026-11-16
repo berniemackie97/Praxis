@@ -1,4 +1,5 @@
 using Praxis.Application.Agents;
+using Praxis.Application.Agents.Capabilities;
 using Praxis.Application.Agents.Data;
 using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
@@ -12,6 +13,7 @@ using Praxis.Application.Policy;
 using Praxis.Application.Search;
 using Praxis.Application.Verification;
 using Praxis.Infrastructure.Agents;
+using Praxis.Infrastructure.Agents.Capabilities;
 using Praxis.Infrastructure.Documents;
 using Praxis.Infrastructure.Persistence;
 
@@ -22,9 +24,12 @@ public static class AgentComposition
 {
     public static SkillLibrary Skills(SqliteCatalog catalog) => new(BundledSkills.Documents, catalog.Skills, new YamlSkillDocumentParser());
 
+    public static CapabilityService Capabilities(SqliteCatalog catalog) => new(catalog.Capabilities, new LocalCapabilityExecutor());
+
     public static IReadOnlyList<IAgentTool> Tools(
         SqliteCatalog catalog, IEmbeddingModelConnector embeddings, IArtifactWriter artifacts, IVerifierModelFactory models, TimeProvider clock,
-        ISavedLinkWriter? links = null, IChatMemoryNotes? memoryNotes = null, SkillLibrary? skills = null)
+        ISavedLinkWriter? links = null, IChatMemoryNotes? memoryNotes = null, SkillLibrary? skills = null,
+        CapabilityService? capabilities = null)
     {
         FinancialLedger ledger = new(catalog.Finance);
         PolicyService policy = new(catalog.Policy);
@@ -61,11 +66,12 @@ public static class AgentComposition
             new SettingsReadTool(policy, catalog.Policy),
             new SettingsProposeTool(policy, clock),
             new AgentDelegateTool(tiers, catalog.Text, catalog.Sources),
-            .. SystemActionTools.All
+            .. SystemActionTools.All,
+            .. (capabilities is null ? Array.Empty<IAgentTool>() : [new CapabilityRequestTool(capabilities), new CapabilityResultTool(capabilities)])
         ];
     }
 
     public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock, SkillLibrary? skills = null) =>
         new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
-            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog));
+            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog), catalog.AgentRecalls);
 }

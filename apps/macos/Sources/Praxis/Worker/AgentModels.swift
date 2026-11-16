@@ -148,10 +148,36 @@ struct ChatNoteCaptureData: Decodable {
 
 struct AgentBackendsData: Decodable { let backends: [AgentBackendProfile] }
 struct AgentConversationsData: Decodable { let conversations: [AgentConversation] }
+struct BrainRecallReceipt: Decodable, Identifiable {
+    let id: String
+    let backendId: String
+    let outcome: String
+    let considered: Int
+    let withheld: Int
+    let selected: [AgentCitation]
+    let createdUtc: String
+}
+
+struct CapabilityItem: Decodable, Identifiable {
+    let id: String
+    let operation: String
+    let target: String?
+    let description: String
+    let status: String
+    let detail: String?
+
+    var title: String {
+        operation == "terminal" ? "Run a terminal command" : "Open a browser address"
+    }
+}
+
+struct CapabilityRequestsData: Decodable { let requests: [CapabilityItem] }
+
 struct AgentConversationData: Decodable {
     let conversation: AgentConversation
     let messages: [AgentMessage]
     let toolCalls: [AgentToolCallRecord]
+    let brainRecalls: [BrainRecallReceipt]?
 }
 struct AgentRecapData: Decodable { let recap: String? }
 struct AgentRunStartedData: Decodable { let runId: String }

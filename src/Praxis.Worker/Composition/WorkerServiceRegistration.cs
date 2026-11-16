@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Praxis.Application.Activity;
 using Praxis.Application.Agents;
+using Praxis.Application.Agents.Capabilities;
 using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Agents.Skills;
@@ -105,6 +106,7 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<IPolicyRepository>(),
             provider.GetRequiredService<IIntakeSupervisor>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<ChatMemoryMaintenance>();
+        services.AddSingleton<IAgentRecallJournal>(provider => provider.GetRequiredService<SqliteCatalog>().AgentRecalls);
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
@@ -114,12 +116,13 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IArtifactWriter>(provider => new ArtifactWriter(provider.GetRequiredService<IOriginalStore>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<IAgentBackendFactory>(provider => new AgentBackendFactory(provider.GetRequiredService<HttpClient>(),
             provider.GetRequiredService<ISecretStore>(), RelayCommand(), Path.GetTempPath()));
+        services.AddSingleton(provider => AgentComposition.Capabilities(provider.GetRequiredService<SqliteCatalog>()));
         services.AddSingleton(provider => AgentComposition.Skills(provider.GetRequiredService<SqliteCatalog>()));
         services.AddSingleton(provider => AgentComposition.Runtime(provider.GetRequiredService<SqliteCatalog>(),
             AgentComposition.Tools(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IEmbeddingModelConnector>(),
                 provider.GetRequiredService<IArtifactWriter>(), provider.GetRequiredService<IVerifierModelFactory>(), provider.GetRequiredService<TimeProvider>(),
                 provider.GetRequiredService<ISavedLinkWriter>(), provider.GetRequiredService<IChatMemoryNotes>(),
-                provider.GetRequiredService<SkillLibrary>()),
+                provider.GetRequiredService<SkillLibrary>(), provider.GetRequiredService<CapabilityService>()),
             provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SkillLibrary>()));
         services.AddSingleton<AgentRunCoordinator>();
@@ -155,6 +158,7 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, PolicyActions>();
         services.AddSingleton<IDesktopActionGroup, AgentActions>();
         services.AddSingleton<IDesktopActionGroup, SkillActions>();
+        services.AddSingleton<IDesktopActionGroup, CapabilityActions>();
         services.AddSingleton<IDesktopActionGroup, ActivityActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();

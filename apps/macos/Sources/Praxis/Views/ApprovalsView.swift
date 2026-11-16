@@ -6,7 +6,7 @@ struct ApprovalsView: View {
 
     var body: some View {
         Group {
-            if model.count == 0 {
+            if model.count == 0 && model.actionHistory.isEmpty {
                 EmptyState(systemImage: "checkmark.seal",
                            title: "You're all caught up",
                            message: "Requests to send data to a stronger model, permission changes from chat, and the agent's suggestions appear here.")
@@ -14,6 +14,33 @@ struct ApprovalsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.xl) {
                         FeedbackLine(error: model.error, notice: model.notice)
+                        if !model.actionRequests.isEmpty {
+                            QueueSection(title: "Actions requested in Chat", systemImage: "terminal",
+                                         caption: "Check the exact command or address. Approval runs the action once.",
+                                         count: model.actionRequests.count) {
+                                ForEach(model.actionRequests) { item in
+                                    DecisionCard(systemImage: "terminal", title: item.title,
+                                                 detail: [item.description, item.target].compactMap { $0 }.joined(separator: "\n"),
+                                                 accept: "Approve and Run", reject: "Reject") { model.decide(item, accept: $0) }
+                                        .disabled(model.decidingActions.contains(item.id))
+                                }
+                            }
+                        }
+                        if !model.actionHistory.isEmpty {
+                            DisclosureGroup("Recent Chat actions") {
+                                ForEach(model.actionHistory) { item in
+                                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                                        Text("\(item.title) · \(item.status.capitalized)").font(.rowTitle)
+                                        if let target = item.target { Text(target).textSelection(.enabled) }
+                                        if let detail = item.detail {
+                                            Text(detail).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, Spacing.s)
+                                }
+                            }
+                        }
                         if !model.holds.isEmpty {
                             QueueSection(title: "Send to a stronger model?", systemImage: "arrow.up.forward.app",
                                          caption: "Intake needs a remote model your policy hasn't granted. If you do nothing, each item continues down its fallback chain when the deadline passes.",

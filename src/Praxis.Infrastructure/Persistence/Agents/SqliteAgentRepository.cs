@@ -132,7 +132,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentMessage> ReadMessages(Guid conversationId) => database.ExecuteRead(connection =>
     {
         using SqliteCommand command = connection.CreateCommand("""
-            SELECT role, content, tool_calls, tool_call_id FROM agent_messages WHERE conversation_id = $id ORDER BY sequence DESC LIMIT $limit
+            SELECT role, content, tool_calls, tool_call_id, citations FROM agent_messages WHERE conversation_id = $id ORDER BY sequence DESC LIMIT $limit
             """);
         command.Parameters.AddWithValue("$id", conversationId.ToString("D"));
         command.Parameters.AddWithValue("$limit", MaximumMessages);
@@ -141,7 +141,8 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         while (reader.Read())
         {
             messages.Add(new AgentMessage(reader.GetString(0), reader.GetString(1),
-                JsonSerializer.Deserialize<AgentToolCall[]>(reader.GetString(2), Json) ?? [], Text(reader, 3), []));
+                JsonSerializer.Deserialize<AgentToolCall[]>(reader.GetString(2), Json) ?? [], Text(reader, 3),
+                JsonSerializer.Deserialize<AgentCitation[]>(reader.GetString(4), Json) ?? []));
         }
 
         messages.Reverse();
@@ -164,10 +165,11 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
             using SqliteTransaction transaction = connection.BeginTransaction();
             string now = Now();
             int inserted = connection.Run(transaction, """
-                INSERT INTO agent_messages (conversation_id, sequence, role, content, tool_calls, tool_call_id, created_utc)
-                SELECT $id, COALESCE(MAX(sequence), 0) + 1, $role, $content, $calls, $callId, $now FROM agent_messages WHERE conversation_id = $id
+                INSERT INTO agent_messages (conversation_id, sequence, role, content, tool_calls, tool_call_id, created_utc, citations)
+                SELECT $id, COALESCE(MAX(sequence), 0) + 1, $role, $content, $calls, $callId, $now, $citations FROM agent_messages WHERE conversation_id = $id
                 """, ("$id", conversationId.ToString("D")), ("$role", message.Role), ("$content", message.Content),
-                ("$calls", JsonSerializer.Serialize(message.ToolCalls, Json)), ("$callId", message.ToolCallId), ("$now", now));
+                ("$calls", JsonSerializer.Serialize(message.ToolCalls, Json)), ("$callId", message.ToolCallId), ("$now", now),
+                ("$citations", JsonSerializer.Serialize(message.Citations, Json)));
             if (inserted != 1 || connection.Run(transaction, "UPDATE agent_conversations SET updated_utc = $now WHERE conversation_id = $id",
                     ("$now", now), ("$id", conversationId.ToString("D"))) != 1)
             {

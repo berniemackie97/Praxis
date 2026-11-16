@@ -1,46 +1,55 @@
 using System.Text.RegularExpressions;
 using Praxis.Application.Search;
-using Praxis.Domain.Agents;
 using Praxis.Domain.Search;
 
 namespace Praxis.Application.Agents.Runtime;
 
-/// <summary>Cheap local recall from current indexed evidence. No model or embedding call.</summary>
+/// <summary>Bounded local evidence selection. Reasoning effort never broadens disclosure or expands the automatic brief.</summary>
 internal static partial class AgentBrainContext
 {
     private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "about", "could", "does", "from", "give", "have", "help", "know", "only", "please",
-        "reply", "respond", "should", "summarize", "tell", "that", "their", "this", "what",
-        "where", "which", "with", "would", "your"
+        "about", "answer", "brain", "chat", "could", "does", "exactly", "from", "give", "have", "help", "know", "library",
+        "notes", "only", "please", "reply", "respond", "should", "summarize", "tell", "that", "their", "this", "want",
+        "what", "where", "which", "with", "would", "your"
     };
 
-    internal static AgentToolOutput? Recall(ITextSearchIndex index, string prompt, Func<Guid, bool> allowed)
+    internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
+        ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum)
     {
-        string query = string.Join(" ", Terms().Matches(prompt).Select(match => match.Value)
-            .Where(term => !CommonWords.Contains(term)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8));
-        if (query.Length == 0)
+        string[] terms = Terms().Matches(prompt).Select(match => match.Value)
+            .Where(term => !CommonWords.Contains(term)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
+        if (terms.Length == 0)
         {
-            return null;
+            return ("no_query", 0, 0, []);
         }
 
-        IReadOnlyList<SearchHit> hits = index.QueryPassages(query, 12);
-        if (hits.Count == 0 && query.Contains(' '))
+        string query = string.Join(' ', terms);
+        IReadOnlyList<SearchHit> hits = index.RetainCurrent(index.QueryPassages(query, 12));
+        bool relaxed = hits.Count == 0 && terms.Length > 1;
+        if (relaxed)
         {
-            hits = index.QueryPassages(query, 12, anyTerm: true);
+            hits = index.RetainCurrent(index.QueryPassages(query, 12, anyTerm: true));
         }
 
-        SearchHit[] selected = index.RetainCurrent(hits).Where(hit => allowed(hit.SourceId))
-            .DistinctBy(hit => hit.SourceId).Take(4).ToArray();
-        if (selected.Length == 0)
-        {
-            return null;
-        }
+        SearchHit[] current = hits.Where(hit => !string.IsNullOrWhiteSpace(hit.Snippet)).DistinctBy(hit => hit.SourceId).ToArray();
+        SearchHit[] relevant = relaxed
+            ? current.Select(hit => (Hit: hit, Matches: Overlap(terms, hit))).Where(hit => hit.Matches >= 2)
+                .OrderByDescending(hit => hit.Matches).Select(hit => hit.Hit).ToArray()
+            : current;
+        SearchHit[] eligible = relevant.Where(hit => allowed(hit.SourceId)).ToArray();
+        SearchHit[] selected = eligible.Take(maximum).ToArray();
+        int withheld = relevant.Length - eligible.Length;
+        string outcome = selected.Length > 0 ? (relaxed ? "focused_match" : "full_match")
+            : withheld > 0 ? "withheld" : current.Length > 0 ? "weak_matches" : "no_matches";
+        return (outcome, current.Length, withheld, selected);
+    }
 
-        return AgentToolOutput.Of(new
-        {
-            excerpts = selected.Select(hit => new { snippet = hit.Snippet, source = Path.GetFileName(hit.SourceLocator) })
-        }, selected.Select(hit => new AgentCitation(hit.SourceId, hit.ItemId, hit.Revision, "search", Path.GetFileName(hit.SourceLocator))).ToArray());
+    private static int Overlap(string[] terms, SearchHit hit)
+    {
+        HashSet<string> evidenceTerms = Terms().Matches(hit.Title + " " + hit.Snippet).Select(match => match.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return terms.Count(evidenceTerms.Contains);
     }
 
     [GeneratedRegex(@"[\p{L}\p{N}][\p{L}\p{N}_-]{3,23}")]

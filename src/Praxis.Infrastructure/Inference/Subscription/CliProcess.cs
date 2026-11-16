@@ -23,7 +23,7 @@ internal static class CliProcess
 
     internal static async Task<CliResult> RunAsync(
         string executable, IReadOnlyList<string> arguments, string? stdin, string workingDirectory,
-        TimeSpan timeout, CancellationToken cancellationToken)
+        TimeSpan timeout, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? isolatedEnvironment = null)
     {
         var start = new ProcessStartInfo(executable)
         {
@@ -38,6 +38,15 @@ internal static class CliProcess
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
+        }
+
+        if (isolatedEnvironment is not null)
+        {
+            start.Environment.Clear();
+            foreach ((string key, string value) in isolatedEnvironment)
+            {
+                start.Environment[key] = value;
+            }
         }
 
         foreach (var variable in BillingVariables)
