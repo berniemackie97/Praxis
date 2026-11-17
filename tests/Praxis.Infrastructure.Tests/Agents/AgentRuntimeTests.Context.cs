@@ -1,3 +1,4 @@
+using System.Text;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Domain.Agents;
@@ -9,6 +10,34 @@ namespace Praxis.Infrastructure.Tests.Agents;
 
 public sealed partial class AgentRuntimeTests
 {
+    [Fact]
+    public async Task OversizedActiveToolTrafficStopsBeforeAnotherModelRequest()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        await Capture(catalog, "large-evidence.md", Encoding.UTF8.GetBytes("# Evidence\n" + new string('a', 24_000)));
+        Guid sourceId = Assert.Single(catalog.Library.List(20, 0, null)
+            .Where(item => item.SourceLocator.EndsWith("large-evidence.md", StringComparison.Ordinal))).SourceId;
+        int nextOffset = 0;
+        ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("knowledge_open",
+            $"""{"sourceId":"{{sourceId}}","offset":{{nextOffset++ * 6_000}}}"""))));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+
+        List<string> events = [];
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Read the evidence",
+            (kind, _, _) => events.Add(kind), CancellationToken.None,
+            new AgentRunLimits(MaximumSteps: 8, CompactAfterCharacters: 9_000));
+
+        Assert.Equal(AgentReply.ContextBudget, reply.StopReason);
+        Assert.Equal(2, backend.SystemPrompts.Count);
+        Assert.Equal(2, reply.ToolCalls.Count);
+        Assert.Contains("context_limited", events);
+        Assert.Equal(1_800, reply.InputTokens);
+        IReadOnlyList<AgentMessage> saved = catalog.Agents.ReadMessages(conversation.ConversationId);
+        Assert.Equal(reply.Text, saved[^1].Content);
+        Assert.Empty(saved[^1].Citations);
+        Assert.Equal(2, saved.Count(message => message.Role == AgentRoles.Tool));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
