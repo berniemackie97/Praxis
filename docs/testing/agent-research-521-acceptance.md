@@ -28,9 +28,9 @@ Capture the commit SHA, actual test counts, failures and exit status. A queued G
 
 Use the exact merged/PR build, an installed `qwen3.5:4b` Ollama model, **Compact** context, and **Allow tools** enabled. In a new conversation ask:
 
-> Find my captured Conquer 5517 walking-packet notes. Read the relevant original source passages and explain only the packet identifier, packet size, fields and processing behavior that those passages explicitly establish. Cite the opened sources for each technical value. If information is absent or contradictory, explain the limitation instead of guessing.
+> Identify the walking/movement packet used by Conquer 5517. Report the packet identifiers, sizes, and field layout. Use the available source documentation, open the relevant source passages, and cite evidence for each technical value. Do not guess unsupported values.
 
-This is a reproducible *new* benchmark question, not a claim that it reproduces the original November 16 prompt verbatim. Use the actual indexed walk-packet sources. Do not substitute the synthetic test fixtures, a web article, or a source search hit for an opened passage. Verify that the original source exists and was indexed; otherwise mark the run **not evaluable**, not a model failure or success.
+Use this same owner-supplied prompt for the follow-up comparison against the four failed/partial trials at `835d2e9`. Keep the corpus, model and context setting unchanged. Use the actual indexed walk-packet sources. Do not substitute the synthetic test fixtures, a web article, or a source search hit for an opened passage. Verify that the original source exists and was indexed; otherwise mark the run **not evaluable**, not a model failure or success.
 
 Run this prompt in **three fresh conversations** on the same commit/model/context setting. For each run record:
 
