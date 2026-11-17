@@ -3,7 +3,7 @@ using Praxis.Domain.Agents;
 namespace Praxis.Application.Agents.Runtime;
 
 /// <summary>Limits chat history without altering saved messages or splitting earlier user turns.</summary>
-internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, int OmittedMessages)
+internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, int OmittedMessages, bool ActiveTrafficExceeded = false)
 {
     // A revoked citation taints the whole generated turn, including its tool results. Keep the owner's
     // request as history, but do not replay an assistant answer that embeds currently withheld data.
@@ -51,8 +51,21 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
             owner--;
         }
 
+        if (transcript[owner].Role != AgentRoles.User)
+        {
+            throw new ArgumentException("An active chat request must contain an owner message.", nameof(transcript));
+        }
+
         IReadOnlyList<AgentMessage> traffic = transcript.Skip(owner + 1).ToArray();
-        AgentContextWindow bounded = Select(transcript.Take(owner + 1).ToArray(), Math.Max(1, maximumCharacters - traffic.Sum(Characters)));
+        long trafficCharacters = traffic.Sum(Characters);
+        long activeCharacters = Characters(transcript[owner]) + trafficCharacters;
+        if (activeCharacters > maximumCharacters)
+        {
+            return new AgentContextWindow([transcript[owner]], 0, true);
+        }
+
+        int historyCharacters = (int)Math.Max(1, maximumCharacters - trafficCharacters);
+        AgentContextWindow bounded = Select(transcript.Take(owner + 1).ToArray(), historyCharacters);
         return bounded with { Messages = [.. bounded.Messages, .. traffic] };
     }
 
@@ -65,7 +78,7 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
         }
 
         int start = transcript.Count - 1;
-        int remaining = maximumCharacters - Characters(transcript[start]);
+        long remaining = maximumCharacters - Characters(transcript[start]);
 
         while (start > 0)
         {
@@ -80,7 +93,7 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
                 break;
             }
 
-            int length = 0;
+            long length = 0;
             for (int index = previous; index < start; index++)
             {
                 length += Characters(transcript[index]);
@@ -113,6 +126,14 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
     private static bool IsForwarded(AgentMessage message) =>
         message.Role != AgentRoles.Tool && message.Content.Length > 0;
 
-    private static int Characters(AgentMessage message) =>
-        IsForwarded(message) ? message.Content.Length + 64 : 0;
+    private static long Characters(AgentMessage message)
+    {
+        long payload = message.Content.Length + (message.ToolCallId?.Length ?? 0);
+        foreach (AgentToolCall call in message.ToolCalls)
+        {
+            payload += call.CallId.Length + call.Name.Length + call.ArgumentsJson.Length + 32;
+        }
+
+        return payload == 0 ? 0 : payload + 64;
+    }
 }
