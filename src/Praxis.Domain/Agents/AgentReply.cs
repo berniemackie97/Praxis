@@ -14,5 +14,7 @@ public sealed record AgentReply(
     public const string TokenBudget = "token_budget";
     public const string ContextBudget = "context_budget";
     public const string NoProgress = "no_progress";
+    public const string EvidenceInsufficient = "evidence_insufficient";
+    public const string DisclosureChanged = "disclosure_changed";
     public const string BackendFailed = "backend_failed";
 }
