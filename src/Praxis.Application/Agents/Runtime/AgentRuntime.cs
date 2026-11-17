@@ -112,7 +112,7 @@ public sealed class AgentRuntime(
         }
 
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
-        AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText);
+        AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText, conversation.ContextPreset);
         if (registry.Definitions.Any(tool => tool.Name == MediaFindTool.ToolName) && ClipRequest(conversationId, command) is { } clipRequest)
         {
             RunState clipState = new(false, false);
