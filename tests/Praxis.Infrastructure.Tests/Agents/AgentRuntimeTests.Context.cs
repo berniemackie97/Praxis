@@ -15,9 +15,9 @@ public sealed partial class AgentRuntimeTests
     public async Task OversizedActiveToolTrafficStopsBeforeAnotherModelRequest()
     {
         using SqliteCatalog catalog = await SeededAsync();
-        await Capture(catalog, "large-evidence.md", Encoding.UTF8.GetBytes("# Evidence\n" + new string('a', 24_000)));
-        Guid sourceId = Assert.Single(catalog.Library.List(20, 0, null)
-            .Where(item => item.SourceLocator.EndsWith("large-evidence.md", StringComparison.Ordinal))).SourceId;
+        using MemoryStream original = new(Encoding.UTF8.GetBytes("# Evidence\n" + new string('a', 24_000)));
+        Guid sourceId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "large-evidence.md"), original, original.Length, "large-evidence.md")).SourceId;
         int nextOffset = 0;
         ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("knowledge_open",
             JsonSerializer.Serialize(new { sourceId, offset = nextOffset++ * 6_000 })))));
