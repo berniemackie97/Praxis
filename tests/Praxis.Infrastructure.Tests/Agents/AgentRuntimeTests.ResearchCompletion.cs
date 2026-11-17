@@ -24,7 +24,7 @@ public sealed partial class AgentRuntimeTests
         using HttpClient http = new(handler);
         OpenAiCompatibleAgentBackend backend = new(http, new Uri(profile.Endpoint + "/"), profile.Model, null);
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
-        string owner = new('é', 25_000);
+        string owner = new('é', 10_000);
         List<string> events = [];
 
         AgentReply stopped = await runtime.RunAsync(compact.ConversationId, owner,
