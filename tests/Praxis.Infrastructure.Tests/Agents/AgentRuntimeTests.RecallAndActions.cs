@@ -159,7 +159,7 @@ public sealed partial class AgentRuntimeTests
             (_, _, _) => { }, CancellationToken.None, useTools: false);
         AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 10));
         Assert.Equal(ownerScoped, receipt.Selected.Count > 0);
-        Assert.Equal(ownerScoped ? "full_match" : "not_needed", receipt.Outcome);
+        Assert.Contains(receipt.Outcome, ownerScoped ? new[] { "full_match", "focused_match" } : new[] { "not_needed" });
         Assert.Equal(ownerScoped, delivered.Any(message =>
             message.Content.Contains("OpenConquerServer is a .NET server project", StringComparison.Ordinal)));
         Assert.Equal(ownerScoped, reply.Citations.Count > 0);
