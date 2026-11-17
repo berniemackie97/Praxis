@@ -35,7 +35,8 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains("lease.md", results[0].Content, StringComparison.Ordinal);
         Assert.Contains("already_read", results[1].Content, StringComparison.Ordinal);
         Assert.DoesNotContain("lease.md", results[1].Content, StringComparison.Ordinal);
-        Assert.Equal(original.CallId, JsonDocument.Parse(results[1].Content).RootElement.GetProperty("previousCallId").GetString());
+        using JsonDocument duplicateReceipt = JsonDocument.Parse(results[1].Content);
+        Assert.Equal(original.CallId, duplicateReceipt.RootElement.GetProperty("previousCallId").GetString());
         AgentToolCallRecord[] audited = catalog.Agents.ReadToolCalls(conversation.ConversationId, 10).ToArray();
         Assert.Equal("ok", Assert.Single(audited, record => record.CallId == original.CallId).Outcome);
         Assert.Equal("duplicate_read", Assert.Single(audited, record => record.CallId == duplicate.CallId).Outcome);
@@ -100,9 +101,11 @@ public sealed partial class AgentRuntimeTests
         using SqliteCatalog catalog = await SeededAsync();
         AgentToolRegistry registry = new(Tools(catalog), catalog.Agents, clock);
         AgentReadProgress reads = new();
+        catalog.Agents.SaveBackend(Local());
+        AgentConversation conversation = catalog.Agents.Create("local-llm", "read permission");
         Guid sourceId = Assert.Single(catalog.Library.List(20, 0, null)
             .Where(item => item.SourceLocator.EndsWith("lease.md", StringComparison.Ordinal))).SourceId;
-        AgentToolContext permitted = new(Guid.NewGuid(), "local-llm", true, ToolPermissions.ReadOnly, _ => true);
+        AgentToolContext permitted = new(conversation.ConversationId, "local-llm", true, ToolPermissions.ReadOnly, _ => true);
         string request = JsonSerializer.Serialize(new { sourceId, offset = 0 });
         AgentToolOutput first = await registry.InvokeAsync(Call("knowledge_open", request), permitted, CancellationToken.None, reads);
         Assert.NotEmpty(first.Citations);
@@ -125,7 +128,9 @@ public sealed partial class AgentRuntimeTests
         using SqliteCatalog catalog = await SeededAsync();
         AgentToolRegistry registry = new(Tools(catalog), catalog.Agents, clock);
         AgentReadProgress reads = new();
-        AgentToolContext context = new(Guid.NewGuid(), "local-llm", true, ToolPermissions.ReadOnly, _ => true);
+        catalog.Agents.SaveBackend(Local());
+        AgentConversation conversation = catalog.Agents.Create("local-llm", "invalid read");
+        AgentToolContext context = new(conversation.ConversationId, "local-llm", true, ToolPermissions.ReadOnly, _ => true);
         AgentToolOutput first = await registry.InvokeAsync(Call("knowledge_open", """{"sourceId":"not-a-guid"}"""), context, CancellationToken.None, reads);
         AgentToolOutput second = await registry.InvokeAsync(Call("knowledge_open", """{"sourceId":"not-a-guid"}"""), context, CancellationToken.None, reads);
 
