@@ -701,6 +701,10 @@ public sealed class AgentRuntime(
                 state.CitationEvidence[number] = call.Name == KnowledgeOpenTool.ToolName
                     ? output.Content
                     : result.GetProperty("results")[index].GetProperty("snippet").GetString() ?? "";
+                if (call.Name == KnowledgeSearchTool.ToolName)
+                {
+                    state.SearchPreviews.Add(number);
+                }
             }
         }
 
@@ -748,7 +752,7 @@ public sealed class AgentRuntime(
         AnswerVerifier.Check(text,
             state.FinalEvidenceResults ?? (state.OpenedCitations.Count > 0 ? state.VerificationResults : state.ToolResults),
             userText, state.Citations.All.Count > 0, repaired, state.Citations.All.Count,
-            state.ForwardedOpenedCitations ?? state.OpenedCitations, state.CitationEvidence);
+            state.ForwardedOpenedCitations ?? state.OpenedCitations, state.CitationEvidence, state.SearchPreviews);
 
     /// <summary>The transcript from the latest compaction summary onward.</summary>
     /// <summary>
@@ -806,6 +810,7 @@ public sealed class AgentRuntime(
         public List<string> ToolResults { get; } = [];
         public List<string> VerificationResults { get; } = [];
         public Dictionary<int, string> CitationEvidence { get; } = [];
+        public HashSet<int> SearchPreviews { get; } = [];
         public HashSet<int> OpenedCitations { get; } = [];
         public HashSet<int>? ForwardedOpenedCitations { get; set; }
         public IReadOnlyList<string>? FinalEvidenceResults { get; set; }
