@@ -12,5 +12,6 @@ public sealed record AgentReply(
     public const string StepLimit = "step_limit";
     public const string TokenBudget = "token_budget";
     public const string ContextBudget = "context_budget";
+    public const string NoProgress = "no_progress";
     public const string BackendFailed = "backend_failed";
 }
