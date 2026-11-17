@@ -127,6 +127,10 @@ struct AgentPresentationTests {
         let started = AgentRunEvent(sequence: 2, kind: "tool_started", tool: call.name, detail: nil, atUtc: "")
         let finished = AgentRunEvent(sequence: 3, kind: "tool_finished", tool: call.name, detail: nil, atUtc: "")
 
+        let inProgress = ChatLine.lines([user], after: 0, prompt: question,
+                                        events: [started], liveActivity: true)
+        #expect(inProgress.map(\.kind) == [.owner])
+
         let live = ChatLine.lines([user], after: 0, prompt: question,
                                   events: [started, finished], liveActivity: true)
         #expect(live.map(\.kind) == [.owner, .activity])
