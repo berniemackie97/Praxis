@@ -386,6 +386,9 @@ struct WorkerSessionTests {
         model.draft = "ANSWER C"
         model.send()
         try await waitFor("C replied while A still runs") { model.latestReply?.text.hasPrefix("PING fixture-v1") == true }
+        try await waitFor("C answer rendered without leaving the chat") {
+            model.transcript.last?.kind == .agent && model.transcript.last?.text == model.latestReply?.text
+        }
         #expect(model.latestReply?.inputTokens == 123)
         #expect(model.latestReply?.outputTokens == 7)
 
@@ -406,6 +409,9 @@ struct WorkerSessionTests {
         model.send()
         try await waitFor("B dispatched with edited model and effort") {
             model.latestReply?.text == #"PING fixture-v2 model_reasoning_effort="high""#
+        }
+        try await waitFor("B latest answer rendered in its selected transcript") {
+            model.transcript.last?.kind == .agent && model.transcript.last?.text == model.latestReply?.text
         }
         session.stop()
         try await waitFor("fixture worker exited") { exited }
