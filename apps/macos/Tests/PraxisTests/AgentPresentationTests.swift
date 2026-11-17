@@ -133,6 +133,11 @@ struct AgentPresentationTests {
         #expect(live.last?.text == "Used search")
         #expect(live.last?.id == -3)
 
+        let beforeReload = ChatLine.lines([], after: 0, prompt: question,
+                                          events: [started, finished], liveActivity: true)
+        #expect(beforeReload.map(\.kind) == [.owner, .activity])
+        #expect(beforeReload.first?.text == question)
+
         let pending = [user,
                        AgentMessage(role: "assistant", content: "", toolCalls: [call], toolCallId: nil),
                        AgentMessage(role: "tool", content: "Result", toolCalls: [], toolCallId: "1")]
