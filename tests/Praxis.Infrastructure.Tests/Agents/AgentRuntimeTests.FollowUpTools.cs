@@ -23,7 +23,14 @@ public sealed partial class AgentRuntimeTests
         ScriptedBackend backend = new(
             _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
             _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId }))),
-            _ => new AgentTurn("The lease says rent is paid by check [2].", [], 10, 5));
+            transcript =>
+            {
+                AgentMessage opened = transcript.Last(message => message.Role == AgentRoles.Tool);
+                using JsonDocument evidence = JsonDocument.Parse(opened.Content);
+                Assert.Contains("Monthly rent is paid by check", evidence.RootElement.GetProperty("result").GetProperty("text").GetString(), StringComparison.Ordinal);
+                int number = evidence.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
+                return new AgentTurn($"The lease says rent is paid by check [{number}].", [], 10, 5);
+            });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
         List<string> events = [];
 
