@@ -153,6 +153,14 @@ struct AgentPresentationTests {
         #expect(!chat.canSend)
     }
 
+    @MainActor
+    @Test func activeRunPollingExpiresOnlyAfterItsDeadline() {
+        let now = ContinuousClock.now
+        #expect(!ChatWorkbenchModel.pollExpired(now.advanced(by: .seconds(-4)), now: now))
+        #expect(ChatWorkbenchModel.pollExpired(now.advanced(by: .seconds(-5)), now: now))
+        #expect(ChatWorkbenchModel.pollExpired(nil, now: now))
+    }
+
     @Test func chatFailureLabelsNeverRevealProviderErrorText() {
         #expect(ChatFailureText.describe("model_timeout").contains("timed out"))
         #expect(ChatFailureText.describe("model_unavailable").contains("unreachable"))
