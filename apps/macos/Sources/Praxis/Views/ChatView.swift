@@ -468,7 +468,7 @@ private struct ReplyDetails: View {
                         ForEach(turns) { turn in
                             Text("Turn \(turn.turn): \(turn.inputTokens.formatted()) in · \(turn.outputTokens.formatted()) out · \(turn.requestedToolCalls) tool calls")
                             if let request = turn.request {
-                                Text("\(request.requestBytes.formatted()) HTTP request bytes · \(request.toolSchemaBytes.formatted()) tool-schema bytes · \(request.toolResultContentBytes.formatted()) forwarded tool-result bytes")
+                                Text("\(request.requestBytes.formatted()) HTTP JSON body bytes · \(request.toolSchemaBytes.formatted()) tool-schema bytes · \(request.toolResultContentBytes.formatted()) forwarded tool-result bytes")
                                     .foregroundStyle(.secondary)
                                     .help("Serialized HTTP request and tool schema sizes; tool-result bytes count raw forwarded content. These are byte counts, not tokens, and do not directly add together.")
                             }
