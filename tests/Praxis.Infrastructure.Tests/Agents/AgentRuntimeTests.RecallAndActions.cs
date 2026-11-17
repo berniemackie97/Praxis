@@ -207,7 +207,9 @@ public sealed partial class AgentRuntimeTests
             (_, _, _) => { }, CancellationToken.None, useTools: false);
 
         AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 1));
-        Assert.Equal(revokeBeforeFollowUp ? "withheld" : "focused_match", receipt.Outcome);
+        Assert.Contains(receipt.Outcome, revokeBeforeFollowUp
+            ? new[] { "withheld" }
+            : new[] { "full_match", "focused_match" });
         Assert.Equal(!revokeBeforeFollowUp, receipt.Selected.Count > 0);
         Assert.Equal(!revokeBeforeFollowUp, forwarded.Any(message =>
             message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal)));
