@@ -39,7 +39,7 @@ public static partial class AnswerVerifier
         int[] citations = CitationMarker().Matches(answer)
             .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)).ToArray();
         bool missingCitations = evidenceAvailable &&
-            (citations.Length == 0 && (FigureTokens().IsMatch(answer) || openedCitations is { Count: > 0 }) ||
+            (citations.Length == 0 ||
              citations.Any(number => number <= 0 || availableCitations > 0 && number > availableCitations) ||
              openedCitations is { Count: > 0 } && !citations.Any(openedCitations.Contains));
         return new AnswerCheck(unsupported, missingCitations, repaired);
