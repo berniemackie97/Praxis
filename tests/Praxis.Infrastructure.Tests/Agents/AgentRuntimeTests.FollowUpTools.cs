@@ -70,7 +70,7 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(4, backend.ToolSets.Count);
         Assert.Contains(backend.ToolSets[0], tool => tool.Name == "settings_read");
         Assert.DoesNotContain(backend.ToolSets[1], tool => tool.Name == "settings_read");
-        Assert.Equal(backend.ToolSets[0].Select(tool => tool.Name), backend.ToolSets[2].Select(tool => tool.Name));
+        Assert.Equal(backend.ToolSets[0].Select(tool => tool.Name).ToArray(), backend.ToolSets[2].Select(tool => tool.Name).ToArray());
         Assert.Contains(backend.ToolSets[3], tool => tool.Name == "settings_read");
         Assert.DoesNotContain(backend.ToolSets.SelectMany(tools => tools), tool => tool.Tier is ToolTiers.Propose or ToolTiers.Write or ToolTiers.System);
         Assert.Equal("ok", Assert.Single(catalog.Agents.ReadToolCalls(conversation.ConversationId, 20),
