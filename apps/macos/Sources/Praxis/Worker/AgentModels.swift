@@ -94,6 +94,25 @@ struct AnswerCheck: Decodable, Equatable {
     var clean: Bool { unsupportedFigures.isEmpty && !missingCitations }
 }
 
+struct AgentRequestFootprint: Decodable, Equatable {
+    let requestBytes: Int
+    let messageBytes: Int
+    let toolSchemaBytes: Int
+    let systemTextBytes: Int
+    let toolResultContentBytes: Int
+    let toolCallArgumentsBytes: Int
+    let advertisedTools: Int
+}
+
+struct AgentTurnUsage: Decodable, Equatable, Identifiable {
+    let turn: Int
+    let inputTokens: Int
+    let outputTokens: Int
+    let requestedToolCalls: Int
+    let request: AgentRequestFootprint?
+    var id: Int { turn }
+}
+
 struct AgentReply: Decodable, Equatable {
     let conversationId: String
     let text: String
@@ -106,6 +125,7 @@ struct AgentReply: Decodable, Equatable {
     let outputTokens: Int
     let omittedMessages: Int?
     let toolsUnavailable: Bool?
+    var turnUsage: [AgentTurnUsage]? = nil
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {
