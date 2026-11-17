@@ -559,20 +559,20 @@ struct ChatLine: Identifiable, Equatable {
                 continue
             }
         }
+        let currentTurn = messages.dropFirst(min(start, messages.count))
+        if let prompt, (liveActivity || reply != nil),
+           !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
+            lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
+        }
         if liveActivity {
             for event in events where event.kind == "tool_finished" {
                 guard let tool = event.tool else { continue }
                 lines.append(ChatLine(id: -event.sequence, kind: .activity, text: "Used " + ChatActivity.label(tool)))
             }
         }
-        if let reply, let prompt, !reply.text.isEmpty {
-            let currentTurn = messages.dropFirst(min(start, messages.count))
-            if !currentTurn.contains(where: { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }) {
-                if !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
-                    lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
-                }
-                lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
-            }
+        if let reply, !reply.text.isEmpty,
+           !currentTurn.contains(where: { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }) {
+            lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
         }
         return lines
     }
