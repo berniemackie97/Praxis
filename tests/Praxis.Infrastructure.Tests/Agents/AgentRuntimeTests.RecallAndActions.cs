@@ -60,8 +60,8 @@ public sealed partial class AgentRuntimeTests
 
 
     [Theory]
-    [InlineData("Reply with rent only.")]
-    [InlineData("Say 'rent' only.")]
+    [InlineData("Reply with lease only.")]
+    [InlineData("Say 'lease' only.")]
     [InlineData("Hello!")]
     public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt)
     {
@@ -69,7 +69,7 @@ public sealed partial class AgentRuntimeTests
         AgentBackendProfile profile = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
         catalog.Agents.SaveBackend(profile);
         AgentConversation chat = catalog.Agents.Create(profile.BackendId, "direct reply");
-        Guid lease = Assert.Single(catalog.Search.Query("rent", 10)).SourceId;
+        Guid lease = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
         catalog.Policy.SaveCategory(new SourceCategory(lease, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
         PolicyService policy = new(catalog.Policy);
         policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
