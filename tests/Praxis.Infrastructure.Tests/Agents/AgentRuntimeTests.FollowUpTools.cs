@@ -34,6 +34,7 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(2, reply.ToolCalls.Count);
         Assert.Contains("lease.md", reply.Citations.Select(citation => citation.SourceName));
         Assert.Contains(backend.ToolSets[0], tool => tool.Name == "knowledge_timeline");
+        Assert.DoesNotContain(backend.ToolSets[0], tool => tool.Name == ToolExpandTool.ToolName);
         Assert.DoesNotContain(backend.ToolSets[1], tool => tool.Name == "knowledge_timeline");
         Assert.DoesNotContain(backend.ToolSets[2], tool => tool.Name == "settings_read");
         Assert.All(backend.ToolSets.Skip(1), tools =>
