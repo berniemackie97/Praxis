@@ -106,7 +106,8 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
         {
             using JsonDocument document = JsonDocument.Parse(receipt.result.Content);
             if (!document.RootElement.TryGetProperty("result", out JsonElement result) ||
-                !result.TryGetProperty("results", out JsonElement matches) || matches.ValueKind != JsonValueKind.Array)
+                result.ValueKind != JsonValueKind.Object || !result.TryGetProperty("results", out JsonElement matches) ||
+                matches.ValueKind != JsonValueKind.Array)
             {
                 continue;
             }
