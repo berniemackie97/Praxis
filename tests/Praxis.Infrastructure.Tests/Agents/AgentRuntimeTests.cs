@@ -523,14 +523,20 @@ public sealed partial class AgentRuntimeTests : IDisposable
         public ScriptedBackend(Func<IReadOnlyList<AgentMessage>, CancellationToken, Task<AgentTurn>> step) => turns = new([step]);
 
         public List<string> SystemPrompts { get; } = [];
+        public List<int> ToolCounts { get; } = [];
+        public bool AllowToollessTurn { get; set; }
 
         public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools, CancellationToken cancellationToken)
         {
             lock (SystemPrompts)
             {
                 SystemPrompts.Add(systemPrompt);
+                ToolCounts.Add(tools.Count);
             }
-            Assert.Contains(tools, tool => tool.Name == "data_query");
+            if (!AllowToollessTurn || tools.Count > 0)
+            {
+                Assert.Contains(tools, tool => tool.Name == "data_query");
+            }
             return turns.Count > 1 ? turns.Dequeue()(transcript, cancellationToken) : turns.Peek()(transcript, cancellationToken);
         }
     }

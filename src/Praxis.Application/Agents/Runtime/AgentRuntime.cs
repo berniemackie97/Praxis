@@ -25,6 +25,7 @@ public sealed class AgentRuntime(
     IAgentRecallJournal? recallJournal = null)
 {
     private const int MaximumCliToolCalls = 12;
+    private const string NoProgressNotice = "I stopped because repeated source reads made no progress. The available evidence was insufficient for a verified answer.";
 
     public async Task<AgentReply> RunAsync(Guid conversationId, string userText, Action<string, string?, string?> report, CancellationToken cancellationToken,
         AgentRunLimits? limits = null, bool useTools = true)
@@ -111,7 +112,7 @@ public sealed class AgentRuntime(
         }
 
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
-        AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText);
+        AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText, conversation.ContextPreset);
         if (registry.Definitions.Any(tool => tool.Name == MediaFindTool.ToolName) && ClipRequest(conversationId, command) is { } clipRequest)
         {
             RunState clipState = new(false, false);
@@ -289,6 +290,7 @@ public sealed class AgentRuntime(
         for (int step = 0; step < bounds.MaximumSteps; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            bool finishWithEvidence = state.Reads.ConsecutiveRepeats >= 2;
             if (state.InputTokens > bounds.MaximumInputTokens)
             {
                 const string notice = "I stopped because this request reached its token budget.";
@@ -327,8 +329,15 @@ public sealed class AgentRuntime(
 
             string turnSystem = repairInstruction is null ? system : system + "\n\n" + repairInstruction;
             repairInstruction = null;
-            AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext), definitions, cancellationToken);
-            if ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text)))
+            if (finishWithEvidence)
+            {
+                report("progress_limited", null, "repeated knowledge reads; final answer requested");
+                turnSystem += "\n\nThe same knowledge reads have already been attempted. Do not call tools again. Answer with the evidence already provided, citing supporting sources, or say what is missing.";
+            }
+
+            AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext),
+                finishWithEvidence ? [] : definitions, cancellationToken);
+            if (!finishWithEvidence && ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text))))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
             }
@@ -336,6 +345,12 @@ public sealed class AgentRuntime(
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
             cancellationToken.ThrowIfCancellationRequested();
+            if (finishWithEvidence && (turn.ToolCalls.Count > 0 || string.IsNullOrWhiteSpace(turn.Text)))
+            {
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(NoProgressNotice, []));
+                return Finish(conversationId, userText, NoProgressNotice, AgentReply.NoProgress, state, report, repaired);
+            }
+
             if (turn.ToolCalls.Count == 0)
             {
                 if (!useTools)
@@ -347,6 +362,12 @@ public sealed class AgentRuntime(
                 AnswerCheck check = Check(turn.Text, userText, state, repaired);
                 if (!check.Clean)
                 {
+                    if (finishWithEvidence)
+                    {
+                        conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(NoProgressNotice, []));
+                        return Finish(conversationId, userText, NoProgressNotice, AgentReply.NoProgress, state, report, repaired);
+                    }
+
                     if (repaired || step + 1 == bounds.MaximumSteps)
                     {
                         const string fallback = "I couldn’t verify an answer to your latest request from the available evidence.";
@@ -470,12 +491,14 @@ public sealed class AgentRuntime(
     private async Task<string> InvokeAsync(AgentToolCall call, AgentToolContext context, RunState state, Action<string, string?, string?> report, CancellationToken cancellationToken)
     {
         report("tool_started", call.Name, null);
-        AgentToolOutput output = await registry.InvokeAsync(call, context, cancellationToken);
+        AgentToolOutput output = await registry.InvokeAsync(call, context, cancellationToken, state.Reads);
         state.ToolCalls.Add(call);
         state.Withheld += output.Withheld.Sum(notice => notice.Count);
         string wrapped = state.Citations.Wrap(output);
         state.ToolResults.Add(output.Content);
-        report("tool_finished", call.Name, output.Withheld.Count > 0 ? $"withheld {output.Withheld.Sum(notice => notice.Count)}" : null);
+        string? detail = state.Reads.ConsecutiveRepeats > 0 ? "repeated read" :
+            output.Withheld.Count > 0 ? $"withheld {output.Withheld.Sum(notice => notice.Count)}" : null;
+        report("tool_finished", call.Name, detail);
         return wrapped;
     }
 
@@ -545,6 +568,7 @@ public sealed class AgentRuntime(
         public bool UseTools { get; } = useTools;
         public bool ToolsUnavailable { get; } = toolsUnavailable;
         public CitationLedger Citations { get; } = new();
+        public AgentReadProgress Reads { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<string> ToolResults { get; } = [];
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);

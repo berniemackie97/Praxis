@@ -22,14 +22,13 @@ namespace Praxis.Application.Agents.Tools;
 public sealed class KnowledgeOpenTool(
     ITextDerivativeRepository text, ISourceRepository sources, IOriginalStore originals, IPdfTextReader pdf, MediaMoments? moments = null) : IAgentTool
 {
-    private const int Window = 6_000;
     private const int MaximumOriginalBytes = 32 * 1024 * 1024;
 
     public AgentToolDefinition Definition { get; } = new("knowledge_open",
         """
         Open a source to read it, using sourceId (or itemId+revision) from another tool's result. Optional locator from a citation:
         chars:START-END, page:N[:line:M], row:N, line:N, stmttrn:N, time:START-END (seconds, media). Optional 'around' centres on a phrase. Returns up to 6000 characters
-        with offsets so you can page with 'offset'.
+        depending on the selected context budget, with offsets so you can page with 'offset'.
         """,
         ToolArguments.Schema("""
             {"type":"object","properties":{"sourceId":{"type":"string"},"itemId":{"type":"string"},"revision":{"type":"integer","minimum":1},
@@ -50,10 +49,11 @@ public sealed class KnowledgeOpenTool(
         string? locator = args.Text("locator", 64);
         string? around = args.Text("around", 200);
         (string body, string unit) = await ReadAsync(current, locator, cancellationToken);
+        int window = AgentContextPreset.KnowledgeOpenCharacters(context.ContextPreset);
         int start = around is not null && body.IndexOf(around, StringComparison.OrdinalIgnoreCase) is var found and >= 0
-            ? Math.Max(0, found - Window / 4)
+            ? Math.Max(0, found - window / 4)
             : TimeStart(sourceId, current, locator) ?? LocatorStart(body, locator, unit) ?? Math.Min(body.Length, args.Integer("offset", 0, 0, int.MaxValue));
-        string excerpt = body.Substring(start, Math.Min(Window, body.Length - start));
+        string excerpt = body.Substring(start, Math.Min(window, body.Length - start));
         string name = Path.GetFileName(current.Locator);
         return AgentToolOutput.Of(new
         {
