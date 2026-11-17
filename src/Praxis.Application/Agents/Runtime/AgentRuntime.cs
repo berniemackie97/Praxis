@@ -25,6 +25,7 @@ public sealed class AgentRuntime(
     IAgentRecallJournal? recallJournal = null)
 {
     private const int MaximumCliToolCalls = 12;
+    private const string NoProgressNotice = "I stopped because repeated source reads made no progress. The available evidence was insufficient for a verified answer.";
 
     public async Task<AgentReply> RunAsync(Guid conversationId, string userText, Action<string, string?, string?> report, CancellationToken cancellationToken,
         AgentRunLimits? limits = null, bool useTools = true)
@@ -346,9 +347,8 @@ public sealed class AgentRuntime(
             cancellationToken.ThrowIfCancellationRequested();
             if (finishWithEvidence && (turn.ToolCalls.Count > 0 || string.IsNullOrWhiteSpace(turn.Text)))
             {
-                const string notice = "I stopped because repeated source reads made no progress. The available evidence was insufficient for a verified answer.";
-                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
-                return Finish(conversationId, userText, notice, AgentReply.NoProgress, state, report, repaired);
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(NoProgressNotice, []));
+                return Finish(conversationId, userText, NoProgressNotice, AgentReply.NoProgress, state, report, repaired);
             }
 
             if (turn.ToolCalls.Count == 0)
@@ -362,6 +362,12 @@ public sealed class AgentRuntime(
                 AnswerCheck check = Check(turn.Text, userText, state, repaired);
                 if (!check.Clean)
                 {
+                    if (finishWithEvidence)
+                    {
+                        conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(NoProgressNotice, []));
+                        return Finish(conversationId, userText, NoProgressNotice, AgentReply.NoProgress, state, report, repaired);
+                    }
+
                     if (repaired || step + 1 == bounds.MaximumSteps)
                     {
                         const string fallback = "I couldn’t verify an answer to your latest request from the available evidence.";
