@@ -92,16 +92,16 @@ public sealed partial class AgentRuntimeTests
             CancellationToken.None, new AgentRunLimits(MaximumSteps: 1));
         Task<AgentReply> completed = runtime.RunAsync(second.ConversationId, "Second request", (_, _, _) => { },
             CancellationToken.None);
-        await Task.WhenAll(limited, completed);
+        AgentReply[] replies = await Task.WhenAll(limited, completed);
 
-        Assert.Equal(AgentReply.StepLimit, limited.Result.StopReason);
-        Assert.Equal(AgentReply.Completed, completed.Result.StopReason);
-        Assert.Equal(limited.Result.Text, catalog.Agents.ReadMessages(first.ConversationId)[^1].Content);
+        Assert.Equal(AgentReply.StepLimit, replies[0].StopReason);
+        Assert.Equal(AgentReply.Completed, replies[1].StopReason);
+        Assert.Equal(replies[0].Text, catalog.Agents.ReadMessages(first.ConversationId)[^1].Content);
         Assert.Equal("Second conversation answered.", catalog.Agents.ReadMessages(second.ConversationId)[^1].Content);
         Assert.DoesNotContain(catalog.Agents.ReadMessages(first.ConversationId),
-            message => message.Content == completed.Result.Text);
+            message => message.Content == replies[1].Text);
         Assert.DoesNotContain(catalog.Agents.ReadMessages(second.ConversationId),
-            message => message.Content == limited.Result.Text);
+            message => message.Content == replies[0].Text);
     }
 
     [Fact]
