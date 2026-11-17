@@ -2,12 +2,11 @@ using System.Text;
 using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
-using Praxis.Application.Processing;
 using Praxis.Domain.Agents;
 using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Tests.Finance;
+using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Agents;
