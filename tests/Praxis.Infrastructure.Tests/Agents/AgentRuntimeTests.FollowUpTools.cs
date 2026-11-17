@@ -8,7 +8,6 @@ using Praxis.Domain.Policy;
 using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
-using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Agents;
