@@ -462,6 +462,20 @@ public sealed class AgentRuntime(
                 {
                     if (finishWithEvidence)
                     {
+                        if (!repaired && step + 1 < bounds.MaximumSteps &&
+                            state.OpenedCitations.Count > 0 &&
+                            (state.ForwardedOpenedCitations is null || state.ForwardedOpenedCitations.Count > 0))
+                        {
+                            repairInstruction = "The previous draft failed source verification. " +
+                                (check.UnsupportedFigures.Count > 0
+                                    ? $"Remove unsupported values ({string.Join(", ", check.UnsupportedFigures)}) or state that they are unknown. " : "") +
+                                (check.MissingCitations ? "Use valid citations from the opened passages, not search previews. " : "") +
+                                "Give only the corrected, source-grounded answer. Do not call tools.";
+                            report("repairing", null, $"unsupported figures: {check.UnsupportedFigures.Count}; missing source citation: {check.MissingCitations}");
+                            repaired = true;
+                            continue;
+                        }
+
                         string notice = compactedEvidence
                             ? "I found source passages but could not verify the requested answer from the evidence that fits this context. Narrow the question or choose Expanded context."
                             : NoProgressNotice;
