@@ -175,9 +175,11 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task CompactSourceOnlyCorrectionIsVerifiedOnceWithoutFurtherToolCalls(bool corrected)
+    [InlineData(true, 5_000)]
+    [InlineData(false, 5_000)]
+    [InlineData(true, 7_300)]
+    [InlineData(false, 7_300)]
+    public async Task CompactSourceOnlyCorrectionIsVerifiedOnceWithoutFurtherToolCalls(bool corrected, int historyBudget)
     {
         using SqliteCatalog catalog = await SeededAsync();
         using MemoryStream original = new(Encoding.UTF8.GetBytes(
@@ -210,7 +212,7 @@ public sealed partial class AgentRuntimeTests
 
         AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find synthetic packet opcode and size",
             (kind, _, _) => events.Add(kind), CancellationToken.None,
-            new AgentRunLimits(CompactAfterCharacters: 5_000));
+            new AgentRunLimits(CompactAfterCharacters: historyBudget));
 
         Assert.Equal(corrected ? AgentReply.Completed : AgentReply.EvidenceInsufficient, reply.StopReason);
         Assert.Equal(corrected, reply.Check.Clean);
@@ -220,6 +222,10 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(2, reply.SourceReads);
         Assert.All(backend.ToolCounts.TakeLast(2), count => Assert.Equal(0, count));
         Assert.Contains("repairing", events);
+        if (!corrected)
+        {
+            Assert.DoesNotContain("repeated source reads", reply.Text, StringComparison.Ordinal);
+        }
         Assert.Contains("Remove unsupported values", backend.SystemPrompts[^1], StringComparison.Ordinal);
         Assert.DoesNotContain("0x42D", reply.Text, StringComparison.Ordinal);
         if (!corrected)
