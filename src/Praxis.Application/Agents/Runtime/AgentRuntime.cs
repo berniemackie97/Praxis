@@ -634,7 +634,7 @@ public sealed class AgentRuntime(
         }
 
         AnswerCheck check = state.RejectedCheck ?? (hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false));
-        report("completed", null, check.Clean ? null : "answer check flagged figures");
+        report("completed", null, check.Clean ? null : "answer verification failed");
         return new AgentReply(conversationId, text, stop, state.ToolCalls,
             state.SuppressCitations ? [] : state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
             state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray(),
