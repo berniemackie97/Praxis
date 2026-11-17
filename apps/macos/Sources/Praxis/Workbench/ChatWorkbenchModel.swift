@@ -520,6 +520,9 @@ enum ChatFailureText {
         case "model_approval_required": return "Codex could not request an approval in Praxis. Try a read-only question or use the provider directly for the action."
         case "model_rejected": return "The connection rejected the request. For private Ollama Chat, choose an installed local model."
         case "model_invalid_response": return "The provider did not return a usable answer. Try again or choose another model."
+        case "model_server_error": return "The model service returned an error. Check the provider and retry."
+        case "model_truncated": return "The model response was incomplete. Retry with a shorter request."
+        case "agent_internal_error": return "Praxis encountered an internal error. No answer was saved; the conversation is intact. Check Activity before retrying."
         case "invalid_request": return "The worker rejected this request. Try a shorter message."
         default: return "Chat failed unexpectedly. No answer was saved; the message remains in this conversation."
         }
