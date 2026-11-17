@@ -70,7 +70,7 @@ internal static partial class AgentBrainContext
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex GeneralQuestion();
 
-    [GeneratedRegex(@"\b(?:my|mine|our|ours|we|us|me|mine|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|lease|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
+    [GeneratedRegex(@"\b(?:my|mine|our|ours|we|us|me|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex OwnerScope();
 
