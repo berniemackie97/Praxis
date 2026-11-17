@@ -241,6 +241,7 @@ struct AgentPresentationTests {
         let event = AgentRunEvent(sequence: 3, kind: "tool_started", tool: "knowledge_search", detail: nil, atUtc: "")
         #expect(ChatActivity.progress(event) == "Using search…")
         #expect(ChatActivity.progress(nil) == "Starting…")
+        #expect(ChatActivity.label("tools_expand") == "available tools")
         let check = AnswerCheck(unsupportedFigures: ["$180.00"], missingCitations: true, repaired: true)
         #expect(!check.clean)
         #expect(AnswerCheckText.describe(check).hasPrefix("Still flagged after one correction"))
