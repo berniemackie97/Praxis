@@ -307,8 +307,8 @@ public sealed class AgentRuntime(
                 AgentContextWindow window = AgentContextWindow.WithActiveToolTraffic(VisibleHistory(state.TransientToolResults), historyBudget);
                 if (window.ActiveTrafficExceeded)
                 {
-                    const string notice = "I stopped because the tool results exceeded this chat's context budget. Narrow the question or choose Expanded context.";
-                    report("context_limited", null, "active tool traffic exceeded context budget");
+                    const string notice = "I stopped because this request exceeded its context budget. Narrow the question or choose Expanded context.";
+                    report("context_limited", null, "active request context exceeded budget");
                     conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
                     return Finish(conversationId, userText, notice, AgentReply.ContextBudget, state, report, repaired);
                 }
