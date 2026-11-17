@@ -562,6 +562,11 @@ public sealed class AgentRuntime(
         }
 
         state.ToolResults.Add(output.Content);
+        if (call.Name != KnowledgeSearchTool.ToolName)
+        {
+            state.VerificationResults.Add(output.Content);
+        }
+
         string? detail = state.Reads.ConsecutiveRepeats > 0 ? "repeated read" :
             output.Withheld.Count > 0 ? $"withheld {output.Withheld.Sum(notice => notice.Count)}" : null;
         report("tool_finished", call.Name, detail);
@@ -586,8 +591,8 @@ public sealed class AgentRuntime(
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
-        AnswerVerifier.Check(text, state.ToolResults, userText, state.Citations.All.Count > 0, repaired,
-            state.Citations.All.Count, state.OpenedCitations);
+        AnswerVerifier.Check(text, state.OpenedCitations.Count > 0 ? state.VerificationResults : state.ToolResults,
+            userText, state.Citations.All.Count > 0, repaired, state.Citations.All.Count, state.OpenedCitations);
 
     /// <summary>The transcript from the latest compaction summary onward.</summary>
     /// <summary>
@@ -643,6 +648,7 @@ public sealed class AgentRuntime(
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<AgentTurnUsage> TurnUsage { get; } = [];
         public List<string> ToolResults { get; } = [];
+        public List<string> VerificationResults { get; } = [];
         public HashSet<int> OpenedCitations { get; } = [];
         public bool SuppressCitations { get; set; }
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
