@@ -27,7 +27,8 @@ public sealed partial class AgentRuntimeTests
             {
                 AgentMessage opened = transcript.Last(message => message.Role == AgentRoles.Tool);
                 using JsonDocument evidence = JsonDocument.Parse(opened.Content);
-                Assert.Contains("Monthly rent is paid by check", evidence.RootElement.GetProperty("result").GetProperty("text").GetString(), StringComparison.Ordinal);
+                string excerpt = evidence.RootElement.GetProperty("result").GetProperty("text").GetString() ?? "";
+                Assert.Contains("Monthly rent is paid by check", excerpt, StringComparison.Ordinal);
                 int number = evidence.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
                 return new AgentTurn($"The lease says rent is paid by check [{number}].", [], 10, 5);
             });
