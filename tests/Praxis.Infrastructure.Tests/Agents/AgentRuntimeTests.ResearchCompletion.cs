@@ -194,7 +194,7 @@ public sealed partial class AgentRuntimeTests
                 AgentMessage opened = transcript.Last(message => message.Role == AgentRoles.Tool);
                 using JsonDocument receipt = JsonDocument.Parse(opened.Content);
                 Assert.Contains("opcode 0x2716, length 28 bytes", receipt.RootElement.GetProperty("result")
-                    .GetProperty("text").GetString(), StringComparison.Ordinal);
+                    .GetProperty("text").GetString() ?? "", StringComparison.Ordinal);
                 citation = receipt.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
                 return new AgentTurn($"The synthetic packet opcode is 0x42D [{citation}].", [], 10, 4);
             },
