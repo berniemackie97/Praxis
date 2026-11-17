@@ -56,6 +56,54 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal("B answered", catalog.Agents.ReadMessages(second.ConversationId)[^1].Content);
     }
 
+    [Theory]
+    [InlineData(AgentReply.StepLimit, 2, 100_000, 1_800)]
+    [InlineData(AgentReply.TokenBudget, 4, 100, 900)]
+    public async Task ToolLoopLimitPersistsTheTerminalReply(string stop, int maximumSteps, int tokenBudget, int expectedTokens)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new(_ => Turn(Call("knowledge_search", """{"query":"lease"}""")));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find my lease", (_, _, _) => { },
+            CancellationToken.None, new AgentRunLimits(MaximumSteps: maximumSteps, MaximumInputTokens: tokenBudget));
+
+        AgentMessage final = catalog.Agents.ReadMessages(conversation.ConversationId)[^1];
+        Assert.Equal(stop, reply.StopReason);
+        Assert.Equal(expectedTokens, reply.InputTokens);
+        Assert.Equal(AgentRoles.Assistant, final.Role);
+        Assert.Equal(reply.Text, final.Content);
+        Assert.NotEmpty(final.Content);
+        Assert.Empty(final.Citations);
+        Assert.Empty(final.ToolCalls);
+    }
+
+    [Fact]
+    public async Task ConcurrentConversationsKeepTheirOwnTerminalAnswers()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new((messages, _) => Task.FromResult(
+            messages.Any(message => message.Role == AgentRoles.User && message.Content == "Keep searching")
+                ? Turn(Call("knowledge_search", """{"query":"lease"}"""))
+                : new AgentTurn("Second conversation answered.", [], 7, 3)));
+        (AgentRuntime runtime, AgentConversation first) = Runtime(catalog, Local(), backend);
+        AgentConversation second = catalog.Agents.Create(first.BackendId, "second");
+
+        Task<AgentReply> limited = runtime.RunAsync(first.ConversationId, "Keep searching", (_, _, _) => { },
+            CancellationToken.None, new AgentRunLimits(MaximumSteps: 1));
+        Task<AgentReply> completed = runtime.RunAsync(second.ConversationId, "Second request", (_, _, _) => { },
+            CancellationToken.None);
+        await Task.WhenAll(limited, completed);
+
+        Assert.Equal(AgentReply.StepLimit, limited.Result.StopReason);
+        Assert.Equal(AgentReply.Completed, completed.Result.StopReason);
+        Assert.Equal(limited.Result.Text, catalog.Agents.ReadMessages(first.ConversationId)[^1].Content);
+        Assert.Equal("Second conversation answered.", catalog.Agents.ReadMessages(second.ConversationId)[^1].Content);
+        Assert.DoesNotContain(catalog.Agents.ReadMessages(first.ConversationId),
+            message => message.Content == completed.Result.Text);
+        Assert.DoesNotContain(catalog.Agents.ReadMessages(second.ConversationId),
+            message => message.Content == limited.Result.Text);
+    }
+
     [Fact]
     public async Task CliLimitsHistoryAndToolCallsWithoutSendingSavedMemoriesToRemote()
     {
