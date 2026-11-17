@@ -12,7 +12,7 @@ namespace Praxis.Infrastructure.Tests.Agents;
 public sealed partial class AgentRuntimeTests
 {
     [Fact]
-    public async Task OversizedActiveToolTrafficStopsBeforeAnotherModelRequest()
+    public async Task OversizedActiveToolTrafficGetsOneToolFreeTurnBeforeStopping()
     {
         using SqliteCatalog catalog = await SeededAsync();
         using MemoryStream original = new(Encoding.UTF8.GetBytes("# Evidence\n" + new string('a', 24_000)));
@@ -20,7 +20,10 @@ public sealed partial class AgentRuntimeTests
             Path.Combine(inbox, "large-evidence.md"), original, original.Length, "large-evidence.md")).SourceId;
         int nextOffset = 0;
         ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("knowledge_open",
-            JsonSerializer.Serialize(new { sourceId, offset = nextOffset++ * 6_000 })))));
+            JsonSerializer.Serialize(new { sourceId, offset = nextOffset++ * 6_000 })))))
+        {
+            AllowToollessTurn = true
+        };
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
         List<string> events = [];
@@ -28,11 +31,12 @@ public sealed partial class AgentRuntimeTests
             (kind, _, _) => events.Add(kind), CancellationToken.None,
             new AgentRunLimits(MaximumSteps: 8, CompactAfterCharacters: 9_000));
 
-        Assert.Equal(AgentReply.ContextBudget, reply.StopReason);
-        Assert.Equal(2, backend.SystemPrompts.Count);
+        Assert.Equal(AgentReply.NoProgress, reply.StopReason);
+        Assert.Equal(3, backend.SystemPrompts.Count);
+        Assert.Equal(0, backend.ToolCounts[^1]);
         Assert.Equal(2, reply.ToolCalls.Count);
-        Assert.Contains("context_limited", events);
-        Assert.Equal(1_800, reply.InputTokens);
+        Assert.Contains("progress_limited", events);
+        Assert.Equal(2_700, reply.InputTokens);
         IReadOnlyList<AgentMessage> saved = catalog.Agents.ReadMessages(conversation.ConversationId);
         Assert.Equal(reply.Text, saved[^1].Content);
         Assert.Empty(saved[^1].Citations);

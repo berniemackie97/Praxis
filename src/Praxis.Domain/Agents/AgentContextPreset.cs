@@ -22,6 +22,14 @@ public static class AgentContextPreset
         _ => 24_000
     };
 
+    // Explicit transport-body ceilings; they do not claim to match a provider's token context window.
+    public static int MaximumRequestBytes(string mode) => mode switch
+    {
+        Compact => 48_000,
+        Expanded => 288_000,
+        _ => 144_000
+    };
+
     public static int BriefLimit(string mode, bool local) => mode switch
     {
         Compact => 1,

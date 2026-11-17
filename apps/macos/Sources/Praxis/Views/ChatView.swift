@@ -462,6 +462,11 @@ private struct ReplyDetails: View {
                     .font(.meta).foregroundStyle(.secondary)
                     .help("Provider-reported usage. CLI counts can include cached context and provider overhead; counts are not directly comparable or a subscription balance.")
             }
+            if let searches = reply.searchCalls, let reads = reply.sourceReads, searches + reads > 0 {
+                Text("Source retrieval: \(searches) search calls · \(reads) read calls")
+                    .font(.meta).foregroundStyle(.secondary)
+                    .help("Attempted source tool calls, including repeated attempts; not a count of unique successful sources.")
+            }
             if let turns = reply.turnUsage, !turns.isEmpty {
                 DisclosureGroup("Model turns (\(turns.count))") {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -470,7 +475,12 @@ private struct ReplyDetails: View {
                             if let request = turn.request {
                                 Text("\(request.requestBytes.formatted()) HTTP JSON body bytes · \(request.toolSchemaBytes.formatted()) tool-schema bytes · \(request.toolResultContentBytes.formatted()) forwarded tool-result bytes")
                                     .foregroundStyle(.secondary)
-                                    .help("Serialized HTTP request and tool schema sizes; tool-result bytes count raw forwarded content. These are byte counts, not tokens, and do not directly add together.")
+                                    .help("The full serialized HTTP JSON body includes system instructions, messages, recaps, recalled excerpts and tool definitions. Byte categories overlap and are not tokens.")
+                            }
+                            if (turn.automaticRecallBytes ?? 0) > 0 || (turn.recapBytes ?? 0) > 0 {
+                                Text("\((turn.automaticRecallBytes ?? 0).formatted()) automatic recall bytes · \((turn.recapBytes ?? 0).formatted()) generated recap bytes")
+                                    .foregroundStyle(.secondary)
+                                    .help("Raw UTF-8 text included within the already-counted HTTP messages; these figures must not be added to request-body bytes.")
                             }
                         }
                     }

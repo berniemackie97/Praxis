@@ -19,9 +19,11 @@ public sealed class KnowledgeSearchTool(
     ITextSearchIndex lexical, ISemanticVectorStore vectors, IModelProfileRepository profiles, IEmbeddingModelConnector embeddings,
     IKnowledgeRepository knowledge, IPolicyRepository policy) : IAgentTool
 {
+    public const string ToolName = "knowledge_search";
+
     private static readonly IReadOnlyList<string> Kinds = ["any", "note", "document", "code", "media", "financial", "data"];
 
-    public AgentToolDefinition Definition { get; } = new("knowledge_search",
+    public AgentToolDefinition Definition { get; } = new(ToolName,
         """
         Search everything in the owner's second brain. Returns ranked passages with sourceId/itemId/revision for knowledge_open and a citation number.
         Use specific keywords or a file name; run several searches for multi-part questions. When no source has every word, partial matches return (mode=partial). Filters: kind (note|document|code|media|financial|data), category

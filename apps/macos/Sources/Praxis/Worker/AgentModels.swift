@@ -110,6 +110,8 @@ struct AgentTurnUsage: Decodable, Equatable, Identifiable {
     let outputTokens: Int
     let requestedToolCalls: Int
     let request: AgentRequestFootprint?
+    var automaticRecallBytes: Int? = nil
+    var recapBytes: Int? = nil
     var id: Int { turn }
 }
 
@@ -126,6 +128,8 @@ struct AgentReply: Decodable, Equatable {
     let omittedMessages: Int?
     let toolsUnavailable: Bool?
     var turnUsage: [AgentTurnUsage]? = nil
+    var searchCalls: Int? = nil
+    var sourceReads: Int? = nil
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {

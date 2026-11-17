@@ -14,7 +14,7 @@ namespace Praxis.Infrastructure.Agents;
 /// Tool calling over the OpenAI-compatible chat completions API: OpenAI, DeepSeek, OpenRouter,
 /// Gemini's compatible endpoint, and local servers such as Ollama or LM Studio (<c>/v1</c>).
 /// </summary>
-public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, bool isLocalOllama = false) : IAgentBackend
+public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, bool isLocalOllama = false) : IAgentBudgetedBackend
 {
     public async ValueTask<bool> SupportsToolsAsync(CancellationToken cancellationToken)
     {
@@ -46,8 +46,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         return capabilities?.Tools ?? (family is not ("gemma2" or "gemma3" or "library/gemma2" or "library/gemma3"));
     }
 
-    public async Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
-        CancellationToken cancellationToken)
+    public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
+        CancellationToken cancellationToken) => CompleteWithinAsync(systemPrompt, transcript, tools, int.MaxValue, cancellationToken);
+
+    public async Task<AgentTurn> CompleteWithinAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript,
+        IReadOnlyList<AgentToolDefinition> tools, int maximumRequestBytes, CancellationToken cancellationToken)
     {
         JsonArray messages = [new JsonObject { ["role"] = "system", ["content"] = systemPrompt }];
         foreach (AgentMessage message in transcript)
@@ -79,6 +82,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
 
         string payload = body.ToJsonString();
         AgentRequestFootprint footprint = AgentHttpRequestFootprint.Measure(payload, body, systemPrompt, transcript, tools.Count);
+        if (footprint.RequestBytes > maximumRequestBytes)
+        {
+            throw new AgentRequestTooLargeException(footprint.RequestBytes, maximumRequestBytes);
+        }
+
         using HttpRequestMessage request = new(HttpMethod.Post, new Uri(endpoint, "chat/completions"))
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -94,30 +102,60 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
             throw HttpAgentErrors.From(response.StatusCode);
         }
 
-        using JsonDocument document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        using JsonDocument document = ParseResponse(await response.Content.ReadAsStringAsync(cancellationToken));
         JsonElement root = document.RootElement;
-        if (!root.TryGetProperty("choices", out JsonElement choices) || choices.GetArrayLength() == 0)
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("choices", out JsonElement choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
+            choices.GetArrayLength() == 0 || choices[0].ValueKind != JsonValueKind.Object ||
+            !choices[0].TryGetProperty("message", out JsonElement reply) || reply.ValueKind != JsonValueKind.Object)
         {
-            throw new InferenceException(InferenceFailure.InvalidResponse, "The provider returned no choices.");
+            throw new InferenceException(InferenceFailure.InvalidResponse, "The provider returned no valid message.");
         }
-
-        JsonElement reply = choices[0].GetProperty("message");
         string text = reply.TryGetProperty("content", out JsonElement content) && content.ValueKind == JsonValueKind.String ? content.GetString()! : "";
         List<AgentToolCall> calls = [];
-        if (reply.TryGetProperty("tool_calls", out JsonElement toolCalls) && toolCalls.ValueKind == JsonValueKind.Array)
+        if (reply.TryGetProperty("tool_calls", out JsonElement toolCalls))
         {
-            foreach (JsonElement call in toolCalls.EnumerateArray().Take(16))
+            if (toolCalls.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
             {
-                JsonElement function = call.GetProperty("function");
-                calls.Add(new AgentToolCall(call.TryGetProperty("id", out JsonElement id) ? id.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N"),
-                    function.GetProperty("name").GetString() ?? "", function.TryGetProperty("arguments", out JsonElement arguments)
-                        ? arguments.ValueKind == JsonValueKind.String ? arguments.GetString() ?? "{}" : arguments.GetRawText() : "{}"));
+                throw new InferenceException(InferenceFailure.InvalidResponse, "The provider returned invalid tool calls.");
+            }
+
+            if (toolCalls.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement call in toolCalls.EnumerateArray().Take(16))
+                {
+                    if (call.ValueKind != JsonValueKind.Object ||
+                        !call.TryGetProperty("function", out JsonElement function) || function.ValueKind != JsonValueKind.Object ||
+                        !function.TryGetProperty("name", out JsonElement name) || name.ValueKind != JsonValueKind.String ||
+                        string.IsNullOrWhiteSpace(name.GetString()))
+                    {
+                        throw new InferenceException(InferenceFailure.InvalidResponse, "The provider returned an invalid tool call.");
+                    }
+
+                    string callId = call.TryGetProperty("id", out JsonElement id) && id.ValueKind == JsonValueKind.String
+                        ? id.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                    calls.Add(new AgentToolCall(callId, name.GetString()!,
+                        function.TryGetProperty("arguments", out JsonElement arguments)
+                            ? arguments.ValueKind == JsonValueKind.String ? arguments.GetString() ?? "{}" : arguments.GetRawText() : "{}"));
+                }
             }
         }
 
         JsonElement usage = root.TryGetProperty("usage", out JsonElement used) ? used : default;
         return new AgentTurn(isLocalOllama ? VisibleOllamaAnswer(text, calls.Count != 0) : text,
             calls, Tokens(usage, "prompt_tokens"), Tokens(usage, "completion_tokens"), footprint);
+    }
+
+    private static JsonDocument ParseResponse(string response)
+    {
+        try
+        {
+            return JsonDocument.Parse(response);
+        }
+        catch (JsonException error)
+        {
+            throw new InferenceException(InferenceFailure.InvalidResponse, "The provider returned invalid JSON.", error);
+        }
     }
 
     private static string VisibleOllamaAnswer(string reply, bool hasToolCalls)

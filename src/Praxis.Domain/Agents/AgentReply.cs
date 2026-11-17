@@ -7,12 +7,14 @@ namespace Praxis.Domain.Agents;
 public sealed record AgentReply(
     Guid ConversationId, string Text, string StopReason, IReadOnlyList<AgentToolCall> ToolCalls, IReadOnlyList<AgentCitation> Citations,
     int WithheldResults, AnswerCheck Check, int InputTokens, int OutputTokens, int OmittedMessages = 0, bool ToolsUnavailable = false,
-    IReadOnlyList<AgentTurnUsage>? TurnUsage = null)
+    IReadOnlyList<AgentTurnUsage>? TurnUsage = null, int SearchCalls = 0, int SourceReads = 0)
 {
     public const string Completed = "completed";
     public const string StepLimit = "step_limit";
     public const string TokenBudget = "token_budget";
     public const string ContextBudget = "context_budget";
     public const string NoProgress = "no_progress";
+    public const string EvidenceInsufficient = "evidence_insufficient";
+    public const string DisclosureChanged = "disclosure_changed";
     public const string BackendFailed = "backend_failed";
 }
