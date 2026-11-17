@@ -524,6 +524,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
 
         public List<string> SystemPrompts { get; } = [];
         public List<int> ToolCounts { get; } = [];
+        public List<IReadOnlyList<AgentToolDefinition>> ToolSets { get; } = [];
         public bool AllowToollessTurn { get; set; }
 
         public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools, CancellationToken cancellationToken)
@@ -532,6 +533,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
             {
                 SystemPrompts.Add(systemPrompt);
                 ToolCounts.Add(tools.Count);
+                ToolSets.Add(tools.ToArray());
             }
             if (!AllowToollessTurn || tools.Count > 0)
             {
