@@ -59,12 +59,13 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Theory]
-    [InlineData("Reply with PING only.")]
-    [InlineData("Reply with lease only.")]
-    [InlineData("Say 'lease' only.")]
-    [InlineData("Respond with \"Lease remains private\" exactly.")]
-    [InlineData("Hello!")]
-    public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt)
+    [InlineData("Reply with PING only.", false)]
+    [InlineData("Reply with PING only.", true)]
+    [InlineData("Reply with lease only.", false)]
+    [InlineData("Say 'lease' only.", false)]
+    [InlineData("Respond with \"Lease remains private\" exactly.", false)]
+    [InlineData("Hello!", false)]
+    public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt, bool useTools)
     {
         using SqliteCatalog catalog = await SeededAsync();
         AgentBackendProfile profile = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
@@ -81,7 +82,7 @@ public sealed partial class AgentRuntimeTests
         SessionBackend session = new(_ => Task.FromResult(new AgentTurn("OK", [], 5, 2)),
             messages => delivered = messages);
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
-        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt, (_, _, _) => { }, CancellationToken.None, useTools: false);
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt, (_, _, _) => { }, CancellationToken.None, useTools: useTools);
 
         Assert.Equal(prompt, Assert.Single(delivered).Content);
         Assert.Equal("OK", reply.Text);
