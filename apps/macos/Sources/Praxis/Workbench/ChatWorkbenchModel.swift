@@ -89,12 +89,12 @@ final class ChatWorkbenchModel: ObservableObject {
     var transcript: [ChatLine] {
         let state = current
         let turn = messages.dropFirst(min(state.runMessageCount, messages.count))
-        let savedReply = state.reply.map { reply in
-            turn.contains { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }
-        } ?? false
+        let savedReply = turn.contains { message in
+            message.role == "assistant" && !message.content.isEmpty && message.toolCalls.isEmpty
+        }
         return ChatLine.lines(messages, after: state.runMessageCount,
                               prompt: state.runUserText, reply: state.reply,
-                              events: state.events, liveActivity: state.runId != nil || state.reply != nil && !savedReply)
+                              events: state.events, liveActivity: (state.runId != nil || state.reply != nil) && !savedReply)
     }
 
     var activeBackendId: String { selected?.backendId ?? backendChoice }
