@@ -127,6 +127,8 @@ public sealed partial class AgentRuntimeTests
     [Theory]
     [InlineData("What is Conquer Online?", false)]
     [InlineData("Explain Conquer Online.", false)]
+    [InlineData("Tell me about Conquer Online.", false)]
+    [InlineData("Can you tell me what Conquer Online is?", false)]
     [InlineData("I wonder what Conquer Online is.", false)]
     [InlineData("I was wondering what Conquer Online is.", false)]
     [InlineData("I'm curious: what is Conquer Online?", false)]
