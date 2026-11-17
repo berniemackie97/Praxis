@@ -312,7 +312,8 @@ public sealed class AgentRuntime(
         for (int step = 0; step < bounds.MaximumSteps; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            bool finishWithEvidence = state.Reads.ConsecutiveRepeats >= 2;
+            bool repeatedReads = state.Reads.ConsecutiveRepeats >= 2;
+            bool finishWithEvidence = repeatedReads;
             bool compactedEvidence = false;
             if (state.Citations.All.Any(citation => !scope.MayDisclose(citation.SourceId) ||
                 citation.PlaybackSourceId is { } media && !scope.MayDisclose(media)))
@@ -399,14 +400,16 @@ public sealed class AgentRuntime(
             repairInstruction = null;
             if (finishWithEvidence)
             {
-                if (!compactedEvidence)
+                if (repeatedReads)
                 {
                     report("progress_limited", null, "repeated knowledge reads; final answer requested");
                 }
 
                 turnSystem += compactedEvidence
                     ? "\n\nThe active research transcript has been reduced to complete, selected tool receipts to preserve room for an answer. Do not call tools. Cite only the opened passages present in this request. Do not infer missing packet values."
-                    : "\n\nThe same knowledge reads have already been attempted. Do not call tools again. Answer with the evidence already provided, citing supporting sources, or say what is missing.";
+                    : repeatedReads
+                        ? "\n\nThe same knowledge reads have already been attempted. Do not call tools again. Answer with the evidence already provided, citing supporting sources, or say what is missing."
+                        : "\n\nThe current opened sources are all the evidence available for this answer. Do not call tools. Cite only the opened passages and clearly distinguish documented facts from unknown details.";
             }
 
             IReadOnlyList<AgentMessage> forwarded = WithRecall(turnContext);
@@ -476,10 +479,11 @@ public sealed class AgentRuntime(
                             continue;
                         }
 
-                        string notice = compactedEvidence
+                        bool openedEvidence = state.OpenedCitations.Count > 0;
+                        string notice = openedEvidence
                             ? "I found source passages but could not verify the requested answer from the evidence that fits this context. Narrow the question or choose Expanded context."
                             : NoProgressNotice;
-                        string stop = compactedEvidence ? AgentReply.EvidenceInsufficient : AgentReply.NoProgress;
+                        string stop = openedEvidence ? AgentReply.EvidenceInsufficient : AgentReply.NoProgress;
                         state.RejectedCheck = check;
                         report("verification_limited", null, $"unsupported figures: {check.UnsupportedFigures.Count}; missing source citation: {check.MissingCitations}");
                         conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
