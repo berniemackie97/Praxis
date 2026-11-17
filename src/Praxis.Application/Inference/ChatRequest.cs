@@ -23,6 +23,15 @@ public sealed record ChatRequest(IReadOnlyList<ChatMessage> Messages, JsonElemen
             throw new ArgumentException("The response schema must be a JSON object.", nameof(ResponseSchema));
         }
 
+        foreach (ChatMessage message in Messages)
+        {
+            if (message.Images is { } images && (images.Count > 4 || images.Any(image => image.Length is < 1 or > 160_000 ||
+                !Convert.TryFromBase64String(image, new byte[120_000], out _))))
+            {
+                throw new ArgumentException("A visual request contains too many or invalid images.");
+            }
+        }
+
         if (MaxOutputTokens is < 1 or > 8_192)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxOutputTokens));

@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 39;
+    internal const int CurrentVersion = 40;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -66,6 +66,13 @@ internal static class CatalogSchema
         (22, "agent_tool_calls", "record_id, conversation_id, call_id, tool, tier, arguments, outcome, result_characters, citations, withheld, started_utc, duration_ms"),
         (22, "agent_proposals", "proposal_id, conversation_id, kind, payload, rationale, status, created_utc, resolved_utc"),
         (22, "agent_memories", "memory_id, conversation_id, text, status, created_utc, updated_utc"),
+        (40, "agent_runs", "run_id, conversation_id, request, state, kind, reply, learning_state, message_start, message_end, backend_config"),
+        (40, "agent_skill_experiences", "revision_id, run_id"),
+        (40, "agent_learning_attempts", "run_id, attempt, started_utc, input_tokens, output_tokens"),
+        (40, "agent_skill_revisions", "evidence_invalidated"),
+        (40, "link_settings", "study_media, sample_frames, vision_model, maximum_media_minutes"),
+        (40, "agent_run_events", "run_id, sequence, kind, tool, detail, at_utc"),
+        (40, "processing_controls", "processor_key, paused, actor, changed_utc"),
         (38, "agent_memories", "previous_name, current_name, name_key, business_name"),
         (22, "agent_artifacts", "artifact_id, title, source_id, revision, path, conversation_id, updated_utc"),
         (21, "financial_documents", "item_id, revision, processor_key, source_digest, outcome, format, parser, reason_code, issues, tier, model_provider, model_name, model_digest, created_utc"),

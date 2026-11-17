@@ -23,10 +23,17 @@ struct Cue: Encodable {
     var text: String
 }
 
+struct VideoFrame: Encodable {
+    var seconds: Double
+    var text: String
+    var imageBase64: String
+}
+
 struct Output: Encodable {
     var pages: [String]?
     var cues: [Cue]?
     var error: String?
+    var frames: [VideoFrame]?
 }
 
 func finish(_ output: Output) -> Never {
@@ -141,7 +148,51 @@ func transcribe(_ url: URL, localeIdentifier: String) async -> Output {
     }
 }
 
+@available(macOS 13, *)
+func sampleVideo(_ url: URL, maximumFrames: Int) async -> Output {
+    let asset = AVURLAsset(url: url)
+    guard let duration = try? await asset.load(.duration), duration.seconds.isFinite,
+          duration.seconds > 0, duration.seconds < 86_400 else { return Output(error: "video_unreadable") }
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: 1280, height: 720)
+    let count = min(maximumFrames, max(1, Int(ceil(duration.seconds / 30))))
+    var frames: [VideoFrame] = []
+    var failure = "video_frames_unavailable"
+    for index in 0..<count {
+        if Task.isCancelled { return Output(error: "video_canceled") }
+        let seconds = min(duration.seconds - 0.01, Double(index) * duration.seconds / Double(count))
+        let image: CGImage
+        let actual: CMTime
+        do {
+            (image, actual) = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600))
+        } catch {
+            let cause = error as NSError
+            let underlying = cause.userInfo[NSUnderlyingErrorKey] as? NSError
+            failure = "video_decode_\(cause.code)_\(underlying?.code ?? 0)"
+            continue
+        }
+        let frame: VideoFrame? = autoreleasepool {
+            let bytes = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(bytes, "public.jpeg" as CFString, 1, nil) else { return nil }
+            CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.35] as CFDictionary)
+            guard CGImageDestinationFinalize(destination), bytes.length <= 100_000 else { return nil }
+            return VideoFrame(seconds: max(0, actual.seconds), text: String(recognize(image).prefix(8_000)),
+                              imageBase64: (bytes as Data).base64EncodedString())
+        }
+        if let frame { frames.append(frame) } else { failure = "video_frame_encode_failed" }
+    }
+    return frames.isEmpty ? Output(error: failure) : Output(frames: frames)
+}
+
 let arguments = Array(CommandLine.arguments.dropFirst())
+if arguments.first == "video" {
+    guard arguments.count == 4, arguments[1] == "--max-frames", let maximum = Int(arguments[2]), (1...12).contains(maximum) else { finish(Output(error: "usage")) }
+    guard #available(macOS 13, *) else { finish(Output(error: "video_unavailable")) }
+    Task.detached { finish(await sampleVideo(URL(fileURLWithPath: arguments[3]), maximumFrames: maximum)) }
+    dispatchMain()
+}
+
 if arguments.first == "transcribe" {
     guard arguments.count == 2 || (arguments.count == 4 && arguments[1] == "--locale"), let path = arguments.last else {
         finish(Output(error: "usage"))
@@ -149,14 +200,8 @@ if arguments.first == "transcribe" {
 
     let localeIdentifier = arguments.count == 4 ? arguments[2] : Locale.current.identifier
     guard #available(macOS 26, *) else { finish(Output(error: "transcription_unavailable")) }
-    let done = DispatchSemaphore(value: 0)
-    var output = Output(error: "transcription_failed")
-    Task {
-        output = await transcribe(URL(fileURLWithPath: path), localeIdentifier: localeIdentifier)
-        done.signal()
-    }
-    done.wait()
-    finish(output)
+    Task.detached { finish(await transcribe(URL(fileURLWithPath: path), localeIdentifier: localeIdentifier)) }
+    dispatchMain()
 }
 
 guard arguments.first == "ocr", let path = arguments.last, arguments.count >= 2 else { finish(Output(error: "usage")) }

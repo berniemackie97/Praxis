@@ -96,7 +96,7 @@ public sealed class OllamaRuntime : IDisposable
 
         var capabilities = values.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String)
             .Select(value => value.GetString()).ToHashSet(StringComparer.Ordinal);
-        return new LocalModelCapabilities(capabilities.Contains("completion"), capabilities.Contains("tools"), capabilities.Contains("embedding"));
+        return new LocalModelCapabilities(capabilities.Contains("completion"), capabilities.Contains("tools"), capabilities.Contains("embedding"), capabilities.Contains("vision"));
     }
 
     public IChatModel CreateChatModel(string model) => new OllamaChatModel(this, model);

@@ -5,6 +5,10 @@ struct LinkSettingsSection: View {
     @EnvironmentObject private var workbench: WorkbenchModel
     @State private var mode = "saved_links"
     @State private var blocked = ""
+    @State private var studyMedia = false
+    @State private var sampleFrames = false
+    @State private var visionModel = ""
+    @State private var maximumMediaMinutes = 60
 
     private var model: LinkSettingsModel { workbench.links }
 
@@ -15,6 +19,21 @@ struct LinkSettingsSection: View {
                 Text("Never").tag("off")
             }
             .pickerStyle(.radioGroup)
+            Toggle("Download saved videos for local study", isOn: $studyMedia)
+            if studyMedia {
+                Text("Captionless videos can use on-device speech recognition. Media downloads are bounded and temporary. No cookies, account access or cloud transcription.")
+                    .font(.meta).foregroundStyle(.secondary)
+                Stepper("Up to \(maximumMediaMinutes) minutes per video", value: $maximumMediaMinutes, in: 1...240)
+                Toggle("Sample frames and read on-screen text", isOn: $sampleFrames)
+                if sampleFrames {
+                    Picker("Local vision model", selection: $visionModel) {
+                        Text("OCR only").tag("")
+                        ForEach((workbench.modelSetup.machine?.installed ?? []).filter { $0.capabilities?.vision == true }) { Text($0.name).tag($0.name) }
+                    }
+                    Text("Up to 12 preserved frames. Model descriptions remain unverified; unsampled intervals are unknown. Requires an installed vision-capable model.")
+                        .font(.meta).foregroundStyle(.secondary)
+                }
+            }
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text("Never contact these hosts")
                 TextEditor(text: $blocked)
@@ -28,7 +47,8 @@ struct LinkSettingsSection: View {
                     Text(message).font(.meta).foregroundStyle(model.error == nil ? Color.secondary : Color.red).lineLimit(2)
                 }
                 Spacer()
-                Button("Save") { model.save(mode: mode, blockedHosts: LinkSettingsModel.hosts(from: blocked)) }
+                Button("Save") { model.save(mode: mode, blockedHosts: LinkSettingsModel.hosts(from: blocked), studyMedia: studyMedia,
+                                            sampleFrames: sampleFrames, visionModel: visionModel, maximumMediaMinutes: maximumMediaMinutes) }
                     .disabled(model.settings == nil || !changed)
             }
         } header: {
@@ -37,16 +57,22 @@ struct LinkSettingsSection: View {
             Text("Praxis fetches only links you save (.webloc or .url files, Save Link…, or a link you paste in chat and ask to save) — never links inside emails or documents. It connects only to public addresses, keeps no cookies, and saves what it read in “Praxis Web” in your intake folder. YouTube links keep their captions so chat can show clips.")
                 .font(.meta).foregroundStyle(.secondary)
         }
-        .onAppear { model.refresh() }
+        .onAppear { model.refresh(); workbench.modelSetup.refresh() }
         .onReceive(model.$settings.compactMap { $0 }) { settings in
             mode = settings.mode
             blocked = settings.blockedHosts.joined(separator: "\n")
+            studyMedia = settings.studyMedia ?? false
+            sampleFrames = settings.sampleFrames ?? false
+            visionModel = settings.visionModel ?? ""
+            maximumMediaMinutes = settings.maximumMediaMinutes ?? 60
         }
     }
 
     private var changed: Bool {
         guard let settings = model.settings else { return false }
-        return settings.mode != mode || settings.blockedHosts != LinkSettingsModel.hosts(from: blocked)
+        return settings.mode != mode || settings.blockedHosts != LinkSettingsModel.hosts(from: blocked) ||
+            (settings.studyMedia ?? false) != studyMedia || (settings.sampleFrames ?? false) != sampleFrames ||
+            (settings.visionModel ?? "") != visionModel || (settings.maximumMediaMinutes ?? 60) != maximumMediaMinutes
     }
 }
 

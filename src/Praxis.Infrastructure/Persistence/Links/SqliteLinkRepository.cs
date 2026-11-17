@@ -33,7 +33,7 @@ public sealed class SqliteLinkRepository : ILinkRepository
                 WHERE j.item_id = $item AND j.revision = $revision
                   AND j.processor_key = $processor AND j.state = 'running'
                   AND j.lease_key = $lease AND j.lease_until_utc > $now
-                  AND s.status = 'active'
+                  AND s.status = 'active' AND j.revision=(SELECT MAX(v.revision) FROM item_versions v WHERE v.item_id=j.item_id)
                 """);
             ProcessingJobParameters.BindLease(command, lease);
             command.Parameters.AddWithValue("$now", Now());
@@ -62,16 +62,18 @@ public sealed class SqliteLinkRepository : ILinkRepository
 
     public LinkSettings ReadSettings() => database.ExecuteRead(connection =>
     {
-        using SqliteCommand command = connection.CreateCommand("SELECT mode, blocked_hosts FROM link_settings WHERE settings_id = 1");
+        using SqliteCommand command = connection.CreateCommand("SELECT mode, blocked_hosts, study_media, sample_frames, vision_model, maximum_media_minutes FROM link_settings WHERE settings_id = 1");
         using SqliteDataReader reader = command.ExecuteReader();
         return reader.Read()
-            ? new LinkSettings(reader.GetString(0), JsonSerializer.Deserialize<string[]>(reader.GetString(1)) ?? [])
+            ? new LinkSettings(reader.GetString(0), JsonSerializer.Deserialize<string[]>(reader.GetString(1)) ?? [], reader.GetBoolean(2), reader.GetBoolean(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetInt32(5))
             : LinkSettings.Default;
     });
 
     public void SaveSettings(LinkSettings settings)
     {
         if (!LinkSettings.IsValidMode(settings.Mode) || settings.BlockedHosts.Count > LinkSettings.MaximumBlockedHosts ||
+            settings.MaximumMediaMinutes is < 1 or > 240 || settings.VisionModel is { } model && (model.Length is < 1 or > 100 || model.Any(char.IsWhiteSpace)) ||
             settings.BlockedHosts.Any(host => host.Length is < 1 or > 253 || Uri.CheckHostName(host) == UriHostNameType.Unknown))
         {
             throw new ArgumentException("The link settings are invalid.", nameof(settings));
@@ -85,6 +87,8 @@ public sealed class SqliteLinkRepository : ILinkRepository
                 ON CONFLICT(settings_id) DO UPDATE SET mode = excluded.mode, blocked_hosts = excluded.blocked_hosts, updated_utc = excluded.updated_utc
                 """, ("$mode", settings.Mode), ("$hosts", JsonSerializer.Serialize(settings.BlockedHosts.Select(host => host.ToLowerInvariant()).Distinct())),
                 ("$now", Now()));
+            connection.Run(transaction, "UPDATE link_settings SET study_media=$study,sample_frames=$frames,vision_model=$model,maximum_media_minutes=$minutes WHERE settings_id=1",
+                ("$study", settings.StudyMedia ? 1 : 0), ("$frames", settings.SampleFrames ? 1 : 0), ("$model", settings.VisionModel), ("$minutes", settings.MaximumMediaMinutes));
             transaction.Commit();
             return true;
         });

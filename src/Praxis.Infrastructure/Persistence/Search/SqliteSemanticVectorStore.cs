@@ -115,25 +115,24 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
         });
     }
 
-    public bool HasVectors(string modelDigest, Guid? collectionId = null) => database.ExecuteRead(connection =>
+    public bool HasVectors(string modelDigest, Guid? collectionId = null) => CountVectors(modelDigest, 1, collectionId) > 0;
+
+    public int CountVectors(string modelDigest, int limit, Guid? collectionId = null) => database.ExecuteRead(connection =>
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         using SqliteCommand check = connection.CreateCommand("""
-                                                             SELECT EXISTS(
-                                                                 SELECT 1 FROM semantic_vectors v
-                                                                 JOIN eligible_semantic_segments e
-                                                                   ON e.item_id = v.item_id AND e.revision = v.revision
-                                                                   AND e.ordinal = v.ordinal AND e.source_digest = v.source_digest
-                                                                 WHERE v.model_digest = $model
-                                                                   AND ($collection IS NULL OR EXISTS (
-                                                                                   SELECT 1 FROM source_collection_memberships membership
-                                                                                   JOIN source_collections scope ON scope.collection_id = membership.collection_id
-                                                                                   WHERE membership.source_id = e.source_id
-                                                                                     AND membership.collection_id = $collection
-                                                                                     AND scope.archived_utc IS NULL)) LIMIT 1)
-                                                             """);
+            SELECT COUNT(*) FROM (
+                SELECT 1 FROM semantic_vectors v JOIN eligible_semantic_segments e
+                  ON e.item_id=v.item_id AND e.revision=v.revision AND e.ordinal=v.ordinal AND e.source_digest=v.source_digest
+                WHERE v.model_digest=$model AND ($collection IS NULL OR EXISTS (
+                    SELECT 1 FROM source_collection_memberships membership JOIN source_collections scope ON scope.collection_id=membership.collection_id
+                    WHERE membership.source_id=e.source_id AND membership.collection_id=$collection AND scope.archived_utc IS NULL))
+                LIMIT $limit)
+            """);
         check.Parameters.AddWithValue("$model", modelDigest);
         check.Parameters.AddWithValue("$collection", (object?)collectionId?.ToString("D") ?? DBNull.Value);
-        return Convert.ToInt64(check.ExecuteScalar()) != 0;
+        check.Parameters.AddWithValue("$limit", limit);
+        return Convert.ToInt32(check.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
     });
 
     public IReadOnlyList<SemanticSearchHit> FindNearest(

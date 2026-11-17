@@ -94,7 +94,8 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<ModelSetup>();
         services.AddSingleton(provider => new VerificationRunner(
             provider.GetRequiredService<IVerificationRepository>(), provider.GetRequiredService<IVerifierModelFactory>(),
-            provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification")));
+            provider.GetRequiredService<TimeProvider>(), status: Report(provider, "Praxis.Verification"),
+            mayStart: () => !provider.GetRequiredService<IAgentRunJournal>().HasActiveDream()));
         services.AddSingleton<MediaEvidence>();
         services.AddSingleton(provider => new MediaPlayback(provider.GetRequiredService<ISourceRepository>(),
             provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<MediaEvidence>(),
@@ -106,7 +107,10 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<IOriginalStore>(), provider.GetRequiredService<IPolicyRepository>(),
             provider.GetRequiredService<IIntakeSupervisor>(), options.DataRoot, options.PrimaryIntakeRoot));
         services.AddSingleton<ChatMemoryMaintenance>();
+        services.AddSingleton<AgentLearningReviewer>();
         services.AddSingleton<IAgentRecallJournal>(provider => provider.GetRequiredService<SqliteCatalog>().AgentRecalls);
+        services.AddSingleton<IAgentRunJournal>(provider => provider.GetRequiredService<SqliteCatalog>().AgentRuns);
+        services.AddSingleton<IProcessingControls>(provider => provider.GetRequiredService<SqliteCatalog>().ProcessingControls);
         services.AddSingleton<IAgentConversationRepository>(provider => provider.GetRequiredService<SqliteCatalog>().Agents);
         services.AddSingleton(_ => new SessionSecretStore(new KeychainSecretStore()));
         services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<SessionSecretStore>());
@@ -160,9 +164,11 @@ internal static class WorkerServiceRegistration
         services.AddSingleton<IDesktopActionGroup, SkillActions>();
         services.AddSingleton<IDesktopActionGroup, CapabilityActions>();
         services.AddSingleton<IDesktopActionGroup, ActivityActions>();
+        services.AddSingleton<IDesktopActionGroup, BrainWorkActions>();
         services.AddSingleton<DesktopProtocol>();
         services.AddSingleton<DesktopStdioSession>();
 
+        services.AddHostedService<AgentMaintenanceService>();
         services.AddHostedService<WorkerSupervisor>();
         services.AddHostedService<ChatMemoryService>();
         services.AddSingleton<SemanticIndexMaintenance>();

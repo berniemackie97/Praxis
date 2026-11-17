@@ -151,12 +151,12 @@ public sealed class SqliteProcessingQueue : IProcessingQueue
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
             ExpireAttemptLimitedJobs(connection, transaction, now, maxAttempts, processorKey);
-            using SqliteCommand select = connection.CreateCommand("""
+            using SqliteCommand select = connection.CreateCommand($"""
                                                                   SELECT j.item_id, j.revision, j.processor_key
                                                                   FROM processing_jobs j
                                                                   JOIN items i ON i.item_id = j.item_id
                                                                   JOIN sources s ON s.source_id = i.source_id
-                                                                  WHERE s.status = 'active'
+                                                                  WHERE s.status = 'active' AND ({SqliteProcessingControls.Claimable})
                                                                     AND j.revision = (
                                                                         SELECT MAX(latest.revision) FROM item_versions latest
                                                                         WHERE latest.item_id = j.item_id)

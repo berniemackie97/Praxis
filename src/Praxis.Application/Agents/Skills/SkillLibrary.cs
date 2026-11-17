@@ -48,7 +48,7 @@ public sealed partial class SkillLibrary(IEnumerable<SkillDocument> bundled, ISk
             ? (Verify(revision), revision.Summary.RevisionId) : null;
     }
 
-    public SkillRevisionSummary Propose(string markdown, Guid? conversationId, string rationale, Guid? expectedBase = null)
+    public SkillRevisionSummary Propose(string markdown, Guid? conversationId, string rationale, Guid? expectedBase = null, Guid? experienceId = null)
     {
         SkillDocument document = parser.Parse(markdown);
         if (seeds.ContainsKey(document.Name))
@@ -56,7 +56,7 @@ public sealed partial class SkillLibrary(IEnumerable<SkillDocument> bundled, ISk
             throw new ArgumentException("Bundled skills are read-only. To adapt one, use a different skill name.");
         }
 
-        return repository.Propose(document, conversationId, rationale, expectedBase);
+        return repository.Propose(document, conversationId, rationale, expectedBase, experienceId);
     }
 
     public SkillRevision? ReadRevision(Guid id)

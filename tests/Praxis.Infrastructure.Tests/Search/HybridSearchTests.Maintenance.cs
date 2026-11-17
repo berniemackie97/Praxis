@@ -52,7 +52,7 @@ public sealed partial class HybridSearchTests
         catalog.Models.Save(new(ModelProfile.LocalEmbedding, "ollama", "http://127.0.0.1:11434", "fixture", 2_048, true));
         await new SemanticIndexer(catalog.Embeddings).RefreshAsync(new FixtureEmbeddingModel());
         KnowledgeRetriever retriever = new(catalog.Search, new CapacityExceededStore(catalog.Embeddings), catalog.Models,
-            new CountingEmbeddingConnector(new FixtureEmbeddingModel()));
+            new CountingEmbeddingConnector(new FixtureEmbeddingModel(onQuery: () => throw new InvalidOperationException("No query embedding may run beyond capacity."))));
         var (hits, mode) = await retriever.SearchAsync("invoice", 10, null, CancellationToken.None);
         Assert.Equal("keyword", mode);
         Assert.Equal(source.SourceId, Assert.Single(hits).SourceId);
@@ -73,6 +73,7 @@ public sealed partial class HybridSearchTests
         public IReadOnlyList<SemanticSegment> ReadSegmentsToIndex(string digest, bool rebuild, int limit) => inner.ReadSegmentsToIndex(digest, rebuild, limit);
         public int Store(string digest, bool rebuild, IReadOnlyList<SegmentEmbedding> embeddings) => inner.Store(digest, rebuild, embeddings);
         public bool HasVectors(string digest, Guid? collectionId = null) => inner.HasVectors(digest, collectionId);
+        public int CountVectors(string digest, int limit, Guid? collectionId = null) => limit;
         public IReadOnlyList<SemanticSearchHit> FindNearest(string digest, float[] query, int limit, int maximumScanned,
             CancellationToken cancellationToken, Guid? collectionId = null) => throw new SemanticSearchCapacityException();
     }

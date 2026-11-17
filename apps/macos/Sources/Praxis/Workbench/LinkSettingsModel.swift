@@ -4,6 +4,10 @@ import Foundation
 struct LinkSettings: Decodable, Equatable {
     let mode: String
     let blockedHosts: [String]
+    var studyMedia: Bool? = nil
+    var sampleFrames: Bool? = nil
+    var visionModel: String? = nil
+    var maximumMediaMinutes: Int? = nil
 
     static let modes = ["saved_links", "off"]
 }
@@ -37,8 +41,16 @@ final class LinkSettingsModel: ObservableObject {
         }
     }
 
-    func save(mode: String, blockedHosts: [String]) {
-        channel.send("setLinkSettings", ["mode": mode, "blockedHosts": blockedHosts], as: LinkSettingsData.self,
+    func save(mode: String, blockedHosts: [String], studyMedia: Bool? = nil, sampleFrames: Bool? = nil,
+              visionModel: String? = nil, maximumMediaMinutes: Int? = nil) {
+        var fields: [String: Any] = ["mode": mode, "blockedHosts": blockedHosts]
+        if let studyMedia { fields["studyMedia"] = studyMedia }
+        if let sampleFrames { fields["sampleFrames"] = sampleFrames }
+        if let visionModel {
+            if visionModel.isEmpty { fields["clearVisionModel"] = true } else { fields["visionModel"] = visionModel }
+        }
+        if let maximumMediaMinutes { fields["maximumMediaMinutes"] = maximumMediaMinutes }
+        channel.send("setLinkSettings", fields, as: LinkSettingsData.self,
                      failed: report) { [weak self] data in
             self?.settings = data.settings
             self?.notice = "Link settings saved."

@@ -13,7 +13,7 @@ internal static class SqliteCommandExtensions
 
     /// <summary>Runs a parameterized statement inside <paramref name="transaction"/>; null values bind as NULL.</summary>
     internal static int Run(
-        this SqliteConnection connection, SqliteTransaction transaction, string sql,
+        this SqliteConnection connection, SqliteTransaction? transaction, string sql,
         params (string Name, object? Value)[] parameters)
     {
         using var command = connection.CreateCommand(sql);

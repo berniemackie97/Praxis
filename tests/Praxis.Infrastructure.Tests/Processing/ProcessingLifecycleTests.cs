@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Processing;
 
-public sealed class ProcessingLifecycleTests : IDisposable
+public sealed partial class ProcessingLifecycleTests : IDisposable
 {
     private readonly string workspace = Path.Combine(
         TestPaths.Temp, "praxis-processing-" + Guid.NewGuid().ToString("N"));

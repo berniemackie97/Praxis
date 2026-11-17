@@ -14,6 +14,8 @@ public sealed class ProcessingPipeline
     private const int MaximumAttempts = 3;
 
     private readonly IProcessingQueue queue;
+    private readonly IProcessingControls? controls;
+    public IReadOnlyList<string> Processors => handlers.Select(handler => handler.ProcessorKey).ToArray();
     private readonly TimeProvider clock;
     private readonly IReadOnlyList<IProcessingHandler> handlers;
     private readonly TimeSpan idlePoll;
@@ -33,7 +35,7 @@ public sealed class ProcessingPipeline
     private int wakePending;
     private int nextHandler;
 
-    public ProcessingPipeline(IProcessingQueue queue, IReadOnlyList<IProcessingHandler> handlers, TimeProvider clock, TimeSpan? idlePoll = null, Action<string>? status = null)
+    public ProcessingPipeline(IProcessingQueue queue, IReadOnlyList<IProcessingHandler> handlers, TimeProvider clock, TimeSpan? idlePoll = null, Action<string>? status = null, IProcessingControls? controls = null)
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(clock);
@@ -59,6 +61,7 @@ public sealed class ProcessingPipeline
         }
 
         this.queue = queue;
+        this.controls = controls;
         this.clock = clock;
         this.handlers = handlers;
         report = status ?? (_ => { });
@@ -176,6 +179,10 @@ public sealed class ProcessingPipeline
         DateTimeOffset now = clock.GetUtcNow();
         foreach (IProcessingHandler handler in handlers)
         {
+            if (controls?.IsPaused(handler.ProcessorKey) == true)
+            {
+                continue;
+            }
             lock (backoffGate)
             {
                 if (reopenAfter.TryGetValue(handler.ProcessorKey, out DateTimeOffset after) && now < after)
@@ -233,6 +240,10 @@ public sealed class ProcessingPipeline
 
     private bool IsAvailable(IProcessingHandler handler)
     {
+        if (controls?.IsPaused(handler.ProcessorKey) == true)
+        {
+            return false;
+        }
         lock (backoffGate)
         {
             return !backoff.TryGetValue(handler.ProcessorKey, out (DateTimeOffset Until, TimeSpan Next) state) ||

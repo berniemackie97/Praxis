@@ -10,6 +10,9 @@ public interface IKnowledgeRepository
 
     EntityDetail? GetEntity(Guid entityId);
 
+    /// <summary>Checks reviewed entity/evidence snapshots and performs one synchronous correction under the catalog writer gate.</summary>
+    bool ApplyCurrent(IReadOnlyList<KnowledgeSnapshot> expected, Func<bool> correction);
+
     bool Rename(Guid entityId, string name);
 
     bool SetType(Guid entityId, string entityType);

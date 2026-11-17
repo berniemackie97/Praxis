@@ -59,6 +59,8 @@ public sealed class SqliteCatalog : IDisposable
     public SqlitePolicyRepository Policy { get; }
     public SqliteAgentRepository Agents { get; }
     public SqliteChatMemoryStore ChatMemory { get; }
+    public SqliteAgentRunJournal AgentRuns { get; }
+    public SqliteProcessingControls ProcessingControls { get; }
     public SqliteSkillRepository Skills { get; }
     public SqliteCapabilityJournal Capabilities { get; }
     public SqliteAgentRecallJournal AgentRecalls { get; }
@@ -101,6 +103,8 @@ public sealed class SqliteCatalog : IDisposable
         Policy = new SqlitePolicyRepository(database, clock);
         Agents = new SqliteAgentRepository(database, clock);
         ChatMemory = new SqliteChatMemoryStore(database, clock);
+        AgentRuns = new SqliteAgentRunJournal(database, clock);
+        ProcessingControls = new SqliteProcessingControls(database, clock);
         Skills = new SqliteSkillRepository(database, clock);
         Capabilities = new SqliteCapabilityJournal(database, clock);
         AgentRecalls = new SqliteAgentRecallJournal(database);

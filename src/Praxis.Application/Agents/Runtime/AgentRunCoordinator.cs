@@ -8,7 +8,7 @@ namespace Praxis.Application.Agents.Runtime;
 /// One run per conversation at a time; clients poll events and the reply; runs can be canceled.
 /// Finished runs are retained briefly for polling and then forgotten (messages stay persisted).
 /// </summary>
-public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock)
+public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock, IAgentRunJournal? journal = null)
 {
     private const int MaximumActiveRuns = 2;
     private const int RetainedRuns = 64;
@@ -36,7 +36,18 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
                 throw new InvalidOperationException("Two chats are already responding. Finish or stop one, then send again.");
             }
 
-            Run run = new(Guid.NewGuid(), conversationId, clock.GetUtcNow());
+            Guid id = Guid.NewGuid();
+            journal?.Enqueue(id, conversationId, text, useTools, DreamCommand.Parse(text) is null ? "chat" : "dream");
+            bool dream = DreamCommand.Parse(text) is not null;
+            if (!dream)
+            {
+                foreach (Run background in runs.Values.Where(run => run.IsDream && run.State == AgentRunStatus.Running))
+                {
+                    background.ResumeRequested = true;
+                    background.Cancellation.Cancel();
+                }
+            }
+            Run run = new(id, conversationId, clock.GetUtcNow(), journal, dream);
             runs[run.RunId] = run;
             Prune();
             run.Execution = Task.Run(() => ExecuteAsync(run, text, useTools));
@@ -53,6 +64,10 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
             active = runs.Values.Where(run => run.State == AgentRunStatus.Running).ToArray();
         }
 
+        foreach (Run run in active.Where(run => run.IsDream))
+        {
+            run.ResumeRequested = true;
+        }
         await Task.WhenAll(active.Select(run => run.Cancellation.CancelAsync()));
         await Task.WhenAll(active.Select(run => run.Execution));
     }
@@ -63,13 +78,27 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         deadline.CancelAfter(DreamCommand.Parse(text) is null ? RunDeadline : TimeSpan.FromMinutes(4));
         try
         {
+            if (journal is not null && !journal.TryStart(run.RunId))
+            {
+                run.Finish(AgentRunStatus.Failed, null, "run_configuration_changed", clock.GetUtcNow());
+                return;
+            }
             AgentReply reply = await runtime.RunAsync(run.ConversationId, text,
                 (kind, tool, detail) => run.Add(kind, tool, detail, clock.GetUtcNow()), deadline.Token, useTools: useTools);
             run.Finish(AgentRunStatus.Completed, reply, null, clock.GetUtcNow());
         }
         catch (OperationCanceledException) when (run.Cancellation.IsCancellationRequested)
         {
-            run.Finish(AgentRunStatus.Canceled, null, null, clock.GetUtcNow());
+            if (run.ResumeRequested && journal is not null)
+            {
+                journal.Suspend(run.RunId);
+                run.Finish(AgentRunStatus.Failed, null, "worker_interrupted", clock.GetUtcNow(), persist: false);
+                runs.TryRemove(run.RunId, out _);
+            }
+            else
+            {
+                run.Finish(AgentRunStatus.Canceled, null, null, clock.GetUtcNow());
+            }
         }
         catch (Exception exception)
         {
@@ -87,7 +116,7 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
     }
 
     public bool HasRunning(Guid conversationId) =>
-        runs.Values.Any(run => run.ConversationId == conversationId && run.State == AgentRunStatus.Running);
+        runs.Values.Any(run => run.ConversationId == conversationId && run.State == AgentRunStatus.Running) || journal?.HasPending(conversationId) == true;
 
     public bool HasActiveRuns => runs.Values.Any(run => run.State == AgentRunStatus.Running);
 
@@ -105,17 +134,47 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
     }
 
     public AgentRunStatus? Status(Guid runId, int afterSequence) =>
-        runs.TryGetValue(runId, out Run? run) ? run.Snapshot(afterSequence) : null;
+        runs.TryGetValue(runId, out Run? run) ? run.Snapshot(afterSequence) : journal?.Status(runId, afterSequence);
 
     public bool Cancel(Guid runId)
     {
         if (!runs.TryGetValue(runId, out Run? run) || run.State != AgentRunStatus.Running)
         {
-            return false;
+            return journal?.CancelPending(runId) == true;
         }
 
+        run.ResumeRequested = false;
         run.Cancellation.Cancel();
         return true;
+    }
+
+    public void RestorePending(bool recoverInterrupted = false)
+    {
+        if (journal is null)
+        {
+            return;
+        }
+        lock (admission)
+        {
+            if (recoverInterrupted)
+            {
+                journal.RecoverInterrupted();
+            }
+            if (stopping)
+            {
+                return;
+            }
+            foreach (AgentWorkRequest request in journal.Pending(MaximumActiveRuns))
+            {
+                if (runs.ContainsKey(request.RunId) || runs.Values.Count(run => run.State == AgentRunStatus.Running) >= MaximumActiveRuns)
+                {
+                    continue;
+                }
+                Run restored = new(request.RunId, request.ConversationId, request.CreatedUtc, journal, request.Kind == "dream");
+                runs[restored.RunId] = restored;
+                restored.Execution = Task.Run(() => ExecuteAsync(restored, request.Request, request.UseTools));
+            }
+        }
     }
 
     private void Prune()
@@ -126,11 +185,13 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         }
     }
 
-    private sealed class Run(Guid runId, Guid conversationId, DateTimeOffset created)
+    private sealed class Run(Guid runId, Guid conversationId, DateTimeOffset created, IAgentRunJournal? journal = null, bool dream = false)
     {
         private readonly List<AgentRunEvent> events = [];
         private readonly Lock gate = new();
 
+        public bool IsDream { get; } = dream;
+        public bool ResumeRequested { get; set; }
         public Guid RunId { get; } = runId;
         public Guid ConversationId { get; } = conversationId;
         public DateTimeOffset Created { get; } = created;
@@ -144,15 +205,19 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         }
         private AgentReply? reply;
 
-        public void Finish(string outcome, AgentReply? answer, string? detail, DateTimeOffset at)
+        public void Finish(string outcome, AgentReply? answer, string? detail, DateTimeOffset at, bool persist = true)
         {
             lock (gate)
             {
                 if (outcome != AgentRunStatus.Completed)
                 {
-                    events.Add(new AgentRunEvent(events.Count + 1, outcome, null, detail, at));
+                    events.Add(persist && journal is not null ? journal.AppendEvent(RunId, outcome, null, detail) : new AgentRunEvent(events.Count + 1, outcome, null, detail, at));
                 }
 
+                if (persist)
+                {
+                    journal?.Finish(RunId, outcome, answer, detail);
+                }
                 reply = answer;
                 state = outcome;
             }
@@ -162,7 +227,7 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
         {
             lock (gate)
             {
-                events.Add(new AgentRunEvent(events.Count + 1, kind, tool, detail, at));
+                events.Add(journal?.AppendEvent(RunId, kind, tool, detail) ?? new AgentRunEvent(events.Count + 1, kind, tool, detail, at));
             }
         }
 

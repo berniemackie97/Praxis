@@ -99,7 +99,7 @@ public sealed class SqliteChatMemoryStore : IChatMemoryStore
 
         return database.ExecuteRead(connection =>
         {
-            using var command = connection.CreateCommand("""
+            using var command = connection.CreateCommand($$"""
                 SELECT c.conversation_id, c.title, r.recap, r.reviewed_through
                 FROM agent_recap_search f JOIN agent_chat_recaps r ON r.conversation_id = f.conversation_id
                 JOIN agent_conversations c ON c.conversation_id = r.conversation_id
@@ -107,15 +107,7 @@ public sealed class SqliteChatMemoryStore : IChatMemoryStore
                   AND NOT EXISTS (
                     SELECT 1 FROM agent_messages m, json_each(m.citations) citation
                     WHERE m.conversation_id = c.conversation_id AND m.sequence <= r.reviewed_through
-                      AND (NOT EXISTS (
-                        SELECT 1 FROM sources s JOIN items i ON i.source_id = s.source_id
-                        WHERE s.source_id = json_extract(citation.value, '$.sourceId') AND s.status = 'active'
-                          AND i.item_id = json_extract(citation.value, '$.itemId')
-                          AND json_extract(citation.value, '$.revision') =
-                              (SELECT MAX(v.revision) FROM item_versions v WHERE v.item_id = i.item_id))
-                        OR (json_extract(citation.value, '$.playbackSourceId') IS NOT NULL
-                            AND NOT EXISTS (SELECT 1 FROM sources media WHERE media.status = 'active'
-                                AND media.source_id = json_extract(citation.value, '$.playbackSourceId')))))
+                      AND {{AgentEvidenceSql.ChangedCitation}})
                 ORDER BY bm25(agent_recap_search), c.updated_utc DESC, c.conversation_id LIMIT $limit
                 """);
             command.Parameters.AddWithValue("$query", string.Join(" AND ", terms.Select(term => '"' + term + '"')));

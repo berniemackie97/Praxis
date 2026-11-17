@@ -18,7 +18,11 @@ public sealed class LinkActions(ILinkRepository links, ISavedLinkWriter writer) 
             }
 
             LinkSettings settings = new(mode, fields.OptionalStrings("blockedHosts", 253, LinkSettings.MaximumBlockedHosts)
-                .Select(host => host.Trim().ToLowerInvariant()).Where(host => host.Length > 0).Distinct(StringComparer.Ordinal).ToArray());
+                .Select(host => host.Trim().ToLowerInvariant()).Where(host => host.Length > 0).Distinct(StringComparer.Ordinal).ToArray(),
+                fields.OptionalBoolean("studyMedia") ?? links.ReadSettings().StudyMedia,
+                fields.OptionalBoolean("sampleFrames") ?? links.ReadSettings().SampleFrames,
+                fields.OptionalBoolean("clearVisionModel") == true ? null : fields.OptionalText("visionModel", 100, "The vision model is invalid.") ?? links.ReadSettings().VisionModel,
+                fields.IntegerOrDefault("maximumMediaMinutes", links.ReadSettings().MaximumMediaMinutes, 1, 240));
             links.SaveSettings(settings);
             return new LinkSettingsResponse(links.ReadSettings());
         }),

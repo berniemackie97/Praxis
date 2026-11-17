@@ -42,9 +42,13 @@ public static class CatalogProcessing
         TieredModels tiers = Tiers(catalog, models ?? new VerificationModelFactory(), time);
         DocumentReaders readers = Readers(ocr ?? new VisionOcrEngine());
         ILinkFetcher fetcher = linkFetcher ?? SharedFetcher.Value;
+        ITranscriptionEngine speech = transcriber ?? new SpeechTranscriptionEngine();
+        IWebVideoStudy? study = fetcher is IMediaDownloader downloader
+            ? new WebVideoStudy(downloader, catalog.Links, speech, new VideoFrameReader(), catalog.Models,
+                new OllamaModelDirectory(), new OllamaChatModelConnector(), catalog.Verification) : null;
         return
         [
-            new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, readers, transcriber ?? new SpeechTranscriptionEngine()),
+            new TextExtractionHandler(catalog.Text, catalog.Originals, catalog.Processing, readers, speech),
             new TextSegmentationHandler(catalog.Text, catalog.Segments, catalog.Processing),
             new SemanticExtractionHandler(catalog.Models, catalog.Text, catalog.Segments, catalog.Proposals,
                 catalog.Knowledge, catalog.Processing, new OllamaChatModelConnector()),
@@ -53,7 +57,7 @@ public static class CatalogProcessing
             new UnderstandHandler(catalog.Understanding, catalog.Text, catalog.Originals, readers,
                 new DocumentUnderstander(ladder, RecordProfiles.Default, new LocalDraftPolicy(catalog.Settings, localPace), localPace), new TransactionProfile(ladder, catalog.Understanding),
                 catalog.Policy, catalog.Processing, time),
-            new LinkFetchHandler(catalog.Links, fetcher, linkSnapshots, videoResolvers ?? [new YouTubeLinkResolver(fetcher)], time)
+            new LinkFetchHandler(catalog.Links, fetcher, linkSnapshots, videoResolvers ?? [new YouTubeLinkResolver(fetcher, study: study)], time)
         ];
     }
 
@@ -74,7 +78,7 @@ public static class CatalogProcessing
     public static ProcessingPipeline CreatePipeline(
         SqliteCatalog catalog, TimeSpan? idlePoll = null, Action<string>? status = null, TimeProvider? clock = null,
         IVerifierModelFactory? models = null, IOcrEngine? ocr = null, ILinkSnapshotWriter? linkSnapshots = null) =>
-        new(catalog.Processing, CreateHandlers(catalog, models, clock, ocr, linkSnapshots: linkSnapshots, pace: Pace), clock ?? TimeProvider.System, idlePoll, status);
+        new(catalog.Processing, CreateHandlers(catalog, models, clock, ocr, linkSnapshots: linkSnapshots, pace: Pace), clock ?? TimeProvider.System, idlePoll, status, catalog.ProcessingControls);
 
     /// <summary>The worker's measured local pace, shared by its pipeline and the settings page.</summary>
     public static LocalPace Pace { get; } = new();

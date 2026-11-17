@@ -40,6 +40,25 @@ public sealed partial class GraphProjectionTests
     }
 
     [Fact]
+    public async Task SourceCategoryReviewRejectsAnInterveningOwnerDecision()
+    {
+        using SqliteCatalog catalog = Open();
+        var source = await Enrich(catalog, "category.md", "Client uses PHY.");
+        catalog.Agents.SaveBackend(new AgentBackendProfile("local", AgentBackendKinds.OpenAiCompatible, "http://127.0.0.1:11434/v1", "fixture", null, null, true));
+        Guid chat = catalog.Agents.Create("local", "Category review").ConversationId;
+        ProposalApplier applier = new(catalog.Knowledge, catalog.Policy);
+        KnowledgeProposeTool tool = new(catalog.Agents, applier);
+        AgentToolContext context = new(chat, "local", true, ToolPermissions.ProposeEdits, _ => true);
+        using JsonDocument args = JsonDocument.Parse($$"""{"kind":"source_category","sourceId":"{{source.SourceId}}","category":"personal","rationale":"Review classification."}""");
+        await tool.InvokeAsync(args.RootElement, context, CancellationToken.None);
+        AgentProposal pending = Assert.Single(catalog.Agents.ReadProposals(AgentProposal.Pending, 10));
+        catalog.Policy.SaveCategory(new SourceCategory(source.SourceId, DataCategories.Documents, SourceCategory.OwnerOrigin, true));
+        Assert.False(applier.Apply(pending));
+        Assert.True(catalog.Policy.ReadCategory(source.SourceId)!.LocalOnly);
+        Assert.Equal(DataCategories.Documents, catalog.Policy.ReadCategory(source.SourceId)!.Category);
+    }
+
+    [Fact]
     public async Task RemoteDreamCannotReadOrProposeAgainstWithheldEntities()
     {
         using SqliteCatalog catalog = Open();

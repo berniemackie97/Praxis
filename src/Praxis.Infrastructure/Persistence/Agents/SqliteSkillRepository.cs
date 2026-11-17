@@ -21,10 +21,10 @@ public sealed class SqliteSkillRepository : ISkillRepository
 
     public IReadOnlyList<SkillDescriptor> Installed() => database.ExecuteRead<IReadOnlyList<SkillDescriptor>>(connection =>
     {
-        using SqliteCommand command = connection.CreateCommand("""
-            SELECT i.name, r.description, r.digest, i.revision_id
-            FROM agent_skill_installs i JOIN agent_skill_revisions r ON r.revision_id = i.revision_id
-            WHERE r.state = 'accepted' ORDER BY i.name
+        using SqliteCommand command = connection.CreateCommand($"""
+            SELECT i.name, skill.description, skill.digest, i.revision_id
+            FROM agent_skill_installs i JOIN agent_skill_revisions skill ON skill.revision_id = i.revision_id
+            WHERE skill.state = 'accepted' AND skill.evidence_invalidated=0 AND ({AgentEvidenceSql.CurrentSkill}) ORDER BY i.name
             """);
         using SqliteDataReader reader = command.ExecuteReader();
         List<SkillDescriptor> skills = [];
@@ -54,8 +54,8 @@ public sealed class SqliteSkillRepository : ISkillRepository
     public SkillRevision? ReadInstalled(string name, bool enabledOnly) => database.ExecuteRead(connection =>
     {
         using SqliteCommand command = connection.CreateCommand($"""
-            SELECT {SummaryColumns}, markdown FROM agent_skill_revisions
-            WHERE revision_id = (SELECT revision_id FROM agent_skill_installs WHERE name = $name)
+            SELECT {SummaryColumns}, markdown FROM agent_skill_revisions skill
+            WHERE evidence_invalidated=0 AND ({AgentEvidenceSql.CurrentSkill}) AND revision_id = (SELECT revision_id FROM agent_skill_installs WHERE name = $name)
               AND state = 'accepted'
               AND ($enabledOnly = 0 OR NOT EXISTS (SELECT 1 FROM agent_skill_disabled WHERE name = $name))
             """);
@@ -86,7 +86,7 @@ public sealed class SqliteSkillRepository : ISkillRepository
             return revisions;
         });
 
-    public SkillRevisionSummary Propose(SkillDocument document, Guid? conversationId, string rationale, Guid? expectedBase) =>
+    public SkillRevisionSummary Propose(SkillDocument document, Guid? conversationId, string rationale, Guid? expectedBase, Guid? experienceId = null) =>
         database.Execute(connection =>
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
@@ -113,7 +113,11 @@ public sealed class SqliteSkillRepository : ISkillRepository
                 using SqliteDataReader reader = pending.ExecuteReader();
                 if (reader.Read())
                 {
-                    return Summary(reader);
+                    SkillRevisionSummary existing = Summary(reader);
+                    reader.Close();
+                    LinkExperience(connection, transaction, existing.RevisionId, experienceId);
+                    transaction.Commit();
+                    return existing;
                 }
             }
 
@@ -132,6 +136,7 @@ public sealed class SqliteSkillRepository : ISkillRepository
                 ("$markdown", document.Markdown), ("$digest", document.Digest), ("$base", baseline?.ToString("D")),
                 ("$conversation", conversationId?.ToString("D")), ("$origin", summary.Origin), ("$rationale", rationale),
                 ("$now", CatalogValues.Timestamp(summary.CreatedUtc)));
+            LinkExperience(connection, transaction, summary.RevisionId, experienceId);
             transaction.Commit();
             return summary;
         });
@@ -146,6 +151,13 @@ public sealed class SqliteSkillRepository : ISkillRepository
 
         if (accept)
         {
+            using var eligibility = connection.CreateCommand($"SELECT EXISTS(SELECT 1 FROM agent_skill_revisions skill WHERE revision_id=$id AND evidence_invalidated=0 AND ({AgentEvidenceSql.CurrentSkill}))");
+            eligibility.Transaction = transaction;
+            eligibility.Parameters.AddWithValue("$id", id.ToString("D"));
+            if (Convert.ToInt32(eligibility.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) != 1)
+            {
+                throw new InvalidOperationException("The skill's experience evidence changed or was forgotten. Review a fresh draft.");
+            }
             Guid? current = Pinned(connection, transaction, draft.Name);
             if (current != draft.BaseRevisionId)
             {
@@ -177,6 +189,21 @@ public sealed class SqliteSkillRepository : ISkillRepository
         command.Parameters.AddWithValue("$name", name);
         return command.ExecuteNonQuery() == 1;
     });
+
+    private static void LinkExperience(SqliteConnection connection, SqliteTransaction transaction, Guid revision, Guid? experience)
+    {
+        if (experience is not { } id)
+        {
+            return;
+        }
+        using var current = connection.CreateCommand($"SELECT EXISTS(SELECT 1 FROM agent_runs r WHERE run_id=$run AND state='completed' AND ({AgentEvidenceSql.CurrentRun}))");
+        current.Transaction = transaction; current.Parameters.AddWithValue("$run", id.ToString("D"));
+        if (Convert.ToInt32(current.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) != 1)
+        {
+            throw new InvalidOperationException("The source experience is no longer eligible.");
+        }
+        connection.Run(transaction, "INSERT OR IGNORE INTO agent_skill_experiences(revision_id,run_id) VALUES($revision,$run)", ("$revision", revision.ToString("D")), ("$run", id.ToString("D")));
+    }
 
     private static Guid? Pinned(SqliteConnection connection, SqliteTransaction transaction, string name)
     {
