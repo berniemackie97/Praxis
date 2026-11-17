@@ -196,7 +196,10 @@ public sealed class AgentRuntime(
 
         RunState state = new(useTools, toolsUnavailable);
         AgentMessage? readOnlyEvidence = null;
-        string memoryQuery = ChatMemoryQuery.Build(userText);
+        string? previousPrompt = conversations.ReadMessages(conversationId).Reverse().Skip(1)
+            .FirstOrDefault(message => message.Role == AgentRoles.User)?.Content;
+        string memoryQuery = AgentBrainContext.IsSourceIndependent(userText, previousPrompt)
+            ? "" : ChatMemoryQuery.Build(userText);
         ChatMemoryMatch[] recalledChats = profile.IsLocal && memory is not null && dream is null && memoryQuery.Length > 0
             ? memory.Search(memoryQuery, conversationId, 3).ToArray() : [];
         AgentMessage? chatEvidence = recalledChats.Length == 0 ? null : AgentMessage.FromUser(
@@ -222,8 +225,6 @@ public sealed class AgentRuntime(
 
         if (brainSearch is not null && dream != "")
         {
-            string? previousPrompt = conversations.ReadMessages(conversationId).Reverse().Skip(1)
-                .FirstOrDefault(message => message.Role == AgentRoles.User)?.Content;
             (string outcome, int considered, int withheld, SearchHit[] selected) = AgentBrainContext.Recall(
                 brainSearch, userText, scope.MayDisclose, AgentContextPreset.BriefLimit(conversation.ContextPreset, profile.IsLocal),
                 previousPrompt);
