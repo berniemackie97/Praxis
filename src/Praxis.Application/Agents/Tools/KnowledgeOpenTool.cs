@@ -22,14 +22,13 @@ namespace Praxis.Application.Agents.Tools;
 public sealed class KnowledgeOpenTool(
     ITextDerivativeRepository text, ISourceRepository sources, IOriginalStore originals, IPdfTextReader pdf, MediaMoments? moments = null) : IAgentTool
 {
-    private const int Window = 6_000;
     private const int MaximumOriginalBytes = 32 * 1024 * 1024;
 
     public AgentToolDefinition Definition { get; } = new("knowledge_open",
         """
         Open a source to read it, using sourceId (or itemId+revision) from another tool's result. Optional locator from a citation:
         chars:START-END, page:N[:line:M], row:N, line:N, stmttrn:N, time:START-END (seconds, media). Optional 'around' centres on a phrase. Returns up to 6000 characters
-        with offsets so you can page with 'offset'.
+        depending on the selected context budget, with offsets so you can page with 'offset'.
         """,
         ToolArguments.Schema("""
             {"type":"object","properties":{"sourceId":{"type":"string"},"itemId":{"type":"string"},"revision":{"type":"integer","minimum":1},
