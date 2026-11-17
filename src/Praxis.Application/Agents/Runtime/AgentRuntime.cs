@@ -349,8 +349,30 @@ public sealed class AgentRuntime(
                 turnSystem += "\n\nThe same knowledge reads have already been attempted. Do not call tools again. Answer with the evidence already provided, citing supporting sources, or say what is missing.";
             }
 
-            AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext),
-                selection.ForTurn(finishWithEvidence), cancellationToken);
+            IReadOnlyList<AgentMessage> forwarded = WithRecall(turnContext);
+            IReadOnlyList<AgentToolDefinition> offered = selection.ForTurn(finishWithEvidence);
+            AgentTurn turn;
+            try
+            {
+                if (turnBackend is IAgentBudgetedBackend boundedBackend)
+                {
+                    int maximumBytes = Math.Min(AgentContextPreset.MaximumRequestBytes(conversation.ContextPreset),
+                        bounds.MaximumRequestBytes ?? int.MaxValue);
+                    turn = await boundedBackend.CompleteWithinAsync(turnSystem, forwarded, offered, maximumBytes, cancellationToken);
+                }
+                else
+                {
+                    turn = await turnBackend.CompleteAsync(turnSystem, forwarded, offered, cancellationToken);
+                }
+            }
+            catch (AgentRequestTooLargeException oversized)
+            {
+                const string notice = "I stopped before sending a model request because its full prompt exceeded the selected context budget. Narrow the question or choose Expanded context.";
+                report("context_limited", null, $"serialized request {oversized.RequestBytes} bytes exceeds {oversized.MaximumRequestBytes}");
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
+                return Finish(conversationId, userText, notice, AgentReply.ContextBudget, state, report, repaired);
+            }
+
             RecordTurn(turn);
             if (!finishWithEvidence && ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text))))
             {
@@ -527,7 +549,9 @@ public sealed class AgentRuntime(
         AnswerCheck check = hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
         return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
-            state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray());
+            state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray(),
+            state.ToolCalls.Count(call => call.Name == KnowledgeSearchTool.ToolName),
+            state.ToolCalls.Count(call => call.Name == KnowledgeOpenTool.ToolName));
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
