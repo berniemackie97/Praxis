@@ -336,8 +336,10 @@ public sealed partial class AgentRuntimeTests
         Assert.DoesNotContain(transcript, message => message.Role == AgentRoles.Tool && message.Content.Length == 0);
     }
 
-    [Fact]
-    public async Task SearchCitationCannotSubstituteForAnOpenedPacketSource()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SearchCitationCannotSubstituteForAnOpenedPacketSource(bool citeOpenedToo)
     {
         using SqliteCatalog catalog = await SeededAsync();
         using MemoryStream original = new(Encoding.UTF8.GetBytes("Synthetic walking packet example: opcode 0x2716, length 28 bytes."));
@@ -358,7 +360,8 @@ public sealed partial class AgentRuntimeTests
                 using JsonDocument source = JsonDocument.Parse(transcript.Last(message => message.Role == AgentRoles.Tool).Content);
                 openCitation = source.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
                 Assert.NotEqual(searchCitation, openCitation);
-                return new AgentTurn($"The example uses opcode 0x2716 and 28 bytes [{searchCitation}].", [], 10, 4);
+                string citations = citeOpenedToo ? $"[{searchCitation}][{openCitation}]" : $"[{searchCitation}]";
+                return new AgentTurn($"The example uses opcode 0x2716 and 28 bytes {citations}.", [], 10, 4);
             },
             _ => new AgentTurn($"The example uses opcode 0x2716 and 28 bytes [{openCitation}].", [], 10, 4));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
