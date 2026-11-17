@@ -10,10 +10,13 @@ namespace Praxis.Infrastructure.Agents;
 /// Tool use over the Anthropic Messages API. Consecutive tool results are grouped into one user
 /// turn and roles are kept alternating, as the API requires.
 /// </summary>
-public sealed class AnthropicAgentBackend(HttpClient http, Uri endpoint, string model, string apiKey, int maxTokens = 8_192) : IAgentBackend
+public sealed class AnthropicAgentBackend(HttpClient http, Uri endpoint, string model, string apiKey, int maxTokens = 8_192) : IAgentBudgetedBackend
 {
-    public async Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
-        CancellationToken cancellationToken)
+    public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
+        CancellationToken cancellationToken) => CompleteWithinAsync(systemPrompt, transcript, tools, int.MaxValue, cancellationToken);
+
+    public async Task<AgentTurn> CompleteWithinAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript,
+        IReadOnlyList<AgentToolDefinition> tools, int maximumRequestBytes, CancellationToken cancellationToken)
     {
         JsonArray messages = [];
         foreach (AgentMessage message in transcript)
@@ -53,6 +56,11 @@ public sealed class AnthropicAgentBackend(HttpClient http, Uri endpoint, string 
 
         string payload = body.ToJsonString();
         AgentRequestFootprint footprint = AgentHttpRequestFootprint.Measure(payload, body, systemPrompt, transcript, tools.Count);
+        if (footprint.RequestBytes > maximumRequestBytes)
+        {
+            throw new AgentRequestTooLargeException(footprint.RequestBytes, maximumRequestBytes);
+        }
+
         using HttpRequestMessage request = new(HttpMethod.Post, new Uri(endpoint, "v1/messages"))
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
