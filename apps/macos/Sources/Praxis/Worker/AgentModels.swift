@@ -126,6 +126,8 @@ struct AgentReply: Decodable, Equatable {
     let omittedMessages: Int?
     let toolsUnavailable: Bool?
     var turnUsage: [AgentTurnUsage]? = nil
+    var searchCalls: Int? = nil
+    var sourceReads: Int? = nil
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {
