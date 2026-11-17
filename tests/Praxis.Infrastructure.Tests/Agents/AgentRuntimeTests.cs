@@ -46,7 +46,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
         ScriptedBackend backend = new(
             _ => Turn(Call("knowledge_search", """{"query":"rent"}"""),
                 Call("data_query", """{"dataset":"transactions","filters":[{"field":"direction","op":"eq","values":["outflow"]}],"metrics":[{"function":"sum","field":"amount"}]}""")),
-            transcript => new AgentTurn($"Your rent note is in lease.md [1]. October outflows were $1,270.20 [2].", [], 900, 60));
+            transcript => new AgentTurn("Your rent note is in lease.md [1]. October outflows were $1,270.20, computed by data_query.", [], 900, 60));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
         AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "What did I spend in October and where is my lease?", (_, _, _) => { }, CancellationToken.None);
@@ -55,6 +55,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
         Assert.True(reply.Check.Clean, string.Join(",", reply.Check.UnsupportedFigures));
         Assert.Equal(["knowledge_search", "data_query"], reply.ToolCalls.Select(call => call.Name));
         Assert.NotEmpty(reply.Citations);
+        Assert.DoesNotContain("[2]", reply.Text, StringComparison.Ordinal);
         Assert.Equal(1_800, reply.InputTokens);
         IReadOnlyList<AgentMessage> messages = catalog.Agents.ReadMessages(conversation.ConversationId);
         Assert.Equal([AgentRoles.User, AgentRoles.Assistant, AgentRoles.Tool, AgentRoles.Tool, AgentRoles.Assistant], messages.Select(message => message.Role));
