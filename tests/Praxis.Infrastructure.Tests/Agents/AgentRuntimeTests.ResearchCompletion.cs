@@ -175,6 +175,62 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CompactSourceOnlyCorrectionIsVerifiedOnceWithoutFurtherToolCalls(bool corrected)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        using MemoryStream original = new(Encoding.UTF8.GetBytes(
+            new string('p', 2_000) + " Synthetic packet evidence: opcode 0x2716, length 28 bytes. " + new string('p', 8_000)));
+        Guid sourceId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "synthetic-repair.md"), original, original.Length, "synthetic-repair.md")).SourceId;
+        int citation = 0;
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId, offset = 0 }))),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId, offset = 2_000 }))),
+            transcript =>
+            {
+                AgentMessage opened = transcript.Last(message => message.Role == AgentRoles.Tool);
+                using JsonDocument receipt = JsonDocument.Parse(opened.Content);
+                Assert.Contains("opcode 0x2716, length 28 bytes", receipt.RootElement.GetProperty("result")
+                    .GetProperty("text").GetString(), StringComparison.Ordinal);
+                citation = receipt.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
+                return new AgentTurn($"The synthetic packet opcode is 0x42D [{citation}].", [], 10, 4);
+            },
+            _ => new AgentTurn(corrected
+                ? $"The synthetic packet opcode is 0x2716 and the size is 28 bytes [{citation}]."
+                : $"The synthetic packet opcode is 0x42D [{citation}].", [], 10, 4))
+        {
+            AllowToollessTurn = true
+        };
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Compact);
+        List<string> events = [];
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find synthetic packet opcode and size",
+            (kind, _, _) => events.Add(kind), CancellationToken.None,
+            new AgentRunLimits(CompactAfterCharacters: 5_000));
+
+        Assert.Equal(corrected ? AgentReply.Completed : AgentReply.EvidenceInsufficient, reply.StopReason);
+        Assert.Equal(corrected, reply.Check.Clean);
+        Assert.True(reply.Check.Repaired);
+        Assert.Equal(5, reply.TurnUsage!.Count);
+        Assert.Equal(1, reply.SearchCalls);
+        Assert.Equal(2, reply.SourceReads);
+        Assert.All(backend.ToolCounts.TakeLast(2), count => Assert.Equal(0, count));
+        Assert.Contains("repairing", events);
+        Assert.Contains("Remove unsupported values", backend.SystemPrompts[^1], StringComparison.Ordinal);
+        Assert.DoesNotContain("0x42D", reply.Text, StringComparison.Ordinal);
+        if (!corrected)
+        {
+            Assert.Contains("0x42D", reply.Check.UnsupportedFigures);
+        }
+
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+    }
+
+    [Theory]
     [InlineData(3_600, 1)]
     [InlineData(7_300, 2)]
     public async Task CompactEvidenceSynthesisPreservesRankedPassagesAndStopsBeforeAnotherLargeRead(
