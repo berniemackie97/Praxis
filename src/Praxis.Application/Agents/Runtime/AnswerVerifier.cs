@@ -81,7 +81,7 @@ public static partial class AnswerVerifier
                 continue;
             }
 
-            HashSet<decimal> numbers = support.SelectMany(Figures).Select(Math.Abs).ToHashSet();
+            HashSet<decimal> numbers = support.SelectMany(Figures).Select(value => Math.Abs(value)).ToHashSet();
             HashSet<string> hex = support.SelectMany(text => HexTokens().Matches(text).Select(match => match.Value))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (Match match in FigureTokens().Matches(sentence))
