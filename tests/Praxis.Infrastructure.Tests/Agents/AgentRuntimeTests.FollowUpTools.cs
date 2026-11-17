@@ -117,7 +117,7 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(2, backend.ToolSets.Count);
         Assert.Equal(backend.ToolSets[0].Select(tool => tool.Name).ToArray(), backend.ToolSets[1].Select(tool => tool.Name).ToArray());
         Assert.Contains(backend.ToolSets[1], tool => tool.Name == "settings_read");
-        Assert.DoesNotContain(backend.SystemPrompts[0], "tools_expand", StringComparison.Ordinal);
+        Assert.DoesNotContain("tools_expand", backend.SystemPrompts[0], StringComparison.Ordinal);
     }
 
     [Fact]
