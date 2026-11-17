@@ -110,6 +110,8 @@ struct AgentTurnUsage: Decodable, Equatable, Identifiable {
     let outputTokens: Int
     let requestedToolCalls: Int
     let request: AgentRequestFootprint?
+    var automaticRecallBytes: Int? = nil
+    var recapBytes: Int? = nil
     var id: Int { turn }
 }
 
