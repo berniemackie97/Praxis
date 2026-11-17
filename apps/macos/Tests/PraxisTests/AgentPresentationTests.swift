@@ -291,7 +291,9 @@ struct AgentPresentationTests {
         #expect(ChatFailureText.describe("model_unavailable").contains("unreachable"))
         #expect(ChatFailureText.describe("model_unauthenticated").contains("sign-in"))
         #expect(ChatFailureText.describe("model_quota_exhausted").contains("usage limit"))
-        #expect(ChatFailureText.describe("agent_internal_error").contains("unexpectedly"))
+        #expect(ChatFailureText.describe("agent_internal_error").contains("internal error"))
+        #expect(ChatFailureText.describe("model_server_error").contains("model service"))
+        #expect(ChatFailureText.describe("model_truncated").contains("incomplete"))
         #expect(!ChatFailureText.describe("exception: secret-key").contains("secret-key"))
     }
 
