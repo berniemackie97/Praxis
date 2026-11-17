@@ -539,8 +539,9 @@ struct ChatLine: Identifiable, Equatable {
                       prompt: String? = nil, reply: AgentReply? = nil,
                       events: [AgentRunEvent] = [], liveActivity: Bool = false) -> [ChatLine] {
         var lines: [ChatLine] = []
-        let currentStart = messages.lastIndex { $0.role == "user" && $0.content == prompt }
-            .map { max(start, $0 + 1) } ?? start
+        let currentStart = prompt.flatMap { current in
+            messages.lastIndex { $0.role == "user" && $0.content == current }
+        }.map { max(start, $0 + 1) } ?? start
         for (index, message) in messages.enumerated() {
             switch message.role {
             case "user" where !message.content.hasPrefix("Answer check failed."):
