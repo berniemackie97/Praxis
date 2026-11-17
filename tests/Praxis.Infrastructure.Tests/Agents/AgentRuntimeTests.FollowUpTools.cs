@@ -5,8 +5,10 @@ using Praxis.Application.Agents.Tools;
 using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Policy;
+using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Agents;
@@ -49,6 +51,22 @@ public sealed partial class AgentRuntimeTests
         Assert.True(backend.ToolSets[1].Sum(tool => tool.Description.Length + tool.InputSchema.GetRawText().Length) <
             backend.ToolSets[0].Sum(tool => tool.Description.Length + tool.InputSchema.GetRawText().Length));
         Assert.Equal(2, events.Count(kind => kind == "tool_finished"));
+
+        const string completion = """{"choices":[{"message":{"content":"Done."}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}""";
+        using HttpClient fullHttp = new(new CapturingHandler(completion));
+        using HttpClient narrowHttp = new(new CapturingHandler(completion));
+        Uri endpoint = new("https://api.example.test/v1/");
+        AgentMessage[] sameTranscript = [AgentMessage.FromUser("Summarize the lease")];
+        AgentTurn fullWire = await new OpenAiCompatibleAgentBackend(fullHttp, endpoint, "test-model", null)
+            .CompleteAsync("System", sameTranscript, backend.ToolSets[0], CancellationToken.None);
+        AgentTurn narrowWire = await new OpenAiCompatibleAgentBackend(narrowHttp, endpoint, "test-model", null)
+            .CompleteAsync("System", sameTranscript, backend.ToolSets[1], CancellationToken.None);
+        Assert.NotNull(fullWire.Request);
+        Assert.NotNull(narrowWire.Request);
+        Assert.Equal(fullWire.Request.MessageBytes, narrowWire.Request.MessageBytes);
+        Assert.Equal(fullWire.Request.SystemTextBytes, narrowWire.Request.SystemTextBytes);
+        Assert.True(narrowWire.Request.ToolSchemaBytes < fullWire.Request.ToolSchemaBytes);
+        Assert.True(narrowWire.Request.RequestBytes < fullWire.Request.RequestBytes);
     }
 
     [Fact]
