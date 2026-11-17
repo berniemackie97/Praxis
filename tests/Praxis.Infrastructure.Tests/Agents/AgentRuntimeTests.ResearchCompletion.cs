@@ -2,10 +2,12 @@ using System.Text;
 using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
+using Praxis.Application.Processing;
 using Praxis.Domain.Agents;
 using Praxis.Infrastructure.Agents;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Tests.Finance;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Agents;
@@ -153,6 +155,69 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains("Cite only the opened passages present in this request.", backend.SystemPrompts[^1], StringComparison.Ordinal);
         Assert.Equal(3, reply.ToolCalls.Count);
         Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+    }
+
+    [Theory]
+    [InlineData(3_600, 1)]
+    [InlineData(7_300, 2)]
+    public async Task CompactEvidenceSynthesisPreservesRankedPassagesAndStopsBeforeAnotherLargeRead(
+        int historyBudget, int expectedForwardedReads)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        using MemoryStream relevant = new(Encoding.UTF8.GetBytes(
+            "Unique packet evidence: opcode 0x2716 and length 28 bytes. " + new string('a', 7_000)));
+        using MemoryStream unrelated = new(Encoding.UTF8.GetBytes(
+            "Unrelated notes. " + new string('z', 7_000)));
+        Guid relevantId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "ranked-packet.md"), relevant, relevant.Length, "ranked-packet.md")).SourceId;
+        Guid unrelatedId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "unrelated-packet.md"), unrelated, unrelated.Length, "unrelated-packet.md")).SourceId;
+        await ProcessingDriver.RunIntakeAsync(catalog,
+            CatalogProcessing.CreateHandlers(catalog, new ScriptedModelFactory(), clock));
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"Unique packet evidence","limit":1}""")),
+            transcript =>
+            {
+                Assert.Contains(relevantId.ToString(), transcript.Last(message => message.Role == AgentRoles.Tool).Content,
+                    StringComparison.OrdinalIgnoreCase);
+                return Turn(
+                    Call("knowledge_open", JsonSerializer.Serialize(new { sourceId = relevantId })),
+                    Call("knowledge_open", JsonSerializer.Serialize(new { sourceId = unrelatedId })));
+            },
+            transcript =>
+            {
+                AgentMessage[] evidence = transcript.Where(message => message.Role == AgentRoles.Tool).ToArray();
+                Assert.Equal(expectedForwardedReads, evidence.Length);
+                Assert.Contains(evidence, message => message.Content.Contains("opcode 0x2716", StringComparison.Ordinal));
+                if (expectedForwardedReads == 1)
+                {
+                    Assert.DoesNotContain(evidence, message => message.Content.Contains("Unrelated notes", StringComparison.Ordinal));
+                }
+
+                AgentMessage opened = Assert.Single(evidence, message => message.Content.Contains("opcode 0x2716", StringComparison.Ordinal));
+                using JsonDocument receipt = JsonDocument.Parse(opened.Content);
+                int citation = receipt.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
+                Assert.Contains(transcript, message => message.ToolCalls.Any(call => call.CallId == opened.ToolCallId));
+                return new AgentTurn($"The documented synthetic opcode is 0x2716 [{citation}].", [], 10, 5);
+            })
+        {
+            AllowToollessTurn = true
+        };
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Compact);
+        List<string> events = [];
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Identify the unique packet opcode",
+            (kind, _, _) => events.Add(kind), CancellationToken.None,
+            new AgentRunLimits(CompactAfterCharacters: historyBudget));
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        Assert.True(reply.Check.Clean);
+        Assert.Equal(1, reply.SearchCalls);
+        Assert.Equal(2, reply.SourceReads);
+        Assert.Equal(0, backend.ToolCounts[^1]);
+        Assert.Equal(3, reply.TurnUsage!.Count);
+        Assert.Contains("progress_limited", events);
     }
 
     [Fact]
@@ -306,6 +371,8 @@ public sealed partial class AgentRuntimeTests
             (_, _, _) => { }, CancellationToken.None);
 
         Assert.Equal(AgentReply.EvidenceInsufficient, reply.StopReason);
+        Assert.False(reply.Check.Clean);
+        Assert.Contains("0xDEADBEEF", reply.Check.UnsupportedFigures);
         Assert.Equal(3, reply.TurnUsage!.Count);
         Assert.Contains("couldn’t verify", reply.Text, StringComparison.Ordinal);
         Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
