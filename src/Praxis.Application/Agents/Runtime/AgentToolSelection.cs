@@ -27,7 +27,7 @@ internal sealed class AgentToolSelection(IReadOnlyList<AgentToolDefinition> perm
         if (!narrowed || expandNext)
         {
             expandNext = false;
-            return permitted;
+            return permitted.Where(tool => tool.Name != ToolExpandTool.ToolName).ToArray();
         }
 
         return permitted.Where(tool => Common.Contains(tool.Name) || used.Contains(tool.Name)).ToArray();
