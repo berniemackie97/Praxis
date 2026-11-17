@@ -58,6 +58,24 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task GrantedWriteToolsRemainAdvertised()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        new PolicyService(catalog.Policy).Request(new PolicyChange(ToolPermission: ToolPermissions.AllowEdits), PolicyActors.Owner);
+        ScriptedBackend backend = new(_ => new AgentTurn("No changes requested.", [], 10, 2));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "What can you do?",
+            (_, _, _) => { }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        IReadOnlyList<AgentToolDefinition> definitions = Assert.Single(backend.ToolSets);
+        Assert.Contains(definitions, tool => tool.Name == "knowledge_search");
+        Assert.Contains(definitions, tool => tool.Name == "artifact_create");
+        Assert.DoesNotContain(definitions, tool => tool.Tier == ToolTiers.System);
+    }
+
+    [Fact]
     public async Task SessionUsageDoesNotInventHttpRequestSizes()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
