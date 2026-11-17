@@ -10,7 +10,7 @@ namespace Praxis.Infrastructure.Links;
 /// between check and use); redirects are followed by hand and each hop is checked again; no
 /// cookies, credentials or proxies; responses are bounded in size, time and content type.
 /// </summary>
-public sealed class SafeHttpFetcher : ILinkFetcher, IDisposable
+public sealed class SafeHttpFetcher : ILinkFetcher, IMediaDownloader, IDisposable
 {
     public const int MaximumBytes = 16 * 1024 * 1024;
     private const int MaximumRedirects = 5;
@@ -50,88 +50,128 @@ public sealed class SafeHttpFetcher : ILinkFetcher, IDisposable
 
     public async Task<FetchedPage> FetchAsync(Uri url, CancellationToken cancellationToken)
     {
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(Timeout);
+        try
+        {
+            var opened = await OpenAsync(url, MaximumBytes, type => AllowedTypes.Contains(type), _ => false, deadline.Token);
+            using HttpResponseMessage? response = opened.Response;
+            if (response is null)
+            {
+                return FetchedPage.Failed(opened.Reason ?? "fetch_failed", opened.Status);
+            }
+            using MemoryStream body = new();
+            if (!await CopyBoundedAsync(response.Content, body, MaximumBytes, deadline.Token))
+            {
+                return FetchedPage.Failed("too_large", opened.Status);
+            }
+            return new FetchedPage(opened.Url, opened.Status, response.Content.Headers.ContentType?.ToString(), body.ToArray(), null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return FetchedPage.Failed("fetch_timeout");
+        }
+        catch (IOException)
+        {
+            return FetchedPage.Failed("unreachable");
+        }
+    }
+
+    public async Task<string?> DownloadAsync(Uri url, string destination, int maximumBytes, Func<Uri, bool> blocked, CancellationToken cancellationToken)
+    {
+        if (maximumBytes is < 1 or > 128 * 1024 * 1024)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        }
+        using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromMinutes(3));
+        bool complete = false, created = false;
+        try
+        {
+            var opened = await OpenAsync(url, maximumBytes, type => type.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ||
+                type.StartsWith("video/", StringComparison.OrdinalIgnoreCase) || type == "application/octet-stream", blocked, deadline.Token);
+            using HttpResponseMessage? response = opened.Response;
+            if (response is null)
+            {
+                return opened.Reason ?? "download_failed";
+            }
+            await using FileStream output = new(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81_920,
+                            FileOptions.Asynchronous | FileOptions.SequentialScan);
+            created = true;
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            complete = await CopyBoundedAsync(response.Content, output, maximumBytes, deadline.Token);
+            return complete ? null : "too_large";
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return "download_timeout"; }
+        catch (IOException) { return "download_failed"; }
+        finally
+        {
+            if (created && !complete && File.Exists(destination))
+            {
+                File.Delete(destination);
+            }
+        }
+    }
+
+    private async Task<(HttpResponseMessage? Response, Uri Url, string? Reason, int Status)> OpenAsync(
+        Uri url, int maximumBytes, Func<string, bool> allowedType, Func<Uri, bool> blocked, CancellationToken cancellationToken)
+    {
         Uri current = url;
         for (int hop = 0; hop <= MaximumRedirects; hop++)
         {
             if (SavedLink.Parse(current.AbsoluteUri) is null)
             {
-                return FetchedPage.Failed("unsupported_url");
+                return (null, current, "unsupported_url", 0);
             }
-
+            if (blocked(current))
+            {
+                return (null, current, "host_blocked", 0);
+            }
             using HttpRequestMessage request = new(HttpMethod.Get, current);
             HttpResponseMessage response;
-            try
+            try { response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken); }
+            catch (HttpRequestException exception) when (exception.InnerException is BlockedAddressException) { return (null, current, "private_address", 0); }
+            catch (HttpRequestException) { return (null, current, "unreachable", 0); }
+            int status = (int)response.StatusCode;
+            if (status is >= 300 and < 400 && response.Headers.Location is { } location)
             {
-                response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                current = location.IsAbsoluteUri ? location : new Uri(current, location);
+                response.Dispose(); continue;
             }
-            catch (HttpRequestException exception) when (exception.InnerException is BlockedAddressException)
+            string? reason = !response.IsSuccessStatusCode ? "http_error"
+                : response.Content.Headers.ContentType?.MediaType is not { } type || !allowedType(type) ? "unsupported_content"
+                : response.Content.Headers.ContentLength > maximumBytes ? "too_large" : null;
+            if (reason is null)
             {
-                return FetchedPage.Failed("private_address");
+                return (response, current, null, status);
             }
-            catch (HttpRequestException)
-            {
-                return FetchedPage.Failed("unreachable");
-            }
-            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                return FetchedPage.Failed("fetch_timeout");
-            }
-
-            using (response)
-            {
-                int status = (int)response.StatusCode;
-                if (status is >= 300 and < 400 && response.Headers.Location is { } location)
-                {
-                    current = location.IsAbsoluteUri ? location : new Uri(current, location);
-                    continue;
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    return FetchedPage.Failed("http_error", status);
-                }
-
-                string? type = response.Content.Headers.ContentType?.MediaType;
-                if (type is null || !AllowedTypes.Contains(type))
-                {
-                    return FetchedPage.Failed("unsupported_content", status);
-                }
-
-                if (response.Content.Headers.ContentLength > MaximumBytes)
-                {
-                    return FetchedPage.Failed("too_large", status);
-                }
-
-                byte[]? body = await ReadBoundedAsync(response.Content, cancellationToken);
-                return body is null
-                    ? FetchedPage.Failed("too_large", status)
-                    : new FetchedPage(current, status, response.Content.Headers.ContentType?.ToString() ?? type, body, null);
-            }
+            response.Dispose(); return (null, current, reason, status);
         }
-
-        return FetchedPage.Failed("too_many_redirects");
+        return (null, current, "too_many_redirects", 0);
     }
 
-    public void Dispose() => client.Dispose();
-
-    private static async Task<byte[]?> ReadBoundedAsync(HttpContent content, CancellationToken cancellationToken)
+    internal static async Task<bool> CopyBoundedAsync(HttpContent content, Stream destination, int maximumBytes, CancellationToken cancellationToken)
     {
         await using Stream stream = await content.ReadAsStreamAsync(cancellationToken);
-        using MemoryStream buffer = new();
         byte[] chunk = new byte[81_920];
+        long total = 0;
         int read;
         while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
         {
-            if (buffer.Length + read > MaximumBytes)
+            total += read;
+            if (total > maximumBytes)
             {
-                return null;
+                return false;
             }
-
-            buffer.Write(chunk, 0, read);
+            await destination.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
         }
-
-        return buffer.ToArray();
+        return true;
     }
+
+    public void Dispose() => client.Dispose();
 
     private async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
     {

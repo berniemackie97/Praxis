@@ -21,9 +21,14 @@ public sealed class SemanticRetriever(ISemanticVectorStore vectors)
         }
 
         string digest = EmbeddingVectors.ValidateModelDigest((await model.DescribeAsync(cancellationToken)).Digest);
-        if (!vectors.HasVectors(digest, collectionId))
+        int candidates = vectors.CountVectors(digest, MaximumScannedVectors + 1, collectionId);
+        if (candidates == 0)
         {
             return [];
+        }
+        if (candidates > MaximumScannedVectors)
+        {
+            throw new SemanticSearchCapacityException();
         }
 
         IReadOnlyList<float[]> embedded = await model.EmbedAsync([query], cancellationToken);

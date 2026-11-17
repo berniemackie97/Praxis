@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Praxis.Application.Projects;
+using Praxis.Application.Agents.Runtime;
 
 namespace Praxis.Worker.Hosting;
 
@@ -9,7 +10,7 @@ namespace Praxis.Worker.Hosting;
 /// projects whose files changed (each at most once per interval). Failures are logged and retried
 /// on the next pass; they never stop the worker.
 /// </summary>
-public sealed partial class ProjectUnderstandingService(ProjectUnderstander understander, ILogger<ProjectUnderstandingService> logger, TimeProvider clock)
+public sealed partial class ProjectUnderstandingService(ProjectUnderstander understander, ILogger<ProjectUnderstandingService> logger, TimeProvider clock, AgentRunCoordinator runs)
     : BackgroundService
 {
     private static readonly TimeSpan FirstPass = TimeSpan.FromMinutes(1);
@@ -24,7 +25,7 @@ public sealed partial class ProjectUnderstandingService(ProjectUnderstander unde
             {
                 try
                 {
-                    int understood = await understander.RunAsync(stoppingToken);
+                    int understood = runs.HasActiveRuns ? 0 : await understander.RunAsync(stoppingToken);
                     if (understood > 0)
                     {
                         Understood(logger, understood);

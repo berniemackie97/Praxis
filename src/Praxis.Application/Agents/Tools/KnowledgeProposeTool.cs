@@ -42,7 +42,7 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
             _ => throw new ArgumentException($"'kind' must be one of: {string.Join(", ", AgentProposal.Kinds)}.")
         };
         JsonObject fenced = JsonSerializer.SerializeToNode(payload)!.AsObject();
-        List<KnowledgeProposalBasis> basis = [];
+        List<KnowledgeSnapshot> basis = [];
         foreach (string field in new[] { "entityId", "intoEntityId", "objectEntityId" })
         {
             if (fenced[field] is not { } target)
@@ -54,6 +54,15 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
                 return Task.FromResult(AgentToolOutput.Error("evidence_unavailable", "The target has no fully disclosable current evidence. No proposal was created."));
             }
             basis.Add(observed);
+        }
+        if (kind == AgentProposal.SourceCategory)
+        {
+            Guid source = args.RequireGuid("sourceId");
+            if (!context.MayDisclose(source))
+            {
+                return Task.FromResult(AgentToolOutput.Error("evidence_unavailable", "This source is not available to the current session."));
+            }
+            fenced["categoryBefore"] = JsonSerializer.SerializeToNode(applier.CategoryBasis(source));
         }
         fenced["basis"] = JsonSerializer.SerializeToNode(basis);
         bool direct = applier.CanApplyDirectly(kind) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write);

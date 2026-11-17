@@ -12,7 +12,7 @@ namespace Praxis.Application.Verification;
 /// </summary>
 public sealed class VerificationRunner(
     IVerificationRepository repository, IVerifierModelFactory models, TimeProvider clock,
-    TimeSpan? idlePoll = null, Action<string>? status = null)
+    TimeSpan? idlePoll = null, Action<string>? status = null, Func<bool>? mayStart = null)
 {
     private static readonly TimeSpan PlanInterval = TimeSpan.FromMinutes(5);
     private readonly TimeSpan idle = idlePoll ?? TimeSpan.FromMinutes(1);
@@ -62,7 +62,7 @@ public sealed class VerificationRunner(
     public async Task<bool> ProcessNextAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (repository.Claim() is not { } claim)
+        if (mayStart?.Invoke() == false || repository.Claim() is not { } claim)
         {
             return false;
         }

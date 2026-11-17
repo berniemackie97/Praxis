@@ -14,7 +14,7 @@ namespace Praxis.Infrastructure.Links;
 /// Without <c>yt-dlp</c> the public oEmbed metadata is kept so the link is still searchable. Playback
 /// uses the privacy-enhanced embed (youtube-nocookie.com).
 /// </summary>
-public sealed partial class YouTubeLinkResolver(ILinkFetcher fetcher, string? ytDlpPath = null) : IVideoLinkResolver
+public sealed partial class YouTubeLinkResolver(ILinkFetcher fetcher, string? ytDlpPath = null, IWebVideoStudy? study = null) : IVideoLinkResolver
 {
     private static readonly TimeSpan Budget = TimeSpan.FromMinutes(3);
     private readonly string? ytDlp = ytDlpPath ?? Locate();
@@ -143,8 +143,9 @@ public sealed partial class YouTubeLinkResolver(ILinkFetcher fetcher, string? yt
             IReadOnlyList<WebVideoCue> cues = captions is not null && new FileInfo(captions).Length <= 8 * 1024 * 1024
                 ? ParseCaptions(await File.ReadAllTextAsync(captions, cancellationToken))
                 : [];
-            return new WebVideoSnapshot(WebVideoSnapshot.CurrentVersion, canonical, embed, title, Text(root, "channel") ?? Text(root, "uploader"),
-                description, duration, cues);
+            WebVideoSnapshot captured = new(WebVideoSnapshot.CurrentVersion, canonical, embed, title, Text(root, "channel") ?? Text(root, "uploader"),
+                description, duration, cues, cues.Count == 0 ? null : "published_captions");
+            return study is null ? captured : await study.StudyAsync(captured, DirectMedia(root, audio: true), DirectMedia(root, audio: false), cancellationToken);
         }
         catch (InferenceException)
         {
@@ -165,6 +166,19 @@ public sealed partial class YouTubeLinkResolver(ILinkFetcher fetcher, string? yt
                 // The system removes leftover temporary folders.
             }
         }
+    }
+
+    private static Uri? DirectMedia(JsonElement root, bool audio)
+    {
+        if (!root.TryGetProperty("formats", out JsonElement formats) || formats.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+        return formats.EnumerateArray().Where(format => Text(format, "protocol") is "https" or "http")
+                    .Where(format => audio ? Text(format, "ext") == "m4a" && Text(format, "vcodec") == "none"
+                        : Text(format, "ext") == "mp4" && Text(format, "vcodec") is not (null or "none") &&
+                            format.TryGetProperty("height", out JsonElement height) && height.TryGetInt32(out int pixels) && pixels <= 480)
+                    .Select(format => SavedLink.Parse(Text(format, "url"))).FirstOrDefault(url => url is not null);
     }
 
     private static string? Locate() =>

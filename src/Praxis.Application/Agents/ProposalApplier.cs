@@ -2,6 +2,7 @@ using System.Text.Json;
 using Praxis.Application.Knowledge;
 using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
+using Praxis.Domain.Knowledge;
 using Praxis.Domain.Policy;
 
 namespace Praxis.Application.Agents;
@@ -12,12 +13,14 @@ namespace Praxis.Application.Agents;
 /// </summary>
 public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepository policy)
 {
-    public KnowledgeProposalBasis? Basis(Guid entityId, Func<Guid, bool> mayDisclose)
+    public KnowledgeSnapshot? Basis(Guid entityId, Func<Guid, bool> mayDisclose)
     {
         Domain.Knowledge.EntityDetail? entity = knowledge.GetEntity(entityId);
         return entity is null || entity.Mentions.Count == 0 || entity.Mentions.Any(mention => !mayDisclose(mention.SourceId))
-            ? null : KnowledgeProposalBasis.Capture(entity);
+            ? null : KnowledgeSnapshot.Capture(entity);
     }
+
+    public SourceCategory? CategoryBasis(Guid sourceId) => policy.ReadCategory(sourceId);
 
     public bool CanApplyDirectly(string kind) => kind != AgentProposal.SourceCategory;
 
@@ -25,28 +28,27 @@ public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepos
     {
         using JsonDocument document = JsonDocument.Parse(proposal.PayloadJson);
         JsonElement payload = document.RootElement;
-        if (payload.TryGetProperty("basis", out JsonElement basis))
-        {
-            foreach (KnowledgeProposalBasis expected in basis.Deserialize<KnowledgeProposalBasis[]>() ?? [])
-            {
-                if (knowledge.GetEntity(expected.EntityId) is not { } current ||
-                    KnowledgeProposalBasis.Capture(current).Fingerprint != expected.Fingerprint)
-                {
-                    return false;
-                }
-            }
-        }
+        KnowledgeSnapshot[] expected = payload.TryGetProperty("basis", out JsonElement basis)
+            ? basis.Deserialize<KnowledgeSnapshot[]>() ?? [] : [];
         Guid Id(string name) => Guid.Parse(payload.GetProperty(name).GetString()!);
         string Text(string name) => payload.GetProperty(name).GetString()!;
-        return proposal.Kind switch
+        return knowledge.ApplyCurrent(expected, () =>
         {
-            AgentProposal.EntityType => knowledge.SetType(Id("entityId"), Text("entityType")),
-            AgentProposal.EntityRename => knowledge.Rename(Id("entityId"), Text("name")),
-            AgentProposal.EntityMerge => knowledge.Merge(Id("entityId"), Id("intoEntityId")),
-            AgentProposal.Relation => knowledge.Relate(Id("entityId"), Text("predicate"), Id("objectEntityId")) != Guid.Empty,
-            AgentProposal.SourceCategory => Category(Id("sourceId"), Text("category")),
-            _ => false
-        };
+            if (proposal.Kind == AgentProposal.SourceCategory && payload.TryGetProperty("categoryBefore", out JsonElement categoryBefore) &&
+                categoryBefore.Deserialize<SourceCategory>() != policy.ReadCategory(Id("sourceId")))
+            {
+                return false;
+            }
+            return proposal.Kind switch
+            {
+                AgentProposal.EntityType => knowledge.SetType(Id("entityId"), Text("entityType")),
+                AgentProposal.EntityRename => knowledge.Rename(Id("entityId"), Text("name")),
+                AgentProposal.EntityMerge => knowledge.Merge(Id("entityId"), Id("intoEntityId")),
+                AgentProposal.Relation => knowledge.Relate(Id("entityId"), Text("predicate"), Id("objectEntityId")) != Guid.Empty,
+                AgentProposal.SourceCategory => Category(Id("sourceId"), Text("category")),
+                _ => false
+            };
+        });
     }
 
     private bool Category(Guid sourceId, string category)

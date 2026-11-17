@@ -125,3 +125,32 @@ struct WorkbenchPresentationTests {
         #expect(Set(AppSection.groups.flatMap(\.sections)) == Set(AppSection.allCases))
     }
 }
+
+@Suite("Living Brain control receipts")
+struct BrainControlReceiptTests {
+    @Test func persistentDrainAndLearningEvidenceDecodeTogether() throws {
+        let json = """
+            {"settings":{"mode":"after_work","dailyCalls":4,"dailyTokens":24000,
+             "model":null,"idleDream":false,"dreamIntervalMinutes":120},
+             "processors":[{"processorKey":"intake-triage-v1","paused":true,"state":"draining",
+              "running":1,"waiting":3,"actor":"owner","changedUtc":"2026-11-17T00:00:00Z"}],
+             "learning":[{"runId":"run","conversationId":"chat","state":"awaiting_owner_review",
+              "skillRevisionId":"draft","inputTokens":500,"outputTokens":120,"model":"local-digest",
+              "reviewedUtc":"2026-11-17T00:00:00Z"}]}
+            """
+        let receipt = try JSONDecoder().decode(BrainWorkData.self, from: Data(json.utf8))
+        #expect(receipt.settings.mode == "after_work")
+        #expect(!receipt.settings.idleDream)
+        #expect(receipt.processors.first?.state == "draining")
+        #expect(receipt.processors.first?.paused == true)
+        #expect(receipt.learning.first?.skillRevisionId == "draft")
+        #expect(receipt.learning.first?.inputTokens == 500)
+    }
+
+    @Test func absentVisionCapabilityNeverClaimsVisualSupport() throws {
+        let old = try JSONDecoder().decode(LocalModelCapabilities.self, from: Data("{\"chat\":true,\"tools\":true,\"embedding\":false}".utf8))
+        #expect(old.vision != true)
+        let capable = try JSONDecoder().decode(LocalModelCapabilities.self, from: Data("{\"chat\":true,\"tools\":true,\"embedding\":false,\"vision\":true}".utf8))
+        #expect(capable.vision == true)
+    }
+}

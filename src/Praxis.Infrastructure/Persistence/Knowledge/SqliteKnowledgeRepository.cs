@@ -42,6 +42,10 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         LEFT JOIN confirmed_entity_mentions m ON m.entity_id = e.entity_id
         """ + "\n";
 
+    public bool ApplyCurrent(IReadOnlyList<KnowledgeSnapshot> expected, Func<bool> correction) => database.Execute(_ =>
+        expected.All(snapshot => GetEntity(snapshot.EntityId) is { } current &&
+            KnowledgeSnapshot.Capture(current).Fingerprint == snapshot.Fingerprint) && correction());
+
     private readonly CatalogDatabase database;
 
     private readonly TimeProvider clock;

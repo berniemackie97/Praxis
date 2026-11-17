@@ -22,6 +22,9 @@ public interface ISemanticVectorStore
 
     bool HasVectors(string modelDigest, Guid? collectionId = null);
 
+    /// <summary>Counts current vectors up to a bound, without materializing their values.</summary>
+    int CountVectors(string modelDigest, int limit, Guid? collectionId = null);
+
     /// <summary>
     /// Exact nearest-neighbor search: the strongest eligible segment per item, most similar first.
     /// Throws when the index holds more than <paramref name="maximumScanned"/> vectors for the model.

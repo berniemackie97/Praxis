@@ -103,6 +103,7 @@ enum ActivityText {
         case "strongest": "Checking"
         case "dream": "Dream"
         case "embedding": "Semantic index"
+        case "learning": "Learning review"
         default: tier.capitalized
         }
     }
@@ -161,4 +162,43 @@ enum ActivityText {
         guard let milliseconds else { return "—" }
         return milliseconds < 1_000 ? "\(milliseconds) ms" : String(format: "%.1f s", Double(milliseconds) / 1_000)
     }
+}
+
+
+struct BrainWorkData: Decodable {
+    let settings: LearningPolicy
+    let processors: [ProcessorControl]
+    let learning: [LearningReceipt]
+}
+
+struct LearningPolicy: Decodable {
+    let mode: String
+    let dailyCalls: Int
+    let dailyTokens: Int
+    let model: String?
+    let idleDream: Bool
+    let dreamIntervalMinutes: Int
+}
+
+struct ProcessorControl: Decodable, Identifiable {
+    let processorKey: String
+    let paused: Bool
+    let state: String
+    let running: Int
+    let waiting: Int
+    let actor: String?
+    let changedUtc: String?
+    var id: String { processorKey }
+}
+
+struct LearningReceipt: Decodable, Identifiable {
+    let runId: String
+    let conversationId: String
+    let state: String
+    let skillRevisionId: String?
+    let inputTokens: Int
+    let outputTokens: Int
+    let model: String?
+    let reviewedUtc: String?
+    var id: String { runId }
 }

@@ -19,7 +19,7 @@ using Xunit;
 namespace Praxis.Infrastructure.Tests.Links;
 
 /// <summary>Saved links: read as URLs, fetched only through the safe fetcher, captured as snapshot sources.</summary>
-public sealed class LinkIntakeTests : IDisposable
+public sealed partial class LinkIntakeTests : IDisposable
 {
     private const string Webloc = """
         <?xml version="1.0" encoding="UTF-8"?>

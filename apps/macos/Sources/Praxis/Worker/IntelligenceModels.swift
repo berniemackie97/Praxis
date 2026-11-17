@@ -35,6 +35,7 @@ struct LocalModelCapabilities: Decodable, Equatable {
     let chat: Bool
     let tools: Bool
     let embedding: Bool
+    var vision: Bool? = nil
 }
 
 /// A local model or explicitly allowed subscription CLI for reviewed verification.

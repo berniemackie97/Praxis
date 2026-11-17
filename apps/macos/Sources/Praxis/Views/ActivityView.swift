@@ -13,6 +13,10 @@ struct ActivityView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 VStack(alignment: .leading, spacing: Spacing.l) {
                     controls
+                    if let brain = model.brain {
+                        learning(brain)
+                        processorControls(brain)
+                    }
                     if let error = model.error {
                         Banner(text: error, tone: .warning, systemImage: "exclamationmark.triangle.fill")
                     }
@@ -75,6 +79,65 @@ struct ActivityView: View {
                 }
                 Text("Remote triage can send permitted source excerpts to that provider. Local-only sources stay held by Privacy policy.")
                     .font(.meta).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func learning(_ brain: BrainWorkData) -> some View {
+        Panel(title: "Learning from experience", systemImage: "lightbulb", caption: "Local-only review of useful tool receipts. Draft skills require approval in Skills; no model weights or permissions change.") {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                HStack {
+                    Picker("Learning", selection: Binding(get: { brain.settings.mode }, set: { model.configureLearning(mode: $0) })) {
+                        Text("Off").tag("off")
+                        Text("Manual review").tag("manual")
+                        Text("After useful work").tag("after_work")
+                        Text("Idle maintenance").tag("idle")
+                    }
+                    Spacer()
+                    Button("Review Next") { model.reviewLearning() }.disabled(brain.settings.mode == "off")
+                }
+                HStack {
+                    Picker("Local review model", selection: Binding(get: { brain.settings.model ?? "" }, set: { model.configureLearning(model: $0) })) {
+                        Text("Shared local model").tag("")
+                        ForEach((setup.machine?.installed ?? []).filter(\.supportsChat)) { Text($0.name).tag($0.name) }
+                    }
+                    Spacer()
+                    Stepper("Up to \(brain.settings.dailyCalls) reviews/day", value: Binding(get: { brain.settings.dailyCalls }, set: { model.configureLearning(dailyCalls: $0) }), in: 1...100)
+                }
+                Picker("Daily token budget", selection: Binding(get: { brain.settings.dailyTokens }, set: { model.configureLearning(dailyTokens: $0) })) {
+                    ForEach(Array(Set([6_000, 12_000, 24_000, 48_000, brain.settings.dailyTokens])).sorted(), id: \.self) { Text($0.formatted()).tag($0) }
+                }
+                Toggle("Dream during idle time when knowledge changes", isOn: Binding(get: { brain.settings.idleDream }, set: { model.configureLearning(idleDream: $0) }))
+                    .disabled(brain.settings.mode == "off" || brain.settings.mode == "manual")
+                Text("Requires Propose edits or Allow edits. Each attempt reserves at least 6,000 tokens; unused daily capacity is not a usage charge. Actual reported usage appears below.")
+                    .font(.meta).foregroundStyle(.secondary)
+                ForEach(brain.learning.prefix(8)) { receipt in
+                    HStack {
+                        Text(receipt.state.replacingOccurrences(of: "_", with: " ").capitalized)
+                        Spacer()
+                        Text("\(receipt.inputTokens.formatted()) in · \(receipt.outputTokens.formatted()) out")
+                            .foregroundStyle(.secondary)
+                    }.font(.meta)
+                }
+            }.disabled(model.changingBrain)
+        }
+    }
+
+    private func processorControls(_ brain: BrainWorkData) -> some View {
+        Panel(title: "Processor controls", systemImage: "pause.circle", caption: "Pause stops new leases and lets active work drain. State survives restart; resume keeps existing results and queued work.") {
+            VStack(spacing: Spacing.s) {
+                ForEach(brain.processors) { processor in
+                    HStack {
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text(ActivityText.stage(processor.processorKey)).font(.rowTitle)
+                            Text("\(processor.state.replacingOccurrences(of: "_", with: " ")) · \(processor.running) running · \(processor.waiting) waiting")
+                                .font(.meta).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(processor.paused ? "Resume" : "Pause") { model.setPaused(processor) }
+                            .disabled(model.changingBrain)
+                    }
+                }
             }
         }
     }
@@ -257,6 +320,7 @@ struct ActivityView: View {
         case "chat": "Chat"
         case "verification": "Verification"
         case "indexing": "Indexing Brain"
+        case "learning": "Reviewing task experience"
         case "knowledge-maintenance": "Reviewing Brain knowledge"
         default: code.capitalized
         }

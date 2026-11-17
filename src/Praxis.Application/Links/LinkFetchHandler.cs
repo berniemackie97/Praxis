@@ -16,8 +16,8 @@ public sealed class LinkFetchHandler(ILinkRepository links, ILinkFetcher fetcher
     private const int MaximumSnapshotCharacters = 2 * 1024 * 1024;
 
     public string ProcessorKey => ProcessorKeys.LinkFetch;
-    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(5);
-    public int MaxConcurrency => 2;
+    public TimeSpan LeaseDuration => TimeSpan.FromMinutes(15);
+    public int MaxConcurrency => links.ReadSettings().StudyMedia ? 1 : 2;
 
     public bool TryReopenWork() => false;
 
@@ -57,6 +57,16 @@ public sealed class LinkFetchHandler(ILinkRepository links, ILinkFetcher fetcher
                 return;
             }
 
+            if (links.ReadLeased(lease) is null)
+            {
+                return;
+            }
+            LinkSettings current = links.ReadSettings();
+            if (current.Mode == LinkSettings.Off || current.Blocks(link.Url))
+            {
+                links.Close(lease, "settings_changed");
+                return;
+            }
             byte[] json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(snapshot);
             string written = await snapshots.WriteAsync(snapshot.Title.Length > 0 ? snapshot.Title : name, WebVideoSnapshot.Extension, json, cancellationToken);
             links.Complete(lease, link.Url, 200, "video", written);

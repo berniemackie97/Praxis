@@ -80,6 +80,15 @@ internal sealed class OllamaChatModel : IChatModel
                     _ => "user"
                 });
                 writer.WriteString("content", entry.Content);
+                if (entry.Images is { Count: > 0 } images)
+                {
+                    writer.WriteStartArray("images");
+                    foreach (string image in images)
+                    {
+                        writer.WriteStringValue(image);
+                    }
+                    writer.WriteEndArray();
+                }
                 writer.WriteEndObject();
             }
 

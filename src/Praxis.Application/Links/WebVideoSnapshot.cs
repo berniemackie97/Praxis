@@ -14,7 +14,13 @@ public sealed record WebVideoSnapshot(
     [property: JsonPropertyName("channel")] string? Channel,
     [property: JsonPropertyName("description")] string? Description,
     [property: JsonPropertyName("durationSeconds")] double? DurationSeconds,
-    [property: JsonPropertyName("cues")] IReadOnlyList<WebVideoCue> Cues)
+    [property: JsonPropertyName("cues")] IReadOnlyList<WebVideoCue> Cues,
+    [property: JsonPropertyName("transcriptOrigin")] string? TranscriptOrigin = null,
+    [property: JsonPropertyName("audioSha256")] string? AudioSha256 = null,
+    [property: JsonPropertyName("frames")] IReadOnlyList<WebVideoFrame>? Frames = null,
+    [property: JsonPropertyName("studyReason")] string? StudyReason = null,
+    [property: JsonPropertyName("visionInputTokens")] int VisionInputTokens = 0,
+    [property: JsonPropertyName("visionOutputTokens")] int VisionOutputTokens = 0)
 {
     public const string Extension = ".webvideo";
     public const int CurrentVersion = 1;

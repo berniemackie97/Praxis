@@ -49,6 +49,17 @@ public sealed partial class AgentRuntimeTests
             connection.Open();
             using SqliteCommand previous = connection.CreateCommand();
             previous.CommandText = """
+                DROP TRIGGER agent_run_forget_skills;
+                DROP TABLE agent_skill_experiences;
+                DROP TABLE agent_learning_attempts;
+                DROP TABLE agent_run_events;
+                DROP TABLE agent_runs;
+                DROP TABLE processing_controls;
+                ALTER TABLE agent_skill_revisions DROP COLUMN evidence_invalidated;
+                ALTER TABLE link_settings DROP COLUMN study_media;
+                ALTER TABLE link_settings DROP COLUMN sample_frames;
+                ALTER TABLE link_settings DROP COLUMN vision_model;
+                ALTER TABLE link_settings DROP COLUMN maximum_media_minutes;
                 DROP TRIGGER agent_recap_search_insert;
                 DROP TRIGGER agent_recap_search_update;
                 DROP TRIGGER agent_recap_search_delete;
