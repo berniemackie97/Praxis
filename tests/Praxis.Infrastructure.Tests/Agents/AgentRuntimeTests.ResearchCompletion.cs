@@ -396,6 +396,38 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
 
+    [Fact]
+    public void OpenedSourceMetadataCannotProveAClaimAboutPacketSize()
+    {
+        Guid sourceId = Guid.NewGuid();
+        string raw = JsonSerializer.Serialize(new
+        {
+            sourceId,
+            revision = 10005,
+            offset = 10005,
+            totalLength = 10005,
+            text = "The packet size is not documented here."
+        });
+        string wrapped = JsonSerializer.Serialize(new
+        {
+            result = new { sourceId, revision = 10005, offset = 10005, text = "The packet size is not documented here." },
+            citations = new[] { new { n = 1 } }
+        });
+
+        foreach (string receipt in new[] { raw, wrapped })
+        {
+            AnswerCheck check = AnswerVerifier.Check("The packet size is 10005 bytes [1].",
+                [receipt], "What size is the packet?", true, false, 1, new HashSet<int> { 1 });
+            Assert.Contains("10005", check.UnsupportedFigures);
+            Assert.False(check.Clean);
+        }
+
+        AnswerCheck supported = AnswerVerifier.Check("The packet size is 10005 bytes [1].",
+            [JsonSerializer.Serialize(new { sourceId, text = "The packet size is 10005 bytes." })],
+            "What size is the packet?", true, false, 1, new HashSet<int> { 1 });
+        Assert.True(supported.Clean);
+    }
+
     [Theory]
     [InlineData("The example uses opcode 0x2716 and 28 bytes [2].", false, false)]
     [InlineData("The example uses opcode 0xDEAD and 28 bytes [2].", true, false)]
