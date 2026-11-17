@@ -203,8 +203,9 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(relevantSource, answer.Citations[0].SourceId);
         string brief = Assert.Single(forwarded, message =>
             message.Content.StartsWith("Local library search excerpts", StringComparison.Ordinal)).Content;
-        Assert.True(brief.IndexOf("world-walking-notes.md", StringComparison.Ordinal) <
-            brief.IndexOf("conquer-online.md", StringComparison.Ordinal));
+        int relevantIndex = brief.IndexOf("world-walking-notes.md", StringComparison.Ordinal);
+        int titleOnlyIndex = brief.IndexOf("conquer-online.md", StringComparison.Ordinal);
+        Assert.True(relevantIndex >= 0 && (titleOnlyIndex < 0 || relevantIndex < titleOnlyIndex));
     }
 
     [Fact]
