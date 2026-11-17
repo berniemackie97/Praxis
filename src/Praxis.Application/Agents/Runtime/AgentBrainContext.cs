@@ -17,7 +17,8 @@ internal static partial class AgentBrainContext
     internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
         ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum)
     {
-        if (DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt))
+        if (DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt) ||
+            (GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt)))
         {
             return ("not_needed", 0, 0, []);
         }
@@ -38,10 +39,15 @@ internal static partial class AgentBrainContext
         }
 
         SearchHit[] current = hits.Where(hit => !string.IsNullOrWhiteSpace(hit.Snippet)).DistinctBy(hit => hit.SourceId).ToArray();
-        SearchHit[] relevant = relaxed
-            ? current.Select(hit => (Hit: hit, Matches: Overlap(terms, hit))).Where(hit => hit.Matches >= 2)
-                .OrderByDescending(hit => hit.Matches).Select(hit => hit.Hit).ToArray()
-            : current;
+        var ranked = current.Select(hit => new
+        {
+            Hit = hit,
+            Matches = Overlap(terms, hit.Title + " " + hit.Snippet),
+            Body = Overlap(terms, hit.Snippet)
+        }).Where(hit => !relaxed || hit.Matches >= 2)
+            .OrderByDescending(hit => hit.Body)
+            .ThenByDescending(hit => hit.Matches).ToArray();
+        SearchHit[] relevant = ranked.Select(hit => hit.Hit).ToArray();
         SearchHit[] eligible = relevant.Where(hit => allowed(hit.SourceId)).ToArray();
         SearchHit[] selected = eligible.Take(maximum).ToArray();
         int withheld = relevant.Length - eligible.Length;
@@ -50,9 +56,9 @@ internal static partial class AgentBrainContext
         return (outcome, current.Length, withheld, selected);
     }
 
-    private static int Overlap(string[] terms, SearchHit hit)
+    private static int Overlap(string[] terms, string text)
     {
-        HashSet<string> evidenceTerms = Terms().Matches(hit.Title + " " + hit.Snippet).Select(match => match.Value)
+        HashSet<string> evidenceTerms = Terms().Matches(text).Select(match => match.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return terms.Count(evidenceTerms.Contains);
     }
@@ -64,6 +70,14 @@ internal static partial class AgentBrainContext
     [GeneratedRegex(@"^\s*(?:hi|hello|hey|thanks|thank you|good morning|good afternoon|good evening)[!.\s]*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Greeting();
+
+    [GeneratedRegex(@"^\s*(?:(?:please|can you|could you)\s+)?(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+(?:is|are|was|were)|when\s+(?:was|were|did)|why\s+(?:does|do|did|is|are)|how\s+(?:does|do|did)|tell me about|define|explain|describe)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex GeneralQuestion();
+
+    [GeneratedRegex(@"\b(?:my|mine|our|ours|we|us|i|me|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex OwnerScope();
 
     [GeneratedRegex(@"[\p{L}\p{N}][\p{L}\p{N}_-]{3,23}")]
     private static partial Regex Terms();
