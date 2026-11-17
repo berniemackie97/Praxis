@@ -108,9 +108,11 @@ public sealed class IntakeIncidentJournalTests : IDisposable
         try
         {
             await WaitForAsync(() => group.RootStatuses()[0].Status.State == "offline");
+            await WaitForAsync(() => catalog.IntakeIncidents.Recent(20).FirstOrDefault()?.State == "offline");
             Assert.Equal("offline", Assert.Single(catalog.IntakeIncidents.Recent(20)).State);
             Directory.CreateDirectory(absent);
             await WaitForAsync(() => group.RootStatuses()[0].Status.State == "reapproval_required");
+            await WaitForAsync(() => catalog.IntakeIncidents.Recent(20).FirstOrDefault()?.State == "reapproval_required");
             Assert.Equal("reapproval_required", catalog.IntakeIncidents.Recent(20)[0].State);
             group.ApproveRoot(absent);
             await WaitForAsync(() => group.RootStatuses()[0].Status.State == "watching");
