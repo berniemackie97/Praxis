@@ -79,6 +79,31 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task AutomaticRecallBytesAreReportedWithoutCopyingSourceTextIntoUsageEvents()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local() with { BackendId = "ollama" };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation chat = catalog.Agents.Create(profile.BackendId, "recall footprint");
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn("The lease records payment by check [1].", [], 20, 4)));
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
+        List<string> metrics = [];
+
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, "How is rent paid under my lease?",
+            (kind, _, detail) => { if (kind == "usage_turn") { metrics.Add(detail!); } },
+            CancellationToken.None, useTools: false);
+
+        AgentTurnUsage usage = Assert.Single(reply.TurnUsage!);
+        Assert.True(usage.AutomaticRecallBytes > 0);
+        Assert.Equal(0, usage.RecapBytes);
+        Assert.Null(usage.Request);
+        Assert.Equal(20, usage.InputTokens);
+        string receipt = Assert.Single(metrics);
+        Assert.Contains("automaticRecallBytes", receipt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Monthly rent is paid by check", receipt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RepeatedSixThousandCharacterSourcePagesStopWithPairedToolTraffic()
     {
         using SqliteCatalog catalog = await SeededAsync();
