@@ -178,7 +178,7 @@ public sealed partial class AgentRuntimeTests
     public async Task DisclosureRevokedBetweenToolAndModelTurnStopsWithoutForwardingOldEvidence()
     {
         using SqliteCatalog catalog = await SeededAsync();
-        AgentBackendProfile remote = Local() with { BackendId = "remote", Endpoint = "https://example.test/v1", IsLocal = false };
+        AgentBackendProfile remote = Local() with { BackendId = "remote", Endpoint = "https://example.test/v1" };
         Guid source = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
         catalog.Policy.ApplyChange(new Praxis.Domain.Policy.PolicyChange(Mode: Praxis.Domain.Policy.DisclosureModes.AllowAll),
             Praxis.Domain.Policy.PolicyActors.Owner);
