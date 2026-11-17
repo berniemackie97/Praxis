@@ -435,6 +435,14 @@ final class ChatWorkbenchModel: ObservableObject {
     }
 
     var statusPaused: Bool { running && current.pollFailures >= 3 }
+    var savedAnswerPendingStatus: Bool {
+        guard running, let prompt = current.runUserText else { return false }
+        let currentTurn = messages.dropFirst(min(current.runMessageCount, messages.count))
+        guard let request = currentTurn.firstIndex(where: { $0.role == "user" && $0.content == prompt }) else { return false }
+        return currentTurn[currentTurn.index(after: request)...].contains {
+            $0.role == "assistant" && !$0.content.isEmpty && $0.toolCalls.isEmpty
+        }
+    }
 
     private func apply(_ status: AgentRunStatus) {
         let id = status.conversationId
