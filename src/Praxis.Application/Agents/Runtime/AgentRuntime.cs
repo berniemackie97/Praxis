@@ -630,7 +630,7 @@ public sealed class AgentRuntime(
         state.ToolCalls.Add(call);
         state.Withheld += output.Withheld.Sum(notice => notice.Count);
         string wrapped = state.Citations.Wrap(output);
-        if (output.Citations.Count > 0 && call.Name is KnowledgeSearchTool.ToolName or KnowledgeOpenTool.ToolName)
+        if (output.Citations.Count > 0 && (call.Name is KnowledgeSearchTool.ToolName or KnowledgeOpenTool.ToolName))
         {
             using JsonDocument receipt = JsonDocument.Parse(wrapped);
             JsonElement citations = receipt.RootElement.GetProperty("citations");
