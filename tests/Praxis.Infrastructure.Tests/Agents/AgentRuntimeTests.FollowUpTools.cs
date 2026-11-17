@@ -98,6 +98,29 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task MissingExpansionToolDoesNotSilentlyHideOtherCapabilities()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local();
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation conversation = catalog.Agents.Create(profile.BackendId, "without expansion");
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
+            _ => new AgentTurn("The lease file was found [1].", [], 10, 5));
+        IAgentTool[] tools = Tools(catalog).Where(tool => tool.Definition.Name != ToolExpandTool.ToolName).ToArray();
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, tools, new FixedFactory(backend, null), clock);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find my lease",
+            (_, _, _) => { }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        Assert.Equal(2, backend.ToolSets.Count);
+        Assert.Equal(backend.ToolSets[0].Select(tool => tool.Name).ToArray(), backend.ToolSets[1].Select(tool => tool.Name).ToArray());
+        Assert.Contains(backend.ToolSets[1], tool => tool.Name == "settings_read");
+        Assert.DoesNotContain(backend.SystemPrompts[0], "tools_expand", StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SessionBackendKeepsItsGrantedCatalogWithoutToolExpansion()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
