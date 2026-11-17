@@ -337,7 +337,7 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
-    public void SearchPreviewCanBeCitedWhenNoLongerPassageWasOpened()
+    public void SearchPreviewCanBeCitedWhenNoSourcePassageWasOpened()
     {
         const string evidence = "The lease says monthly rent is paid by check.";
         AnswerCheck check = AnswerVerifier.Check("The lease says rent is paid by check [1].",
