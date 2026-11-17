@@ -71,11 +71,11 @@ internal static partial class AgentBrainContext
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Greeting();
 
-    [GeneratedRegex(@"^\s*(?:(?:please|can you|could you)\s+)?(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+(?:is|are|was|were)|when\s+(?:was|were|did)|why\s+(?:does|do|did|is|are)|how\s+(?:does|do|did)|tell me about|define|explain|describe)\b",
+    [GeneratedRegex(@"^\s*(?:(?:i\s+(?:wonder|was\s+wondering)|i(?:'m|\s+am)\s+curious)\s*:?\s*|(?:(?:please|can you|could you)\s+)?)(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+(?:is|are|was|were)|when\s+(?:was|were|did)|why\s+(?:does|do|did|is|are)|how\s+(?:does|do|did)|tell\s+me\s+(?:about|what|who)|define|explain|describe)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex GeneralQuestion();
 
-    [GeneratedRegex(@"\b(?:my|mine|our|ours|we|us|i|me|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
+    [GeneratedRegex(@"\b(?:my|mine|our|ours|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex OwnerScope();
 
