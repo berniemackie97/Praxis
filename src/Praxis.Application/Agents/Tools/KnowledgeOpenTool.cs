@@ -50,10 +50,11 @@ public sealed class KnowledgeOpenTool(
         string? locator = args.Text("locator", 64);
         string? around = args.Text("around", 200);
         (string body, string unit) = await ReadAsync(current, locator, cancellationToken);
+        int window = AgentContextPreset.KnowledgeOpenCharacters(context.ContextPreset);
         int start = around is not null && body.IndexOf(around, StringComparison.OrdinalIgnoreCase) is var found and >= 0
-            ? Math.Max(0, found - Window / 4)
+            ? Math.Max(0, found - window / 4)
             : TimeStart(sourceId, current, locator) ?? LocatorStart(body, locator, unit) ?? Math.Min(body.Length, args.Integer("offset", 0, 0, int.MaxValue));
-        string excerpt = body.Substring(start, Math.Min(Window, body.Length - start));
+        string excerpt = body.Substring(start, Math.Min(window, body.Length - start));
         string name = Path.GetFileName(current.Locator);
         return AgentToolOutput.Of(new
         {
