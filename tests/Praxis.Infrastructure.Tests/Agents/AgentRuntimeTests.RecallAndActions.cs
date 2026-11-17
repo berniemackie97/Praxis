@@ -58,6 +58,72 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(1, revoked.Withheld);
     }
 
+    [Theory]
+    [InlineData("Reply with PING only.", false)]
+    [InlineData("Reply with PING only.", true)]
+    [InlineData("reply with only ping", false)]
+    [InlineData("reply with only pong", true)]
+    [InlineData("Reply with lease only.", false)]
+    [InlineData("Please reply with only lease.", false)]
+    [InlineData("Reply only with lease.", false)]
+    [InlineData("Say just lease.", false)]
+    [InlineData("Reply with just lease.", false)]
+    [InlineData("Say 'lease' only.", false)]
+    [InlineData("Respond with \"Lease remains private\" exactly.", false)]
+    [InlineData("Hello!", false)]
+    public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt, bool useTools)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation chat = catalog.Agents.Create(profile.BackendId, "direct reply");
+        Guid lease = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
+        catalog.Policy.SaveCategory(new SourceCategory(lease, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        PolicyService policy = new(catalog.Policy);
+        policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
+        policy.Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Documents, profile.BackendId,
+            DisclosurePurposes.Chat, true, null)), PolicyActors.Owner);
+
+        IReadOnlyList<AgentMessage> delivered = [];
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn("OK", [], 5, 2)),
+            messages => delivered = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt, (_, _, _) => { }, CancellationToken.None, useTools: useTools);
+
+        Assert.Equal(prompt, Assert.Single(delivered).Content);
+        Assert.Equal("OK", reply.Text);
+        Assert.Empty(reply.Citations);
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10));
+        Assert.Equal("not_needed", receipt.Outcome);
+        Assert.Equal(0, receipt.Considered);
+        Assert.Empty(receipt.Selected);
+    }
+
+    [Theory]
+    [InlineData("Hello, what does the lease say?")]
+    [InlineData("Reply with only the rent specified in my lease.")]
+    public async Task SourceDependentRequestStillRecallsTheSource(string prompt)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local() with { BackendId = "ollama" };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation chat = catalog.Agents.Create(profile.BackendId, "grounded");
+        IReadOnlyList<AgentMessage> delivered = [];
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn("Rent is paid by check [1].", [], 5, 2)),
+            messages => delivered = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
+
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt,
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        Assert.Contains(delivered, message => message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal));
+        Assert.Equal(prompt, delivered[^1].Content);
+        Assert.Single(reply.Citations);
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10));
+        Assert.Single(receipt.Selected);
+        Assert.Contains(receipt.Outcome, new[] { "full_match", "focused_match" });
+    }
+
     [Fact]
     public async Task TerminalActionRequiresOwnerDecisionRunsOnceAndOnlyReturnsOutputToLocalChat()
     {
