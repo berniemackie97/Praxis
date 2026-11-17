@@ -52,6 +52,33 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task BothHttpProvidersRejectOversizedJsonBeforeTransport()
+    {
+        const string openAiResponse = """{"choices":[{"message":{"content":"OK"}}],"usage":{"prompt_tokens":8,"completion_tokens":2}}""";
+        const string anthropicResponse = """{"content":[{"type":"text","text":"OK"}],"usage":{"input_tokens":8,"output_tokens":2}}""";
+        CapturingHandler openAiHandler = new(openAiResponse);
+        CapturingHandler anthropicHandler = new(anthropicResponse);
+        using HttpClient openAiHttp = new(openAiHandler);
+        using HttpClient anthropicHttp = new(anthropicHandler);
+        IAgentBudgetedBackend openAi = new OpenAiCompatibleAgentBackend(openAiHttp, new Uri("https://example.test/v1/"), "test-model", null);
+        IAgentBudgetedBackend anthropic = new AnthropicAgentBackend(anthropicHttp, new Uri("https://example.test/"), "test-model", "test-key");
+        AgentMessage[] transcript = [AgentMessage.FromUser("Sample " + new string('é', 2_000))];
+        foreach (IAgentBudgetedBackend provider in new[] { openAi, anthropic })
+        {
+            AgentRequestTooLargeException error = await Assert.ThrowsAsync<AgentRequestTooLargeException>(() =>
+                provider.CompleteWithinAsync("System", transcript, [], 128, CancellationToken.None));
+            Assert.True(error.RequestBytes > error.MaximumRequestBytes);
+            Assert.Equal(128, error.MaximumRequestBytes);
+            AgentTurn accepted = await provider.CompleteWithinAsync("System", transcript, [], 100_000, CancellationToken.None);
+            Assert.Equal("OK", accepted.Text);
+            Assert.True(accepted.Request?.RequestBytes > 128);
+        }
+
+        Assert.NotNull(openAiHandler.Body);
+        Assert.NotNull(anthropicHandler.Body);
+    }
+
+    [Fact]
     public async Task RepeatedSixThousandCharacterSourcePagesStopWithPairedToolTraffic()
     {
         using SqliteCatalog catalog = await SeededAsync();
