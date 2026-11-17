@@ -612,7 +612,7 @@ enum ChatActivity {
         switch event.kind {
         case "recalling_brain": return "Finding relevant library notes…"
         case "recalling_media": return "Finding playable moments…"
-        case "thinking": return "Thinking…"
+        case "thinking", "usage_turn": return "Thinking…"
         case "tool_started": return "Using \(label(event.tool ?? ""))…"
         case "tool_finished": return "Finished \(label(event.tool ?? ""))."
         case "repairing": return "Correcting figures that no tool returned…"
