@@ -104,7 +104,8 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
 
         using JsonDocument document = ParseResponse(await response.Content.ReadAsStringAsync(cancellationToken));
         JsonElement root = document.RootElement;
-        if (!root.TryGetProperty("choices", out JsonElement choices) || choices.ValueKind != JsonValueKind.Array ||
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("choices", out JsonElement choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
             choices.GetArrayLength() == 0 || choices[0].ValueKind != JsonValueKind.Object ||
             !choices[0].TryGetProperty("message", out JsonElement reply) || reply.ValueKind != JsonValueKind.Object)
         {
