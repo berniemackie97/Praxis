@@ -91,6 +91,11 @@ public sealed class LinkIntakeTests : IDisposable
 
         Assert.StartsWith("# Postgres in ten minutes", document.Text, StringComparison.Ordinal);
         Assert.Equal(DocumentFormats.WebVideo, document.Format);
+        Assert.Contains("Coverage: Published captions.", document.Text, StringComparison.Ordinal);
+        ReadDocument metadataOnly = WebVideoReader.Read(snapshot with { Cues = [] });
+        Assert.Contains("Coverage: Metadata only.", metadataOnly.Text, StringComparison.Ordinal);
+        Assert.Contains("spoken content has not been read", metadataOnly.Text, StringComparison.Ordinal);
+        Assert.Empty(metadataOnly.Timings!);
         TimedSpan second = document.Timings![1];
         Assert.Equal("Then create a database.", document.Text.Substring(second.Offset, second.Length));
         Assert.Equal((4_000L, 9_000L), (second.StartMilliseconds, second.EndMilliseconds));

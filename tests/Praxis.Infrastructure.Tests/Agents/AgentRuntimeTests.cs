@@ -541,6 +541,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
         public List<int> ToolCounts { get; } = [];
         public List<IReadOnlyList<AgentToolDefinition>> ToolSets { get; } = [];
         public bool AllowToollessTurn { get; set; }
+        public string ExpectedTool { get; set; } = "data_query";
 
         public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools, CancellationToken cancellationToken)
         {
@@ -552,7 +553,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
             }
             if (!AllowToollessTurn || tools.Count > 0)
             {
-                Assert.Contains(tools, tool => tool.Name == "data_query");
+                Assert.Contains(tools, tool => tool.Name == ExpectedTool);
             }
             return turns.Count > 1 ? turns.Dequeue()(transcript, cancellationToken) : turns.Peek()(transcript, cancellationToken);
         }

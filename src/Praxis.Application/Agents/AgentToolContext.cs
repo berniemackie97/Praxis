@@ -8,4 +8,4 @@ namespace Praxis.Application.Agents;
 /// <see cref="MayDisclose"/> is false before building output, and report it as withheld.
 /// </summary>
 public sealed record AgentToolContext(Guid ConversationId, string BackendId, bool BackendIsLocal, string ToolPermission, Func<Guid, bool> MayDisclose,
-    string? OwnerText = null, string ContextPreset = AgentContextPreset.Expanded);
+    string? OwnerText = null, string ContextPreset = AgentContextPreset.Expanded, IReadOnlySet<string>? AllowedTools = null);

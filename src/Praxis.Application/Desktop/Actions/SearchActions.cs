@@ -43,10 +43,11 @@ public sealed class SearchActions(
             return new SearchResponse(result.Hits, result.UsedEmbeddings ? "hybrid" : "lexical",
                 result.UsedEmbeddings ? null : "No indexed embeddings for this model. Update the local semantic index to enable hybrid results.");
         }
-        catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested &&
+            exception is InferenceException or SemanticSearchCapacityException or InvalidDataException)
         {
             return new SearchResponse(lexical.RetainCurrent(lexical.Query(query, ResultLimit, collectionId), collectionId), "lexical",
-                "The local embedding runtime is unavailable; showing keyword results.");
+                "Semantic retrieval is unavailable or exceeds its index budget; showing current keyword results.");
         }
     }
 

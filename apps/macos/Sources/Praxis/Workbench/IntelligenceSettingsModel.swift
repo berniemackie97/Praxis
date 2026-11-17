@@ -58,7 +58,7 @@ final class IntelligenceSettingsModel: ObservableObject {
             "contextTokens": 2_048, "enabled": enabled
         ], as: ModelProfileData.self, failed: report) { [weak self] data in
             self?.embeddingProfile = data.profile
-            self?.notice = enabled ? "Local embedding model saved. Index your knowledge from Search to use hybrid retrieval." : "Semantic retrieval is off; keyword search remains available."
+            self?.notice = enabled ? "Local embedding model saved. Background indexing keeps new knowledge current; Search can update it immediately." : "Semantic retrieval is off; keyword search remains available."
         }
     }
 

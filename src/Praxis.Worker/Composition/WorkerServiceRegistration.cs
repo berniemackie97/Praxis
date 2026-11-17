@@ -165,6 +165,8 @@ internal static class WorkerServiceRegistration
 
         services.AddHostedService<WorkerSupervisor>();
         services.AddHostedService<ChatMemoryService>();
+        services.AddSingleton<SemanticIndexMaintenance>();
+        services.AddHostedService<SemanticIndexService>();
         services.AddSingleton(provider => new ProjectUnderstander(provider.GetRequiredService<SqliteCatalog>().Projects,
             provider.GetRequiredService<SqliteCatalog>().Text,
             CatalogProcessing.Ladder(provider.GetRequiredService<SqliteCatalog>(), provider.GetRequiredService<IVerifierModelFactory>(),

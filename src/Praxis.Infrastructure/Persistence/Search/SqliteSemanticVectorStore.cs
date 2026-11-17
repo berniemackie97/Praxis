@@ -170,7 +170,7 @@ public sealed class SqliteSemanticVectorStore : ISemanticVectorStore
                 cancellationToken.ThrowIfCancellationRequested();
                 if (++examined > maximumScanned)
                 {
-                    throw new InvalidOperationException("The semantic index exceeds the bounded exact-search budget.");
+                    throw new SemanticSearchCapacityException();
                 }
 
                 int dimensions = reader.GetInt32(7);

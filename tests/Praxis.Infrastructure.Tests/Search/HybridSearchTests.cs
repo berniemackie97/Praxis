@@ -13,7 +13,7 @@ using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Search;
 
-public sealed class HybridSearchTests : IDisposable
+public sealed partial class HybridSearchTests : IDisposable
 {
     private readonly string root = Path.Combine(TestPaths.Temp,
         "praxis-hybrid-" + Guid.NewGuid().ToString("N"));

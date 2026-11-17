@@ -101,6 +101,8 @@ enum ActivityText {
         case "local": "Triage"
         case "strong": "Reading"
         case "strongest": "Checking"
+        case "dream": "Dream"
+        case "embedding": "Semantic index"
         default: tier.capitalized
         }
     }

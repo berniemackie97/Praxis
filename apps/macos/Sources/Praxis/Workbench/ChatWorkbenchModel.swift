@@ -249,6 +249,25 @@ final class ChatWorkbenchModel: ObservableObject {
         channel.reset("conversation")
     }
 
+    func prepareDream(using backend: AgentBackendProfile) -> Bool {
+        guard !busy, backend.enabled else { return false }
+        guard (states[""]?.draft ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            feedback(.error("Send or clear your new-chat draft before preparing Dream."), for: key)
+            return false
+        }
+        if let index = backends.firstIndex(where: { $0.backendId == backend.backendId }) {
+            backends[index] = backend
+        } else {
+            backends.append(backend)
+        }
+        newConversation()
+        chooseBackend(backend.backendId)
+        contextChoice = "compact"
+        draft = "/dream"
+        useTools = true
+        return true
+    }
+
     func rename(_ conversation: AgentConversation, to title: String) {
         let id = conversation.id
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)

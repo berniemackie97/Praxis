@@ -47,6 +47,9 @@ public sealed class WebVideoReader : IDocumentReader
         }
 
         header.Append("Video: ").Append(snapshot.Url).Append("\n\n");
+        header.Append(snapshot.Cues.Count == 0
+            ? "Coverage: Metadata only. No transcript was captured; spoken content has not been read.\n\n"
+            : "Coverage: Published captions. Visual content has not been analyzed; captions may omit speech.\n\n");
         if (snapshot.Description is { Length: > 0 } description)
         {
             header.Append(description.Trim()).Append("\n\n");

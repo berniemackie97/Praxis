@@ -34,12 +34,12 @@ struct ModelsSettingsView: View {
                     OllamaRow(setup: setup, intelligence: intelligence)
                 }
                 FlatSection("What each model does",
-                            footer: "Triage runs on every new file, so a local model keeps it private and free. Reading does the heavy work, so it runs an efficient model. Checking runs only when a result fails verification. Chat sub-agents use the triage model.") {
+                            footer: "Triage runs on every new file, so a local model keeps it private and free. Reading does the heavy work, so it runs an efficient model. Checking runs only when a result fails verification. Chat sub-agents use the triage assignment. Changes apply to future calls and remain subject to Privacy permissions.") {
                     Button("Use Recommended") { setup.applyRecommended() }
                 } content: {
                     ForEach(Array(ModelSetupModel.roles.enumerated()), id: \.element) { index, role in
                         if index > 0 { Divider() }
-                        RoleRow(setup: setup, role: role, installed: intelligence.installedModels)
+                        ModelRoleRow(setup: setup, role: role, installed: intelligence.installedModels)
                     }
                 }
                 apiConnections
@@ -284,7 +284,7 @@ private struct OllamaRow: View {
 }
 
 /// One role: which connection runs it, with which model and how much reasoning.
-private struct RoleRow: View {
+struct ModelRoleRow: View {
     @ObservedObject var setup: ModelSetupModel
     let role: String
     let installed: [InstalledModel]

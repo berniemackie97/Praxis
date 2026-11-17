@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Knowledge;
 using Praxis.Domain.Policy;
@@ -28,6 +29,7 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
 
     public Task<AgentToolOutput> InvokeAsync(JsonElement arguments, AgentToolContext context, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ToolArguments args = new(arguments);
         string kind = args.Choice("kind", AgentProposal.Kinds, "");
         object payload = kind switch
@@ -39,13 +41,33 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
             AgentProposal.SourceCategory => new { sourceId = args.RequireGuid("sourceId"), category = Vocabulary(args.RequireText("category", 32), DataCategories.All, "category") },
             _ => throw new ArgumentException($"'kind' must be one of: {string.Join(", ", AgentProposal.Kinds)}.")
         };
+        JsonObject fenced = JsonSerializer.SerializeToNode(payload)!.AsObject();
+        List<KnowledgeProposalBasis> basis = [];
+        foreach (string field in new[] { "entityId", "intoEntityId", "objectEntityId" })
+        {
+            if (fenced[field] is not { } target)
+            {
+                continue;
+            }
+            if (applier.Basis(target.GetValue<Guid>(), context.MayDisclose) is not { } observed)
+            {
+                return Task.FromResult(AgentToolOutput.Error("evidence_unavailable", "The target has no fully disclosable current evidence. No proposal was created."));
+            }
+            basis.Add(observed);
+        }
+        fenced["basis"] = JsonSerializer.SerializeToNode(basis);
         bool direct = applier.CanApplyDirectly(kind) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write);
-        AgentProposal proposal = repository.AddProposal(context.ConversationId, kind, ToolJson.Serialize(payload), args.RequireText("rationale", 1_000),
-            direct ? AgentProposal.Applied : AgentProposal.Pending);
+        AgentProposal proposal = repository.AddProposal(context.ConversationId, kind, fenced.ToJsonString(), args.RequireText("rationale", 1_000), AgentProposal.Pending);
         bool applied = direct && applier.Apply(proposal);
+        if (applied)
+        {
+            repository.SetProposalStatus(proposal.ProposalId, AgentProposal.Pending, AgentProposal.Applied);
+        }
         return Task.FromResult(AgentToolOutput.Of(new
         {
             proposal.ProposalId,
+            before = basis.Select(item => new { item.EntityId, item.Name, item.Type }),
+            proposed = payload,
             status = applied ? "applied" : direct ? "apply_failed" : "awaiting_owner_review"
         }));
     }

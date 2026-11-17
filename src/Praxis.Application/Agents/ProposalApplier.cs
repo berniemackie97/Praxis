@@ -12,12 +12,30 @@ namespace Praxis.Application.Agents;
 /// </summary>
 public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepository policy)
 {
+    public KnowledgeProposalBasis? Basis(Guid entityId, Func<Guid, bool> mayDisclose)
+    {
+        Domain.Knowledge.EntityDetail? entity = knowledge.GetEntity(entityId);
+        return entity is null || entity.Mentions.Count == 0 || entity.Mentions.Any(mention => !mayDisclose(mention.SourceId))
+            ? null : KnowledgeProposalBasis.Capture(entity);
+    }
+
     public bool CanApplyDirectly(string kind) => kind != AgentProposal.SourceCategory;
 
     public bool Apply(AgentProposal proposal)
     {
         using JsonDocument document = JsonDocument.Parse(proposal.PayloadJson);
         JsonElement payload = document.RootElement;
+        if (payload.TryGetProperty("basis", out JsonElement basis))
+        {
+            foreach (KnowledgeProposalBasis expected in basis.Deserialize<KnowledgeProposalBasis[]>() ?? [])
+            {
+                if (knowledge.GetEntity(expected.EntityId) is not { } current ||
+                    KnowledgeProposalBasis.Capture(current).Fingerprint != expected.Fingerprint)
+                {
+                    return false;
+                }
+            }
+        }
         Guid Id(string name) => Guid.Parse(payload.GetProperty(name).GetString()!);
         string Text(string name) => payload.GetProperty(name).GetString()!;
         return proposal.Kind switch

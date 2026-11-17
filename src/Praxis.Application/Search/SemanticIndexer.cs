@@ -18,7 +18,7 @@ public sealed class SemanticIndexer(ISemanticVectorStore vectors)
     /// </summary>
     public async Task<SemanticIndexUpdate> RefreshAsync(
         IEmbeddingModel model, bool rebuild = false, int maxSegments = 512,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Func<bool>? mayCommit = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (maxSegments is < 1 or > MaximumSegmentsPerRefresh)
@@ -71,6 +71,8 @@ public sealed class SemanticIndexer(ISemanticVectorStore vectors)
             throw new InvalidDataException("The embedding model changed during indexing; retry with a stable model.");
         }
 
-        return new SemanticIndexUpdate(vectors.Store(digest, rebuild, embeddings), hasMore);
+        return mayCommit is not null && !mayCommit()
+            ? new SemanticIndexUpdate(0, true)
+            : new SemanticIndexUpdate(vectors.Store(digest, rebuild, embeddings), hasMore);
     }
 }
