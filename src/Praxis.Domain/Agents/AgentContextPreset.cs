@@ -28,4 +28,15 @@ public static class AgentContextPreset
         Expanded => local ? 6 : 4,
         _ => local ? 4 : 3
     };
+
+    public static int KnowledgeOpenCharacters(string mode) => Math.Min(6_000, HistoryCharacters(mode) / 4);
+
+    public static int KnowledgeSearchResults(string mode) => mode == Compact ? 4 : 8;
+
+    public static int KnowledgeSearchSnippetCharacters(string mode, bool full) => mode switch
+    {
+        Compact => full ? 400 : 180,
+        Balanced => full ? 1_200 : 280,
+        _ => full ? 6_000 : 280
+    };
 }
