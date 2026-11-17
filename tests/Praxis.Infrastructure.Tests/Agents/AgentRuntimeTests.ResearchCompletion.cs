@@ -494,6 +494,38 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Theory]
+    [InlineData("The packet ID is 10005 [2].", "10005")]
+    [InlineData("The opcode is 0x2716 [2].", "0x2716")]
+    public void MatchingFiguresInAnotherOpenedPassageDoNotValidateTheClaimedCitation(
+        string answer, string unsupported)
+    {
+        const string first = "The walking packet ID is 10005 and the opcode is 0x2716.";
+        const string second = "The action packet ID is 10010 and the opcode is 0x2710.";
+        Dictionary<int, string> cited = new() { [1] = first, [2] = second };
+        AnswerCheck invalid = AnswerVerifier.Check(answer, [first, second],
+            "What does the packet layout say?", true, false, 2, new HashSet<int> { 1, 2 }, cited);
+        Assert.False(invalid.Clean);
+        Assert.Contains(unsupported, invalid.UnsupportedFigures);
+
+        AnswerCheck supported = AnswerVerifier.Check(answer.Replace("[2]", "[1]", StringComparison.Ordinal),
+            [first, second], "What does the packet layout say?", true, false, 2,
+            new HashSet<int> { 1, 2 }, cited);
+        Assert.True(supported.Clean);
+    }
+
+    [Fact]
+    public void CitedTechnicalClaimsAreCheckedPerSentenceWithoutAttributingComputedValuesToSource()
+    {
+        const string source = "The lease specifies payment by check.";
+        const string aggregate = "{\"sum_amount\":-127020}";
+        string answer = "The lease specifies payment by check [1]. October outflows were $1,270.20, computed by data_query.";
+        AnswerCheck check = AnswerVerifier.Check(answer, [source, aggregate],
+            "Where is the lease and what did I spend in October?", true, false, 1,
+            null, new Dictionary<int, string> { [1] = source });
+        Assert.True(check.Clean);
+    }
+
+    [Theory]
     [InlineData("The example uses opcode 0x2716 and 28 bytes [2].", false, false)]
     [InlineData("The example uses opcode 0xDEAD and 28 bytes [2].", true, false)]
     [InlineData("The example uses opcode 0x2716 and 28 bytes [1].", false, true)]
