@@ -23,6 +23,8 @@ final class ChatWorkbenchModel: ObservableObject {
         var lastTranscriptSync: ContinuousClock.Instant?
         var events: [AgentRunEvent] = []
         var reply: AgentReply?
+        var runUserText: String?
+        var runMessageCount = 0
         var feedback: Feedback?
     }
 
@@ -84,7 +86,12 @@ final class ChatWorkbenchModel: ObservableObject {
     func hasWork(_ id: String) -> Bool { states[id]?.busy == true || states[id]?.runId != nil }
 
     /// The transcript as the owner reads it: their messages and the agent's answers; tool traffic is summarized.
-    var transcript: [ChatLine] { ChatLine.lines(messages) }
+    var transcript: [ChatLine] {
+        let state = current
+        return ChatLine.lines(messages, after: state.runMessageCount,
+                              prompt: state.busy || state.runId != nil ? nil : state.runUserText,
+                              reply: state.reply)
+    }
 
     var activeBackendId: String { selected?.backendId ?? backendChoice }
     var activeBackend: AgentBackendProfile? { backends.first { $0.backendId == activeBackendId } }
@@ -338,6 +345,8 @@ final class ChatWorkbenchModel: ObservableObject {
 
     private func start(_ id: String, _ text: String, originalDraft: String, useTools: Bool) {
         states[id, default: ConversationState()].busy = true
+        states[id]?.runUserText = text
+        states[id]?.runMessageCount = selectedId == id ? messages.count : 0
         feedback(nil, for: id)
         channel.send("agentSend", ["conversationId": id, "message": text, "useTools": useTools], as: AgentRunStartedData.self,
                      failed: { [weak self] in self?.failOperation(id, $0) }) { [weak self] data in
@@ -514,7 +523,8 @@ struct ChatLine: Identifiable, Equatable {
     let text: String
     var citations: [AgentCitation] = []
 
-    static func lines(_ messages: [AgentMessage]) -> [ChatLine] {
+    static func lines(_ messages: [AgentMessage], after start: Int = 0,
+                      prompt: String? = nil, reply: AgentReply? = nil) -> [ChatLine] {
         var lines: [ChatLine] = []
         for (index, message) in messages.enumerated() {
             switch message.role {
@@ -530,6 +540,15 @@ struct ChatLine: Identifiable, Equatable {
                 lines.append(ChatLine(id: index * 2, kind: .summary, text: "Earlier conversation summarized."))
             default:
                 continue
+            }
+        }
+        if let reply, let prompt, !reply.text.isEmpty {
+            let currentTurn = messages.dropFirst(min(start, messages.count))
+            if !currentTurn.contains(where: { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }) {
+                if !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
+                    lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
+                }
+                lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
             }
         }
         return lines
