@@ -69,6 +69,59 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
         return bounded with { Messages = [.. bounded.Messages, .. traffic] };
     }
 
+    internal static AgentContextWindow ForEvidenceSynthesis(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
+    {
+        int owner = transcript.Count - 1;
+        while (owner > 0 && transcript[owner].Role != AgentRoles.User)
+        {
+            owner--;
+        }
+
+        if (transcript[owner].Role != AgentRoles.User)
+        {
+            throw new ArgumentException("An active chat request must contain an owner message.", nameof(transcript));
+        }
+
+        AgentMessage request = transcript[owner];
+        long remaining = maximumCharacters - Characters(request);
+        Dictionary<string, AgentToolCall> calls = transcript.Skip(owner + 1)
+            .Where(message => message.Role == AgentRoles.Assistant)
+            .SelectMany(message => message.ToolCalls)
+            .DistinctBy(call => call.CallId)
+            .ToDictionary(call => call.CallId, StringComparer.Ordinal);
+        var receipts = transcript.Skip(owner + 1).Select((message, index) => (message, index))
+            .Where(entry => entry.message.Role == AgentRoles.Tool && entry.message.ToolCallId is not null &&
+                calls.ContainsKey(entry.message.ToolCallId))
+            .Select(entry => (entry.index, result: entry.message, call: calls[entry.message.ToolCallId!]))
+            .ToArray();
+        bool hasSourceReads = receipts.Any(entry => entry.call.Name == "knowledge_open");
+        var candidates = receipts.Where(entry => !hasSourceReads || entry.call.Name != "knowledge_search")
+            .OrderBy(entry => entry.call.Name == "knowledge_open" ? 0 : 1)
+            .ThenByDescending(entry => entry.index);
+        List<(int Index, AgentMessage Assistant, AgentMessage Result)> retained = [];
+        foreach (var candidate in candidates)
+        {
+            AgentMessage assistant = AgentMessage.FromAssistant("", [candidate.call]);
+            long length = Characters(assistant) + Characters(candidate.result);
+            if (length > remaining)
+            {
+                continue;
+            }
+
+            retained.Add((candidate.index, assistant, candidate.result));
+            remaining -= length;
+        }
+
+        if (retained.Count == 0)
+        {
+            return new AgentContextWindow([request], 0, true);
+        }
+
+        AgentMessage[] evidence = retained.OrderBy(item => item.Index)
+            .SelectMany(item => new[] { item.Assistant, item.Result }).ToArray();
+        return new AgentContextWindow([request, .. evidence], 0);
+    }
+
     internal static AgentContextWindow Select(IReadOnlyList<AgentMessage> transcript, int maximumCharacters)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumCharacters);
