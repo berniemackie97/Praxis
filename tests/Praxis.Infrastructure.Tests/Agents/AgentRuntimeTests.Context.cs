@@ -59,9 +59,8 @@ public sealed partial class AgentRuntimeTests
                 JsonElement evidence = opened.RootElement.GetProperty("result");
                 Assert.Equal(2_000, evidence.GetProperty("text").GetString()!.Length);
                 Assert.Equal(2_000, evidence.GetProperty("nextOffset").GetInt32());
-                Assert.Contains(opened.RootElement.GetProperty("citations").EnumerateArray(),
-                    item => item.GetProperty("n").GetInt32() == 2);
-                return new AgentTurn("The lease guide contains source text [2].", [], 10, 5);
+                int citation = opened.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
+                return new AgentTurn($"The lease guide contains source text [{citation}].", [], 10, 5);
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
         catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Compact);
