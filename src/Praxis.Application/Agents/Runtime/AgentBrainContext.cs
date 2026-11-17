@@ -15,15 +15,17 @@ internal static partial class AgentBrainContext
     };
 
     internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
-        ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum)
+        ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum, string? previousPrompt = null)
     {
+        bool followUp = previousPrompt is not null && OwnerScope().IsMatch(previousPrompt) &&
+            SourceFollowUp().IsMatch(prompt);
         if (DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt) ||
-            (GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt)))
+            (GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt) && !followUp))
         {
             return ("not_needed", 0, 0, []);
         }
 
-        string[] terms = Terms().Matches(prompt).Select(match => match.Value)
+        string[] terms = Terms().Matches(followUp ? previousPrompt + " " + prompt : prompt).Select(match => match.Value)
             .Where(term => !CommonWords.Contains(term)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
         if (terms.Length == 0)
         {
@@ -78,6 +80,10 @@ internal static partial class AgentBrainContext
     [GeneratedRegex(@"\b(?:my|mine|our|ours|uploaded|attached|saved|previously|remembered)\b|\b(?:in|from|under|within|according to)\s+(?:the|this|your)\s+(?:(?:\w+\s+){0,2})(?:notes|file|document|docs|repository|repo|codebase|project|library|brain|memory)\b|\b(?:your|my|our)\s+(?:notes|memory|library|sources|files|projects|code)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex OwnerScope();
+
+    [GeneratedRegex(@"^\s*(?:and\s+(?:what|how|why|when|where|who|does|is|are)\b|what\s+about\b|how\s+about\b|what\s+is\s+(?:its|their)\b|(?:does|is|was)\s+(?:it|that)\b)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SourceFollowUp();
 
     [GeneratedRegex(@"[\p{L}\p{N}][\p{L}\p{N}_-]{3,23}")]
     private static partial Regex Terms();
