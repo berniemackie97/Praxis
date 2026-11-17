@@ -46,7 +46,7 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
         else
         {
             auditArguments = tool.Definition.AuditArguments;
-            if (reads?.TryRepeat(call, context.MayDisclose, out string? previous) == true)
+            if (reads?.TryRepeat(call, context.MayDisclose, out string previous) == true)
             {
                 output = AgentToolOutput.Of(new
                 {
