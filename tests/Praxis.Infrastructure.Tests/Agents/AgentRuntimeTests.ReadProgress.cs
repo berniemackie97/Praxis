@@ -178,8 +178,8 @@ public sealed partial class AgentRuntimeTests
         AgentReadProgress reads = new();
         catalog.Agents.SaveBackend(Local());
         AgentConversation conversation = catalog.Agents.Create("local-llm", "read permission");
-        Guid sourceId = Assert.Single(catalog.Library.List(20, 0, null)
-            .Where(item => item.SourceLocator.EndsWith("lease.md", StringComparison.Ordinal))).SourceId;
+        Guid sourceId = Assert.Single(catalog.Library.List(20, 0, null),
+            item => item.SourceLocator.EndsWith("lease.md", StringComparison.Ordinal)).SourceId;
         AgentToolContext permitted = new(conversation.ConversationId, "local-llm", true, ToolPermissions.ReadOnly, _ => true);
         string request = JsonSerializer.Serialize(new { sourceId, offset = 0 });
         AgentToolOutput first = await registry.InvokeAsync(Call("knowledge_open", request), permitted, CancellationToken.None, reads);
