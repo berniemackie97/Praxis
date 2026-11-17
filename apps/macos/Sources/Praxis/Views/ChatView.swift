@@ -381,7 +381,8 @@ private struct Thinking: View {
     var body: some View {
         HStack(spacing: Spacing.s) {
             ProgressView().controlSize(.small)
-            Text(model.statusPaused ? "Status paused" : ChatActivity.progress(model.events.last))
+            Text(model.statusPaused ? "Status paused" :
+                 model.savedAnswerPendingStatus ? "Answer saved. Confirming completion…" : ChatActivity.progress(model.events.last))
                 .font(.callout).foregroundStyle(.secondary)
             if model.statusPaused { Button("Refresh Status") { model.refresh() } }
             Spacer()
