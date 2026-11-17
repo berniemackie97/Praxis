@@ -289,6 +289,7 @@ public sealed class AgentRuntime(
         for (int step = 0; step < bounds.MaximumSteps; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            bool finishWithEvidence = state.Reads.ConsecutiveRepeats >= 2;
             if (state.InputTokens > bounds.MaximumInputTokens)
             {
                 const string notice = "I stopped because this request reached its token budget.";
@@ -327,8 +328,15 @@ public sealed class AgentRuntime(
 
             string turnSystem = repairInstruction is null ? system : system + "\n\n" + repairInstruction;
             repairInstruction = null;
-            AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext), definitions, cancellationToken);
-            if ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text)))
+            if (finishWithEvidence)
+            {
+                report("progress_limited", null, "repeated knowledge reads; final answer requested");
+                turnSystem += "\n\nThe same knowledge reads have already been attempted. Do not call tools again. Answer with the evidence already provided, citing supporting sources, or say what is missing.";
+            }
+
+            AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext),
+                finishWithEvidence ? [] : definitions, cancellationToken);
+            if (!finishWithEvidence && ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text))))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
             }
@@ -336,6 +344,13 @@ public sealed class AgentRuntime(
             state.InputTokens += turn.InputTokens;
             state.OutputTokens += turn.OutputTokens;
             cancellationToken.ThrowIfCancellationRequested();
+            if (finishWithEvidence && (turn.ToolCalls.Count > 0 || string.IsNullOrWhiteSpace(turn.Text)))
+            {
+                const string notice = "I stopped because repeated source reads made no progress. The available evidence was insufficient for a verified answer.";
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
+                return Finish(conversationId, userText, notice, AgentReply.NoProgress, state, report, repaired);
+            }
+
             if (turn.ToolCalls.Count == 0)
             {
                 if (!useTools)
@@ -470,12 +485,14 @@ public sealed class AgentRuntime(
     private async Task<string> InvokeAsync(AgentToolCall call, AgentToolContext context, RunState state, Action<string, string?, string?> report, CancellationToken cancellationToken)
     {
         report("tool_started", call.Name, null);
-        AgentToolOutput output = await registry.InvokeAsync(call, context, cancellationToken);
+        AgentToolOutput output = await registry.InvokeAsync(call, context, cancellationToken, state.Reads);
         state.ToolCalls.Add(call);
         state.Withheld += output.Withheld.Sum(notice => notice.Count);
         string wrapped = state.Citations.Wrap(output);
         state.ToolResults.Add(output.Content);
-        report("tool_finished", call.Name, output.Withheld.Count > 0 ? $"withheld {output.Withheld.Sum(notice => notice.Count)}" : null);
+        string? detail = state.Reads.ConsecutiveRepeats > 0 ? "repeated read" :
+            output.Withheld.Count > 0 ? $"withheld {output.Withheld.Sum(notice => notice.Count)}" : null;
+        report("tool_finished", call.Name, detail);
         return wrapped;
     }
 
@@ -545,6 +562,7 @@ public sealed class AgentRuntime(
         public bool UseTools { get; } = useTools;
         public bool ToolsUnavailable { get; } = toolsUnavailable;
         public CitationLedger Citations { get; } = new();
+        public AgentReadProgress Reads { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
         public List<string> ToolResults { get; } = [];
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
