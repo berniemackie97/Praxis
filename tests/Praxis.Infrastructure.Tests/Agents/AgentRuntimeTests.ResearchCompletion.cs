@@ -108,20 +108,24 @@ public sealed partial class AgentRuntimeTests
     {
         using SqliteCatalog catalog = await SeededAsync();
         using MemoryStream original = new(Encoding.UTF8.GetBytes(
-            "Synthetic walking packet example: opcode 0x2716, length 28 bytes. " + new string('p', 10_000)));
+            new string('p', 2_000) + " Synthetic walking packet example: opcode 0x2716, length 28 bytes. " + new string('p', 8_000)));
         Guid sourceId = (await catalog.Originals.CaptureFileAsync(
             Path.Combine(inbox, "synthetic-overflow.md"), original, original.Length, "synthetic-overflow.md")).SourceId;
         ScriptedBackend backend = new(
             _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
-            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId }))),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId, offset = 0 }))),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId, offset = 2_000 }))),
             transcript =>
             {
-                AgentMessage opened = Assert.Single(transcript.Where(message => message.Role == AgentRoles.Tool));
+                AgentMessage[] evidence = transcript.Where(message => message.Role == AgentRoles.Tool).ToArray();
+                Assert.InRange(evidence.Length, 1, 2);
+                Assert.All(transcript.SelectMany(message => message.ToolCalls),
+                    call => Assert.Equal("knowledge_open", call.Name));
+                AgentMessage opened = evidence[^1];
                 using JsonDocument receipt = JsonDocument.Parse(opened.Content);
-                Assert.Contains("opcode 0x2716, length 28 bytes",
-                    receipt.RootElement.GetProperty("result").GetProperty("text").GetString(), StringComparison.Ordinal);
+                string excerpt = receipt.RootElement.GetProperty("result").GetProperty("text").GetString() ?? "";
+                Assert.Contains("opcode 0x2716, length 28 bytes", excerpt, StringComparison.Ordinal);
                 int citation = receipt.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
-                Assert.Equal(1, transcript.SelectMany(message => message.ToolCalls).Count());
                 Assert.Contains(transcript, message => message.ToolCalls.Count == 1 &&
                     message.ToolCalls[0].CallId == opened.ToolCallId);
                 return new AgentTurn($"The synthetic packet is 0x2716 and 28 bytes [{citation}].", [], 10, 5);
@@ -136,17 +140,17 @@ public sealed partial class AgentRuntimeTests
         AgentReply reply = await runtime.RunAsync(conversation.ConversationId,
             "Read the synthetic walking packet and cite its opcode and length",
             (kind, _, _) => events.Add(kind), CancellationToken.None,
-            new AgentRunLimits(CompactAfterCharacters: 3_000));
+            new AgentRunLimits(CompactAfterCharacters: 5_000));
 
         Assert.Equal(AgentReply.Completed, reply.StopReason);
         Assert.True(reply.Check.Clean);
         Assert.Equal(1, reply.SearchCalls);
-        Assert.Equal(1, reply.SourceReads);
-        Assert.Equal(3, reply.TurnUsage!.Count);
+        Assert.Equal(2, reply.SourceReads);
+        Assert.Equal(4, reply.TurnUsage!.Count);
         Assert.Equal(0, backend.ToolCounts[^1]);
         Assert.Contains("progress_limited", events);
         Assert.Contains("bounded", backend.SystemPrompts[^1], StringComparison.Ordinal);
-        Assert.Equal(2, reply.ToolCalls.Count);
+        Assert.Equal(3, reply.ToolCalls.Count);
         Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
 
