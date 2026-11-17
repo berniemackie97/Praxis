@@ -173,6 +173,46 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(AgentReply.Completed, reply.StopReason);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OwnerScopedFollowUpReusesOnlyCurrentlyPermittedEvidence(bool revokeBeforeFollowUp)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        Guid source = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
+        AgentBackendProfile remote = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
+        catalog.Agents.SaveBackend(remote);
+        catalog.Policy.SaveCategory(new SourceCategory(source, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        PolicyService policy = new(catalog.Policy);
+        policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
+        policy.Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Documents,
+            remote.BackendId, DisclosurePurposes.Chat, true, null)), PolicyActors.Owner);
+        AgentConversation conversation = catalog.Agents.Create(remote.BackendId, "follow-up");
+        IReadOnlyList<AgentMessage> forwarded = [];
+        SessionBackend session = new(_ => Task.FromResult(
+            new AgentTurn("Rent is paid by check [1].", [], 5, 2)), messages => forwarded = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(null, session), clock);
+
+        await runtime.RunAsync(conversation.ConversationId, "What does my lease say about rent?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        if (revokeBeforeFollowUp)
+        {
+            catalog.Policy.SaveCategory(new SourceCategory(source, DataCategories.Documents,
+                SourceCategory.OwnerOrigin, true));
+        }
+
+        await runtime.RunAsync(conversation.ConversationId, "And how is rent paid?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 1));
+        Assert.Equal(revokeBeforeFollowUp ? "withheld" : "focused_match", receipt.Outcome);
+        Assert.Equal(!revokeBeforeFollowUp, receipt.Selected.Count > 0);
+        Assert.Equal(!revokeBeforeFollowUp, forwarded.Any(message =>
+            message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public async Task AutomaticRecallRanksMatchingPassageAboveMatchingFilename()
     {
