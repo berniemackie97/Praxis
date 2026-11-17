@@ -36,7 +36,10 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains("already_read", results[1].Content, StringComparison.Ordinal);
         Assert.DoesNotContain("lease.md", results[1].Content, StringComparison.Ordinal);
         using JsonDocument duplicateReceipt = JsonDocument.Parse(results[1].Content);
-        Assert.Equal(original.CallId, duplicateReceipt.RootElement.GetProperty("previousCallId").GetString());
+        JsonElement receipt = duplicateReceipt.RootElement.GetProperty("result");
+        Assert.Equal("already_read", receipt.GetProperty("error").GetString());
+        Assert.Equal(original.CallId, receipt.GetProperty("previousCallId").GetString());
+        Assert.Empty(duplicateReceipt.RootElement.GetProperty("citations").EnumerateArray());
         AgentToolCallRecord[] audited = catalog.Agents.ReadToolCalls(conversation.ConversationId, 10).ToArray();
         Assert.Equal("ok", Assert.Single(audited, record => record.CallId == original.CallId).Outcome);
         Assert.Equal("duplicate_read", Assert.Single(audited, record => record.CallId == duplicate.CallId).Outcome);
