@@ -153,6 +153,10 @@ public sealed class AgentRuntime(
         string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
             profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : [],
             skills?.Search(userText, profile.IsLocal, 6), profile.IsLocal) : AgentSystemPrompt.Direct;
+        if (useTools && session is null)
+        {
+            system += "\nAfter using a tool, fewer tool schemas may be offered. If a different permitted tool is needed, call tools_expand to restore the full catalog for the next turn. Do not expand when the offered tools suffice.";
+        }
         if (managedLocal && memory is not null)
         {
             if (memory.ReadName() is { } name && MemoryText.ValidName(name))
@@ -228,7 +232,9 @@ public sealed class AgentRuntime(
         AgentToolDefinition[] definitions = useTools ? registry.Definitions
             .Where(tool => ToolTiers.Permits(permission, tool.Tier) &&
                 (profile.IsLocal || (!tool.LocalOnly && tool.Name != MemoryRecallTool.ToolName)) &&
-                (managedLocal || tool.Name != MemoryEditTool.ToolName)).ToArray() : [];
+                (managedLocal || tool.Name != MemoryEditTool.ToolName) &&
+                (session is null || tool.Name != ToolExpandTool.ToolName)).ToArray() : [];
+        AgentToolSelection selection = new(definitions);
         IReadOnlyList<AgentMessage>? boundedTranscript = null;
         if (session is not null || !useTools)
         {
@@ -344,7 +350,7 @@ public sealed class AgentRuntime(
             }
 
             AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext),
-                finishWithEvidence ? [] : definitions, cancellationToken);
+                selection.ForTurn(finishWithEvidence), cancellationToken);
             RecordTurn(turn);
             if (!finishWithEvidence && ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text))))
             {
@@ -398,6 +404,7 @@ public sealed class AgentRuntime(
                 string content = state.ToolCalls.Count >= bounds.MaximumToolCalls
                     ? """{"error":"tool_budget_exhausted","message":"Answer with what you have."}"""
                     : await InvokeAsync(call, context, state, report, cancellationToken);
+                selection.Observe(call, content);
                 if (call.Name is SkillOpenTool.ToolName or SkillSearchTool.ToolName)
                 {
                     string receipt = SkillReceipt(call.Name, content);
