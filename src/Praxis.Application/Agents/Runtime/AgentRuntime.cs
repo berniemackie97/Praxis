@@ -222,8 +222,11 @@ public sealed class AgentRuntime(
 
         if (brainSearch is not null && dream != "")
         {
+            string? previousPrompt = conversations.ReadMessages(conversationId).Reverse().Skip(1)
+                .FirstOrDefault(message => message.Role == AgentRoles.User)?.Content;
             (string outcome, int considered, int withheld, SearchHit[] selected) = AgentBrainContext.Recall(
-                brainSearch, userText, scope.MayDisclose, AgentContextPreset.BriefLimit(conversation.ContextPreset, profile.IsLocal));
+                brainSearch, userText, scope.MayDisclose, AgentContextPreset.BriefLimit(conversation.ContextPreset, profile.IsLocal),
+                previousPrompt);
             AgentCitation[] citations = selected.Select(hit =>
                 new AgentCitation(hit.SourceId, hit.ItemId, hit.Revision, "brain-search", Path.GetFileName(hit.SourceLocator))).ToArray();
             recallJournal?.Record(conversationId, new AgentRecallReceipt(Guid.NewGuid(), profile.BackendId, outcome, considered,
