@@ -124,6 +124,49 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains(receipt.Outcome, new[] { "full_match", "focused_match" });
     }
 
+    [Theory]
+    [InlineData("What is Conquer Online?", false)]
+    [InlineData("Explain Conquer Online.", false)]
+    [InlineData("What is Conquer Online, and how does my OpenConquerServer project relate to it?", true)]
+    [InlineData("What does my OpenConquerServer documentation say about Conquer Online?", true)]
+    public async Task GeneralAndOwnerScopedQuestionsDoNotConflatePrivateProjectWithPublicTopic(
+        string question, bool ownerScoped)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        const string sourceText = "Conquer Online is a game. OpenConquerServer is a .NET server project related to Conquer Online.";
+        using MemoryStream document = new(System.Text.Encoding.UTF8.GetBytes(sourceText));
+        Guid sourceId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "conquer-project-notes.md"), document, document.Length, "project-note")).SourceId;
+        Assert.True(await Praxis.Infrastructure.Tests.Support.ProcessingDriver.Text(catalog).ProcessNextAsync());
+        Assert.NotEmpty(catalog.Search.Query("Conquer Online", 10));
+
+        AgentBackendProfile cloud = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
+        catalog.Agents.SaveBackend(cloud);
+        catalog.Policy.SaveCategory(new SourceCategory(sourceId, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        PolicyService policy = new(catalog.Policy);
+        policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
+        policy.Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Documents,
+            cloud.BackendId, DisclosurePurposes.Chat, true, null)), PolicyActors.Owner);
+        AgentConversation conversation = catalog.Agents.Create(cloud.BackendId, "disambiguation");
+        IReadOnlyList<AgentMessage> delivered = [];
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn(
+            ownerScoped ? "The owner document relates the game and software project [1]." : "Conquer Online is a game.",
+            [], 6, 3)), messages => delivered = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(null, session), clock);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, question,
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 10));
+        Assert.Equal(ownerScoped, receipt.Selected.Count > 0);
+        Assert.Equal(ownerScoped ? "full_match" : "not_needed", receipt.Outcome);
+        Assert.Equal(ownerScoped, delivered.Any(message =>
+            message.Content.Contains("OpenConquerServer is a .NET server project", StringComparison.Ordinal)));
+        Assert.Equal(ownerScoped, reply.Citations.Count > 0);
+        Assert.Equal(question, delivered[^1].Content);
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+    }
+
     [Fact]
     public async Task TerminalActionRequiresOwnerDecisionRunsOnceAndOnlyReturnsOutputToLocalChat()
     {
