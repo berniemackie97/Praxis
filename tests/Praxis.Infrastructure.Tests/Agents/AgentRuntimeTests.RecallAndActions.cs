@@ -58,8 +58,8 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(1, revoked.Withheld);
     }
 
-
     [Theory]
+    [InlineData("Reply with PING only.")]
     [InlineData("Reply with lease only.")]
     [InlineData("Say 'lease' only.")]
     [InlineData("Hello!")]
