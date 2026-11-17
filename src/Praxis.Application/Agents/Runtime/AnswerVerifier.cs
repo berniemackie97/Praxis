@@ -47,7 +47,7 @@ public static partial class AnswerVerifier
     public static string RepairInstruction(AnswerCheck check) =>
         "Answer check failed. " +
         (check.UnsupportedFigures.Count > 0
-            ? $"These figures do not appear in any tool result: {string.Join(", ", check.UnsupportedFigures)}. Recompute them with data_query or compute_evaluate, or remove them. "
+            ? $"These figures are not verified by the supporting evidence: {string.Join(", ", check.UnsupportedFigures)}. Recompute them with data_query or compute_evaluate, or remove them. "
             : "") +
         (check.MissingCitations ? "Cite the evidence actually read with its valid [n] number; a search hit alone does not prove source content. " : "") +
         "Then give your corrected final answer.";
