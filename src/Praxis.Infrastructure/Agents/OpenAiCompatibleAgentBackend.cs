@@ -14,7 +14,7 @@ namespace Praxis.Infrastructure.Agents;
 /// Tool calling over the OpenAI-compatible chat completions API: OpenAI, DeepSeek, OpenRouter,
 /// Gemini's compatible endpoint, and local servers such as Ollama or LM Studio (<c>/v1</c>).
 /// </summary>
-public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, bool isLocalOllama = false) : IAgentBackend
+public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, string model, string? apiKey, bool isLocalOllama = false) : IAgentBudgetedBackend
 {
     public async ValueTask<bool> SupportsToolsAsync(CancellationToken cancellationToken)
     {
@@ -46,8 +46,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
         return capabilities?.Tools ?? (family is not ("gemma2" or "gemma3" or "library/gemma2" or "library/gemma3"));
     }
 
-    public async Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
-        CancellationToken cancellationToken)
+    public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
+        CancellationToken cancellationToken) => CompleteWithinAsync(systemPrompt, transcript, tools, int.MaxValue, cancellationToken);
+
+    public async Task<AgentTurn> CompleteWithinAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript,
+        IReadOnlyList<AgentToolDefinition> tools, int maximumRequestBytes, CancellationToken cancellationToken)
     {
         JsonArray messages = [new JsonObject { ["role"] = "system", ["content"] = systemPrompt }];
         foreach (AgentMessage message in transcript)
@@ -79,6 +82,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
 
         string payload = body.ToJsonString();
         AgentRequestFootprint footprint = AgentHttpRequestFootprint.Measure(payload, body, systemPrompt, transcript, tools.Count);
+        if (footprint.RequestBytes > maximumRequestBytes)
+        {
+            throw new AgentRequestTooLargeException(footprint.RequestBytes, maximumRequestBytes);
+        }
+
         using HttpRequestMessage request = new(HttpMethod.Post, new Uri(endpoint, "chat/completions"))
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
