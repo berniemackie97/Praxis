@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Domain.Agents;
@@ -19,7 +20,7 @@ public sealed partial class AgentRuntimeTests
             .Where(item => item.SourceLocator.EndsWith("large-evidence.md", StringComparison.Ordinal))).SourceId;
         int nextOffset = 0;
         ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("knowledge_open",
-            $"""{"sourceId":"{{sourceId}}","offset":{{nextOffset++ * 6_000}}}"""))));
+            JsonSerializer.Serialize(new { sourceId, offset = nextOffset++ * 6_000 })))));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
         List<string> events = [];
