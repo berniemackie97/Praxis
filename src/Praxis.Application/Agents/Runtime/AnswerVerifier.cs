@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Praxis.Domain.Agents;
 
@@ -14,7 +15,7 @@ public static partial class AnswerVerifier
     public static AnswerCheck Check(string answer, IEnumerable<string> toolResults, string userText, bool evidenceAvailable, bool repaired,
         int availableCitations = 0, IReadOnlySet<int>? openedCitations = null)
     {
-        string[] evidence = toolResults.Append(userText).ToArray();
+        string[] evidence = toolResults.Select(VerifiableEvidence).Append(userText).ToArray();
         HashSet<decimal> supported = [];
         foreach (string result in evidence)
         {
@@ -51,6 +52,38 @@ public static partial class AnswerVerifier
             : "") +
         (check.MissingCitations ? "Cite the evidence actually read with its valid [n] number; a search hit alone does not prove source content. " : "") +
         "Then give your corrected final answer.";
+
+    private static string VerifiableEvidence(string receipt)
+    {
+        if (!receipt.TrimStart().StartsWith('{'))
+        {
+            return receipt;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(receipt);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return receipt;
+            }
+
+            JsonElement result = root.TryGetProperty("result", out JsonElement wrapped) &&
+                wrapped.ValueKind == JsonValueKind.Object ? wrapped : root;
+            if (result.TryGetProperty("sourceId", out _) && result.TryGetProperty("text", out JsonElement text) &&
+                text.ValueKind == JsonValueKind.String)
+            {
+                return text.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Plain evidence is allowed; only structured source receipts require projection.
+        }
+
+        return receipt;
+    }
 
     private static IEnumerable<decimal> Figures(string text) =>
         FigureTokens().Matches(text).Select(match => Parse(match.Value)).OfType<decimal>();
