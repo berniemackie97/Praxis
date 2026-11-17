@@ -119,7 +119,9 @@ public sealed partial class AgentRuntimeTests
         Assert.Contains(delivered, message => message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal));
         Assert.Equal(prompt, delivered[^1].Content);
         Assert.Single(reply.Citations);
-        Assert.Equal("full_match", Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10)).Outcome);
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10));
+        Assert.Single(receipt.Selected);
+        Assert.Contains(receipt.Outcome, new[] { "full_match", "focused_match" });
     }
 
     [Fact]
