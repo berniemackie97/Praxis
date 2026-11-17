@@ -39,10 +39,15 @@ internal static partial class AgentBrainContext
         }
 
         SearchHit[] current = hits.Where(hit => !string.IsNullOrWhiteSpace(hit.Snippet)).DistinctBy(hit => hit.SourceId).ToArray();
-        SearchHit[] relevant = relaxed
-            ? current.Select(hit => (Hit: hit, Matches: Overlap(terms, hit))).Where(hit => hit.Matches >= 2)
-                .OrderByDescending(hit => hit.Matches).Select(hit => hit.Hit).ToArray()
-            : current;
+        var ranked = current.Select(hit => new
+        {
+            Hit = hit,
+            Matches = Overlap(terms, hit.Title + " " + hit.Snippet),
+            Body = Overlap(terms, hit.Snippet)
+        }).Where(hit => !relaxed || hit.Matches >= 2)
+            .OrderByDescending(hit => hit.Body)
+            .ThenByDescending(hit => hit.Matches).ToArray();
+        SearchHit[] relevant = ranked.Select(hit => hit.Hit).ToArray();
         SearchHit[] eligible = relevant.Where(hit => allowed(hit.SourceId)).ToArray();
         SearchHit[] selected = eligible.Take(maximum).ToArray();
         int withheld = relevant.Length - eligible.Length;
@@ -51,9 +56,9 @@ internal static partial class AgentBrainContext
         return (outcome, current.Length, withheld, selected);
     }
 
-    private static int Overlap(string[] terms, SearchHit hit)
+    private static int Overlap(string[] terms, string text)
     {
-        HashSet<string> evidenceTerms = Terms().Matches(hit.Title + " " + hit.Snippet).Select(match => match.Value)
+        HashSet<string> evidenceTerms = Terms().Matches(text).Select(match => match.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return terms.Count(evidenceTerms.Contains);
     }
