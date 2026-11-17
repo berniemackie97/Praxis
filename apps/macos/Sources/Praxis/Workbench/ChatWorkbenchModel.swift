@@ -561,7 +561,10 @@ struct ChatLine: Identifiable, Equatable {
             }
         }
         let currentTurn = messages.dropFirst(min(start, messages.count))
-        if let prompt, (liveActivity || reply != nil),
+        let needsReply = reply.map { answer in
+            !currentTurn.contains { $0.role == "assistant" && $0.content == answer.text && $0.toolCalls.isEmpty }
+        } ?? false
+        if let prompt, (liveActivity || needsReply),
            !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
             lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
         }
@@ -571,8 +574,7 @@ struct ChatLine: Identifiable, Equatable {
                 lines.append(ChatLine(id: -event.sequence, kind: .activity, text: "Used " + ChatActivity.label(tool)))
             }
         }
-        if let reply, !reply.text.isEmpty,
-           !currentTurn.contains(where: { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }) {
+        if let reply, needsReply, !reply.text.isEmpty {
             lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
         }
         return lines
