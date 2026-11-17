@@ -149,6 +149,56 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(4, reply.TurnUsage!.Count);
     }
 
+    [Fact]
+    public async Task DisclosureRevokedBetweenToolAndModelTurnStopsWithoutForwardingOldEvidence()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile remote = Local() with { BackendId = "remote", Endpoint = "https://example.test/v1", IsLocal = false };
+        Guid source = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
+        catalog.Policy.ApplyChange(new Praxis.Domain.Policy.PolicyChange(Mode: Praxis.Domain.Policy.DisclosureModes.AllowAll),
+            Praxis.Domain.Policy.PolicyActors.Owner);
+        catalog.Policy.SaveCategory(new Praxis.Domain.Policy.SourceCategory(source, Praxis.Domain.Policy.DataCategories.Documents,
+            Praxis.Domain.Policy.SourceCategory.OwnerOrigin, false));
+        ScriptedBackend backend = new(_ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, remote, backend);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find my lease",
+            (kind, tool, _) =>
+            {
+                if (kind == "tool_finished" && tool == "knowledge_search")
+                {
+                    catalog.Policy.SaveCategory(new Praxis.Domain.Policy.SourceCategory(source, Praxis.Domain.Policy.DataCategories.Documents,
+                        Praxis.Domain.Policy.SourceCategory.OwnerOrigin, true));
+                }
+            }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.DisclosureChanged, reply.StopReason);
+        Assert.Empty(reply.Citations);
+        Assert.Single(backend.SystemPrompts);
+        Assert.Equal(1, reply.SearchCalls);
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+        Assert.DoesNotContain("Monthly rent", reply.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RepeatedUnsupportedPacketFigureHasExplicitEvidenceInsufficientStop()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
+            _ => new AgentTurn("The packet opcode is 0xDEADBEEF [1].", [], 10, 4),
+            _ => new AgentTurn("The packet opcode is 0xDEADBEEF [1].", [], 10, 4));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find documented packet opcode",
+            (_, _, _) => { }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.EvidenceInsufficient, reply.StopReason);
+        Assert.Equal(3, reply.TurnUsage!.Count);
+        Assert.Contains("couldn’t verify", reply.Text, StringComparison.Ordinal);
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+    }
+
     [Theory]
     [InlineData("The example uses opcode 0x2716 and 28 bytes [2].", false, false)]
     [InlineData("The example uses opcode 0xDEAD and 28 bytes [2].", true, false)]
