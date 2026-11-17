@@ -90,7 +90,7 @@ public sealed partial class AgentRuntimeTests
         int searchCitation = 0;
         int openCitation = 0;
         ScriptedBackend backend = new(
-            _ => Turn(Call("knowledge_search", """{"query":"synthetic-walk-packet","limit":1}""")),
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
             transcript =>
             {
                 using JsonDocument search = JsonDocument.Parse(transcript.Last(message => message.Role == AgentRoles.Tool).Content);
