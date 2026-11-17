@@ -88,9 +88,13 @@ final class ChatWorkbenchModel: ObservableObject {
     /// The transcript as the owner reads it: their messages and the agent's answers; tool traffic is summarized.
     var transcript: [ChatLine] {
         let state = current
+        let turn = messages.dropFirst(min(state.runMessageCount, messages.count))
+        let savedReply = turn.contains { message in
+            message.role == "assistant" && !message.content.isEmpty && message.toolCalls.isEmpty
+        }
         return ChatLine.lines(messages, after: state.runMessageCount,
-                              prompt: state.busy || state.runId != nil ? nil : state.runUserText,
-                              reply: state.reply)
+                              prompt: state.runUserText, reply: state.reply,
+                              events: state.events, liveActivity: (state.runId != nil || state.reply != nil) && !savedReply)
     }
 
     var activeBackendId: String { selected?.backendId ?? backendChoice }
@@ -532,15 +536,21 @@ struct ChatLine: Identifiable, Equatable {
     var citations: [AgentCitation] = []
 
     static func lines(_ messages: [AgentMessage], after start: Int = 0,
-                      prompt: String? = nil, reply: AgentReply? = nil) -> [ChatLine] {
+                      prompt: String? = nil, reply: AgentReply? = nil,
+                      events: [AgentRunEvent] = [], liveActivity: Bool = false) -> [ChatLine] {
         var lines: [ChatLine] = []
+        let currentStart = prompt.flatMap { current in
+            messages.lastIndex { $0.role == "user" && $0.content == current }
+        }.map { max(start, $0 + 1) } ?? start
         for (index, message) in messages.enumerated() {
             switch message.role {
             case "user" where !message.content.hasPrefix("Answer check failed."):
                 lines.append(ChatLine(id: index * 2, kind: .owner, text: message.content))
             case "assistant":
                 if !message.toolCalls.isEmpty {
-                    lines.append(ChatLine(id: index * 2, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
+                    if !liveActivity || index < currentStart {
+                        lines.append(ChatLine(id: index * 2, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
+                    }
                 } else if !message.content.isEmpty {
                     lines.append(ChatLine(id: index * 2 + 1, kind: .agent, text: message.content, citations: message.citations ?? []))
                 }
@@ -550,14 +560,22 @@ struct ChatLine: Identifiable, Equatable {
                 continue
             }
         }
-        if let reply, let prompt, !reply.text.isEmpty {
-            let currentTurn = messages.dropFirst(min(start, messages.count))
-            if !currentTurn.contains(where: { $0.role == "assistant" && $0.content == reply.text && $0.toolCalls.isEmpty }) {
-                if !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
-                    lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
-                }
-                lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
+        let currentTurn = messages.dropFirst(min(start, messages.count))
+        let needsReply = reply.map { answer in
+            !currentTurn.contains(where: { $0.role == "assistant" && $0.content == answer.text && $0.toolCalls.isEmpty })
+        } ?? false
+        if let prompt, (liveActivity || needsReply),
+           !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
+            lines.append(ChatLine(id: messages.count * 2, kind: .owner, text: prompt))
+        }
+        if liveActivity {
+            for event in events where event.kind == "tool_finished" {
+                guard let tool = event.tool else { continue }
+                lines.append(ChatLine(id: -event.sequence, kind: .activity, text: "Used " + ChatActivity.label(tool)))
             }
+        }
+        if let reply, needsReply, !reply.text.isEmpty {
+            lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
         }
         return lines
     }

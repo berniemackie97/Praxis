@@ -120,6 +120,65 @@ struct AgentPresentationTests {
         #expect(!lines.contains { $0.text.hasPrefix("Answer check failed") })
     }
 
+    @Test func liveToolEventsAppearBeforeSavedMessagesAndReconcileWithoutDuplicates() {
+        let question = "Summarize my note"
+        let user = AgentMessage(role: "user", content: question, toolCalls: [], toolCallId: nil)
+        let call = AgentToolCall(callId: "1", name: "knowledge_search", argumentsJson: "{}")
+        let started = AgentRunEvent(sequence: 2, kind: "tool_started", tool: call.name, detail: nil, atUtc: "")
+        let finished = AgentRunEvent(sequence: 3, kind: "tool_finished", tool: call.name, detail: nil, atUtc: "")
+
+        let inProgress = ChatLine.lines([user], after: 0, prompt: question,
+                                        events: [started], liveActivity: true)
+        #expect(inProgress.map(\.kind) == [.owner])
+
+        let live = ChatLine.lines([user], after: 0, prompt: question,
+                                  events: [started, finished], liveActivity: true)
+        #expect(live.map(\.kind) == [.owner, .activity])
+        #expect(live.last?.text == "Used search")
+        #expect(live.last?.id == -3)
+
+        let beforeReload = ChatLine.lines([], after: 0, prompt: question,
+                                          events: [started, finished], liveActivity: true)
+        #expect(beforeReload.map(\.kind) == [.owner, .activity])
+        #expect(beforeReload.first?.text == question)
+
+        let pending = [user,
+                       AgentMessage(role: "assistant", content: "", toolCalls: [call], toolCallId: nil),
+                       AgentMessage(role: "tool", content: "Result", toolCalls: [], toolCallId: "1")]
+        let refreshing = ChatLine.lines(pending, after: 0, prompt: question,
+                                        events: [started, finished], liveActivity: true)
+        #expect(refreshing.map(\.kind) == [.owner, .activity])
+        #expect(refreshing.last?.id == -3)
+
+        let final = AgentMessage(role: "assistant", content: "The note covers rendering.", toolCalls: [], toolCallId: nil)
+        let saved = ChatLine.lines(pending + [final], after: 0, prompt: question,
+                                   events: [started, finished], liveActivity: false)
+        #expect(saved.map(\.kind) == [.owner, .activity, .agent])
+        #expect(saved[1].text == "Used search")
+        #expect(saved.last?.text == final.content)
+    }
+
+    @Test func liveActivityPreservesEarlierTurnsAndRepeatedToolCalls() {
+        let previous = [
+            AgentMessage(role: "user", content: "First question", toolCalls: [], toolCallId: nil),
+            AgentMessage(role: "assistant", content: "", toolCalls: [
+                AgentToolCall(callId: "old", name: "knowledge_open", argumentsJson: "{}")], toolCallId: nil),
+            AgentMessage(role: "tool", content: "Old result", toolCalls: [], toolCallId: "old"),
+            AgentMessage(role: "assistant", content: "First answer", toolCalls: [], toolCallId: nil)
+        ]
+        let prompt = "Second question"
+        let current = AgentMessage(role: "user", content: prompt, toolCalls: [], toolCallId: nil)
+        let events = [
+            AgentRunEvent(sequence: 2, kind: "tool_finished", tool: "knowledge_search", detail: nil, atUtc: ""),
+            AgentRunEvent(sequence: 4, kind: "tool_finished", tool: "knowledge_search", detail: nil, atUtc: "")
+        ]
+        let lines = ChatLine.lines(previous + [current], after: previous.count,
+                                   prompt: prompt, events: events, liveActivity: true)
+        #expect(lines.map(\.kind) == [.owner, .activity, .agent, .owner, .activity, .activity])
+        #expect(lines.suffix(2).map(\.id) == [-2, -4])
+        #expect(lines.suffix(2).allSatisfy { $0.text == "Used search" })
+    }
+
     @Test func exhaustedToolLoopShowsItsFinalNoticeAfterActivity() {
         let messages = [
             AgentMessage(role: "user", content: "Find my lease", toolCalls: [], toolCallId: nil),
