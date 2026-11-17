@@ -28,7 +28,7 @@ public static partial class AnswerVerifier
             }
         }
 
-        HashSet<string> evidenceHex = toolResults.Append(userText)
+        HashSet<string> evidenceHex = evidence
             .SelectMany(value => HexTokens().Matches(value).Select(match => match.Value))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         string[] unsupported = FigureTokens().Matches(answer).Select(match => match.Value)
