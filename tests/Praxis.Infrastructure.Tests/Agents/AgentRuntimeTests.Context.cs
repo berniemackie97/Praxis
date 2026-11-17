@@ -39,6 +39,42 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(2, saved.Count(message => message.Role == AgentRoles.Tool));
     }
 
+    [Fact]
+    public async Task CompactSearchAndLargeSourceReadReachAnAnswerTurn()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        using MemoryStream original = new(Encoding.UTF8.GetBytes("# Lease guide\\n" + new string('a', 24_000)));
+        Guid sourceId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "lease-guide.md"), original, original.Length, "lease-guide.md")).SourceId;
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":25,"detail":"full"}""")),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId }))),
+            transcript =>
+            {
+                AgentMessage[] toolMessages = transcript.Where(message => message.Role == AgentRoles.Tool).ToArray();
+                Assert.Equal(2, toolMessages.Length);
+                using JsonDocument search = JsonDocument.Parse(toolMessages[0].Content);
+                using JsonDocument opened = JsonDocument.Parse(toolMessages[1].Content);
+                Assert.True(search.RootElement.GetProperty("result").GetProperty("results").GetArrayLength() <= 4);
+                JsonElement evidence = opened.RootElement.GetProperty("result");
+                Assert.Equal(2_000, evidence.GetProperty("text").GetString()!.Length);
+                Assert.Equal(2_000, evidence.GetProperty("nextOffset").GetInt32());
+                Assert.Contains(opened.RootElement.GetProperty("citations").EnumerateArray(),
+                    item => item.GetProperty("n").GetInt32() == 2);
+                return new AgentTurn("The lease guide contains source text [2].", [], 10, 5);
+            });
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Compact);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find and read my lease guide",
+            (_, _, _) => { }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        Assert.True(reply.Check.Clean);
+        Assert.Equal(3, backend.SystemPrompts.Count);
+        Assert.Equal(2, reply.ToolCalls.Count);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
