@@ -18,7 +18,7 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
 
     public IReadOnlyList<AgentToolDefinition> Definitions => byName.Values.Select(tool => tool.Definition).OrderBy(definition => definition.Name, StringComparer.Ordinal).ToArray();
 
-    public async Task<AgentToolOutput> InvokeAsync(AgentToolCall call, AgentToolContext context, CancellationToken cancellationToken)
+    public async Task<AgentToolOutput> InvokeAsync(AgentToolCall call, AgentToolContext context, CancellationToken cancellationToken, AgentReadProgress? reads = null)
     {
         DateTimeOffset started = clock.GetUtcNow();
         long timestamp = Stopwatch.GetTimestamp();
@@ -46,7 +46,20 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
         else
         {
             auditArguments = tool.Definition.AuditArguments;
-            (output, outcome) = await RunAsync(tool, call, context, cancellationToken);
+            if (reads?.TryRepeat(call, context.MayDisclose, out string? previous) == true)
+            {
+                output = AgentToolOutput.Of(new
+                {
+                    error = "already_read",
+                    previousCallId = previous,
+                    message = "This exact read already completed. Use the earlier evidence, or change the query or offset."
+                });
+                outcome = "duplicate_read";
+            }
+            else
+            {
+                (output, outcome) = await RunAsync(tool, call, context, cancellationToken);
+            }
         }
 
         if (output.Content.Length > MaximumResultCharacters)
@@ -54,6 +67,11 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
             // Keep the result valid JSON: wrap the leading part instead of cutting mid-structure.
             output = output with { Content = Tools.ToolJson.Serialize(new { truncated = true, partial = output.Content[..(MaximumResultCharacters - 200)] }) };
             outcome = outcome == "ok" ? "truncated" : outcome;
+        }
+
+        if (outcome != "duplicate_read")
+        {
+            reads?.Record(call, output, outcome == "ok");
         }
 
         audit.RecordToolCall(new AgentToolCallRecord(context.ConversationId, call.CallId, call.Name, tier, auditArguments ? Bound(call.ArgumentsJson) : "{}", outcome,
