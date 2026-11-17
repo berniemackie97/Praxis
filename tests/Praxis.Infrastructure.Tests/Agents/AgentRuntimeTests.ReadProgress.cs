@@ -96,6 +96,30 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task UnsupportedEvidenceOnlyAnswerCannotTriggerAnotherInferenceTurn()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease"}""")),
+            _ => Turn(Call("knowledge_search", """{"query":"lease"}""")),
+            _ => Turn(Call("knowledge_search", """{"query":"lease"}""")),
+            _ => new AgentTurn("Monthly rent is $9,999.99 [1].", [], 10, 5))
+        {
+            AllowToollessTurn = true
+        };
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId, "Find the lease",
+            (_, _, _) => { }, CancellationToken.None);
+
+        Assert.Equal(AgentReply.NoProgress, reply.StopReason);
+        Assert.Equal(4, backend.SystemPrompts.Count);
+        Assert.Equal(0, backend.ToolCounts[^1]);
+        Assert.DoesNotContain("9,999.99", reply.Text, StringComparison.Ordinal);
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+    }
+
+    [Fact]
     public async Task NovelKnowledgeSearchResetsRepeatedReadProgress()
     {
         using SqliteCatalog catalog = await SeededAsync();
