@@ -14,18 +14,23 @@ internal static partial class AgentBrainContext
         "tell", "thank", "thanks", "that", "their", "this", "want", "what", "where", "which", "with", "would", "your"
     };
 
+    internal static bool IsSourceIndependent(string prompt, string? previousPrompt = null) =>
+        DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt) ||
+        GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt) && !IsOwnerFollowUp(prompt, previousPrompt);
+
+    private static bool IsOwnerFollowUp(string prompt, string? previousPrompt) =>
+        previousPrompt is not null && OwnerScope().IsMatch(previousPrompt) && SourceFollowUp().IsMatch(prompt);
+
     internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
         ITextSearchIndex index, string prompt, Func<Guid, bool> allowed, int maximum, string? previousPrompt = null)
     {
-        bool followUp = previousPrompt is not null && OwnerScope().IsMatch(previousPrompt) &&
-            SourceFollowUp().IsMatch(prompt);
-        if (DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt) ||
-            (GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt) && !followUp))
+        if (IsSourceIndependent(prompt, previousPrompt))
         {
             return ("not_needed", 0, 0, []);
         }
 
-        string[] terms = Terms().Matches(followUp ? previousPrompt + " " + prompt : prompt).Select(match => match.Value)
+        string[] terms = Terms().Matches(IsOwnerFollowUp(prompt, previousPrompt) ? previousPrompt + " " + prompt : prompt)
+            .Select(match => match.Value)
             .Where(term => !CommonWords.Contains(term)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
         if (terms.Length == 0)
         {
