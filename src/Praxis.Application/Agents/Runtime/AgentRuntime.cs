@@ -340,7 +340,8 @@ public sealed class AgentRuntime(
             else
             {
                 IReadOnlyList<AgentMessage> visible = VisibleHistory(state.TransientToolResults);
-                AgentContextWindow window = AgentContextWindow.WithActiveToolTraffic(visible, historyBudget);
+                AgentContextWindow window = AgentContextWindow.WithActiveToolTraffic(visible, historyBudget,
+                    AgentContextPreset.KnowledgeOpenCharacters(conversation.ContextPreset));
                 if (window.ActiveTrafficExceeded)
                 {
                     window = AgentContextWindow.ForEvidenceSynthesis(visible, historyBudget);
@@ -374,6 +375,11 @@ public sealed class AgentRuntime(
                     }
 
                     report("progress_limited", null, "active tool history packed into a final cited answer turn");
+                }
+                else if (!finishWithEvidence && window.ApproachingEvidenceLimit && state.OpenedCitations.Count > 0)
+                {
+                    finishWithEvidence = true;
+                    report("progress_limited", null, "another source excerpt would exceed the active context allowance");
                 }
 
                 turnContext = window.Messages;
@@ -460,6 +466,8 @@ public sealed class AgentRuntime(
                             ? "I found source passages but could not verify the requested answer from the evidence that fits this context. Narrow the question or choose Expanded context."
                             : NoProgressNotice;
                         string stop = compactedEvidence ? AgentReply.EvidenceInsufficient : AgentReply.NoProgress;
+                        state.RejectedCheck = check;
+                        report("verification_limited", null, $"unsupported figures: {check.UnsupportedFigures.Count}; missing source citation: {check.MissingCitations}");
                         conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
                         return Finish(conversationId, userText, notice, stop, state, report, repaired);
                     }
@@ -467,6 +475,8 @@ public sealed class AgentRuntime(
                     if (repaired || step + 1 == bounds.MaximumSteps)
                     {
                         const string fallback = "I couldn’t verify an answer to your latest request from the available evidence.";
+                        state.RejectedCheck = check;
+                        report("verification_limited", null, $"unsupported figures: {check.UnsupportedFigures.Count}; missing source citation: {check.MissingCitations}");
                         conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(fallback, []));
                         return Finish(conversationId, userText, fallback, AgentReply.EvidenceInsufficient, state, report, repaired);
                     }
@@ -623,7 +633,7 @@ public sealed class AgentRuntime(
             report("checking", null, null);
         }
 
-        AnswerCheck check = hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
+        AnswerCheck check = state.RejectedCheck ?? (hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false));
         report("completed", null, check.Clean ? null : "answer check flagged figures");
         return new AgentReply(conversationId, text, stop, state.ToolCalls,
             state.SuppressCitations ? [] : state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
@@ -696,6 +706,7 @@ public sealed class AgentRuntime(
         public HashSet<int> OpenedCitations { get; } = [];
         public HashSet<int>? ForwardedOpenedCitations { get; set; }
         public IReadOnlyList<string>? FinalEvidenceResults { get; set; }
+        public AnswerCheck? RejectedCheck { get; set; }
         public bool SuppressCitations { get; set; }
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
         public int Withheld { get; set; }
