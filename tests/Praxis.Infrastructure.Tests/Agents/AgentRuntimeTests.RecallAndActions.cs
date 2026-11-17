@@ -62,6 +62,7 @@ public sealed partial class AgentRuntimeTests
     [InlineData("Reply with PING only.")]
     [InlineData("Reply with lease only.")]
     [InlineData("Say 'lease' only.")]
+    [InlineData("Respond with \"Lease remains private\" exactly.")]
     [InlineData("Hello!")]
     public async Task SourceIndependentChatDoesNotDiscloseIncidentalBrainMatches(string prompt)
     {
@@ -89,6 +90,27 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal("not_needed", receipt.Outcome);
         Assert.Equal(0, receipt.Considered);
         Assert.Empty(receipt.Selected);
+    }
+
+    [Fact]
+    public async Task GreetingBeforeSourceQuestionStillRecallsTheSource()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        AgentBackendProfile profile = Local() with { BackendId = "ollama" };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation chat = catalog.Agents.Create(profile.BackendId, "grounded");
+        IReadOnlyList<AgentMessage> delivered = [];
+        SessionBackend session = new(_ => Task.FromResult(new AgentTurn("Rent is paid by check [1].", [], 5, 2)),
+            messages => delivered = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
+
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, "Hello, what does the lease say?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        Assert.Contains(delivered, message => message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal));
+        Assert.Equal("Hello, what does the lease say?", delivered[^1].Content);
+        Assert.Single(reply.Citations);
+        Assert.Equal("full_match", Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10)).Outcome);
     }
 
     [Fact]
