@@ -453,7 +453,7 @@ private struct ReplyDetails: View {
                 .font(.callout)
             }
             if reply.toolsUnavailable == true {
-                Text(citedIndices.isEmpty ? "This model replied without library tools." : "Answered from read-only brain context.")
+                Text(reply.citations.isEmpty ? "This model replied without library tools." : "Read-only Brain context was available for this reply.")
                     .font(.meta).foregroundStyle(.secondary)
             }
             if reply.inputTokens > 0 || reply.outputTokens > 0 {
