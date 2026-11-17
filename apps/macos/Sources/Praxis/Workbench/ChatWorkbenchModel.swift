@@ -347,6 +347,7 @@ final class ChatWorkbenchModel: ObservableObject {
         states[id, default: ConversationState()].busy = true
         states[id]?.runUserText = text
         states[id]?.runMessageCount = selectedId == id ? messages.count : 0
+        states[id]?.reply = nil
         feedback(nil, for: id)
         channel.send("agentSend", ["conversationId": id, "message": text, "useTools": useTools], as: AgentRunStartedData.self,
                      failed: { [weak self] in self?.failOperation(id, $0) }) { [weak self] data in
@@ -355,7 +356,6 @@ final class ChatWorkbenchModel: ObservableObject {
             states[id]?.busy = false
             states[id]?.runId = data.runId
             states[id]?.events = []
-            states[id]?.reply = nil
             states[id]?.polling = false
             states[id]?.pollStarted = nil
             states[id]?.pollGeneration += 1
