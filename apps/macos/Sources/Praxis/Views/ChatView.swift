@@ -462,6 +462,11 @@ private struct ReplyDetails: View {
                     .font(.meta).foregroundStyle(.secondary)
                     .help("Provider-reported usage. CLI counts can include cached context and provider overhead; counts are not directly comparable or a subscription balance.")
             }
+            if let searches = reply.searchCalls, let reads = reply.sourceReads, searches + reads > 0 {
+                Text("Source retrieval: \(searches) search calls · \(reads) read calls")
+                    .font(.meta).foregroundStyle(.secondary)
+                    .help("Attempted source tool calls, including repeated attempts; not a count of unique successful sources.")
+            }
             if let turns = reply.turnUsage, !turns.isEmpty {
                 DisclosureGroup("Model turns (\(turns.count))") {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
