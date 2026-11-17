@@ -63,8 +63,7 @@ struct AgentPresentationTests {
         #expect(MediaTimeRange(locator: "time:0-inf") == nil)
     }
 
-
-    @Test func chatOnlyDisplaysReferencesUsedInTheAnswer() {
+    @Test func chatOnlyDisplaysNumberedReferences() {
         #expect(CitationMarkers.indices(in: "PING", count: 3).isEmpty)
         #expect(CitationMarkers.indices(in: "The lease says [2].", count: 3) == [1])
         #expect(CitationMarkers.indices(in: "Evidence [3] and [1].", count: 3) == [0, 2])
