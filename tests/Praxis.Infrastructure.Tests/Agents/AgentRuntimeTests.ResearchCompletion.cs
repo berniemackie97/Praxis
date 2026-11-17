@@ -104,6 +104,53 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task CompactOverflowGetsOneSourceGroundedAnswerTurnInsteadOfDiscardingEvidence()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        using MemoryStream original = new(Encoding.UTF8.GetBytes(
+            "Synthetic walking packet example: opcode 0x2716, length 28 bytes. " + new string('p', 10_000)));
+        Guid sourceId = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "synthetic-overflow.md"), original, original.Length, "synthetic-overflow.md")).SourceId;
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"lease","limit":1}""")),
+            _ => Turn(Call("knowledge_open", JsonSerializer.Serialize(new { sourceId }))),
+            transcript =>
+            {
+                AgentMessage opened = Assert.Single(transcript.Where(message => message.Role == AgentRoles.Tool));
+                using JsonDocument receipt = JsonDocument.Parse(opened.Content);
+                Assert.Contains("opcode 0x2716, length 28 bytes",
+                    receipt.RootElement.GetProperty("result").GetProperty("text").GetString(), StringComparison.Ordinal);
+                int citation = receipt.RootElement.GetProperty("citations")[0].GetProperty("n").GetInt32();
+                Assert.Equal(1, transcript.SelectMany(message => message.ToolCalls).Count());
+                Assert.Contains(transcript, message => message.ToolCalls.Count == 1 &&
+                    message.ToolCalls[0].CallId == opened.ToolCallId);
+                return new AgentTurn($"The synthetic packet is 0x2716 and 28 bytes [{citation}].", [], 10, 5);
+            })
+        {
+            AllowToollessTurn = true
+        };
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Compact);
+        List<string> events = [];
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId,
+            "Read the synthetic walking packet and cite its opcode and length",
+            (kind, _, _) => events.Add(kind), CancellationToken.None,
+            new AgentRunLimits(CompactAfterCharacters: 3_000));
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        Assert.True(reply.Check.Clean);
+        Assert.Equal(1, reply.SearchCalls);
+        Assert.Equal(1, reply.SourceReads);
+        Assert.Equal(3, reply.TurnUsage!.Count);
+        Assert.Equal(0, backend.ToolCounts[^1]);
+        Assert.Contains("progress_limited", events);
+        Assert.Contains("bounded", backend.SystemPrompts[^1], StringComparison.Ordinal);
+        Assert.Equal(2, reply.ToolCalls.Count);
+        Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
+    }
+
+    [Fact]
     public async Task RepeatedSixThousandCharacterSourcePagesStopWithPairedToolTraffic()
     {
         using SqliteCatalog catalog = await SeededAsync();
@@ -112,7 +159,10 @@ public sealed partial class AgentRuntimeTests
             Path.Combine(inbox, "synthetic-packet.md"), original, original.Length, "synthetic-packet.md")).SourceId;
         int pages = 0;
         ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("knowledge_open",
-            JsonSerializer.Serialize(new { sourceId, offset = pages++ * 6_000 })))));
+            JsonSerializer.Serialize(new { sourceId, offset = pages++ * 6_000 })))))
+        {
+            AllowToollessTurn = true
+        };
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
         catalog.Agents.SetContext(conversation.ConversationId, AgentContextPreset.Expanded);
         List<string> events = [];
@@ -121,9 +171,10 @@ public sealed partial class AgentRuntimeTests
             (kind, _, _) => events.Add(kind), CancellationToken.None,
             new AgentRunLimits(MaximumSteps: 16, MaximumInputTokens: 100_000));
 
-        Assert.Equal(AgentReply.ContextBudget, reply.StopReason);
-        Assert.Contains("context_limited", events);
+        Assert.Equal(AgentReply.NoProgress, reply.StopReason);
+        Assert.Contains("progress_limited", events);
         Assert.InRange(reply.SourceReads, 2, 15);
+        Assert.Equal(0, backend.ToolCounts[^1]);
         Assert.Equal(reply.SourceReads, reply.ToolCalls.Count);
         AgentMessage[] transcript = catalog.Agents.ReadMessages(conversation.ConversationId).ToArray();
         Assert.Equal(reply.SourceReads, transcript.Count(message => message.Role == AgentRoles.Tool));
