@@ -394,8 +394,16 @@ private struct Thinking: View {
 }
 
 enum CitationMarkers {
+    private static let marker = try! NSRegularExpression(pattern: #"(?<![\p{L}\p{N}_])\[(\d{1,3})\](?!\()"#)
+
     static func indices(in text: String, count: Int) -> [Int] {
-        (0..<count).filter { text.contains("[\($0 + 1)]") }
+        guard count > 0 else { return [] }
+        let content = text as NSString
+        let matches = marker.matches(in: text, range: NSRange(location: 0, length: content.length))
+        return Set(matches.compactMap { match -> Int? in
+            guard let number = Int(content.substring(with: match.range(at: 1))), number >= 1, number <= count else { return nil }
+            return number - 1
+        }).sorted()
     }
 }
 
