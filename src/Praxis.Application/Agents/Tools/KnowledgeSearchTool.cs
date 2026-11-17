@@ -26,7 +26,7 @@ public sealed class KnowledgeSearchTool(
         Search everything in the owner's second brain. Returns ranked passages with sourceId/itemId/revision for knowledge_open and a citation number.
         Use specific keywords or a file name; run several searches for multi-part questions. When no source has every word, partial matches return (mode=partial). Filters: kind (note|document|code|media|financial|data), category
         (financial|correspondence|health|identity|personal|documents|media|code), collectionId, entityId (only sources mentioning that entity).
-        detail=full adds longer snippets. Results withheld by the owner's disclosure policy are counted, never shown.
+        detail=full adds longer snippets. The current context preset can reduce page size or snippet length; use nextOffset to continue. Results withheld by the owner's disclosure policy are counted, never shown.
         """,
         ToolArguments.Schema("""
             {"type":"object","properties":{
