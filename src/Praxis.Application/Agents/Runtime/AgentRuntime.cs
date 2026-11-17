@@ -359,6 +359,13 @@ public sealed class AgentRuntime(
                     state.ForwardedOpenedCitations = [];
                     foreach (AgentMessage result in window.Messages.Where(message => message.Role == AgentRoles.Tool))
                     {
+                        AgentToolCall? call = window.Messages.SelectMany(message => message.ToolCalls)
+                            .FirstOrDefault(call => call.CallId == result.ToolCallId);
+                        if (call?.Name != KnowledgeOpenTool.ToolName)
+                        {
+                            continue;
+                        }
+
                         using JsonDocument receipt = JsonDocument.Parse(result.Content);
                         foreach (JsonElement citation in receipt.RootElement.GetProperty("citations").EnumerateArray())
                         {
@@ -429,8 +436,11 @@ public sealed class AgentRuntime(
             cancellationToken.ThrowIfCancellationRequested();
             if (finishWithEvidence && (turn.ToolCalls.Count > 0 || string.IsNullOrWhiteSpace(turn.Text)))
             {
-                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(NoProgressNotice, []));
-                return Finish(conversationId, userText, NoProgressNotice, AgentReply.NoProgress, state, report, repaired);
+                string notice = compactedEvidence
+                    ? "I found sources but could not produce an answer from the evidence that fits this context. Narrow the question or choose Expanded context."
+                    : NoProgressNotice;
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
+                return Finish(conversationId, userText, notice, AgentReply.NoProgress, state, report, repaired);
             }
 
             if (turn.ToolCalls.Count == 0)
