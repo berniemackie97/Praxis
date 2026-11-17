@@ -226,7 +226,8 @@ public sealed class AgentRuntime(
             return profile.IsLocal ? messages : AgentContextWindow.ExcludeWithheldTurns(messages, scope.MayDisclose);
         }
         AgentToolDefinition[] definitions = useTools ? registry.Definitions
-            .Where(tool => (profile.IsLocal || (!tool.LocalOnly && tool.Name != MemoryRecallTool.ToolName)) &&
+            .Where(tool => ToolTiers.Permits(permission, tool.Tier) &&
+                (profile.IsLocal || (!tool.LocalOnly && tool.Name != MemoryRecallTool.ToolName)) &&
                 (managedLocal || tool.Name != MemoryEditTool.ToolName)).ToArray() : [];
         IReadOnlyList<AgentMessage>? boundedTranscript = null;
         if (session is not null || !useTools)
@@ -255,10 +256,18 @@ public sealed class AgentRuntime(
             }
         }
 
+        void RecordTurn(AgentTurn turn)
+        {
+            state.InputTokens += turn.InputTokens;
+            state.OutputTokens += turn.OutputTokens;
+            AgentTurnUsage usage = new(state.TurnUsage.Count + 1, turn.InputTokens, turn.OutputTokens, turn.ToolCalls.Count, turn.Request);
+            state.TurnUsage.Add(usage);
+            report("usage_turn", null, ToolJson.Serialize(new { usage, cumulativeInputTokens = state.InputTokens, cumulativeOutputTokens = state.OutputTokens }));
+        }
+
         if (session is not null)
         {
             report("thinking", null, profile.BackendId);
-            AgentToolDefinition[] permitted = definitions.Where(tool => ToolTiers.Permits(permission, tool.Tier)).ToArray();
             int toolLimit = useTools ? Math.Min(bounds.MaximumToolCalls, MaximumCliToolCalls) : 0;
             SemaphoreSlim toolGate = new(1);
             async Task<string> InvokeSessionTool(AgentToolCall call, CancellationToken token)
@@ -276,10 +285,9 @@ public sealed class AgentRuntime(
                 }
             }
 
-            AgentTurn turn = await session.RunAsync(system, WithRecall(boundedTranscript!), permitted, InvokeSessionTool, cancellationToken);
+            AgentTurn turn = await session.RunAsync(system, WithRecall(boundedTranscript!), definitions, InvokeSessionTool, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            state.InputTokens += turn.InputTokens;
-            state.OutputTokens += turn.OutputTokens;
+            RecordTurn(turn);
             conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(turn.Text, []) with { Citations = state.Citations.All.ToArray() });
             return Finish(conversationId, userText, turn.Text, AgentReply.Completed, state, report, repaired: false);
         }
@@ -337,13 +345,12 @@ public sealed class AgentRuntime(
 
             AgentTurn turn = await turnBackend.CompleteAsync(turnSystem, WithRecall(turnContext),
                 finishWithEvidence ? [] : definitions, cancellationToken);
+            RecordTurn(turn);
             if (!finishWithEvidence && ((!useTools && turn.ToolCalls.Count > 0) || (turn.ToolCalls.Count == 0 && string.IsNullOrWhiteSpace(turn.Text))))
             {
                 throw new InferenceException(InferenceFailure.InvalidResponse, "The provider did not return a usable answer.");
             }
 
-            state.InputTokens += turn.InputTokens;
-            state.OutputTokens += turn.OutputTokens;
             cancellationToken.ThrowIfCancellationRequested();
             if (finishWithEvidence && (turn.ToolCalls.Count > 0 || string.IsNullOrWhiteSpace(turn.Text)))
             {
@@ -512,7 +519,8 @@ public sealed class AgentRuntime(
 
         AnswerCheck check = hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
-        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens, state.OmittedMessages, state.ToolsUnavailable);
+        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
+            state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray());
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
@@ -570,6 +578,7 @@ public sealed class AgentRuntime(
         public CitationLedger Citations { get; } = new();
         public AgentReadProgress Reads { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];
+        public List<AgentTurnUsage> TurnUsage { get; } = [];
         public List<string> ToolResults { get; } = [];
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
         public int Withheld { get; set; }

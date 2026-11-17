@@ -51,9 +51,11 @@ public sealed class AnthropicAgentBackend(HttpClient http, Uri endpoint, string 
             }).ToArray());
         }
 
+        string payload = body.ToJsonString();
+        AgentRequestFootprint footprint = AgentHttpRequestFootprint.Measure(payload, body, systemPrompt, transcript, tools.Count);
         using HttpRequestMessage request = new(HttpMethod.Post, new Uri(endpoint, "v1/messages"))
         {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
         request.Headers.Add("x-api-key", apiKey);
         request.Headers.Add("anthropic-version", "2023-06-01");
@@ -80,7 +82,7 @@ public sealed class AnthropicAgentBackend(HttpClient http, Uri endpoint, string 
         }
 
         JsonElement usage = document.RootElement.TryGetProperty("usage", out JsonElement used) ? used : default;
-        return new AgentTurn(text.ToString(), calls, Tokens(usage, "input_tokens") + Tokens(usage, "cache_read_input_tokens"), Tokens(usage, "output_tokens"));
+        return new AgentTurn(text.ToString(), calls, Tokens(usage, "input_tokens") + Tokens(usage, "cache_read_input_tokens"), Tokens(usage, "output_tokens"), footprint);
     }
 
     private static JsonArray Append(JsonArray messages, string role)

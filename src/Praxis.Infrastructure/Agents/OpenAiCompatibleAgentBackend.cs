@@ -77,9 +77,11 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
             body["tool_choice"] = "auto";
         }
 
+        string payload = body.ToJsonString();
+        AgentRequestFootprint footprint = AgentHttpRequestFootprint.Measure(payload, body, systemPrompt, transcript, tools.Count);
         using HttpRequestMessage request = new(HttpMethod.Post, new Uri(endpoint, "chat/completions"))
         {
-            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
         if (apiKey is not null)
         {
@@ -115,7 +117,7 @@ public sealed class OpenAiCompatibleAgentBackend(HttpClient http, Uri endpoint, 
 
         JsonElement usage = root.TryGetProperty("usage", out JsonElement used) ? used : default;
         return new AgentTurn(isLocalOllama ? VisibleOllamaAnswer(text, calls.Count != 0) : text,
-            calls, Tokens(usage, "prompt_tokens"), Tokens(usage, "completion_tokens"));
+            calls, Tokens(usage, "prompt_tokens"), Tokens(usage, "completion_tokens"), footprint);
     }
 
     private static string VisibleOllamaAnswer(string reply, bool hasToolCalls)

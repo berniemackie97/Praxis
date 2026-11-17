@@ -462,6 +462,22 @@ private struct ReplyDetails: View {
                     .font(.meta).foregroundStyle(.secondary)
                     .help("Provider-reported usage. CLI counts can include cached context and provider overhead; counts are not directly comparable or a subscription balance.")
             }
+            if let turns = reply.turnUsage, !turns.isEmpty {
+                DisclosureGroup("Model turns (\(turns.count))") {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        ForEach(turns) { turn in
+                            Text("Turn \(turn.turn): \(turn.inputTokens.formatted()) in · \(turn.outputTokens.formatted()) out · \(turn.requestedToolCalls) tool calls")
+                            if let request = turn.request {
+                                Text("\(request.requestBytes.formatted()) HTTP JSON body bytes · \(request.toolSchemaBytes.formatted()) tool-schema bytes · \(request.toolResultContentBytes.formatted()) forwarded tool-result bytes")
+                                    .foregroundStyle(.secondary)
+                                    .help("Serialized HTTP request and tool schema sizes; tool-result bytes count raw forwarded content. These are byte counts, not tokens, and do not directly add together.")
+                            }
+                        }
+                    }
+                    .padding(.top, Spacing.xs)
+                }
+                .font(.meta)
+            }
             if !reply.check.clean {
                 Banner(text: AnswerCheckText.describe(reply.check), tone: .warning, systemImage: "exclamationmark.triangle.fill")
             }

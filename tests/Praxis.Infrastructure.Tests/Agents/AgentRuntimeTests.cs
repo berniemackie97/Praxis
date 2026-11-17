@@ -424,12 +424,20 @@ public sealed partial class AgentRuntimeTests : IDisposable
         AgentTurn turn = await openAi.CompleteAsync("system", transcript, [tool], CancellationToken.None);
         Assert.Equal("data_query", Assert.Single(turn.ToolCalls).Name);
         Assert.Equal(120, turn.InputTokens);
+        AgentRequestFootprint openAiBytes = Assert.IsType<AgentRequestFootprint>(turn.Request);
+        Assert.Equal(Encoding.UTF8.GetByteCount(openAiHandler.Body!), openAiBytes.RequestBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount("system"), openAiBytes.SystemTextBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount("""{"result":1}"""), openAiBytes.ToolResultContentBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount("{}"), openAiBytes.ToolCallArgumentsBytes);
+        Assert.Equal(1, openAiBytes.AdvertisedTools);
         Assert.Equal("https://api.example.com/v1/chat/completions", openAiHandler.Uri!.ToString());
         Assert.Equal("Bearer secret", openAiHandler.Authorization);
         using (JsonDocument body = JsonDocument.Parse(openAiHandler.Body!))
         {
             Assert.Equal("tool", body.RootElement.GetProperty("messages")[3].GetProperty("role").GetString());
             Assert.Equal("data_query", body.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("name").GetString());
+            Assert.Equal(Encoding.UTF8.GetByteCount(body.RootElement.GetProperty("messages").GetRawText()), openAiBytes.MessageBytes);
+            Assert.Equal(Encoding.UTF8.GetByteCount(body.RootElement.GetProperty("tools").GetRawText()), openAiBytes.ToolSchemaBytes);
         }
 
         CapturingHandler anthropicHandler = new("""
@@ -441,6 +449,12 @@ public sealed partial class AgentRuntimeTests : IDisposable
         Assert.Equal("{\"dataset\":\"accounts\"}", Assert.Single(claude.ToolCalls).ArgumentsJson);
         using JsonDocument anthropicBody = JsonDocument.Parse(anthropicHandler.Body!);
         JsonElement messages = anthropicBody.RootElement.GetProperty("messages");
+        AgentRequestFootprint anthropicBytes = Assert.IsType<AgentRequestFootprint>(claude.Request);
+        Assert.Equal(Encoding.UTF8.GetByteCount(anthropicHandler.Body!), anthropicBytes.RequestBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount(messages.GetRawText()), anthropicBytes.MessageBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount(anthropicBody.RootElement.GetProperty("tools").GetRawText()), anthropicBytes.ToolSchemaBytes);
+        Assert.Equal(Encoding.UTF8.GetByteCount("""{"result":1}"""), anthropicBytes.ToolResultContentBytes);
+        Assert.Equal(1, anthropicBytes.AdvertisedTools);
         Assert.Equal(["user", "assistant", "user"], messages.EnumerateArray().Select(message => message.GetProperty("role").GetString()));
         Assert.Equal("tool_result", messages[2].GetProperty("content")[0].GetProperty("type").GetString());
         Assert.Equal("key", anthropicHandler.ApiKey);
@@ -524,6 +538,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
 
         public List<string> SystemPrompts { get; } = [];
         public List<int> ToolCounts { get; } = [];
+        public List<IReadOnlyList<AgentToolDefinition>> ToolSets { get; } = [];
         public bool AllowToollessTurn { get; set; }
 
         public Task<AgentTurn> CompleteAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools, CancellationToken cancellationToken)
@@ -532,6 +547,7 @@ public sealed partial class AgentRuntimeTests : IDisposable
             {
                 SystemPrompts.Add(systemPrompt);
                 ToolCounts.Add(tools.Count);
+                ToolSets.Add(tools.ToArray());
             }
             if (!AllowToollessTurn || tools.Count > 0)
             {
