@@ -376,7 +376,7 @@ public sealed class AgentRuntime(
 
                     report("progress_limited", null, "active tool history packed into a final cited answer turn");
                 }
-                else if (!finishWithEvidence && window.ApproachingEvidenceLimit && state.OpenedCitations.Count > 0)
+                else if (!finishWithEvidence && window.ApproachingEvidenceLimit && state.OpenedCitations.Count >= 2)
                 {
                     finishWithEvidence = true;
                     report("progress_limited", null, "another source excerpt would exceed the active context allowance");
