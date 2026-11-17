@@ -120,6 +120,28 @@ struct AgentPresentationTests {
         #expect(!lines.contains { $0.text.hasPrefix("Answer check failed") })
     }
 
+    @Test func completedChatReplyAppearsBeforeAndAfterTranscriptReload() {
+        let user = AgentMessage(role: "user", content: "Explain the packet", toolCalls: [], toolCallId: nil)
+        let answer = "It is a movement message."
+        let reply = AgentReply(conversationId: "chat", text: answer, stopReason: "completed",
+                               toolCalls: [], citations: [], withheldResults: 0,
+                               check: AnswerCheck(unsupportedFigures: [], missingCitations: false, repaired: false),
+                               inputTokens: 20, outputTokens: 6, omittedMessages: nil, toolsUnavailable: nil)
+
+        let before = ChatLine.lines([user], after: 0, prompt: user.content, reply: reply)
+        #expect(before.map(\.kind) == [.owner, .agent])
+        #expect(before.last?.text == answer)
+
+        let saved = AgentMessage(role: "assistant", content: answer, toolCalls: [], toolCallId: nil)
+        let after = ChatLine.lines([user, saved], after: 0, prompt: user.content, reply: reply)
+        #expect(after.map(\.kind) == [.owner, .agent])
+        #expect(after.last?.text == answer)
+
+        let missing = ChatLine.lines([], after: 0, prompt: user.content, reply: reply)
+        #expect(missing.map(\.kind) == [.owner, .agent])
+        #expect(missing.first?.text == user.content)
+    }
+
     @Test func progressAndAnswerCheckWordingIsPlain() {
         let event = AgentRunEvent(sequence: 3, kind: "tool_started", tool: "knowledge_search", detail: nil, atUtc: "")
         #expect(ChatActivity.progress(event) == "Using search…")
