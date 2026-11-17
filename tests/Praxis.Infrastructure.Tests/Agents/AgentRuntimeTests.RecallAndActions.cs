@@ -127,6 +127,10 @@ public sealed partial class AgentRuntimeTests
     [Theory]
     [InlineData("What is Conquer Online?", false)]
     [InlineData("Explain Conquer Online.", false)]
+    [InlineData("I wonder what Conquer Online is.", false)]
+    [InlineData("I was wondering what Conquer Online is.", false)]
+    [InlineData("I'm curious: what is Conquer Online?", false)]
+    [InlineData("I wonder what my OpenConquerServer project says about Conquer Online.", true)]
     [InlineData("What is Conquer Online, and how does my OpenConquerServer project relate to it?", true)]
     [InlineData("What does my OpenConquerServer documentation say about Conquer Online?", true)]
     public async Task GeneralAndOwnerScopedQuestionsDoNotConflatePrivateProjectWithPublicTopic(
