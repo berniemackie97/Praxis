@@ -153,7 +153,7 @@ public sealed class AgentRuntime(
         string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
             profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : [],
             skills?.Search(userText, profile.IsLocal, 6), profile.IsLocal) : AgentSystemPrompt.Direct;
-        if (useTools && session is null)
+        if (useTools && session is null && registry.Definitions.Any(tool => tool.Name == ToolExpandTool.ToolName))
         {
             system += "\nAfter using a tool, fewer tool schemas may be offered. If a different permitted tool is needed, call tools_expand to restore the full catalog for the next turn. Do not expand when the offered tools suffice.";
         }
