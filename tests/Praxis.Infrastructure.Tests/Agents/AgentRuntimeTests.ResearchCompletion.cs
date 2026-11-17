@@ -71,7 +71,7 @@ public sealed partial class AgentRuntimeTests
             Assert.Equal(128, error.MaximumRequestBytes);
             AgentTurn accepted = await provider.CompleteWithinAsync("System", transcript, [], 100_000, CancellationToken.None);
             Assert.Equal("OK", accepted.Text);
-            Assert.True(accepted.Request?.RequestBytes > 128);
+            Assert.True(Assert.IsType<AgentRequestFootprint>(accepted.Request).RequestBytes > 128);
         }
 
         Assert.NotNull(openAiHandler.Body);
