@@ -61,7 +61,13 @@ public sealed partial class AgentRuntimeTests
     [Theory]
     [InlineData("Reply with PING only.", false)]
     [InlineData("Reply with PING only.", true)]
+    [InlineData("reply with only ping", false)]
+    [InlineData("reply with only pong", true)]
     [InlineData("Reply with lease only.", false)]
+    [InlineData("Please reply with only lease.", false)]
+    [InlineData("Reply only with lease.", false)]
+    [InlineData("Say just lease.", false)]
+    [InlineData("Reply with just lease.", false)]
     [InlineData("Say 'lease' only.", false)]
     [InlineData("Respond with \"Lease remains private\" exactly.", false)]
     [InlineData("Hello!", false)]
@@ -93,8 +99,10 @@ public sealed partial class AgentRuntimeTests
         Assert.Empty(receipt.Selected);
     }
 
-    [Fact]
-    public async Task GreetingBeforeSourceQuestionStillRecallsTheSource()
+    [Theory]
+    [InlineData("Hello, what does the lease say?")]
+    [InlineData("Reply with only the rent specified in my lease.")]
+    public async Task SourceDependentRequestStillRecallsTheSource(string prompt)
     {
         using SqliteCatalog catalog = await SeededAsync();
         AgentBackendProfile profile = Local() with { BackendId = "ollama" };
@@ -105,11 +113,11 @@ public sealed partial class AgentRuntimeTests
             messages => delivered = messages);
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, session), clock);
 
-        AgentReply reply = await runtime.RunAsync(chat.ConversationId, "Hello, what does the lease say?",
+        AgentReply reply = await runtime.RunAsync(chat.ConversationId, prompt,
             (_, _, _) => { }, CancellationToken.None, useTools: false);
 
         Assert.Contains(delivered, message => message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal));
-        Assert.Equal("Hello, what does the lease say?", delivered[^1].Content);
+        Assert.Equal(prompt, delivered[^1].Content);
         Assert.Single(reply.Citations);
         Assert.Equal("full_match", Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10)).Outcome);
     }
