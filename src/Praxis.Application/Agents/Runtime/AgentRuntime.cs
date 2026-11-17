@@ -313,6 +313,16 @@ public sealed class AgentRuntime(
         {
             cancellationToken.ThrowIfCancellationRequested();
             bool finishWithEvidence = state.Reads.ConsecutiveRepeats >= 2;
+            if (state.Citations.All.Any(citation => !scope.MayDisclose(citation.SourceId) ||
+                citation.PlaybackSourceId is { } media && !scope.MayDisclose(media)))
+            {
+                const string notice = "I stopped because access to a source changed during this request. Start a new request with the current privacy settings.";
+                state.SuppressCitations = true;
+                report("disclosure_changed", null, "previously cited source no longer available");
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
+                return Finish(conversationId, userText, notice, AgentReply.DisclosureChanged, state, report, repaired);
+            }
+
             if (state.InputTokens > bounds.MaximumInputTokens)
             {
                 const string notice = "I stopped because this request reached its token budget.";
@@ -416,7 +426,7 @@ public sealed class AgentRuntime(
                     {
                         const string fallback = "I couldn’t verify an answer to your latest request from the available evidence.";
                         conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(fallback, []));
-                        return Finish(conversationId, userText, fallback, AgentReply.Completed, state, report, repaired);
+                        return Finish(conversationId, userText, fallback, AgentReply.EvidenceInsufficient, state, report, repaired);
                     }
 
                     report("repairing", null, string.Join(", ", check.UnsupportedFigures));
@@ -560,7 +570,7 @@ public sealed class AgentRuntime(
 
     private AgentReply Finish(Guid conversationId, string userText, string text, string stop, RunState state, Action<string, string?, string?> report, bool repaired)
     {
-        bool hasEvidence = state.UseTools || state.Citations.All.Count > 0;
+        bool hasEvidence = stop == AgentReply.Completed && (state.UseTools || state.Citations.All.Count > 0);
         if (hasEvidence)
         {
             report("checking", null, null);
@@ -568,7 +578,8 @@ public sealed class AgentRuntime(
 
         AnswerCheck check = hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false);
         report("completed", null, check.Clean ? null : "answer check flagged figures");
-        return new AgentReply(conversationId, text, stop, state.ToolCalls, state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
+        return new AgentReply(conversationId, text, stop, state.ToolCalls,
+            state.SuppressCitations ? [] : state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
             state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray(),
             state.ToolCalls.Count(call => call.Name == KnowledgeSearchTool.ToolName),
             state.ToolCalls.Count(call => call.Name == KnowledgeOpenTool.ToolName));
@@ -633,6 +644,7 @@ public sealed class AgentRuntime(
         public List<AgentTurnUsage> TurnUsage { get; } = [];
         public List<string> ToolResults { get; } = [];
         public HashSet<int> OpenedCitations { get; } = [];
+        public bool SuppressCitations { get; set; }
         public Dictionary<string, string> TransientToolResults { get; } = new(StringComparer.Ordinal);
         public int Withheld { get; set; }
         public int InputTokens { get; set; }
