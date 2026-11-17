@@ -291,7 +291,9 @@ public sealed class AgentRuntime(
             cancellationToken.ThrowIfCancellationRequested();
             if (state.InputTokens > bounds.MaximumInputTokens)
             {
-                return Finish(conversationId, userText, "I stopped because this request reached its token budget.", AgentReply.TokenBudget, state, report, repaired);
+                const string notice = "I stopped because this request reached its token budget.";
+                conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(notice, []));
+                return Finish(conversationId, userText, notice, AgentReply.TokenBudget, state, report, repaired);
             }
 
             report("thinking", null, null);
@@ -371,7 +373,9 @@ public sealed class AgentRuntime(
             }
         }
 
-        return Finish(conversationId, userText, "I stopped because this request reached its step limit. Ask me to continue.", AgentReply.StepLimit, state, report, repaired);
+        const string limitNotice = "I stopped because this request reached its step limit. Ask me to continue.";
+        conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(limitNotice, []));
+        return Finish(conversationId, userText, limitNotice, AgentReply.StepLimit, state, report, repaired);
     }
 
     private static string PlainExcerpt(string snippet, int limit)
