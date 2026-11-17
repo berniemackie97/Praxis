@@ -203,7 +203,11 @@ public sealed partial class AgentRuntimeTests
             },
             transcript =>
             {
-                AgentMessage[] evidence = transcript.Where(message => message.Role == AgentRoles.Tool).ToArray();
+                HashSet<string> readCallIds = transcript.SelectMany(message => message.ToolCalls)
+                    .Where(call => call.Name == "knowledge_open")
+                    .Select(call => call.CallId).ToHashSet(StringComparer.Ordinal);
+                AgentMessage[] evidence = transcript.Where(message => message.Role == AgentRoles.Tool &&
+                    message.ToolCallId is { } id && readCallIds.Contains(id)).ToArray();
                 Assert.Equal(expectedForwardedReads, evidence.Length);
                 Assert.Contains(evidence, message => message.Content.Contains("opcode 0x2716", StringComparison.Ordinal));
                 if (expectedForwardedReads == 1)
