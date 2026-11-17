@@ -55,7 +55,8 @@ public sealed partial class AgentRuntimeTests
                 Assert.Equal(2, toolMessages.Length);
                 using JsonDocument search = JsonDocument.Parse(toolMessages[0].Content);
                 using JsonDocument opened = JsonDocument.Parse(toolMessages[1].Content);
-                Assert.True(search.RootElement.GetProperty("result").GetProperty("results").GetArrayLength() <= 4);
+                int resultCount = search.RootElement.GetProperty("result").GetProperty("results").GetArrayLength();
+                Assert.InRange(resultCount, 1, 4);
                 JsonElement evidence = opened.RootElement.GetProperty("result");
                 Assert.Equal(2_000, evidence.GetProperty("text").GetString()!.Length);
                 Assert.Equal(2_000, evidence.GetProperty("nextOffset").GetInt32());
