@@ -57,7 +57,7 @@ internal static partial class AgentBrainContext
         return terms.Count(evidenceTerms.Contains);
     }
 
-    [GeneratedRegex("""^\s*(?:(?:please|just)\s+)?(?:reply|respond|say|print|output)\s+(?:with\s+)?(?:[\p{L}\p{N}_-]{1,40}|"[^"\r\n]{1,80}"|'[^'\r\n]{1,80}')\s+(?:only|exactly)\s*[.!]?\s*$""",
+    [GeneratedRegex("""^\s*(?:(?:please|just)\s+)?(?:(?:only|exactly)\s+)?(?:reply|respond|say|print|output)\s+(?:(?:only|exactly|just)\s+)?(?:with\s+)?(?:(?:only|exactly|just)\s+)?(?:[\p{L}\p{N}_-]{1,40}|"[^"\r\n]{1,80}"|'[^'\r\n]{1,80}')(?:\s+(?:only|exactly))?[.!]?\s*$""",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DirectReply();
 
