@@ -12,7 +12,8 @@ namespace Praxis.Application.Agents.Runtime;
 /// </summary>
 public static partial class AnswerVerifier
 {
-    public static AnswerCheck Check(string answer, IEnumerable<string> toolResults, string userText, bool evidenceAvailable, bool repaired)
+    public static AnswerCheck Check(string answer, IEnumerable<string> toolResults, string userText, bool evidenceAvailable, bool repaired,
+        int availableCitations = 0, IReadOnlySet<int>? openedCitations = null)
     {
         HashSet<decimal> supported = [];
         foreach (string result in toolResults.Append(userText))
@@ -26,11 +27,20 @@ public static partial class AnswerVerifier
             }
         }
 
+        HashSet<string> evidenceHex = toolResults.Append(userText)
+            .SelectMany(value => HexTokens().Matches(value).Select(match => match.Value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         string[] unsupported = FigureTokens().Matches(answer).Select(match => match.Value)
             .Where(token => Parse(token) is { } value && IsSubstantive(value, token) && !supported.Contains(Math.Abs(value)) &&
                             !supported.Contains(Math.Round(Math.Abs(value), 2)))
-            .Distinct(StringComparer.Ordinal).Take(20).ToArray();
-        bool missingCitations = evidenceAvailable && !CitationMarker().IsMatch(answer) && FigureTokens().IsMatch(answer);
+            .Concat(HexTokens().Matches(answer).Select(match => match.Value).Where(token => !evidenceHex.Contains(token)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToArray();
+        int[] citations = CitationMarker().Matches(answer)
+            .Select(match => int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)).ToArray();
+        bool missingCitations = evidenceAvailable &&
+            (citations.Length == 0 && (FigureTokens().IsMatch(answer) || openedCitations is { Count: > 0 }) ||
+             citations.Any(number => number <= 0 || availableCitations > 0 && number > availableCitations) ||
+             openedCitations is { Count: > 0 } && !citations.Any(openedCitations.Contains));
         return new AnswerCheck(unsupported, missingCitations, repaired);
     }
 
@@ -39,7 +49,7 @@ public static partial class AnswerVerifier
         (check.UnsupportedFigures.Count > 0
             ? $"These figures do not appear in any tool result: {string.Join(", ", check.UnsupportedFigures)}. Recompute them with data_query or compute_evaluate, or remove them. "
             : "") +
-        (check.MissingCitations ? "Cite the evidence for each claim with its [n] number. " : "") +
+        (check.MissingCitations ? "Cite the evidence actually read with its valid [n] number; a search hit alone does not prove source content. " : "") +
         "Then give your corrected final answer.";
 
     private static IEnumerable<decimal> Figures(string text) =>
@@ -61,6 +71,9 @@ public static partial class AnswerVerifier
     [GeneratedRegex(@"(?<![\w\[/-])-?\$?\d{1,3}(?:,\d{3})+(?:\.\d+)?%?|(?<![\w\[/-])-?\$?\d+(?:\.\d+)?%?(?![\w\]/-])", RegexOptions.CultureInvariant)]
     private static partial Regex FigureTokens();
 
-    [GeneratedRegex(@"\[\d{1,3}\]", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\[(\d{1,3})\]", RegexOptions.CultureInvariant)]
     private static partial Regex CitationMarker();
+
+    [GeneratedRegex(@"(?<![\w])0[xX][0-9a-fA-F]+\b", RegexOptions.CultureInvariant)]
+    private static partial Regex HexTokens();
 }
