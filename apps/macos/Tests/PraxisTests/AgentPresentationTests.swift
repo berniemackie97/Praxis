@@ -27,6 +27,28 @@ struct AgentPresentationTests {
         let older = try JSONDecoder().decode(WorkerReply<AgentRunStatus>.self, from: Data(olderJson.utf8))
         #expect(older.data?.reply?.omittedMessages == nil)
         #expect(answer.citations.first?.sourceName == "download.qfx")
+        #expect(answer.turnUsage == nil)
+    }
+
+    @Test func chatDecodesPerTurnTokensAndRequestByteCounts() throws {
+        let json = """
+            {"conversationId":"c1","text":"Completed.","stopReason":"completed",
+             "toolCalls":[],"citations":[],"withheldResults":0,
+             "check":{"unsupportedFigures":[],"missingCitations":false,"repaired":false},
+             "inputTokens":120,"outputTokens":20,
+             "turnUsage":[{"turn":1,"inputTokens":120,"outputTokens":20,"requestedToolCalls":1,
+               "request":{"requestBytes":9000,"messageBytes":4000,"toolSchemaBytes":3000,
+                 "systemTextBytes":1200,"toolResultContentBytes":500,
+                 "toolCallArgumentsBytes":40,"advertisedTools":10}}]}
+            """
+        let reply = try JSONDecoder().decode(AgentReply.self, from: Data(json.utf8))
+        let usage = try #require(reply.turnUsage?.first)
+        #expect(usage.inputTokens == 120)
+        #expect(usage.outputTokens == 20)
+        #expect(usage.requestedToolCalls == 1)
+        #expect(usage.request?.requestBytes == 9000)
+        #expect(usage.request?.toolSchemaBytes == 3000)
+        #expect(usage.request?.toolResultContentBytes == 500)
     }
 
     @Test func persistedConversationIncludesPinnedModelAndEffort() throws {
