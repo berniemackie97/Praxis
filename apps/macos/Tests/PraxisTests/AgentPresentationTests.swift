@@ -28,6 +28,8 @@ struct AgentPresentationTests {
         #expect(older.data?.reply?.omittedMessages == nil)
         #expect(answer.citations.first?.sourceName == "download.qfx")
         #expect(answer.turnUsage == nil)
+        #expect(answer.searchCalls == nil)
+        #expect(answer.sourceReads == nil)
     }
 
     @Test func chatDecodesPerTurnTokensAndRequestByteCounts() throws {
@@ -35,8 +37,9 @@ struct AgentPresentationTests {
             {"conversationId":"c1","text":"Completed.","stopReason":"completed",
              "toolCalls":[],"citations":[],"withheldResults":0,
              "check":{"unsupportedFigures":[],"missingCitations":false,"repaired":false},
-             "inputTokens":120,"outputTokens":20,
+             "inputTokens":120,"outputTokens":20,"searchCalls":1,"sourceReads":2,
              "turnUsage":[{"turn":1,"inputTokens":120,"outputTokens":20,"requestedToolCalls":1,
+               "automaticRecallBytes":500,"recapBytes":300,
                "request":{"requestBytes":9000,"messageBytes":4000,"toolSchemaBytes":3000,
                  "systemTextBytes":1200,"toolResultContentBytes":500,
                  "toolCallArgumentsBytes":40,"advertisedTools":10}}]}
@@ -49,6 +52,10 @@ struct AgentPresentationTests {
         #expect(usage.request?.requestBytes == 9000)
         #expect(usage.request?.toolSchemaBytes == 3000)
         #expect(usage.request?.toolResultContentBytes == 500)
+        #expect(usage.automaticRecallBytes == 500)
+        #expect(usage.recapBytes == 300)
+        #expect(reply.searchCalls == 1)
+        #expect(reply.sourceReads == 2)
     }
 
     @Test func persistedConversationIncludesPinnedModelAndEffort() throws {
