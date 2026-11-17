@@ -168,6 +168,46 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task AutomaticRecallRanksMatchingPassageAboveMatchingFilename()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        using MemoryStream misleading = new(System.Text.Encoding.UTF8.GetBytes(
+            "This note covers unrelated UI formatting and shell themes."));
+        using MemoryStream relevant = new(System.Text.Encoding.UTF8.GetBytes(
+            "Conquer Online walking packet behavior: entity movement and direction validation."));
+
+        await catalog.Originals.CaptureFileAsync(Path.Combine(inbox, "conquer-online.md"),
+            misleading, misleading.Length, "misleading");
+        Guid relevantSource = (await catalog.Originals.CaptureFileAsync(
+            Path.Combine(inbox, "world-walking-notes.md"), relevant, relevant.Length, "walking-evidence")).SourceId;
+        Praxis.Infrastructure.Tests.Support.ProcessingDriver worker =
+            Praxis.Infrastructure.Tests.Support.ProcessingDriver.Text(catalog);
+        Assert.True(await worker.ProcessNextAsync());
+        Assert.True(await worker.ProcessNextAsync());
+
+        AgentBackendProfile profile = Local() with { BackendId = "ollama" };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation conversation = catalog.Agents.Create(profile.BackendId, "ranking");
+        IReadOnlyList<AgentMessage> forwarded = [];
+        SessionBackend session = new(_ => Task.FromResult(
+            new AgentTurn("The notes discuss walking behavior [1].", [], 6, 3)), messages => forwarded = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(null, session), clock);
+
+        AgentReply answer = await runtime.RunAsync(conversation.ConversationId,
+            "What do my notes say about Conquer Online walking packets?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 10));
+        Assert.Equal(relevantSource, receipt.Selected[0].SourceId);
+        Assert.Equal(relevantSource, answer.Citations[0].SourceId);
+        string brief = Assert.Single(forwarded, message =>
+            message.Content.StartsWith("Local library search excerpts", StringComparison.Ordinal)).Content;
+        Assert.True(brief.IndexOf("world-walking-notes.md", StringComparison.Ordinal) <
+            brief.IndexOf("conquer-online.md", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task TerminalActionRequiresOwnerDecisionRunsOnceAndOnlyReturnsOutputToLocalChat()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
