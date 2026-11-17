@@ -336,6 +336,16 @@ public sealed partial class AgentRuntimeTests
         Assert.DoesNotContain(transcript, message => message.Role == AgentRoles.Tool && message.Content.Length == 0);
     }
 
+    [Fact]
+    public void SearchPreviewCanBeCitedWhenNoLongerPassageWasOpened()
+    {
+        const string evidence = "The lease says monthly rent is paid by check.";
+        AnswerCheck check = AnswerVerifier.Check("The lease says rent is paid by check [1].",
+            [evidence], "What do my lease notes say?", true, false, 1, null,
+            new Dictionary<int, string> { [1] = evidence }, new HashSet<int> { 1 });
+        Assert.True(check.Clean);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
