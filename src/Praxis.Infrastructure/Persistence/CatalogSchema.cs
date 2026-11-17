@@ -4,7 +4,7 @@ namespace Praxis.Infrastructure.Persistence;
 
 internal static class CatalogSchema
 {
-    internal const int CurrentVersion = 38;
+    internal const int CurrentVersion = 39;
     private static readonly (int Since, string Name, string Columns)[] Tables =
     [
         (1, "original_objects", "digest, byte_length, recorded_utc"),
@@ -216,6 +216,17 @@ internal static class CatalogSchema
             {
                 throw new InvalidDataException("The catalog schema is incomplete.", exception);
             }
+        }
+
+        if (version >= 39)
+        {
+            using SqliteCommand recap = database.CreateCommand("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_recap_search'");
+            if (recap.ExecuteScalar() is not string definition || !definition.Contains("USING fts5", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("The conversation search index is missing or incompatible.");
+            }
+            using SqliteCommand columns = database.CreateCommand("SELECT conversation_id, recap FROM agent_recap_search LIMIT 0");
+            using SqliteDataReader reader = columns.ExecuteReader();
         }
     }
 

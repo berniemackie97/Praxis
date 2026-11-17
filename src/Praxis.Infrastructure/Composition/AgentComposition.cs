@@ -50,6 +50,7 @@ public static class AgentComposition
             new MediaFindTool(retriever, moments, catalog.Sources, catalog.Agents),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
+            new KnowledgeMaintenanceTool(catalog.Reconsolidation, catalog.Knowledge),
             new KnowledgeProjectTool(catalog.Projects),
             new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),
             new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
@@ -58,7 +59,7 @@ public static class AgentComposition
             new ComputeEvaluateTool(),
             new ArtifactCreateTool(artifacts, catalog.Agents, clock),
             new ArtifactUpdateTool(artifacts, catalog.Agents, clock),
-            new MemoryRecallTool(catalog.Agents),
+            new MemoryRecallTool(catalog.Agents, catalog.ChatMemory),
             new MemoryRememberTool(catalog.Agents),
             .. (memoryNotes is null ? Array.Empty<IAgentTool>() : [new MemoryEditTool(memoryNotes, catalog.ChatMemory, catalog.Agents)]),
             new IntakeStatusTool(catalog.Processing, catalog.Policy, ledger),
@@ -74,5 +75,5 @@ public static class AgentComposition
 
     public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock, SkillLibrary? skills = null) =>
         new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
-            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog), catalog.AgentRecalls);
+            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog), catalog.AgentRecalls, CatalogProcessing.Activity);
 }

@@ -7,6 +7,7 @@ public interface IChatMemoryStore
     bool SaveRecap(ChatMemoryWork work, string recap);
     void Retry(ChatMemoryWork work);
     string? ReadRecap(Guid conversationId);
+    IReadOnlyList<ChatMemoryMatch> Search(string query, Guid? excludeConversationId, int limit);
     string? ReadName();
     void SaveName(string name);
 }

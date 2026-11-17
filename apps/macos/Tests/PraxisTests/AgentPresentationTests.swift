@@ -279,6 +279,25 @@ struct AgentPresentationTests {
     }
 
     @MainActor
+    @Test func dreamDraftUsesChosenModelAndPreservesExistingDrafts() {
+        let chat = ChatWorkbenchModel(channel: WorkerChannel(worker: WorkerSession()))
+        let backend = AgentBackendProfile(backendId: "codex", kind: "codex", endpoint: nil,
+                                         model: "model-from-connection", keyAccount: nil, executable: "/example/codex", enabled: true)
+        chat.draft = "Unsent notes"
+        #expect(!chat.prepareDream(using: backend))
+        #expect(chat.draft == "Unsent notes")
+        chat.draft = ""
+        #expect(chat.prepareDream(using: backend))
+        #expect(chat.activeBackendId == "codex")
+        #expect(chat.activeModel == "model-from-connection")
+        #expect(chat.draft == "/dream")
+        #expect(chat.useTools)
+        #expect(chat.activeContextPreset == "compact")
+        #expect(!chat.running)
+        #expect(ModelSetupModel.roles.contains("local"))
+    }
+
+    @MainActor
     @Test func activeRunPollingExpiresOnlyAfterItsDeadline() {
         let now = ContinuousClock.now
         #expect(!ChatWorkbenchModel.pollExpired(now.advanced(by: .seconds(-4)), now: now))

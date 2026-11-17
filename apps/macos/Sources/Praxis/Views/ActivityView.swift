@@ -5,11 +5,14 @@ import SwiftUI
 /// and duration, and plain notes on anything that blocks progress.
 struct ActivityView: View {
     @ObservedObject var model: ActivityModel
+    @ObservedObject var setup: ModelSetupModel
+    let dream: (AgentBackendProfile) -> Void
 
     var body: some View {
         ScrollView {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 VStack(alignment: .leading, spacing: Spacing.l) {
+                    controls
                     if let error = model.error {
                         Banner(text: error, tone: .warning, systemImage: "exclamationmark.triangle.fill")
                     }
@@ -35,6 +38,7 @@ struct ActivityView: View {
             }
         }
         .task {
+            setup.refresh()
             while !Task.isCancelled {
                 model.refresh()
                 try? await Task.sleep(for: .seconds(3))
@@ -43,6 +47,37 @@ struct ActivityView: View {
     }
 
     // MARK: - Sections
+
+    private var controls: some View {
+        Panel(title: "Brain work", systemImage: "brain", caption: "Model changes affect future calls. Current work keeps its selected model. Privacy permissions still apply.") {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                if let error = setup.error {
+                    Banner(text: error, tone: .warning, systemImage: "exclamationmark.triangle.fill")
+                }
+                ForEach(["local", "strong", "strongest"], id: \.self) { role in
+                    ModelRoleRow(setup: setup, role: role, installed: setup.machine?.installed ?? [])
+                }
+                Divider()
+                HStack {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text("Dream").font(.rowTitle)
+                        Text("Inspect evidence and propose knowledge repairs. Review before applying.")
+                            .font(.meta).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Menu("Prepare Dream…") {
+                        ForEach(setup.backends.filter(\.enabled)) { backend in
+                            Button("\(ModelSetupModel.name(backend.backendId)) · \(backend.model)") { dream(backend) }
+                        }
+                    }
+                    .disabled(!setup.backends.contains(where: \.enabled))
+                    .help("Open a new Chat draft with this model. Add instructions after /dream, then send.")
+                }
+                Text("Remote triage can send permitted source excerpts to that provider. Local-only sources stay held by Privacy policy.")
+                    .font(.meta).foregroundStyle(.secondary)
+            }
+        }
+    }
 
     private func now(_ data: ActivityData, at date: Date) -> some View {
         Panel(title: "Working now", systemImage: "waveform.path.ecg",
@@ -221,6 +256,8 @@ struct ActivityView: View {
         case "intake": "Intake"
         case "chat": "Chat"
         case "verification": "Verification"
+        case "indexing": "Indexing Brain"
+        case "knowledge-maintenance": "Reviewing Brain knowledge"
         default: code.capitalized
         }
     }

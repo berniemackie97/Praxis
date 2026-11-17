@@ -20,13 +20,18 @@ public sealed class KnowledgeRelatedTool(IKnowledgeRepository knowledge) : IAgen
         ToolArguments args = new(arguments);
         Guid from = args.RequireGuid("entityId");
         EntityDetail start = knowledge.GetEntity(from) ?? throw new ArgumentException("No entity with that entityId.");
+        if (!KnowledgeDisclosure.Visible(start, context))
+        {
+            return Task.FromResult(AgentToolOutput.Error("evidence_withheld", "This neighborhood requires additional source disclosure permission."));
+        }
         if (args.Guid("toEntityId") is not { } to)
         {
             return Task.FromResult(AgentToolOutput.Of(new
             {
                 entity = start.Summary.Name,
-                relations = start.Relations,
-                neighbours = start.Related.Select(related => new { related.EntityId, related.Name, related.EntityType, related.SharedSegments })
+                relations = start.Relations.Where(relation => KnowledgeDisclosure.Visible(knowledge, relation.OtherEntityId, context)),
+                neighbours = start.Related.Where(entity => KnowledgeDisclosure.Visible(knowledge, entity.EntityId, context))
+                    .Select(related => new { related.EntityId, related.Name, related.EntityType, related.SharedSegments })
             }));
         }
 
@@ -45,7 +50,7 @@ public sealed class KnowledgeRelatedTool(IKnowledgeRepository knowledge) : IAgen
             IEnumerable<(Guid Id, string Link)> next = detail.Related.Select(related => (related.EntityId, $"co-occurs ({related.SharedSegments} passages)"));
             foreach ((Guid id, string link) in next)
             {
-                if (visited.TryAdd(id, (current, link)))
+                if (KnowledgeDisclosure.Visible(knowledge, id, context) && visited.TryAdd(id, (current, link)))
                 {
                     frontier.Enqueue((id, depth + 1));
                 }

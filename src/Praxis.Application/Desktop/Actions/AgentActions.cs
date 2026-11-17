@@ -88,7 +88,19 @@ public sealed class AgentActions(
                 return new ChangedResponse(false);
             }
 
-            return new ChangedResponse(!accept || proposals.Apply(proposal));
+            bool applied = !accept;
+            try
+            {
+                applied = !accept || proposals.Apply(proposal);
+                return new ChangedResponse(applied);
+            }
+            finally
+            {
+                if (!applied)
+                {
+                    repository.SetProposalStatus(proposal.ProposalId, AgentProposal.Applied, AgentProposal.Pending);
+                }
+            }
         }),
         DesktopAction.Of("agentMemories", fields => new AgentMemoriesResponse(repository.ReadMemories(
             fields.OptionalText("status", 16, "The status field is invalid."), null, fields.IntegerOrDefault("limit", 100, 1, 500)))),

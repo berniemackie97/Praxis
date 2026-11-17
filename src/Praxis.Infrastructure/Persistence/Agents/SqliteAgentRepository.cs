@@ -226,8 +226,14 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         return records;
     });
 
-    public AgentProposal AddProposal(Guid? conversationId, string kind, string payloadJson, string rationale, string status)
+    public AgentProposal AddProposal(Guid? conversationId, string kind, string payloadJson, string rationale, string status) => database.Execute(_ =>
     {
+        AgentProposal? existing = Proposals("WHERE kind = $kind AND payload = $payload AND status = $status", 1,
+            ("$kind", kind), ("$payload", payloadJson), ("$status", AgentProposal.Pending)).FirstOrDefault();
+        if (status == AgentProposal.Pending && existing is not null)
+        {
+            return existing;
+        }
         AgentProposal proposal = new(Guid.NewGuid(), conversationId, kind, payloadJson, rationale, status, clock.GetUtcNow());
         Write("""
             INSERT INTO agent_proposals (proposal_id, conversation_id, kind, payload, rationale, status, created_utc, resolved_utc)
@@ -235,7 +241,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
             """, ("$id", proposal.ProposalId.ToString("D")), ("$conversation", conversationId?.ToString("D")), ("$kind", kind), ("$payload", payloadJson),
             ("$rationale", rationale), ("$status", status), ("$now", CatalogValues.Timestamp(proposal.CreatedUtc)));
         return proposal;
-    }
+    });
 
     public IReadOnlyList<AgentProposal> ReadProposals(string? status, int limit) =>
         Proposals(status is null ? "" : "WHERE status = $status", Math.Clamp(limit, 1, 500), ("$status", status));

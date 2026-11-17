@@ -37,7 +37,8 @@ public sealed class KnowledgeRetriever(ITextSearchIndex lexical, ISemanticVector
                 HybridSearchResults hybrid = await new HybridSearch(lexical, new SemanticRetriever(vectors)).QueryAsync(query, connection.Model, limit, cancellationToken, collection);
                 return (hybrid.Hits, hybrid.UsedEmbeddings ? "hybrid" : "keyword");
             }
-            catch (InferenceException) when (!cancellationToken.IsCancellationRequested)
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested &&
+                exception is InferenceException or SemanticSearchCapacityException or InvalidDataException)
             {
                 // Fall back to keyword search; the mode tells the caller.
             }

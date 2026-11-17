@@ -10,7 +10,7 @@ namespace Praxis.Application.Understanding;
 
 /// <summary>
 /// Triages every readable source. Unambiguous formats are triaged by code; otherwise the local
-/// tier reads a bounded excerpt (one cheap call, nothing leaves the Mac). Without a usable local
+/// tier reads a bounded excerpt under the selected provider's disclosure policy. Without a usable
 /// answer the source keeps the strictest category and intake continues. Owner-set categories are
 /// never overwritten.
 /// </summary>

@@ -6,9 +6,8 @@ import Foundation
 /// change is saved as soon as it is made.
 @MainActor
 final class ModelSetupModel: ObservableObject {
-    /// Roles in the order the page shows them; the intake tiers keep their worker names.
-    /// Roles in the order the page shows them. Triage uses the local model chosen under On this Mac.
-    static let roles = ["chat", "strong", "strongest"]
+    /// Roles in display order. Each intake tier keeps its own provider/model assignment.
+    static let roles = ["chat", "local", "strong", "strongest"]
 
     private let channel: WorkerChannel
 

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Praxis.Application.Agents.Memory;
 
@@ -83,6 +84,52 @@ public sealed class SqliteChatMemoryStore : IChatMemoryStore
         """, ("$id", work.ConversationId.ToString("D")), ("$due", At(clock.GetUtcNow().AddMinutes(2))), ("$through", work.Through));
 
     public string? ReadRecap(Guid conversationId) => Scalar("SELECT recap FROM agent_chat_recaps WHERE conversation_id = $id", ("$id", conversationId.ToString("D")));
+
+    public IReadOnlyList<ChatMemoryMatch> Search(string query, Guid? excludeConversationId, int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(limit, 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(query.Length, 256);
+        string[] terms = Regex.Matches(ChatMemoryQuery.Build(query), @"[\p{L}\p{N}_]{3,48}", RegexOptions.None, TimeSpan.FromMilliseconds(50))
+            .Select(match => match.Value).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray();
+        if (terms.Length == 0)
+        {
+            return [];
+        }
+
+        return database.ExecuteRead(connection =>
+        {
+            using var command = connection.CreateCommand("""
+                SELECT c.conversation_id, c.title, r.recap, r.reviewed_through
+                FROM agent_recap_search f JOIN agent_chat_recaps r ON r.conversation_id = f.conversation_id
+                JOIN agent_conversations c ON c.conversation_id = r.conversation_id
+                WHERE agent_recap_search MATCH $query AND ($exclude IS NULL OR c.conversation_id <> $exclude)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM agent_messages m, json_each(m.citations) citation
+                    WHERE m.conversation_id = c.conversation_id AND m.sequence <= r.reviewed_through
+                      AND (NOT EXISTS (
+                        SELECT 1 FROM sources s JOIN items i ON i.source_id = s.source_id
+                        WHERE s.source_id = json_extract(citation.value, '$.sourceId') AND s.status = 'active'
+                          AND i.item_id = json_extract(citation.value, '$.itemId')
+                          AND json_extract(citation.value, '$.revision') =
+                              (SELECT MAX(v.revision) FROM item_versions v WHERE v.item_id = i.item_id))
+                        OR (json_extract(citation.value, '$.playbackSourceId') IS NOT NULL
+                            AND NOT EXISTS (SELECT 1 FROM sources media WHERE media.status = 'active'
+                                AND media.source_id = json_extract(citation.value, '$.playbackSourceId')))))
+                ORDER BY bm25(agent_recap_search), c.updated_utc DESC, c.conversation_id LIMIT $limit
+                """);
+            command.Parameters.AddWithValue("$query", string.Join(" AND ", terms.Select(term => '"' + term + '"')));
+            command.Parameters.AddWithValue("$exclude", (object?)excludeConversationId?.ToString("D") ?? DBNull.Value);
+            command.Parameters.AddWithValue("$limit", limit);
+            using var reader = command.ExecuteReader();
+            List<ChatMemoryMatch> matches = [];
+            while (reader.Read())
+            {
+                matches.Add(new ChatMemoryMatch(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2), reader.GetInt32(3)));
+            }
+            return matches;
+        });
+    }
     public string? ReadName() => Scalar("SELECT display_name FROM agent_identity WHERE singleton = 1");
 
     public void SaveName(string name) => Write("""

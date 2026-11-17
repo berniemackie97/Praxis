@@ -17,3 +17,14 @@ Before proposing software installation, Chat can check standard command location
 In a local Ollama chat, a direct correction such as `"Old label" is now called Current Name. Save that to memory.` records the current name and uses the older label to match existing sources. With **Propose edits**, the exact pair appears in **Approvals → Things to remember**. With **Allow edits**, it applies immediately. The correction doesn't change Privacy settings or rewrite source documents.
 
 To change Privacy from chat, ask for a specific setting, such as “Set Privacy to local only.” Praxis shows the requested change under **Approvals → Permission changes requested in chat**. **Confirm** applies that exact change; **Reject** leaves the existing setting in place. Chat text cannot confirm a pending change.
+
+
+## Dream and living memory
+
+Use `/dream` to inspect up to three authorized suggestions from the existing reconsolidation queue, or `/dream <instruction>` to investigate a particular topic. Dream can read evidence and stage knowledge or local skill proposals; its runtime cannot directly edit records, delegate, install tools, or change settings. Review proposed knowledge changes in Approvals and skill drafts in Skills. An empty eligible queue skips inference. The selected Chat model handles the operation; Activity → Brain work can prepare a new Dream draft with a connected local, Codex or Claude backend. You can change Model and Effort before sending.
+
+Activity also exposes the existing independent Triage, Reading and Checking assignments. Changes govern future model calls, not work already in flight. Assigning a remote model does not grant source disclosure or replay completed intake.
+
+Local chats can retrieve up to three relevant generated recaps from prior conversations. Recaps are navigation aids, not verified facts; they remain local even when remote source disclosure is allowed. Deleting a chat removes its indexed recap. Current-revision and revocation checks suppress recaps whose cited evidence is no longer eligible.
+
+With a local embedding profile enabled, the worker incrementally updates semantic vectors during available periods. It skips new batches during active chats or tracked model calls; a running batch can take up to its own deadline to drain. Keyword recall remains available. See [living Brain acceptance and limits](delivery/living-brain.md).

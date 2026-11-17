@@ -93,7 +93,9 @@ struct WorkbenchSplitView: View {
                                             return true
                                         })
         case .verification: VerificationView(model: model.verification)
-        case .activity: ActivityView(model: model.activity)
+        case .activity: ActivityView(model: model.activity, setup: model.modelSetup) { backend in
+            if model.chat.prepareDream(using: backend) { section = .chat }
+        }
         case .collections: CollectionsView { collectionId in
             model.selectCollectionFilter(collectionId)
             section = .library

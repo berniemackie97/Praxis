@@ -20,7 +20,8 @@ public sealed class KnowledgeEntityTool(IKnowledgeRepository knowledge) : IAgent
         if (id is null)
         {
             string name = args.Text("name", 128) ?? throw new ArgumentException("Provide entityId or name.");
-            IReadOnlyList<EntitySummary> matches = knowledge.ListEntities(null, name, 10);
+            IReadOnlyList<EntitySummary> matches = knowledge.ListEntities(null, name, 10)
+                .Where(entity => KnowledgeDisclosure.Visible(knowledge, entity.EntityId, context)).ToArray();
             if (matches.Count != 1)
             {
                 return Task.FromResult(AgentToolOutput.Of(new
@@ -34,6 +35,10 @@ public sealed class KnowledgeEntityTool(IKnowledgeRepository knowledge) : IAgent
         }
 
         EntityDetail detail = knowledge.GetEntity(id.Value) ?? throw new ArgumentException("No entity with that entityId.");
+        if (!KnowledgeDisclosure.Visible(detail, context))
+        {
+            return Task.FromResult(AgentToolOutput.Error("evidence_withheld", "The entity's metadata requires additional source disclosure permission."));
+        }
         EntityMention[] visible = detail.Mentions.Where(mention => context.MayDisclose(mention.SourceId)).ToArray();
         EntityMention[] shown = visible.Take(args.Integer("mentions", 8, 0, 20)).ToArray();
         int withheld = detail.Mentions.Count - visible.Length;
@@ -45,8 +50,8 @@ public sealed class KnowledgeEntityTool(IKnowledgeRepository knowledge) : IAgent
             typeOrigin = detail.Summary.TypeOrigin,
             detail.Summary.TypeConflict,
             detail.Aliases,
-            relations = detail.Relations,
-            related = detail.Related.Take(15),
+            relations = detail.Relations.Where(relation => KnowledgeDisclosure.Visible(knowledge, relation.OtherEntityId, context)),
+            related = detail.Related.Where(entity => KnowledgeDisclosure.Visible(knowledge, entity.EntityId, context)).Take(15),
             mentions = shown.Select(mention => new { mention.SourceId, mention.ItemId, mention.Revision, source = mention.SourceName, quote = mention.Evidence, mention.Verdict })
         },
         shown.Select(mention => new AgentCitation(mention.SourceId, mention.ItemId, mention.Revision, $"chars:{mention.EvidenceOffset}-{mention.EvidenceOffset + mention.Evidence.Length}", mention.SourceName)).ToArray(),

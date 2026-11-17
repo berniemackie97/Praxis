@@ -43,7 +43,7 @@ public sealed class KnowledgeSaveLinkTool(ISavedLinkWriter writer, IAgentConvers
             saved = true,
             url = url.AbsoluteUri,
             file = Path.GetFileName(path),
-            note = "Praxis fetches and reads it in the background; search for it in a minute."
+            note = "Queued for background fetching and intake. This receipt does not mean the content was learned. Search and open the captured source to verify coverage; a video without captions may contain metadata only."
         });
     }
 }

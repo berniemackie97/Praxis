@@ -60,7 +60,7 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
     private async Task ExecuteAsync(Run run, string text, bool useTools)
     {
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(run.Cancellation.Token);
-        deadline.CancelAfter(RunDeadline);
+        deadline.CancelAfter(DreamCommand.Parse(text) is null ? RunDeadline : TimeSpan.FromMinutes(4));
         try
         {
             AgentReply reply = await runtime.RunAsync(run.ConversationId, text,
@@ -88,6 +88,8 @@ public sealed class AgentRunCoordinator(AgentRuntime runtime, TimeProvider clock
 
     public bool HasRunning(Guid conversationId) =>
         runs.Values.Any(run => run.ConversationId == conversationId && run.State == AgentRunStatus.Running);
+
+    public bool HasActiveRuns => runs.Values.Any(run => run.State == AgentRunStatus.Running);
 
     internal T WhileIdle<T>(Guid conversationId, Func<T> change)
     {

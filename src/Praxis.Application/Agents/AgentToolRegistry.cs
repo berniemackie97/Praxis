@@ -26,7 +26,11 @@ public sealed class AgentToolRegistry(IEnumerable<IAgentTool> tools, IAgentConve
         string outcome;
         string tier = "unknown";
         bool auditArguments = false;
-        if (!byName.TryGetValue(call.Name, out IAgentTool? tool))
+        if (context.AllowedTools is { } allowed && !allowed.Contains(call.Name))
+        {
+            (output, outcome) = (AgentToolOutput.Error("operation_tool_denied", "This tool is outside the current operation's scope."), "permission_denied");
+        }
+        else if (!byName.TryGetValue(call.Name, out IAgentTool? tool))
         {
             (output, outcome) = (AgentToolOutput.Error("unknown_tool", $"No tool named '{call.Name}'. Use one of: {string.Join(", ", byName.Keys.Order())}."), "unknown_tool");
         }
