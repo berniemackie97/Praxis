@@ -562,7 +562,7 @@ struct ChatLine: Identifiable, Equatable {
         }
         let currentTurn = messages.dropFirst(min(start, messages.count))
         let needsReply = reply.map { answer in
-            !currentTurn.contains { $0.role == "assistant" && $0.content == answer.text && $0.toolCalls.isEmpty }
+            !currentTurn.contains(where: { $0.role == "assistant" && $0.content == answer.text && $0.toolCalls.isEmpty })
         } ?? false
         if let prompt, (liveActivity || needsReply),
            !currentTurn.contains(where: { $0.role == "user" && $0.content == prompt }) {
