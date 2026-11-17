@@ -80,6 +80,24 @@ public sealed partial class AgentRuntimeTests
         Assert.NotNull(anthropicHandler.Body);
     }
 
+    [Theory]
+    [InlineData("not-json")]
+    [InlineData("{\"choices\":[]}")]
+    [InlineData("{\"choices\":[{\"message\":{\"content\":\"\",\"tool_calls\":[{}]}}]}")]
+    public async Task MalformedProviderRepliesReportInvalidResponseRatherThanInternalFailure(string response)
+    {
+        CapturingHandler handler = new(response);
+        using HttpClient http = new(handler);
+        OpenAiCompatibleAgentBackend backend = new(http, new Uri("https://example.test/v1/"), "test-model", null);
+
+        Praxis.Application.Inference.InferenceException error =
+            await Assert.ThrowsAsync<Praxis.Application.Inference.InferenceException>(() =>
+                backend.CompleteAsync("System", [AgentMessage.FromUser("Question")], [], CancellationToken.None));
+
+        Assert.Equal("model_invalid_response", error.Code);
+        Assert.NotNull(handler.Body);
+    }
+
     [Fact]
     public async Task AutomaticRecallBytesAreReportedWithoutCopyingSourceTextIntoUsageEvents()
     {
