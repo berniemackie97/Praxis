@@ -15,8 +15,9 @@ public static partial class AnswerVerifier
     public static AnswerCheck Check(string answer, IEnumerable<string> toolResults, string userText, bool evidenceAvailable, bool repaired,
         int availableCitations = 0, IReadOnlySet<int>? openedCitations = null)
     {
+        string[] evidence = toolResults.Append(userText).ToArray();
         HashSet<decimal> supported = [];
-        foreach (string result in toolResults.Append(userText))
+        foreach (string result in evidence)
         {
             foreach (decimal value in Figures(result))
             {
