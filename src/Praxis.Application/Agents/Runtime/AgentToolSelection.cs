@@ -14,6 +14,7 @@ internal sealed class AgentToolSelection(IReadOnlyList<AgentToolDefinition> perm
     };
 
     private readonly HashSet<string> used = new(StringComparer.Ordinal);
+    private readonly bool canExpand = permitted.Any(tool => tool.Name == ToolExpandTool.ToolName);
     private bool narrowed;
     private bool expandNext;
 
@@ -22,6 +23,11 @@ internal sealed class AgentToolSelection(IReadOnlyList<AgentToolDefinition> perm
         if (evidenceOnly)
         {
             return [];
+        }
+
+        if (!canExpand)
+        {
+            return permitted;
         }
 
         if (!narrowed || expandNext)
