@@ -213,6 +213,12 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(!revokeBeforeFollowUp, receipt.Selected.Count > 0);
         Assert.Equal(!revokeBeforeFollowUp, forwarded.Any(message =>
             message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal)));
+
+        await runtime.RunAsync(conversation.ConversationId, "What is Conquer Online?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+        AgentRecallReceipt unrelated = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 1));
+        Assert.Equal("not_needed", unrelated.Outcome);
+        Assert.Empty(unrelated.Selected);
     }
 
     [Fact]
