@@ -9,9 +9,9 @@ internal static partial class AgentBrainContext
 {
     private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "about", "answer", "brain", "chat", "could", "does", "exactly", "from", "give", "have", "help", "know", "library",
-        "notes", "only", "please", "reply", "respond", "should", "summarize", "tell", "that", "their", "this", "want",
-        "what", "where", "which", "with", "would", "your"
+        "about", "answer", "brain", "chat", "could", "does", "exactly", "from", "give", "good", "have", "hello", "help", "know",
+        "library", "morning", "afternoon", "evening", "notes", "only", "please", "reply", "respond", "should", "summarize",
+        "tell", "thank", "thanks", "that", "their", "this", "want", "what", "where", "which", "with", "would", "your"
     };
 
     internal static (string Outcome, int Considered, int Withheld, SearchHit[] Selected) Recall(
