@@ -149,7 +149,8 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(4, reply.TurnUsage!.Count);
         Assert.Equal(0, backend.ToolCounts[^1]);
         Assert.Contains("progress_limited", events);
-        Assert.Contains("bounded", backend.SystemPrompts[^1], StringComparison.Ordinal);
+        Assert.Contains("Do not call tools.", backend.SystemPrompts[^1], StringComparison.Ordinal);
+        Assert.Contains("Cite only the opened passages present in this request.", backend.SystemPrompts[^1], StringComparison.Ordinal);
         Assert.Equal(3, reply.ToolCalls.Count);
         Assert.Equal(reply.Text, catalog.Agents.ReadMessages(conversation.ConversationId)[^1].Content);
     }
