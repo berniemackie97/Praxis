@@ -57,13 +57,14 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
         }
 
         IReadOnlyList<AgentMessage> traffic = transcript.Skip(owner + 1).ToArray();
-        long activeCharacters = Characters(transcript[owner]) + traffic.Sum(Characters);
+        long trafficCharacters = traffic.Sum(Characters);
+        long activeCharacters = Characters(transcript[owner]) + trafficCharacters;
         if (activeCharacters > maximumCharacters)
         {
             return new AgentContextWindow([transcript[owner]], 0, true);
         }
 
-        int historyCharacters = (int)Math.Max(1, maximumCharacters - traffic.Sum(Characters));
+        int historyCharacters = (int)Math.Max(1, maximumCharacters - trafficCharacters);
         AgentContextWindow bounded = Select(transcript.Take(owner + 1).ToArray(), historyCharacters);
         return bounded with { Messages = [.. bounded.Messages, .. traffic] };
     }
@@ -127,7 +128,7 @@ internal sealed record AgentContextWindow(IReadOnlyList<AgentMessage> Messages, 
 
     private static long Characters(AgentMessage message)
     {
-        long payload = message.Content.Length;
+        long payload = message.Content.Length + (message.ToolCallId?.Length ?? 0);
         foreach (AgentToolCall call in message.ToolCalls)
         {
             payload += call.CallId.Length + call.Name.Length + call.ArgumentsJson.Length + 32;
