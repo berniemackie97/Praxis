@@ -206,6 +206,37 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task AggregateResultWithoutCitationRejectsAnInventedCitationThenRepairs()
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        ScriptedBackend backend = new(
+            _ => Turn(Call("knowledge_search", """{"query":"rent","limit":1}"""),
+                Call("data_query", """{"dataset":"transactions","filters":[{"field":"direction","op":"eq","values":["outflow"]}],"metrics":[{"function":"sum","field":"amount"}]}""")),
+            transcript =>
+            {
+                using JsonDocument aggregate = JsonDocument.Parse(transcript.Last(message => message.Role == AgentRoles.Tool).Content);
+                Assert.Empty(aggregate.RootElement.GetProperty("citations").EnumerateArray());
+                return new AgentTurn("The lease is in lease.md [1]. October outflows were $1,270.20 [2].", [], 10, 4);
+            },
+            _ => new AgentTurn("The lease is in lease.md [1]. October outflows were $1,270.20, computed by data_query.", [], 10, 4));
+        (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
+        List<string> events = [];
+
+        AgentReply reply = await runtime.RunAsync(conversation.ConversationId,
+            "What did I spend in October and where is my lease?",
+            (kind, _, _) => events.Add(kind), CancellationToken.None);
+
+        Assert.Equal(AgentReply.Completed, reply.StopReason);
+        Assert.True(reply.Check.Clean);
+        Assert.True(reply.Check.Repaired);
+        Assert.Contains("repairing", events);
+        Assert.Single(reply.Citations);
+        Assert.Equal(2, reply.ToolCalls.Count);
+        Assert.DoesNotContain("[2]", reply.Text, StringComparison.Ordinal);
+        Assert.Contains("valid [n]", backend.SystemPrompts[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RepeatedUnsupportedPacketFigureHasExplicitEvidenceInsufficientStop()
     {
         using SqliteCatalog catalog = await SeededAsync();
