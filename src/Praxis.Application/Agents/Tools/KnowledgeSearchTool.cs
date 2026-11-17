@@ -49,9 +49,10 @@ public sealed class KnowledgeSearchTool(
 
         Guid? collection = args.Guid("collectionId");
         Guid? entity = args.Guid("entityId");
-        int limit = args.Integer("limit", 8, 1, 25);
+        int limit = Math.Min(args.Integer("limit", 8, 1, 25), AgentContextPreset.KnowledgeSearchResults(context.ContextPreset));
         int offset = args.Integer("offset", 0, 0, 200);
         bool full = args.Choice("detail", ["concise", "full"], "concise") == "full";
+        int snippetLimit = AgentContextPreset.KnowledgeSearchSnippetCharacters(context.ContextPreset, full);
 
         (IReadOnlyList<SearchHit> hits, string mode) = await new KnowledgeRetriever(lexical, vectors, profiles, embeddings).SearchAsync(query, 100, collection, cancellationToken);
         HashSet<Guid>? entitySources = entity is { } id
@@ -82,7 +83,7 @@ public sealed class KnowledgeSearchTool(
                 hit.Revision,
                 title = hit.Title,
                 source = Path.GetFileName(hit.SourceLocator),
-                snippet = full || hit.Snippet.Length <= 280 ? hit.Snippet : hit.Snippet[..280] + "…"
+                snippet = hit.Snippet.Length <= snippetLimit ? hit.Snippet : hit.Snippet[..snippetLimit] + "…"
             }),
             nextOffset = offset + page.Length < visible.Length ? offset + page.Length : (int?)null
         },
