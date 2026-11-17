@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
+using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Policy;
 using Praxis.Infrastructure.Composition;
@@ -15,6 +16,7 @@ public sealed partial class AgentRuntimeTests
     public async Task ReadOnlyModelReceivesOnlyPermittedToolSchemasAndTurnUsage()
     {
         using SqliteCatalog catalog = await SeededAsync();
+        new PolicyService(catalog.Policy).Request(new PolicyChange(ToolPermission: ToolPermissions.ReadOnly), PolicyActors.Owner);
         AgentToolCall call = Call("knowledge_search", """{"query":"lease","limit":1}""");
         AgentRequestFootprint first = new(8_000, 4_000, 3_000, 900, 0, 0, 9);
         AgentRequestFootprint second = new(9_000, 5_000, 3_000, 900, 1_300, 30, 9);
