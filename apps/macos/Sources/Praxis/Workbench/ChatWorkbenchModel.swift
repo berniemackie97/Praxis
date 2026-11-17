@@ -603,6 +603,7 @@ enum ChatActivity {
         case "settings_read": "your settings"
         case "settings_propose": "a settings change"
         case "agent_delegate": "a helper model"
+        case "tools_expand": "available tools"
         default: tool.replacingOccurrences(of: "_", with: " ")
         }
     }
