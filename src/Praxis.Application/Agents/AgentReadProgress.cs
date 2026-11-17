@@ -14,7 +14,7 @@ public sealed class AgentReadProgress
     {
         previousCallId = "";
         string? key = Key(call);
-        if (key is null || !completed.TryGetValue(key, out ReadReceipt prior) ||
+        if (key is null || !completed.TryGetValue(key, out ReadReceipt? prior) || prior is null ||
             prior.Citations.Any(citation => !mayDisclose(citation.SourceId) ||
                 citation.PlaybackSourceId is { } media && !mayDisclose(media)))
         {
