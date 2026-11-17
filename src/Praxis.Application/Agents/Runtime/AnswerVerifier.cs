@@ -5,10 +5,9 @@ using Praxis.Domain.Agents;
 namespace Praxis.Application.Agents.Runtime;
 
 /// <summary>
-/// Checks a final answer against what the tools actually returned: every substantive figure must
-/// appear in a tool result (directly, or as a minor-unit amount shown in major units), and when
-/// evidence was available the answer must cite it. Years, small counts and figures the owner
-/// typed are exempt.
+/// Checks substantive decimal and hexadecimal figures against available tool evidence.
+/// When a source was opened, search-result previews alone cannot support those figures or citations.
+/// Year-like labels, small counts and figures the owner typed are exempt from decimal checks.
 /// </summary>
 public static partial class AnswerVerifier
 {
