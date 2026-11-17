@@ -78,7 +78,7 @@ internal static partial class AgentBrainContext
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Greeting();
 
-    [GeneratedRegex(@"^\s*(?:(?:i\s+(?:wonder|was\s+wondering)|i(?:'m|\s+am)\s+curious)\s*:?\s*|(?:(?:please|can you|could you)\s+)?)(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+(?:is|are|was|were)|when\s+(?:was|were|did)|why\s+(?:does|do|did|is|are)|how\s+(?:does|do|did)|tell\s+me\s+(?:about|what|who)|define|explain|describe)\b",
+    [GeneratedRegex(@"^\s*(?:(?:i\s+(?:wonder|was\s+wondering)|i(?:'m|\s+am)\s+curious)\s*:?\s*(?:what|who|where|when|why|how)\b|(?:(?:please|can you|could you)\s+)?(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|where\s+(?:is|are|was|were)|when\s+(?:was|were|did)|why\s+(?:does|do|did|is|are)|how\s+(?:does|do|did)|tell\s+me\s+(?:about|what|who)|define|explain|describe)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex GeneralQuestion();
 
