@@ -16,7 +16,11 @@ final class ChatWorkbenchModel: ObservableObject {
         var busy = false
         var runId: String?
         var polling = false
+        var pollStarted: ContinuousClock.Instant?
+        var pollGeneration = 0
         var pollFailures = 0
+        var transcriptDirty = false
+        var lastTranscriptSync: ContinuousClock.Instant?
         var events: [AgentRunEvent] = []
         var reply: AgentReply?
         var feedback: Feedback?
@@ -190,7 +194,12 @@ final class ChatWorkbenchModel: ObservableObject {
         refreshConversations()
         loadMessages()
         refreshRecap()
-        for id in states.keys where states[id]?.runId != nil { states[id]?.pollFailures = 0 }
+        for id in Array(states.keys) where states[id]?.runId != nil {
+            states[id]?.pollFailures = 0
+            states[id]?.polling = false
+            states[id]?.pollStarted = nil
+            states[id]?.pollGeneration += 1
+        }
         ensurePolling()
     }
 
@@ -321,6 +330,8 @@ final class ChatWorkbenchModel: ObservableObject {
             states[id]?.busy = false
             states[id]?.runId = nil
             states[id]?.polling = false
+            states[id]?.pollStarted = nil
+            states[id]?.pollGeneration += 1
             feedback(.error("The worker stopped. Check this conversation before sending again."), for: id)
         }
     }
@@ -336,7 +347,12 @@ final class ChatWorkbenchModel: ObservableObject {
             states[id]?.runId = data.runId
             states[id]?.events = []
             states[id]?.reply = nil
+            states[id]?.polling = false
+            states[id]?.pollStarted = nil
+            states[id]?.pollGeneration += 1
             states[id]?.pollFailures = 0
+            states[id]?.transcriptDirty = false
+            states[id]?.lastTranscriptSync = nil
             if selectedId == id { loadMessages() }
             ensurePolling()
         }
@@ -356,15 +372,40 @@ final class ChatWorkbenchModel: ObservableObject {
         }
     }
 
+    static func pollExpired(_ started: ContinuousClock.Instant?, now: ContinuousClock.Instant) -> Bool {
+        guard let started else { return true }
+        return started.duration(to: now) >= .seconds(5)
+    }
+
     private func pollRuns() -> Bool {
         let active = states.filter { $0.value.runId != nil && $0.value.pollFailures < 3 }
+        let now = ContinuousClock.now
         for (id, state) in active {
-            guard let run = state.runId, !state.polling else { continue }
+            guard let run = state.runId else { continue }
+            if selectedId == id, state.transcriptDirty,
+               state.lastTranscriptSync.map({ $0.duration(to: now) >= .seconds(1) }) ?? true {
+                states[id]?.transcriptDirty = false
+                states[id]?.lastTranscriptSync = now
+                loadMessages()
+            }
+            if state.polling {
+                guard Self.pollExpired(state.pollStarted, now: now) else { continue }
+                states[id]?.pollFailures += 1
+                if states[id]?.pollFailures == 3 {
+                    feedback(.error("Lost contact with this response. Refresh its status or try Stop."), for: id)
+                    continue
+                }
+            }
+
             states[id]?.polling = true
+            states[id]?.pollStarted = now
+            states[id]?.pollGeneration += 1
+            let generation = states[id]?.pollGeneration
             channel.send("agentRun", ["runId": run, "after": state.events.last?.sequence ?? 0],
                          as: AgentRunStatus.self, failed: { [weak self] message in
-                guard let self, states[id]?.runId == run else { return }
+                guard let self, states[id]?.runId == run, states[id]?.pollGeneration == generation else { return }
                 states[id]?.polling = false
+                states[id]?.pollStarted = nil
                 if message == "Unknown run." {
                     states[id]?.runId = nil
                     feedback(.error("This response is no longer available. Check the saved conversation before retrying."), for: id)
@@ -376,7 +417,8 @@ final class ChatWorkbenchModel: ObservableObject {
                     }
                 }
             }) { [weak self] status in
-                guard let self, status.conversationId == id, status.runId == run, states[id]?.runId == run else { return }
+                guard let self, status.conversationId == id, status.runId == run,
+                      states[id]?.runId == run, states[id]?.pollGeneration == generation else { return }
                 apply(status)
             }
         }
@@ -388,11 +430,20 @@ final class ChatWorkbenchModel: ObservableObject {
     private func apply(_ status: AgentRunStatus) {
         let id = status.conversationId
         states[id]?.polling = false
+        states[id]?.pollStarted = nil
         states[id]?.pollFailures = 0
-        states[id]?.events.append(contentsOf: status.events)
-        guard !status.running else { return }
+        let lastSequence = states[id]?.events.last?.sequence ?? 0
+        let newEvents = status.events.filter { $0.sequence > lastSequence }
+        states[id]?.events.append(contentsOf: newEvents)
+        if status.running {
+            if newEvents.contains(where: { $0.kind == "tool_finished" }) {
+                states[id]?.transcriptDirty = true
+            }
+            return
+        }
         states[id]?.runId = nil
         states[id]?.reply = status.reply
+        states[id]?.transcriptDirty = false
 
         switch status.state {
         case "failed": feedback(.error(ChatFailureText.describe(states[id]?.events.last?.detail)), for: id)
