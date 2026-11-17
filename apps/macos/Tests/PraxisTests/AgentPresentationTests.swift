@@ -120,6 +120,20 @@ struct AgentPresentationTests {
         #expect(!lines.contains { $0.text.hasPrefix("Answer check failed") })
     }
 
+    @Test func exhaustedToolLoopShowsItsFinalNoticeAfterActivity() {
+        let messages = [
+            AgentMessage(role: "user", content: "Find my lease", toolCalls: [], toolCallId: nil),
+            AgentMessage(role: "assistant", content: "",
+                         toolCalls: [AgentToolCall(callId: "1", name: "knowledge_search", argumentsJson: "{}")], toolCallId: nil),
+            AgentMessage(role: "tool", content: "No further evidence", toolCalls: [], toolCallId: "1"),
+            AgentMessage(role: "assistant", content: "I stopped because this request reached its step limit. Ask me to continue.",
+                         toolCalls: [], toolCallId: nil)
+        ]
+        let lines = ChatLine.lines(messages)
+        #expect(lines.map(\.kind) == [.owner, .activity, .agent])
+        #expect(lines.last?.text == messages.last?.content)
+    }
+
     @Test func completedChatReplyAppearsBeforeAndAfterTranscriptReload() {
         let user = AgentMessage(role: "user", content: "Explain the packet", toolCalls: [], toolCallId: nil)
         let answer = "It is a movement message."
