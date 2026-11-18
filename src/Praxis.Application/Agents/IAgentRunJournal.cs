@@ -18,6 +18,7 @@ public interface IAgentRunJournal
     bool HasActiveDream();
     bool RecentlyReviewed(Praxis.Domain.Knowledge.KnowledgeSnapshot snapshot);
     IReadOnlyList<AgentCommandHistory> CommandHistory(Guid conversationId, int limit);
+    string LearningReadiness(int dailyCalls, int dailyTokens);
     AgentLearningEpisode? ClaimLearning(int dailyCalls, int dailyTokens, DateTimeOffset? completedBefore = null);
     bool EvidenceCurrent(Guid runId);
     void FinishLearning(Guid runId, string outcome, Guid? skillRevision, int inputTokens, int outputTokens, string? model);

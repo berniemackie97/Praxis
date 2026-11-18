@@ -203,6 +203,58 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task ManualReviewRequestReportsQueueStateAndRunsWhenWorkIsAvailable()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
+        catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment, "ollama", "http://127.0.0.1:11434", "fixture", 4_096, true));
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => """{"action":"no_change","evidenceCallIds":[]}""");
+        reviewer.Configure(new LearningSettings(LearningSettings.Manual));
+
+        Assert.Equal("no_pending_work", reviewer.RequestManual());
+        await LearningRun(catalog);
+        Assert.Equal("queued", reviewer.RequestManual());
+        Assert.Equal("queued", reviewer.RequestManual());
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        Assert.Equal("no_change", Assert.Single(catalog.AgentRuns.LearningHistory(10)).State);
+        Assert.Equal("no_pending_work", reviewer.RequestManual());
+
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ReadOnly), PolicyActors.Owner);
+        Assert.Equal("permission_required", reviewer.RequestManual());
+        reviewer.Configure(new LearningSettings(LearningSettings.Off));
+        Assert.Equal("off", reviewer.RequestManual());
+    }
+
+    [Fact]
+    public async Task ManualReviewRequestReportsAnActiveReviewBeforeBudgetExhaustion()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        await LearningRun(catalog);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => """{"action":"no_change","evidenceCallIds":[]}""");
+        reviewer.Configure(new LearningSettings(LearningSettings.Manual, 1, 6_000));
+
+        Assert.NotNull(catalog.AgentRuns.ClaimLearning(1, 6_000));
+        Assert.Equal("review_running", reviewer.RequestManual());
+    }
+
+    [Fact]
+    public async Task ManualReviewRequestReportsDailyCallAndTokenLimitsWithoutClaimingWork()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        await LearningRun(catalog);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => """{"action":"no_change","evidenceCallIds":[]}""");
+        reviewer.Configure(new LearningSettings(LearningSettings.Manual, 1, 6_000));
+
+        Assert.Equal("queued", reviewer.RequestManual());
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        await LearningRun(catalog);
+        Assert.Equal("daily_call_limit", reviewer.RequestManual());
+        reviewer.Configure(new LearningSettings(LearningSettings.Manual, 4, 6_000));
+        Assert.Equal("daily_token_limit", reviewer.RequestManual());
+        Assert.Equal("pending", Assert.Single(catalog.AgentRuns.LearningHistory(10), item => item.State == "pending").State);
+    }
+
+    [Fact]
     public async Task LearningBudgetCountsRestartedAttemptsAndEmptyWorkDoesNotCallTheModel()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
