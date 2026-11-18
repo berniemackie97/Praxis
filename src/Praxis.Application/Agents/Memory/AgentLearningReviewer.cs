@@ -46,19 +46,13 @@ public sealed class AgentLearningReviewer(IAgentRunJournal journal, ISettingsSto
         {
             return "local_model_required";
         }
-        if (settings.Read("learning_manual_requested") == "true")
-        {
-            return "queued";
-        }
-
         string status = journal.LearningReadiness(configured.DailyCalls, configured.DailyTokens);
-        if (status == "ready")
+        if (status != "ready")
         {
-            settings.Write("learning_manual_requested", "true");
-            return "queued";
+            return status;
         }
-
-        return status;
+        settings.Write("learning_manual_requested", "true");
+        return "queued";
     }
 
     public async Task<bool> RunNextAsync(CancellationToken cancellationToken)
