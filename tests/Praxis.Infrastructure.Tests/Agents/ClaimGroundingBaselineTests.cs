@@ -23,6 +23,12 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
             .Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(5, cases.Select(entry => entry.GetProperty("sourceGroup").GetString()!)
             .Distinct(StringComparer.Ordinal).Count());
+        foreach (var group in cases.GroupBy(entry => entry.GetProperty("sourceGroup").GetString()!))
+        {
+            Assert.Equal(new[] { "contradicted", "supported", "unsupported" },
+                group.Select(entry => entry.GetProperty("expected").GetString()!)
+                    .OrderBy(value => value, StringComparer.Ordinal).ToArray());
+        }
 
         List<(string Domain, string Expected, bool Accepted)> observations = [];
         int acceptedSupported = 0, acceptedUnsupported = 0, acceptedContradicted = 0, rejectedSupported = 0;
