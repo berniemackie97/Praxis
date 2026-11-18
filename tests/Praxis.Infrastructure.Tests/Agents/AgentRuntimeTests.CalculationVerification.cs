@@ -12,8 +12,10 @@ namespace Praxis.Infrastructure.Tests.Agents;
 
 public sealed partial class AgentRuntimeTests
 {
-    [Fact]
-    public async Task SelfContainedCalculatorWorkflowDoesNotRequireUnrelatedBrainCitations()
+    [Theory]
+    [InlineData("Both calculations completed successfully.")]
+    [InlineData("The results were 391 and 420.")]
+    public async Task SelfContainedCalculatorWorkflowDoesNotRequireUnrelatedBrainCitations(string finalText)
     {
         using SqliteCatalog catalog = await SeededAsync();
         await Capture(catalog, "calculation-workflow.md", Encoding.UTF8.GetBytes(
@@ -25,8 +27,8 @@ public sealed partial class AgentRuntimeTests
             Perform a two-step calculation workflow using the compute_evaluate tool.
             First call the tool to calculate 17 * 23.
             After that tool call finishes, make a separate second tool call to calculate 391 + 29.
-            If both succeeded, respond exactly: Both calculations completed successfully.
-            Do not include numbers or citations in the final response.
+            If both succeeded, give a concise completion report with or without the computed figures.
+            Do not cite unrelated Brain material.
             """;
         ScriptedBackend backend = new(
             transcript =>
@@ -42,7 +44,7 @@ public sealed partial class AgentRuntimeTests
             transcript =>
             {
                 Assert.Equal("420", CalculatorResult(transcript.Last(message => message.Role == AgentRoles.Tool), "second"));
-                return new AgentTurn("Both calculations completed successfully.", [], 10, 5);
+                return new AgentTurn(finalText, [], 10, 5);
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
@@ -52,6 +54,7 @@ public sealed partial class AgentRuntimeTests
         AgentReply answer = Assert.IsType<AgentReply>(finished.Reply);
 
         Assert.Equal(AgentReply.Completed, answer.StopReason);
+        Assert.Equal(finalText, answer.Text);
         Assert.True(answer.Check.Clean);
         Assert.Empty(answer.Citations);
         Assert.Equal(2, answer.ToolCalls.Count);
