@@ -41,7 +41,7 @@ public sealed class KnowledgeRulesTests
         Assert.False(InstructionLikeText.Matches(sentence, 0, 5));
 
     [Fact]
-    public void OnlySupportedRelationsBetweenAcceptedEntitiesAreKept()
+    public void RelationsRequireAcceptedEndpointsAndEvidenceSpans()
     {
         const string segment = "The C3Reader class in OpenConquerClient parses PHY chunks. DDS textures are separate.";
         const string json = """
@@ -63,9 +63,10 @@ public sealed class KnowledgeRulesTests
 
         ProposalCandidate[] relations = accepted.Where(candidate => candidate.Kind == "relation").ToArray();
         Assert.Equal(
-            [("C3Reader", "parses", "PHY"), ("C3Reader", "part_of", "OpenConquerClient")],
+            [("C3Reader", "parses", "PHY"), ("C3Reader", "part_of", "OpenConquerClient"),
+             ("C3Reader", "invented_by", "PHY")],
             relations.Select(relation => (relation.RelationSubject, relation.Value, relation.RelationObject)));
-        Assert.Equal(4, rejected);
+        Assert.Equal(3, rejected);
         Assert.All(relations, relation => Assert.Null(relation.Flags));
     }
 
