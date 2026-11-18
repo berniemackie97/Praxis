@@ -13,7 +13,7 @@ public static class VerificationPrompt
 {
     public const string NoTypeChange = "none";
 
-    public static readonly JsonElement Schema = JsonDocument.Parse($$"""
+    public static readonly JsonElement Schema = JsonDocument.Parse("""
         {
           "type": "object", "additionalProperties": false, "required": ["verdicts"],
           "properties": {
@@ -25,7 +25,7 @@ public static class VerificationPrompt
                 "properties": {
                   "ordinal": { "type": "integer" },
                   "verdict": { "type": "string", "enum": ["supported", "unsupported", "uncertain"] },
-                  "correctedType": { "type": "string", "enum": [{{Types()}}] },
+                  "correctedType": { "type": "string", "maxLength": 32 },
                   "note": { "type": "string" },
                   "evidenceIndex": { "type": "integer" }
                 }
@@ -51,9 +51,11 @@ public static class VerificationPrompt
         A class heading or declaration can establish a class. Do not require prose asserting that a symbol exists.
         {KnowledgeVocabulary.TechnicalTypeGuide}
         For "relation" items, judge whether the context states that relation between the two names.
-        Types: person, organization (company, institution, team), project (software project, codebase, repository,
-        product, game, initiative), technology (language, library, format, protocol, tool, model, device),
-        concept, place, document, event, other, class, function, binary_module, data_asset.
+        Use a specific lower_snake_case type up to 32 characters when the evidence warrants a correction.
+        Existing examples: person, organization, project, technology, concept, place, document,
+        event, class, function, binary_module and data_asset. Project means an initiative or
+        repository, not a game or product. The corrected classification is not approval of a
+        global type definition. Do not invent a type without matching evidence.
         Copy each ordinal exactly. Give the one-based evidenceIndex of the quote that directly supports the
         verdict (1 for a single quote). Use 0 for uncertain. For supported or unsupported, note MUST be an exact
         contiguous excerpt of that quote, under 200 characters. Do not write an explanation or use another item's quote.
@@ -66,6 +68,4 @@ public static class VerificationPrompt
         new ChatMessage(ChatRole.User, "Items to verify (JSON):\n" + payload)
     ];
 
-    private static string Types() => string.Join(", ",
-        KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal).Append(NoTypeChange).Select(type => $"\"{type}\""));
 }
