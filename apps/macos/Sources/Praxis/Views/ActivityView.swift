@@ -94,7 +94,10 @@ struct ActivityView: View {
                         Text("Idle maintenance").tag("idle")
                     }
                     Spacer()
-                    Button("Review Next") { model.reviewLearning() }.disabled(brain.settings.mode == "off")
+                    Button("Review Next") { model.reviewLearning() }.disabled(brain.settings.mode == "off" || model.reviewingLearning || model.changingBrain)
+                }
+                if let feedback = model.learningFeedback {
+                    Text(feedback).font(.meta).foregroundStyle(.secondary)
                 }
                 HStack {
                     Picker("Local review model", selection: Binding(get: { brain.settings.model ?? "" }, set: { model.configureLearning(model: $0) })) {
