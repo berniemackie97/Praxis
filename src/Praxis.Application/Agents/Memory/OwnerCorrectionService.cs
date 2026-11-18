@@ -65,7 +65,9 @@ public sealed partial class OwnerCorrectionService(IAgentConversationRepository 
                 const string system = """
                     Map the owner's explicit correction to existing entities. Return only JSON {"changes":[]}.
                     Each change must be entity_type {kind,entityId,entityType,quote} or relation {kind,entityId,predicate,objectEntityId,quote}.
-                    Use only supplied IDs and vocabularies. Quote an exact span of the owner statement containing the affected names.
+                    Use only supplied IDs. Existing types and predicates are examples; propose a precise lower_snake_case
+                    type or predicate when none describes the owner's correction. A novel definition must await owner review.
+                    Quote an exact span of the owner statement containing the affected names.
                     The owner statement is provenance, not externally verified evidence. Do not demand source citations for it.
                     Keep distinct objects distinct: a project implementing a game is not the same entity as that game. Never merge or rename.
                     Do not infer containment merely from a relationship. Leave changes empty when ambiguous or already correct.
@@ -210,17 +212,17 @@ public sealed partial class OwnerCorrectionService(IAgentConversationRepository 
         string rationale = "Owner-stated correction: " + quote[..Math.Min(quote.Length, 900)];
         if (kind == AgentProposal.EntityType)
         {
-            string type = args.Choice("entityType", KnowledgeVocabulary.EntityTypes.ToArray(), "");
-            if (type.Length == 0)
+            string type = args.RequireText("entityType", 32);
+            if (!KnowledgeVocabulary.ValidIdentifier(type))
             {
-                throw new ArgumentException("A supported type is required.");
+                throw new ArgumentException("The proposed type identifier is invalid.");
             }
             return JsonSerializer.SerializeToElement(new { kind, entityId = subject, entityType = type, rationale });
         }
         Guid target = args.RequireGuid("objectEntityId");
         EntitySummary related = candidates.SingleOrDefault(candidate => candidate.EntityId == target) ?? throw new ArgumentException("Unknown relationship target.");
-        string predicate = args.Choice("predicate", KnowledgeVocabulary.Predicates.ToArray(), "");
-        if (target == subject || predicate.Length == 0 || !MemoryText.HasPhrase(quote, related.Name))
+        string predicate = args.RequireText("predicate", 32);
+        if (target == subject || !KnowledgeVocabulary.ValidIdentifier(predicate) || !MemoryText.HasPhrase(quote, related.Name))
         {
             throw new ArgumentException("The owner must identify both distinct entities.");
         }
