@@ -31,26 +31,15 @@ public sealed partial class AgentRuntimeTests
             Do not cite unrelated Brain material.
             """;
         ScriptedBackend backend = new(
-            transcript =>
-            {
-                Assert.DoesNotContain(transcript, message => message.Content.Contains("Local library search excerpts", StringComparison.Ordinal));
-                return Turn(Call("compute_evaluate", """{"expressions":{"first":"17 * 23"}}"""));
-            },
-            transcript =>
-            {
-                Assert.Equal("391", CalculatorResult(transcript.Last(message => message.Role == AgentRoles.Tool), "first"));
-                return Turn(Call("compute_evaluate", """{"expressions":{"second":"391 + 29"}}"""));
-            },
-            transcript =>
-            {
-                Assert.Equal("420", CalculatorResult(transcript.Last(message => message.Role == AgentRoles.Tool), "second"));
-                return new AgentTurn(finalText, [], 10, 5);
-            });
+            _ => Turn(Call("compute_evaluate", """{"expressions":{"first":"17 * 23"}}""")),
+            _ => Turn(Call("compute_evaluate", """{"expressions":{"second":"391 + 29"}}""")),
+            _ => new AgentTurn(finalText, [], 10, 5));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
         AgentRunCoordinator coordinator = new(runtime, clock, catalog.AgentRuns);
         AgentRunStatus finished = await Poll(coordinator, coordinator.Start(conversation.ConversationId, prompt));
-        Assert.Equal(AgentRunStatus.Completed, finished.State);
+        Assert.True(finished.State == AgentRunStatus.Completed,
+            string.Join("; ", finished.Events.Select(item => $"{item.Kind}: {item.Detail}")));
         AgentReply answer = Assert.IsType<AgentReply>(finished.Reply);
 
         Assert.Equal(AgentReply.Completed, answer.StopReason);
@@ -58,6 +47,12 @@ public sealed partial class AgentRuntimeTests
         Assert.True(answer.Check.Clean);
         Assert.Empty(answer.Citations);
         Assert.Equal(2, answer.ToolCalls.Count);
+        IReadOnlyList<AgentMessage> transcript = catalog.Agents.ReadMessages(conversation.ConversationId);
+        Assert.DoesNotContain(transcript, message => message.Content.Contains("Local library search excerpts", StringComparison.Ordinal));
+        AgentMessage[] receipts = transcript.Where(message => message.Role == AgentRoles.Tool).ToArray();
+        Assert.Equal(2, receipts.Length);
+        Assert.Equal("391", CalculatorResult(receipts[0], "first"));
+        Assert.Equal("420", CalculatorResult(receipts[1], "second"));
         Assert.All(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10),
             audit => Assert.Equal("ok", audit.Outcome));
         Assert.Equal("not_needed", Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 10)).Outcome);
