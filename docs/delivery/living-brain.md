@@ -88,3 +88,24 @@ Regression coverage includes the reported Codex exposure bug, zero-inference per
 
 
 The #545 candidate compiled in Release with zero warnings/errors using cached dependency metadata. Direct focused Fact/InlineData invocation passed 326 cases; three existing socket/nested-sandbox cases remain environment-blocked. Eight architecture checks and 31 roadmap tests passed. Swift app/test parsing, Xcode project/source-membership validation, and executable checks over the actual command/memory DTOs and windowed transcript projection passed. Full SwiftUI typechecking stops at the SDK macro subprocess in this restricted environment; a packaged app build, command keyboard/focus checks, Privacy round trip, and real Codex/local-model workflow acceptance remain required. No measured token or billing savings are claimed.
+
+
+## Retrospective evidence admission — #514
+
+Completed Chat turns are candidates for learning, not proof that the user's goal succeeded. The local learning reviewer must correlate each tool-result message with an actual successful, non-withheld tool audit record from that run. Computations require nonempty results; data queries require returned rows/groups; source openings require nonblank text; media lookups require a returned moment and citations. A privacy-withheld run is ineligible. Unmatched, failed and empty observations yield `no_verified_evidence` without a model call or skill draft.
+
+This is a conservative gate on **observed evidence**, not independent verification of task success or generalization. Learned skills remain owner-reviewed proposals. Failed-attempt retrospective lessons, independent outcome evaluation, safe reuse and rollback remain open under #514. No model weights, new storage or remote permissions are changed.
+
+At a reviewed branch head, run:
+
+```sh
+dotnet restore Praxis.slnx --locked-mode
+dotnet build Praxis.slnx -c Release --no-restore
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~AgentRuntimeTests"
+dotnet test Praxis.slnx -c Release --no-build --no-restore
+dotnet format Praxis.slnx --no-restore --verify-no-changes
+bash scripts/macos/build-desktop.sh --archive-existing
+bash scripts/macos/test-worker-session.sh
+```
+
+In addition to prior learning tests, check forged transcript-only receipts, nonempty audited computation controls, empty computation output and privacy-withheld runs. Model/provider acceptance and measured improvement are separate gates.
