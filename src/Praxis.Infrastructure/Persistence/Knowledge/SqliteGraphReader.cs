@@ -468,11 +468,11 @@ public sealed partial class SqliteGraphReader : IGraphReader
         {
             throw new ArgumentException("A valid graph scope is required.", nameof(query));
         }
-        if (query.EntityType is not null && !KnowledgeVocabulary.EntityTypes.Contains(query.EntityType))
+        if (query.EntityType is not null && !KnowledgeVocabulary.ValidIdentifier(query.EntityType))
         {
             throw new ArgumentException("The graph entity type is invalid.", nameof(query));
         }
-        if (query.Predicate is not null && (!allowEdges || !KnowledgeVocabulary.Predicates.Contains(query.Predicate)))
+        if (query.Predicate is not null && (!allowEdges || !KnowledgeVocabulary.ValidIdentifier(query.Predicate)))
         {
             throw new ArgumentException("The graph relation predicate is invalid.", nameof(query));
         }

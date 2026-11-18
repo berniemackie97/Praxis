@@ -6,7 +6,7 @@ namespace Praxis.Domain.Enrichment;
 public static class ProposalRules
 {
     /// <summary>
-    /// Rejects runs with too many proposals, unknown kinds, entity types or predicates, malformed
+    /// Rejects runs with too many proposals, unknown kinds, malformed type or predicate identifiers, malformed
     /// names, unsupported flags, or evidence spans outside <paramref name="content"/>.
     /// </summary>
     public static void ValidateCandidates(string content, IReadOnlyList<ProposalCandidate> candidates)
@@ -24,10 +24,10 @@ public static class ProposalRules
             {
                 "topic" => candidate.EntityType is null && candidate.RelationSubject is null,
                 "entity" => candidate.EntityType is not null &&
-                    KnowledgeVocabulary.EntityTypes.Contains(candidate.EntityType) &&
+                    KnowledgeVocabulary.ValidIdentifier(candidate.EntityType) &&
                     candidate.RelationSubject is null,
                 "relation" => candidate.EntityType is null &&
-                    KnowledgeVocabulary.Predicates.Contains(candidate.Value) &&
+                    KnowledgeVocabulary.ValidIdentifier(candidate.Value) &&
                     IsValidName(candidate.RelationSubject) && IsValidName(candidate.RelationObject),
                 _ => false
             };

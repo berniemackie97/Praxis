@@ -279,13 +279,16 @@ struct KnowledgeGraphView: View {
             }
             Picker("Entity type", selection: $graph.entityType) {
                 Text("All types").tag("")
-                ForEach(KnowledgeVocabulary.entityTypes, id: \.self) { type in
+                ForEach(Array(Set(KnowledgeVocabulary.entityTypes +
+                    (graph.overview?.types.map(\.entityType) ?? []))).sorted(), id: \.self) { type in
                     Text(KnowledgeVocabulary.label(type).capitalized).tag(type)
                 }
             }
             Picker("Relationship", selection: $graph.predicate) {
                 Text("Any relationship").tag("")
-                ForEach(KnowledgeVocabulary.predicates, id: \.self) { predicate in
+                ForEach(Array(Set(KnowledgeVocabulary.predicates +
+                    graph.edges.map(\.predicate) + graph.atlasEdges.map(\.predicate) +
+                    graph.regionEdges.map(\.predicate))).sorted(), id: \.self) { predicate in
                     Text(KnowledgeVocabulary.label(predicate).capitalized).tag(predicate)
                 }
             }

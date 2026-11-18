@@ -62,7 +62,7 @@ public static class UnderstandingVerifier
             {
                 string? type = Name(entity, "type");
                 Count(Evidence(entity, text, chunk) is { } span && Name(entity, "name") is { } name && type is not null &&
-                      KnowledgeVocabulary.EntityTypes.Contains(type) && EvidenceLocator.Mentions(text.Substring(span.Offset, span.Length), name) &&
+                      KnowledgeVocabulary.ValidIdentifier(type) && EvidenceLocator.Mentions(text.Substring(span.Offset, span.Length), name) &&
                       Add(candidates, new ProposalCandidate("entity", type, name, span.Offset, span.Length), text));
             }
 
@@ -70,7 +70,7 @@ public static class UnderstandingVerifier
             {
                 string? predicate = Name(relation, "predicate");
                 Count(Evidence(relation, text, chunk) is { } span && Name(relation, "subject") is { } subject && Name(relation, "object") is { } target &&
-                      predicate is not null && KnowledgeVocabulary.Predicates.Contains(predicate) &&
+                      predicate is not null && KnowledgeVocabulary.ValidIdentifier(predicate) &&
                       EvidenceLocator.Mentions(text.Substring(span.Offset, span.Length), subject) &&
                       EvidenceLocator.Mentions(text.Substring(span.Offset, span.Length), target) &&
                       Add(candidates, new ProposalCandidate("relation", null, predicate, span.Offset, span.Length, subject, target), text));

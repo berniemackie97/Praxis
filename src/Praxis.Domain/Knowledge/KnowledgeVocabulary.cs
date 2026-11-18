@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Praxis.Domain.Knowledge;
 
-/// <summary>Closed vocabularies and name normalization shared by proposals and the entity layer.</summary>
+/// <summary>Core vocabulary, bounded identifiers and canonical name normalization.</summary>
 public static class KnowledgeVocabulary
 {
     public const int MaximumNameLength = 120;
@@ -15,7 +15,7 @@ public static class KnowledgeVocabulary
     public const string TechnicalTypeGuide = """
         A class or struct is class; a callable routine or method is function; a compiled executable,
         shared library or DLL is binary_module; a named runtime data or resource file is data_asset.
-        A source report or article is document. Project is a whole product, game, repository or initiative.
+        A source report or article is document. A project is an initiative or repository, not the game or product it develops.
         A ticket, issue, milestone or pull-request reference (AUTH-001B, #280) is not a project, and neither
         is a folder path; a third-party library or package is technology.
         Do not label code symbols as people, organizations, projects, or technologies.
@@ -27,6 +27,11 @@ public static class KnowledgeVocabulary
         "uses", "part_of", "contains", "depends_on", "implements", "parses", "produces",
         "created_by", "owned_by", "works_on", "member_of", "located_in", "pays", "references", "related_to", "calls", "inherits_from"
     };
+
+    public static bool ValidIdentifier(string? value) => value is { Length: > 0 and <= 32 } &&
+        value[^1] != '_' && char.IsAsciiLetterLower(value[0]) &&
+        value.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_') &&
+        !value.Contains("__", StringComparison.Ordinal);
 
     private static readonly char[] Enclosing = ['"', '\'', '`', '(', ')', '[', ']', '{', '}', '<', '>', '.', ',', ':', ';', '!', '?', '“', '”', '‘', '’'];
 

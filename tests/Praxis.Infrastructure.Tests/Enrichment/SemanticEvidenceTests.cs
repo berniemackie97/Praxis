@@ -39,7 +39,7 @@ public sealed class SemanticEvidenceTests
              "entities":[
                {"name":"SQLite","type":"technology","quote":"SQLite FTS5"},
                {"name":"Postgres","type":"technology","quote":"Search uses SQLite FTS5"},
-               {"name":"BM25","type":"spaceship","quote":"BM25 ranking"},
+               {"name":"BM25","type":"invalid-type","quote":"BM25 ranking"},
                {"name":"Praxis","type":"project","quote":"Praxis stores"}]}
             """;
 
@@ -53,6 +53,29 @@ public sealed class SemanticEvidenceTests
                 new ProposalCandidate("entity", "project", "Praxis", 1_000, 13)
             ],
             accepted);
+    }
+
+    [Fact]
+    public void PreciseUnregisteredTypesRemainEvidenceBackedSuggestions()
+    {
+        const string excerpt = "Conquer Online is a fantasy MMORPG. OpenConquer models Conquer Online.";
+        const string response = """
+            {"topics":[],"entities":[
+                {"name":"Conquer Online","type":"game","quote":"Conquer Online is a fantasy MMORPG"},
+                {"name":"OpenConquer","type":"software_project","quote":"OpenConquer models Conquer Online"}],
+             "relations":[{"subject":"OpenConquer","predicate":"models",
+                "object":"Conquer Online","quote":"OpenConquer models Conquer Online"}]}
+            """;
+        (IReadOnlyList<ProposalCandidate> accepted, int rejected) = SemanticResponseReader.Read(response, excerpt, 0);
+        Assert.Equal(0, rejected);
+        Assert.Contains(accepted, candidate => candidate.Kind == "entity" &&
+            candidate.Value == "Conquer Online" && candidate.EntityType == "game");
+        Assert.Contains(accepted, candidate => candidate.Kind == "entity" &&
+            candidate.Value == "OpenConquer" && candidate.EntityType == "software_project");
+        Assert.Contains(accepted, candidate => candidate.Kind == "relation" &&
+            candidate.Value == "models" && candidate.RelationSubject == "OpenConquer" &&
+            candidate.RelationObject == "Conquer Online");
+        ProposalRules.ValidateCandidates(excerpt, accepted);
     }
 
     [Fact]

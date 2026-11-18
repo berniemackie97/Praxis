@@ -8,7 +8,7 @@ namespace Praxis.Application.Enrichment;
 /// <summary>
 /// Converts a model's structured answer for one segment into proposal candidates. An item is
 /// kept only when its quote is found in the segment; an entity's name must also appear in the
-/// segment; a relation must join two entities accepted from the same answer, use a known
+/// segment; a relation must join two entities accepted from the same answer, use a valid
 /// predicate and quote both names. Evidence that reads like an instruction is flagged.
 /// Everything else is counted as rejected; model output is never trusted as fact.
 /// </summary>
@@ -47,7 +47,7 @@ public static class SemanticResponseReader
             foreach (JsonElement entity in Limit(entities, SemanticExtractionPrompt.MaximumEntities, reader))
             {
                 string? type = Text(entity, "type");
-                if (type is null || !KnowledgeVocabulary.EntityTypes.Contains(type))
+                if (type is null || !KnowledgeVocabulary.ValidIdentifier(type))
                 {
                     reader.Rejected++;
                     continue;
@@ -127,7 +127,7 @@ public static class SemanticResponseReader
             string? subject = Resolve(Text(item, "subject"));
             string? obj = Resolve(Text(item, "object"));
             (int Offset, int Length)? span = Locate(Text(item, "quote"));
-            if (predicate is null || !KnowledgeVocabulary.Predicates.Contains(predicate) ||
+            if (predicate is null || !KnowledgeVocabulary.ValidIdentifier(predicate) ||
                 subject is null || obj is null || span is not { } found ||
                 KnowledgeVocabulary.NameKey(subject) == KnowledgeVocabulary.NameKey(obj))
             {

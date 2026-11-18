@@ -24,6 +24,8 @@ public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepos
 
     public bool CanApplyDirectly(string kind) => kind != AgentProposal.SourceCategory;
 
+    public bool IsKnownDefinition(string kind, string value) => knowledge.IsKnownDefinition(kind, value);
+
     public bool Apply(AgentProposal proposal)
     {
         using JsonDocument document = JsonDocument.Parse(proposal.PayloadJson);

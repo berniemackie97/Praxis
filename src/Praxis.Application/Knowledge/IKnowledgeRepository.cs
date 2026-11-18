@@ -17,6 +17,13 @@ public interface IKnowledgeRepository
 
     bool SetType(Guid entityId, string entityType);
 
+    bool IsKnownDefinition(string kind, string value) => kind switch
+    {
+        "entity_type" => KnowledgeVocabulary.EntityTypes.Contains(value),
+        "predicate" => KnowledgeVocabulary.Predicates.Contains(value),
+        _ => false
+    };
+
     bool Merge(Guid sourceEntityId, Guid targetEntityId);
 
     bool Reject(Guid entityId);
