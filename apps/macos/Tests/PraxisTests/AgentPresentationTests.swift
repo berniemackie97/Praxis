@@ -358,3 +358,39 @@ struct AgentPresentationTests {
         #expect(PolicyLabels.step(hold.processorKey) == "read the document")
     }
 }
+
+@Suite("Chat command grammar and durable outcomes")
+struct ChatCommandExperienceTests {
+    @Test func commandsKeepArgumentsAndDoNotTreatFilePathsAsCommands() throws {
+        let command = try #require(ChatCommand.parse(" /DREAM\tcheck aliases "))
+        #expect(command.name == "dream")
+        #expect(command.arguments == "check aliases")
+        #expect(ChatCommand.parse("/Users/owner/note.md") == nil)
+        #expect(ChatCommand.parse("ordinary question") == nil)
+    }
+
+    @Test func savedCommandReceiptsAttachToTheirCanonicalAssistantMessage() throws {
+        let json = """
+            {"name":"dream","outcome":"proposals_ready","candidates":3,"reviewed":[],
+             "reviewItems":["actual-proposal-id"],"appliedChanges":0,
+             "summary":"A repair waits in Approvals.","ownerCorrectionId":null}
+            """
+        let receipt = try JSONDecoder().decode(CommandReceipt.self, from: Data(json.utf8))
+        let history = CommandHistory(messageSequence: 2002, receipt: receipt)
+        let messages = [AgentMessage(role: "user", content: "/dream", toolCalls: [], toolCallId: nil, sequence: 2001),
+                        AgentMessage(role: "assistant", content: "Generated prose is separate.", toolCalls: [], toolCallId: nil, sequence: 2002)]
+        let lines = ChatLine.lines(messages, commands: [history])
+        #expect(lines.last?.command?.reviewItems == ["actual-proposal-id"])
+        #expect(lines.last?.command?.appliedChanges == 0)
+        #expect(receipt.outcomeLabel == "Ready for review")
+    }
+
+    @Test func exactOwnerStatementDecodesForReviewInsteadOfOnlyItsShortTitle() throws {
+        let json = """
+            {"memoryId":"m","text":"Owner correction: short display", "status":"proposed",
+             "createdUtc":"2026-11-18T00:00:00Z","ownerStatement":"Two related projects remain distinct."}
+            """
+        let memory = try JSONDecoder().decode(AgentMemory.self, from: Data(json.utf8))
+        #expect(memory.ownerStatement == "Two related projects remain distinct.")
+    }
+}

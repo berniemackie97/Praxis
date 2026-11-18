@@ -1,4 +1,5 @@
 using Praxis.Domain.Agents;
+using Praxis.Domain.Knowledge;
 
 namespace Praxis.Application.Agents;
 
@@ -8,4 +9,4 @@ namespace Praxis.Application.Agents;
 /// <see cref="MayDisclose"/> is false before building output, and report it as withheld.
 /// </summary>
 public sealed record AgentToolContext(Guid ConversationId, string BackendId, bool BackendIsLocal, string ToolPermission, Func<Guid, bool> MayDisclose,
-    string? OwnerText = null, string ContextPreset = AgentContextPreset.Expanded, IReadOnlySet<string>? AllowedTools = null);
+    string? OwnerText = null, string ContextPreset = AgentContextPreset.Expanded, IReadOnlySet<string>? AllowedTools = null, IReadOnlyDictionary<Guid, KnowledgeSnapshot>? ExpectedKnowledge = null, Guid? OwnerCorrectionId = null);

@@ -72,7 +72,7 @@ struct ApprovalsView: View {
                             QueueSection(title: "Things to remember", systemImage: "brain",
                                          caption: "Facts, preferences, and corrections to review.", count: model.memories.count) {
                                 ForEach(model.memories) { memory in
-                                    DecisionCard(systemImage: "text.quote", title: memory.text, detail: nil,
+                                    DecisionCard(systemImage: "text.quote", title: memory.text, detail: memory.ownerStatement,
                                                  accept: "Remember", reject: "Discard") { model.resolve(memory, accept: $0) }
                                 }
                             }

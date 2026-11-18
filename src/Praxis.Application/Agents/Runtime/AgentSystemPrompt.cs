@@ -63,7 +63,7 @@ public static class AgentSystemPrompt
             prompt.Append("\n\nOwner preferences and standing facts:\n");
             foreach (AgentMemory memory in memories.Take(12))
             {
-                prompt.Append("- ").Append(memory.Text).Append('\n');
+                prompt.Append(memory.OwnerStatement is null ? "- " : "- Owner-stated correction (not independently verified): ").Append(memory.OwnerStatement ?? memory.Text).Append('\n');
             }
         }
 

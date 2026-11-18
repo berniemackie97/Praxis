@@ -11,7 +11,7 @@ namespace Praxis.Application.Agents;
 /// Applies an accepted knowledge proposal through the same repositories the owner's UI uses.
 /// Source-category proposals change what may be disclosed, so only the owner can apply them.
 /// </summary>
-public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepository policy)
+public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepository policy, IAgentConversationRepository? conversations = null)
 {
     public KnowledgeSnapshot? Basis(Guid entityId, Func<Guid, bool> mayDisclose)
     {
@@ -34,8 +34,13 @@ public sealed class ProposalApplier(IKnowledgeRepository knowledge, IPolicyRepos
         string Text(string name) => payload.GetProperty(name).GetString()!;
         return knowledge.ApplyCurrent(expected, () =>
         {
+            if (payload.TryGetProperty("ownerCorrectionId", out JsonElement ownerId) &&
+                conversations?.ReadMemory(ownerId.GetGuid()) is not { Status: AgentMemory.Active or AgentMemory.Proposed })
+            {
+                return false;
+            }
             if (proposal.Kind == AgentProposal.SourceCategory && payload.TryGetProperty("categoryBefore", out JsonElement categoryBefore) &&
-                categoryBefore.Deserialize<SourceCategory>() != policy.ReadCategory(Id("sourceId")))
+                            categoryBefore.Deserialize<SourceCategory>() != policy.ReadCategory(Id("sourceId")))
             {
                 return false;
             }

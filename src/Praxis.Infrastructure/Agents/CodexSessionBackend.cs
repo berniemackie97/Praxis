@@ -17,7 +17,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     // These reads are either source-disclosure checked or purely computational.
     private static readonly HashSet<string> NoninteractiveReads = new(StringComparer.Ordinal)
     {
-        "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
+        "knowledge_maintenance", "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
         "data_describe", "data_query", "compute_evaluate", "skill_search", "skill_open", "media_find", "capability_discover", "capability_result"
     };
 
@@ -26,10 +26,9 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     public async Task<AgentTurn> RunAsync(string systemPrompt, IReadOnlyList<AgentMessage> transcript, IReadOnlyList<AgentToolDefinition> tools,
         Func<AgentToolCall, CancellationToken, Task<string>> invoke, CancellationToken cancellationToken)
     {
-        // The relay exposes only read operations and the owner-reviewed action queue. Codex cannot
+        // The relay exposes read operations and owner-reviewed proposals. Codex cannot
         // approve any action itself, even when its CLI does not need an extra relay prompt.
-        AgentToolDefinition[] exposed = tools.Where(tool => (tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)) ||
-            (tool.Tier == ToolTiers.Propose && tool.Name == "capability_request")).ToArray();
+        AgentToolDefinition[] exposed = ExposedTools(tools);
         await using AgentToolSocketHost? host = exposed.Length == 0 ? null : new(socketParent, new McpServerProtocol(exposed, invoke));
         using CliWorkspace workspace = new();
         string answer = Path.Combine(workspace.Path, "answer.txt");
@@ -47,7 +46,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
             .. serverOptions,
             .. (model == "default" ? Array.Empty<string>() : ["-m", model]), .. (effort is null ? Array.Empty<string>() : ["-c", $"model_reasoning_effort=\"{effort}\""]), "-o", answer, "-"
         ], systemPrompt + "\n\n" + CliTranscript.Render(transcript), workspace.Path, Deadline, cancellationToken);
-        var (input, output, failure) = ReadEvents(result.Stdout);
+        var (input, output, cached, failure) = ReadEvents(result.Stdout);
         if (result.ExitCode != 0 || failure is not null || !File.Exists(answer))
         {
             throw ClassifyFailure(failure, result.Stderr);
@@ -59,13 +58,18 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
             throw new InferenceException(InferenceFailure.InvalidResponse, "Codex returned an empty answer.");
         }
 
-        return new AgentTurn(text, [], input, output);
+        return new AgentTurn(text, [], input, output, CachedInputTokens: cached);
     }
 
-    internal static (int Input, int Output, string? Failure) ReadEvents(string stdout)
+    internal static AgentToolDefinition[] ExposedTools(IReadOnlyList<AgentToolDefinition> tools) => tools
+        .Where(tool => !tool.LocalOnly && ((tool.Tier == ToolTiers.Read && NoninteractiveReads.Contains(tool.Name)) ||
+            (tool.Tier == ToolTiers.Propose && tool.Name is "capability_request" or "knowledge_propose"))).ToArray();
+
+    internal static (int Input, int Output, int CachedInput, string? Failure) ReadEvents(string stdout)
     {
         int input = 0;
         int output = 0;
+        int cached = 0;
         string? failure = null;
         using StringReader lines = new(stdout);
         while (lines.ReadLine() is { } line)
@@ -84,6 +88,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
                 {
                     input = Tokens(usage, "input_tokens");
                     output = Tokens(usage, "output_tokens");
+                    cached = Math.Min(input, Tokens(usage, "cached_input_tokens"));
                 }
                 else if (type.GetString() == "turn.failed")
                 {
@@ -98,7 +103,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
             }
         }
 
-        return (input, output, failure);
+        return (input, output, cached, failure);
     }
 
     private static int Tokens(JsonElement usage, string name) =>

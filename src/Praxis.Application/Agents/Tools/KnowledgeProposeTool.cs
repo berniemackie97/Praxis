@@ -30,6 +30,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
     public Task<AgentToolOutput> InvokeAsync(JsonElement arguments, AgentToolContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (context.OwnerCorrectionId is { } ownerId && repository.ReadMemory(ownerId) is not { Status: AgentMemory.Active or AgentMemory.Proposed })
+        {
+            return Task.FromResult(AgentToolOutput.Error("owner_correction_unavailable", "The owner correction was discarded or forgotten. No repair was created."));
+        }
         ToolArguments args = new(arguments);
         string kind = args.Choice("kind", AgentProposal.Kinds, "");
         object payload = kind switch
@@ -53,6 +57,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
             {
                 return Task.FromResult(AgentToolOutput.Error("evidence_unavailable", "The target has no fully disclosable current evidence. No proposal was created."));
             }
+            if (context.ExpectedKnowledge is { } expected && (!expected.TryGetValue(observed.EntityId, out KnowledgeSnapshot? original) || original.Fingerprint != observed.Fingerprint))
+            {
+                return Task.FromResult(AgentToolOutput.Error("evidence_changed", "The owner or source changed this entity during correction mapping. No repair was created."));
+            }
             basis.Add(observed);
         }
         if (kind == AgentProposal.SourceCategory)
@@ -63,6 +71,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
                 return Task.FromResult(AgentToolOutput.Error("evidence_unavailable", "This source is not available to the current session."));
             }
             fenced["categoryBefore"] = JsonSerializer.SerializeToNode(applier.CategoryBasis(source));
+        }
+        if (context.OwnerCorrectionId is { } ownerCorrectionId)
+        {
+            fenced["ownerCorrectionId"] = JsonSerializer.SerializeToNode(ownerCorrectionId);
         }
         fenced["basis"] = JsonSerializer.SerializeToNode(basis);
         bool direct = applier.CanApplyDirectly(kind) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write);

@@ -63,13 +63,23 @@ public sealed partial class SqliteAgentRunJournal : IAgentRunJournal
         }
         bool eligible = state == AgentRunStatus.Completed && reply is { StopReason: AgentReply.Completed, Check.Clean: true } &&
             reply.ToolCalls.Count >= 2 && reply.ToolCalls.Any(call => LearningToolReceipt.KindFor(call.Name) is not null);
-        connection.Run(null, """
+        using var transaction = connection.BeginTransaction();
+        int changed = connection.Run(transaction, """
             UPDATE agent_runs SET state=$state,reply=$reply,error=$error,completed_utc=$now,
                 message_end=(SELECT COALESCE(MAX(sequence),0) FROM agent_messages WHERE conversation_id=agent_runs.conversation_id),
                 learning_state=CASE WHEN kind='chat' AND $eligible=1 THEN 'pending' ELSE 'ineligible' END
             WHERE run_id=$run AND state IN ('running','queued')
             """, ("$run", Id(runId)), ("$state", state), ("$reply", reply is null ? null : JsonSerializer.Serialize(reply, Json)),
             ("$error", error), ("$now", Now()), ("$eligible", eligible ? 1 : 0));
+        if (changed == 1 && state == AgentRunStatus.Completed && reply?.Command is { Name: "dream" } command)
+        {
+            foreach (var review in command.Reviewed)
+            {
+                connection.Run(transaction, "INSERT OR IGNORE INTO agent_run_reviews(run_id,entity_id,fingerprint) VALUES($run,$entity,$fingerprint)",
+                    ("$run", Id(runId)), ("$entity", Id(review.EntityId)), ("$fingerprint", review.Fingerprint));
+            }
+        }
+        transaction.Commit();
     });
 
     public AgentRunStatus? Status(Guid runId, int afterSequence) => database.ExecuteRead(connection =>

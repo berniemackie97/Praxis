@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Conversations with the Praxis agent: answers grounded in the owner's sources through tools,
@@ -6,6 +7,8 @@ struct ChatView: View {
     @ObservedObject var model: ChatWorkbenchModel
     @ObservedObject var setup: ModelSetupModel
     let openAgentSettings: () -> Void
+    var openApprovals: () -> Void = {}
+    var openPrivacy: () -> Void = {}
     @State private var showingRecall = false
 
     private var installed: [InstalledModel] { setup.machine?.installed ?? [] }
@@ -53,6 +56,9 @@ struct ChatView: View {
             }
         }
         .sheet(isPresented: $showingRecall) { recallHistory }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            model.refreshCommandCatalog()
+        }
         .onAppear {
             model.refresh()
             setup.refresh()
@@ -164,8 +170,8 @@ struct ChatView: View {
                         .padding(.horizontal, Spacing.l)
                         .padding(.vertical, Spacing.s)
                     }
-                    Transcript(model: model, openAgentSettings: openAgentSettings)
-                    Composer(model: model, supportsChat: supportsChat, supportsTools: supportsTools)
+                    Transcript(model: model, openAgentSettings: openAgentSettings, openApprovals: openApprovals, openPrivacy: openPrivacy)
+                    Composer(model: model, supportsChat: supportsChat, supportsTools: supportsTools, openPrivacy: openPrivacy)
                 }
             }
             .background(Color(nsColor: .textBackgroundColor))
@@ -253,6 +259,8 @@ private struct ConversationList: View {
 private struct Transcript: View {
     @ObservedObject var model: ChatWorkbenchModel
     let openAgentSettings: () -> Void
+    let openApprovals: () -> Void
+    let openPrivacy: () -> Void
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -263,6 +271,10 @@ private struct Transcript: View {
                     }
                     ForEach(model.transcript) { line in
                         VStack(alignment: .leading, spacing: Spacing.m) {
+                            if let receipt = line.command {
+                                CommandReceiptCard(receipt: receipt, openApprovals: openApprovals, openPrivacy: openPrivacy)
+                                    .padding(.leading, 34)
+                            }
                             ChatBubble(line: line)
                             ForEach(InlineChatClips.cited(in: line.text, citations: line.citations), id: \.number) { clip in
                                 MediaClipCard(number: clip.number, citation: clip.citation, range: clip.range, model: model)
@@ -347,8 +359,14 @@ private struct ChatBubble: View {
         case .owner:
             HStack {
                 Spacer(minLength: 80)
-                Text(line.text)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    if let command = ChatCommand.parse(line.text) {
+                        Label("/" + command.name, systemImage: "command").font(.callout.weight(.semibold))
+                        if !command.arguments.isEmpty { Text(command.arguments).textSelection(.enabled) }
+                    } else {
+                        Text(line.text).textSelection(.enabled)
+                    }
+                }
                     .padding(.horizontal, Spacing.m)
                     .padding(.vertical, Spacing.s + 2)
                     .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
@@ -381,6 +399,7 @@ private struct Thinking: View {
     var body: some View {
         HStack(spacing: Spacing.s) {
             ProgressView().controlSize(.small)
+            if let name = model.runningCommandName { Label("/" + name, systemImage: "command").font(.callout.weight(.semibold)) }
             Text(model.statusPaused ? "Status paused" :
                  model.savedAnswerPendingStatus ? "Answer saved. Confirming completion…" : ChatActivity.progress(model.events.last))
                 .font(.callout).foregroundStyle(.secondary)
@@ -462,6 +481,14 @@ private struct ReplyDetails: View {
                     .font(.meta).foregroundStyle(.secondary)
                     .help("Provider-reported usage. CLI counts can include cached context and provider overhead; counts are not directly comparable or a subscription balance.")
             }
+            if let turns = reply.turnUsage {
+                let cached = turns.reduce(0) { $0 + ($1.cachedInputTokens ?? 0) }
+                if cached > 0 {
+                    Text("\(cached.formatted()) input tokens reused from provider cache")
+                        .font(.meta).foregroundStyle(.secondary)
+                        .help("Cached tokens are already included in reported input. This is not a price or subscription balance.")
+                }
+            }
             if let searches = reply.searchCalls, let reads = reply.sourceReads, searches + reads > 0 {
                 Text("Source retrieval: \(searches) search calls · \(reads) read calls")
                     .font(.meta).foregroundStyle(.secondary)
@@ -518,27 +545,80 @@ private struct Composer: View {
     @ObservedObject var model: ChatWorkbenchModel
     let supportsChat: Bool
     let supportsTools: Bool
+    let openPrivacy: () -> Void
+    @State private var commandIndex = 0
+    @State private var dismissedCommands = false
     @FocusState private var focused: Bool
 
     private var canSend: Bool { model.canSend && supportsChat }
     private var tooLong: Bool { model.draft.count > ChatWorkbenchModel.maximumMessageCharacters }
+    private var suggestions: [ChatCommand] { dismissedCommands ? [] : model.commandSuggestions }
+
+    private func submit() {
+        if !suggestions.isEmpty {
+            model.chooseCommand(suggestions[min(commandIndex, suggestions.count - 1)])
+        } else if canSend { model.send() }
+    }
 
     var body: some View {
-        VStack(spacing: Spacing.xs) {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Commands").font(.meta).foregroundStyle(.secondary).padding(Spacing.s)
+                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, command in
+                        Button { model.chooseCommand(command); focused = true } label: {
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text("/" + command.name).font(.callout.weight(.semibold))
+                                Text(command.description).font(.meta).foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(Spacing.s)
+                            .background(commandIndex == index ? Color.accentColor.opacity(0.12) : Color.clear)
+                            .contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                }
+                .background(Surface.card, in: RoundedRectangle(cornerRadius: Radius.m))
+                .overlay(RoundedRectangle(cornerRadius: Radius.m).strokeBorder(Surface.stroke))
+                .accessibilityLabel("Slash command suggestions")
+            }
+            if let command = model.activeCommand {
+                HStack(spacing: Spacing.s) {
+                    Label("/" + command.name, systemImage: command.name == "dream" ? "moon.zzz" : "command")
+                        .font(.callout.weight(.semibold)).foregroundStyle(Color.accentColor)
+                    Text(command.description).font(.meta).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { model.removeCommand() } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).help("Remove command; keep its arguments")
+                        .accessibilityLabel("Remove /" + command.name)
+                }
+                .padding(Spacing.s).background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.m))
+            }
+            if let reason = model.commandBlockReason {
+                HStack {
+                    Label(reason, systemImage: "lock").font(.meta)
+                    if model.activeCommand != nil { Button("Privacy…", action: openPrivacy).buttonStyle(.link).font(.meta) }
+                }.foregroundStyle(.secondary)
+            }
             HStack(alignment: .bottom, spacing: Spacing.s) {
-                TextField("Ask Praxis…", text: $model.draft, axis: .vertical)
+                TextField(model.activeCommand?.argumentHint ?? "Ask Praxis… or type / for commands", text: model.activeCommand == nil ? $model.draft : Binding(get: { model.commandArguments }, set: { model.commandArguments = $0 }), axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...8)
                     .focused($focused)
-                    .onSubmit { if canSend { model.send() } }
+                    .onSubmit(submit)
+                    .onExitCommand { dismissedCommands = true }
+                    .onMoveCommand { direction in
+                        guard !suggestions.isEmpty else { return }
+                        if direction == .down { commandIndex = (commandIndex + 1) % suggestions.count }
+                        if direction == .up { commandIndex = (commandIndex + suggestions.count - 1) % suggestions.count }
+                    }
                     .padding(.vertical, Spacing.xs)
-                Button { model.send() } label: {
+                Button(action: submit) {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 22))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(canSend ? Color.accentColor : Color.secondary.opacity(0.5))
                 .keyboardShortcut(.return, modifiers: .command)
-                .disabled(!canSend)
+                .disabled(!canSend && suggestions.isEmpty)
                 .help("Send (Return). Option-Return adds a new line.")
                 .accessibilityLabel("Send")
             }
@@ -548,17 +628,23 @@ private struct Composer: View {
             .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
                 .strokeBorder(focused ? Color.accentColor.opacity(0.6) : Surface.stroke))
             HStack {
+                Menu {
+                    ForEach(model.commands) { command in
+                        Button("/" + command.name + " · " + command.title) { model.chooseCommand(command); focused = true }
+                    }
+                } label: { Image(systemName: "command") }
+                .menuStyle(.borderlessButton).fixedSize().help("Commands")
+                .accessibilityLabel("Choose a command")
                 if !supportsChat {
                     Text("Choose a model that supports chat.")
-                } else if supportsTools {
-                    Toggle("Allow tools", isOn: $model.useTools)
+                } else {
+                    Toggle("Allow Brain tools", isOn: $model.useTools)
                         .toggleStyle(.checkbox)
                         .controlSize(.small)
                         .disabled(model.busy)
                         .help("Turn off tool calls. Relevant Brain context is supplied automatically when disclosure rules allow it.")
-                } else {
-                    Text("Brain context · tool calls unavailable")
                 }
+                if !supportsTools && supportsChat { Text("Owner corrections available · model tool calls unavailable") }
                 if model.activeBackend?.isLocal == false {
                     Text("Messages go to \(model.activeBackendId).")
                 }
@@ -575,6 +661,7 @@ private struct Composer: View {
         .padding(.bottom, Spacing.l)
         .frame(maxWidth: .infinity)
         .onAppear { focused = true }
+        .onChange(of: model.draft) { _ in commandIndex = 0; dismissedCommands = false }
     }
 }
 

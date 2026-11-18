@@ -3,6 +3,7 @@ using Praxis.Application.Agents.Memory;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Desktop.Contracts;
 using Praxis.Application.Models;
+using Praxis.Application.Policy;
 using Praxis.Domain.Agents;
 
 namespace Praxis.Application.Desktop.Actions;
@@ -14,7 +15,7 @@ namespace Praxis.Application.Desktop.Actions;
 /// </summary>
 public sealed class AgentActions(
     IAgentConversationRepository repository, AgentRunCoordinator runs, ProposalApplier proposals, SessionSecretStore secrets, ModelSetup? setup = null,
-    IChatMemoryStore? memory = null, IAgentRecallJournal? recalls = null)
+    IChatMemoryStore? memory = null, IAgentRecallJournal? recalls = null, IAgentRunJournal? work = null, PolicyService? policy = null)
     : IDesktopActionGroup
 {
     public IEnumerable<DesktopAction> Actions =>
@@ -23,7 +24,7 @@ public sealed class AgentActions(
         {
             // Every connected model, local or remote, can chat.
             setup?.EnsureChatBackends();
-            return new AgentBackendsResponse(repository.ReadBackends());
+            return new AgentBackendsResponse(repository.ReadBackends(), AgentCommands.All, policy?.Current().ToolPermission);
         }),
         DesktopAction.Of("agentBackendSave", fields =>
         {
@@ -69,7 +70,7 @@ public sealed class AgentActions(
         {
             Guid id = fields.RequireGuid("conversationId");
             return new AgentConversationResponse(repository.Read(id) ?? throw new ArgumentException("Unknown conversation."),
-                repository.ReadMessages(id), repository.ReadToolCalls(id, 200), recalls?.Read(id, 12));
+                repository.ReadMessages(id), repository.ReadToolCalls(id, 200), recalls?.Read(id, 12), work?.CommandHistory(id, 100));
         }),
         DesktopAction.Of("agentRecap", fields => new AgentRecapResponse(memory?.ReadRecap(fields.RequireGuid("conversationId")))),
         DesktopAction.Of("agentSend", fields => new AgentRunStartedResponse(runs.Start(fields.RequireGuid("conversationId"),

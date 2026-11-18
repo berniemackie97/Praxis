@@ -130,7 +130,7 @@ internal static class WorkerServiceRegistration
             provider.GetRequiredService<IAgentBackendFactory>(), provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<SkillLibrary>()));
         services.AddSingleton<AgentRunCoordinator>();
-        services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>()));
+        services.AddSingleton(provider => new ProposalApplier(provider.GetRequiredService<IKnowledgeRepository>(), provider.GetRequiredService<IPolicyRepository>(), provider.GetRequiredService<IAgentConversationRepository>()));
 
         services.AddSingleton(provider => new WatchedFolderIntakeGroup(
             provider.GetRequiredService<ISourceRepository>(), provider.GetRequiredService<IOriginalStore>(), options.DataRoot,

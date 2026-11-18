@@ -6,7 +6,7 @@ using Praxis.Domain.Knowledge;
 namespace Praxis.Application.Agents.Tools;
 
 /// <summary>Current, fully disclosable candidates from the existing reconsolidation review queue.</summary>
-public sealed class KnowledgeMaintenanceTool(IKnowledgeReconsolidation revisions, IKnowledgeRepository knowledge) : IAgentTool
+public sealed class KnowledgeMaintenanceTool(IKnowledgeReconsolidation revisions, IKnowledgeRepository knowledge, IAgentRunJournal? history = null) : IAgentTool
 {
     public const string ToolName = "knowledge_maintenance";
     public AgentToolDefinition Definition { get; } = new(ToolName,
@@ -17,11 +17,12 @@ public sealed class KnowledgeMaintenanceTool(IKnowledgeReconsolidation revisions
     {
         List<object> candidates = [];
         HashSet<Guid> seen = [];
-        foreach (KnowledgeRevision revision in revisions.Revisions(RevisionVocabulary.Suggested, 50))
+        foreach (KnowledgeRevision revision in revisions.Revisions(RevisionVocabulary.Suggested, 500))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!seen.Add(revision.EntityId) || knowledge.GetEntity(revision.EntityId) is not { } entity ||
-                entity.Mentions.Count == 0 || entity.Mentions.Any(mention => !context.MayDisclose(mention.SourceId)))
+                entity.Mentions.Count == 0 || entity.Mentions.Any(mention => !context.MayDisclose(mention.SourceId)) ||
+                history?.RecentlyReviewed(KnowledgeSnapshot.Capture(entity)) == true)
             {
                 continue;
             }
