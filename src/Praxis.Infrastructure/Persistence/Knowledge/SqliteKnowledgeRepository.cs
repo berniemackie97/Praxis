@@ -67,7 +67,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        if (entityType is not null && !KnowledgeVocabulary.EntityTypes.Contains(entityType))
+        if (entityType is not null && !KnowledgeVocabulary.ValidIdentifier(entityType))
         {
             throw new ArgumentException("The entity type is not supported.", nameof(entityType));
         }
@@ -139,16 +139,19 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
 
     public bool SetType(Guid entityId, string entityType)
     {
-        if (!KnowledgeVocabulary.EntityTypes.Contains(entityType))
+        if (!KnowledgeVocabulary.ValidIdentifier(entityType))
         {
             throw new ArgumentException("The entity type is not supported.", nameof(entityType));
         }
 
         return Decide(entityId, "set_type", entityType, (connection, transaction, now) =>
+        {
+            RegisterDefinition(connection, transaction, "entity_type", entityType, entityId, now);
             connection.Run(transaction, """
                 UPDATE knowledge_entities SET entity_type = $type, type_origin = 'owner', updated_utc = $now
                 WHERE entity_id = $entity
-                """, ("$type", entityType), ("$now", now), ("$entity", entityId.ToString("D"))));
+                """, ("$type", entityType), ("$now", now), ("$entity", entityId.ToString("D")));
+        });
     }
 
     /// <summary>
@@ -156,6 +159,51 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
     /// mentions and relations move; relations that would point an entity at itself are dropped;
     /// the source entity remains as a merged record for audit.
     /// </summary>
+    public bool IsKnownDefinition(string kind, string value)
+    {
+        if (!KnowledgeVocabulary.ValidIdentifier(value))
+        {
+            return false;
+        }
+        if (kind == "entity_type" && KnowledgeVocabulary.EntityTypes.Contains(value) ||
+            kind == "predicate" && KnowledgeVocabulary.Predicates.Contains(value))
+        {
+            return true;
+        }
+        if (kind is not ("entity_type" or "predicate"))
+        {
+            return false;
+        }
+
+        return database.ExecuteRead(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand("""
+                SELECT 1 FROM knowledge_vocabulary_extensions WHERE kind = $kind AND value = $value
+                """);
+            command.Parameters.AddWithValue("$kind", kind);
+            command.Parameters.AddWithValue("$value", value);
+            return command.ExecuteScalar() is not null;
+        });
+    }
+
+    private static void RegisterDefinition(SqliteConnection connection, SqliteTransaction transaction,
+        string kind, string value, Guid entityId, string now)
+    {
+        if (kind == "entity_type" && KnowledgeVocabulary.EntityTypes.Contains(value) ||
+            kind == "predicate" && KnowledgeVocabulary.Predicates.Contains(value))
+        {
+            return;
+        }
+
+        connection.Run(transaction, """
+            INSERT INTO knowledge_vocabulary_extensions
+                (kind, value, label, example_entity_id, origin, registered_utc)
+            VALUES ($kind, $value, $label, $entity, 'owner', $now)
+            ON CONFLICT(kind, value) DO NOTHING
+            """, ("$kind", kind), ("$value", value),
+            ("$label", value.Replace('_', ' ')), ("$entity", entityId.ToString("D")), ("$now", now));
+    }
+
     public bool Merge(Guid sourceEntityId, Guid targetEntityId)
     {
         RequireId(targetEntityId);
@@ -200,7 +248,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
     public Guid Relate(Guid subjectEntityId, string predicate, Guid objectEntityId)
     {
         RequireId(objectEntityId);
-        if (!KnowledgeVocabulary.Predicates.Contains(predicate))
+        if (!KnowledgeVocabulary.ValidIdentifier(predicate))
         {
             throw new ArgumentException("The relation predicate is not supported.", nameof(predicate));
         }
@@ -218,6 +266,7 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
                 throw new InvalidOperationException("The related entity is not active.");
             }
 
+            RegisterDefinition(connection, transaction, "predicate", predicate, subjectEntityId, now);
             connection.Run(transaction, """
                 INSERT INTO knowledge_relations
                     (relation_id, subject_id, predicate, object_id, origin, proposal_id, created_utc)
