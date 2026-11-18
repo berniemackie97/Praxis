@@ -56,6 +56,7 @@ final class ActivityModel: ObservableObject {
             self?.error = nil
             self?.learningFeedback = switch result.status {
             case "queued": "Review queued. It will run when Chat and local model work are idle."
+            case "review_running": "A learning review is already running."
             case "no_pending_work": "No eligible completed Chat runs are waiting for review."
             case "daily_call_limit": "Today's learning review limit has been reached."
             case "daily_token_limit": "The daily learning token budget has been reached."
