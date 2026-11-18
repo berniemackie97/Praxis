@@ -382,6 +382,31 @@ public sealed class SqliteCatalogTests : IDisposable
     }
 
     [Fact]
+    public void VersionFortyOneRebuildRetainsSourceRevocationTrigger()
+    {
+        CreateLegacyCatalog(41);
+        string path = Path.Combine(root, "catalog.sqlite");
+        using (SqliteConnection original = Connect(path))
+        {
+            InsertSource(original, "previous-source", "previous.md");
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        Assert.Equal(CatalogSchema.CurrentVersion, catalog.SchemaVersion);
+
+        using SqliteConnection migrated = Connect(path);
+        Assert.Equal(1L, Scalar(migrated, """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'trigger' AND name = 'reconsolidation_source_revoked'
+            """));
+        Execute(migrated, "UPDATE sources SET status = 'revoked' WHERE source_id = 'previous-source'");
+        Assert.Equal("revoked", Scalar(migrated,
+            "SELECT status FROM sources WHERE source_id = 'previous-source'"));
+        Assert.Equal("ok", Scalar(migrated, "PRAGMA integrity_check"));
+        Assert.Null(Scalar(migrated, "PRAGMA foreign_key_check"));
+    }
+
+    [Fact]
     public void LegacyVersionOneCatalogUpgradesAndPreservesExistingHistory()
     {
         CreateLegacyCatalog(1);
@@ -551,7 +576,7 @@ public sealed class SqliteCatalogTests : IDisposable
 
     private void CreateLegacyCatalog(int version)
     {
-        if (version is < 1 or > 34)
+        if (version is < 1 or > 41)
         {
             throw new ArgumentOutOfRangeException(nameof(version));
         }
