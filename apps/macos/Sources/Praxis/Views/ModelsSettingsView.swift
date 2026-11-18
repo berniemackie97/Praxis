@@ -580,7 +580,7 @@ private struct ActivitySection: View {
             ForEach(expanded ? lines : Array(lines.prefix(6))) { line in
                 HStack(spacing: Spacing.s) {
                     Image(systemName: line.call.remote ? "cloud" : "desktopcomputer").foregroundStyle(.secondary).frame(width: 18)
-                    Text("\(ModelSetupModel.name(line.call.providerId)) · \(RoleRow.title(line.call.tier))").font(.callout)
+                    Text("\(ModelSetupModel.name(line.call.providerId)) · \(ModelRoleRow.title(line.call.tier))").font(.callout)
                     if line.count > 1 { Text("×\(line.count)").font(.meta.monospacedDigit()).foregroundStyle(.secondary) }
                     Text(line.call.outcome.replacingOccurrences(of: "_", with: " "))
                         .font(.meta).foregroundStyle(line.call.outcome == "completed" ? Color.secondary : Color.orange)
