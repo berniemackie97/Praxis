@@ -86,6 +86,60 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task LearningDoesNotTrustTranscriptResultsWithoutMatchingToolAudits()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
+        catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment, "ollama", "http://127.0.0.1:11434", "fixture", 4_096, true));
+        catalog.Agents.SaveBackend(Local());
+        Guid conversation = catalog.Agents.Create(Local().BackendId, "Unverified").ConversationId;
+        Guid run = Guid.NewGuid();
+        AgentToolCall[] calls = [Call("compute_evaluate", """{"expressions":{"checked":"2+2"}}"""),
+            Call("compute_evaluate", """{"expressions":{"checked":"2+2"}}""")];
+        catalog.AgentRuns.Enqueue(run, conversation, "Validate a repeatable workflow.", true, "chat");
+        Assert.True(catalog.AgentRuns.TryStart(run));
+        catalog.Agents.Append(conversation, AgentMessage.FromUser("Validate a repeatable workflow."));
+        catalog.Agents.Append(conversation, AgentMessage.FromAssistant("", calls));
+        foreach (AgentToolCall call in calls)
+        {
+            catalog.Agents.Append(conversation, AgentMessage.FromTool(call.CallId, """{"result":{"results":{"checked":"4"}}}""", []));
+        }
+        catalog.AgentRuns.Finish(run, AgentRunStatus.Completed,
+            new AgentReply(conversation, "Completed.", AgentReply.Completed, calls, [], 0, new AnswerCheck([], false, false), 0, 0), null);
+
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => throw new InvalidOperationException("Unaudited tool results must not reach a model."));
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        Assert.Equal("no_verified_evidence", Assert.Single(catalog.AgentRuns.LearningHistory(10)).State);
+        Assert.Empty(catalog.Skills.History(null, true, 10));
+    }
+
+    [Fact]
+    public async Task EmptySuccessfulToolResultsDoNotQualifyAsProceduralEvidence()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        await LearningRun(catalog, emptyResults: true);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => throw new InvalidOperationException("Empty results must not reach a model."));
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        Assert.Equal("no_verified_evidence", Assert.Single(catalog.AgentRuns.LearningHistory(10)).State);
+    }
+
+    [Fact]
+    public void WithheldRunCannotEnterTheLearningQueueEvenWithACleanAnswer()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Agents.SaveBackend(Local());
+        Guid conversation = catalog.Agents.Create(Local().BackendId, "Partial task").ConversationId;
+        Guid run = Guid.NewGuid();
+        AgentToolCall[] calls = [Call("compute_evaluate", """{"expressions":{"checked":"2+2"}}"""),
+            Call("compute_evaluate", """{"expressions":{"checked":"2+2"}}""")];
+        catalog.AgentRuns.Enqueue(run, conversation, "Validate a repeatable workflow.", true, "chat");
+        Assert.True(catalog.AgentRuns.TryStart(run));
+        catalog.AgentRuns.Finish(run, AgentRunStatus.Completed,
+            new AgentReply(conversation, "Completed.", AgentReply.Completed, calls, [], 1, new AnswerCheck([], false, false), 0, 0), null);
+        Assert.Empty(catalog.AgentRuns.LearningHistory(10));
+    }
+
+    [Fact]
     public async Task FailedToolReceiptsCannotBecomeLearningEvidence()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
@@ -221,11 +275,11 @@ public sealed partial class AgentRuntimeTests
         Assert.Throws<ArgumentException>(() => catalog.AgentRuns.Enqueue(Guid.NewGuid(), Guid.NewGuid(), "request", true, "chat"));
     }
 
-    private async Task<AgentRunStatus> LearningRun(SqliteCatalog catalog, bool invalidTools = false)
+    private async Task<AgentRunStatus> LearningRun(SqliteCatalog catalog, bool invalidTools = false, bool emptyResults = false)
     {
         catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
         catalog.Models.Save(new ModelProfile(ModelProfile.LocalEnrichment, "ollama", "http://127.0.0.1:11434", "fixture", 4_096, true));
-        string args = invalidTools ? "{}" : """{"expressions":{"checked":"2+2"}}""";
+        string args = invalidTools ? "{}" : emptyResults ? """{"expressions":{}}""" : """{"expressions":{"checked":"2+2"}}""";
         ScriptedBackend backend = new(_ => Turn(Call("compute_evaluate", args), Call("compute_evaluate", args)),
             _ => new AgentTurn("The checked workflow completed.", [], 1, 1));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
