@@ -3,7 +3,6 @@ using System.Text.Json;
 using Praxis.Application.Inference;
 using Praxis.Domain.Enrichment;
 using Praxis.Domain.Knowledge;
-
 using Praxis.Domain.Processing;
 
 namespace Praxis.Application.Enrichment;
