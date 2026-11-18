@@ -25,3 +25,44 @@ dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj
 ```
 
 The test is not an acceptance gate for semantic support. Only after independent review should a subsequent implementation slice compare no-judge baseline against a proposed narrow deterministic or **explicitly authorized** model-based checker on the same frozen source groups. Report citation precision, false support, unsupported/contradicted handling, abstention, source revision correctness, tokens, latency and permission outcomes; preserve existing source/currentness and disclosure protections. Do not invent a claim-support value from a valid citation number.
+
+## Opt-in local claim-support candidate (#538)
+
+The no-extra-model runtime still accepts all 15 synthetic claims. The optional
+`ClaimSupportModelEvaluationTests` test compares that baseline to one structured
+claim–excerpt judgment per case, using the existing **loopback-only** Ollama
+connector. No judge is wired into chat, no stored source is read, and no external
+provider is called. Failures, malformed verdicts, and ambiguous outputs are
+never silently counted as evidence of support.
+
+```bash
+ollama list
+export PRAXIS_GROUNDING_OLLAMA_MODEL='qwen3.5:4b'
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj \
+  -c Release --no-build --no-restore \
+  --filter 'FullyQualifiedName~ClaimSupportModelEvaluationTests' \
+  --logger 'console;verbosity=detailed'
+unset PRAXIS_GROUNDING_OLLAMA_MODEL
+```
+
+Optional `PRAXIS_GROUNDING_OLLAMA_ENDPOINT` must be a loopback Ollama URL;
+the model profile rejects non-loopback endpoints. When the model environment
+variable is absent the test prints `NOT EXECUTED` and does not invoke inference;
+a passing test result in that case is **not** a model evaluation.
+
+The candidate emits per-case verdict, reason, wall latency and reported token
+usage, plus aggregate false support, precision, abstentions, invalid responses,
+model digest and latency. These outputs support comparison; **no accuracy
+threshold is predeclared**, because independent owner labels and held-out
+source-group evaluations are still outstanding under #311. Even an apparently
+good score on five deliberately repetitive groups is not evidence that
+production answers are safe. Future integration requires source-currentness
+and disclosure gating, claim-to-citation alignment, bounded model retries and
+explicitly approved provider/cost policy.
+
+The local candidate also runs a separate 14-case synthetic challenge fixture
+(`claim-grounding-cases-v2.json`) for partial truth, qualified claims, disputed
+current sources, superseded policies, missing documentation, and hostile quoted
+instructions. Its labels remain provisional too. Each fixture reports its own
+baseline and candidate results; do not average them into a real-world precision
+claim or treat a disputed source as automatically resolved by a model verdict.
