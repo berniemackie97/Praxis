@@ -226,6 +226,18 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task ManualReviewRequestReportsAnActiveReviewBeforeBudgetExhaustion()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        await LearningRun(catalog);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => """{"action":"no_change","evidenceCallIds":[]}""");
+        reviewer.Configure(new LearningSettings(LearningSettings.Manual, 1, 6_000));
+
+        Assert.NotNull(catalog.AgentRuns.ClaimLearning(1, 6_000));
+        Assert.Equal("review_running", reviewer.RequestManual());
+    }
+
+    [Fact]
     public async Task ManualReviewRequestReportsDailyCallAndTokenLimitsWithoutClaimingWork()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
