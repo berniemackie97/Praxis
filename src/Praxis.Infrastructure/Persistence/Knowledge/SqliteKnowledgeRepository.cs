@@ -154,11 +154,6 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
         });
     }
 
-    /// <summary>
-    /// Folds <paramref name="sourceEntityId"/> into <paramref name="targetEntityId"/>: aliases,
-    /// mentions and relations move; relations that would point an entity at itself are dropped;
-    /// the source entity remains as a merged record for audit.
-    /// </summary>
     public bool IsKnownDefinition(string kind, string value)
     {
         if (!KnowledgeVocabulary.ValidIdentifier(value))
@@ -204,6 +199,11 @@ public sealed class SqliteKnowledgeRepository : IKnowledgeRepository
             ("$label", value.Replace('_', ' ')), ("$entity", entityId.ToString("D")), ("$now", now));
     }
 
+    /// <summary>
+    /// Folds <paramref name="sourceEntityId"/> into <paramref name="targetEntityId"/>: aliases,
+    /// mentions and relations move; relations that would point an entity at itself are dropped;
+    /// the source entity remains as a merged record for audit.
+    /// </summary>
     public bool Merge(Guid sourceEntityId, Guid targetEntityId)
     {
         RequireId(targetEntityId);
