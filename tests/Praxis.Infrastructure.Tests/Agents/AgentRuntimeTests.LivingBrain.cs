@@ -1,10 +1,10 @@
+using Microsoft.Data.Sqlite;
 using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Policy;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
-using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace Praxis.Infrastructure.Tests.Agents;

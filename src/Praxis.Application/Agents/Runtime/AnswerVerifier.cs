@@ -14,7 +14,7 @@ public static partial class AnswerVerifier
 {
     public static AnswerCheck Check(string answer, IEnumerable<string> toolResults, string userText, bool evidenceAvailable, bool repaired,
         int availableCitations = 0, IReadOnlySet<int>? openedCitations = null,
-        IReadOnlyDictionary<int, string>? citedEvidence = null)
+        IReadOnlyDictionary<int, string>? citedEvidence = null, IReadOnlySet<int>? searchPreviews = null)
     {
         string[] evidence = toolResults.Select(VerifiableEvidence).Append(userText).ToArray();
         HashSet<decimal> supported = [];
@@ -43,7 +43,9 @@ public static partial class AnswerVerifier
         bool missingCitations = evidenceAvailable &&
             (citations.Length == 0 ||
              citations.Any(number => number <= 0 || availableCitations > 0 && number > availableCitations) ||
-             openedCitations is { Count: > 0 } && !citations.Any(openedCitations.Contains));
+             openedCitations is { Count: > 0 } &&
+                 (!citations.Any(openedCitations.Contains) ||
+                  searchPreviews is not null && citations.Any(searchPreviews.Contains)));
         return new AnswerCheck(unsupported, missingCitations, repaired);
     }
 

@@ -81,6 +81,38 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task PublicQuestionsSkipUnrelatedRecapsButExplicitChatRequestsCanStillFindThem()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        AgentBackendProfile profile = Local() with { BackendId = "ollama" };
+        catalog.Agents.SaveBackend(profile);
+        AgentConversation earlier = catalog.Agents.Create(profile.BackendId, "old project");
+        catalog.Agents.Append(earlier.ConversationId, AgentMessage.FromUser("Conquer Online is my server project."));
+        catalog.Agents.AppendFinal(earlier.ConversationId, AgentMessage.FromAssistant("Recorded.", []));
+        clock.UtcNow += TimeSpan.FromSeconds(10);
+        ChatMemoryWork pending = catalog.ChatMemory.Next() ?? throw new InvalidOperationException("Missing recap work.");
+        const string recap = "Conquer Online server project discussion.";
+        Assert.True(catalog.ChatMemory.SaveRecap(pending, recap));
+        Assert.Single(catalog.ChatMemory.Search("Conquer Online", null, 3));
+
+        AgentConversation current = catalog.Agents.Create(profile.BackendId, "new topic");
+        IReadOnlyList<AgentMessage> forwarded = [];
+        SessionBackend session = new(_ => Task.FromResult(
+            new AgentTurn("Conquer Online is a game.", [], 5, 2)), messages => forwarded = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(null, session), clock);
+
+        await runtime.RunAsync(current.ConversationId, "What is Conquer Online?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+        Assert.DoesNotContain(forwarded, message => message.Content.Contains(recap, StringComparison.Ordinal));
+        Assert.Equal("not_needed", Assert.Single(catalog.AgentRecalls.Read(current.ConversationId, 1)).Outcome);
+
+        await runtime.RunAsync(current.ConversationId, "Conquer Online, from my chat",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+        Assert.Contains(forwarded, message => message.Content.Contains(recap, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExplicitMemoryEditsAreLocalRevisionCheckedAndCanRenameTheAssistant()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);

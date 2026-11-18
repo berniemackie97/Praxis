@@ -127,6 +127,12 @@ public sealed partial class AgentRuntimeTests
     [Theory]
     [InlineData("What is Conquer Online?", false)]
     [InlineData("Explain Conquer Online.", false)]
+    [InlineData("Tell me about Conquer Online.", false)]
+    [InlineData("Can you tell me what Conquer Online is?", false)]
+    [InlineData("I wonder what Conquer Online is.", false)]
+    [InlineData("I was wondering what Conquer Online is.", false)]
+    [InlineData("I'm curious: what is Conquer Online?", false)]
+    [InlineData("I wonder what my OpenConquerServer project says about Conquer Online.", true)]
     [InlineData("What is Conquer Online, and how does my OpenConquerServer project relate to it?", true)]
     [InlineData("What does my OpenConquerServer documentation say about Conquer Online?", true)]
     public async Task GeneralAndOwnerScopedQuestionsDoNotConflatePrivateProjectWithPublicTopic(
@@ -165,6 +171,54 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(ownerScoped, reply.Citations.Count > 0);
         Assert.Equal(question, delivered[^1].Content);
         Assert.Equal(AgentReply.Completed, reply.StopReason);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OwnerScopedFollowUpReusesOnlyCurrentlyPermittedEvidence(bool revokeBeforeFollowUp)
+    {
+        using SqliteCatalog catalog = await SeededAsync();
+        Guid source = Assert.Single(catalog.Search.Query("lease", 10)).SourceId;
+        AgentBackendProfile remote = new("codex", AgentBackendKinds.Codex, null, "default", null, "/usr/bin/true", true);
+        catalog.Agents.SaveBackend(remote);
+        catalog.Policy.SaveCategory(new SourceCategory(source, DataCategories.Documents, SourceCategory.OwnerOrigin, false));
+        PolicyService policy = new(catalog.Policy);
+        policy.Request(new PolicyChange(Mode: DisclosureModes.StandingGrants), PolicyActors.Owner);
+        policy.Request(new PolicyChange(AddRule: new DisclosureRule(Guid.NewGuid(), DataCategories.Documents,
+            remote.BackendId, DisclosurePurposes.Chat, true, null)), PolicyActors.Owner);
+        AgentConversation conversation = catalog.Agents.Create(remote.BackendId, "follow-up");
+        IReadOnlyList<AgentMessage> forwarded = [];
+        SessionBackend session = new(_ => Task.FromResult(
+            new AgentTurn("Rent is paid by check [1].", [], 5, 2)), messages => forwarded = messages);
+        AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog),
+            new FixedFactory(null, session), clock);
+
+        await runtime.RunAsync(conversation.ConversationId, "What does my lease say about rent?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        if (revokeBeforeFollowUp)
+        {
+            catalog.Policy.SaveCategory(new SourceCategory(source, DataCategories.Documents,
+                SourceCategory.OwnerOrigin, true));
+        }
+
+        await runtime.RunAsync(conversation.ConversationId, "And how is rent paid?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+
+        AgentRecallReceipt receipt = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 1));
+        Assert.Contains(receipt.Outcome, revokeBeforeFollowUp
+            ? new[] { "withheld" }
+            : new[] { "full_match", "focused_match" });
+        Assert.Equal(!revokeBeforeFollowUp, receipt.Selected.Count > 0);
+        Assert.Equal(!revokeBeforeFollowUp, forwarded.Any(message =>
+            message.Content.Contains("Monthly rent is paid by check", StringComparison.Ordinal)));
+
+        await runtime.RunAsync(conversation.ConversationId, "What is Conquer Online?",
+            (_, _, _) => { }, CancellationToken.None, useTools: false);
+        AgentRecallReceipt unrelated = Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 1));
+        Assert.Equal("not_needed", unrelated.Outcome);
+        Assert.Empty(unrelated.Selected);
     }
 
     [Fact]

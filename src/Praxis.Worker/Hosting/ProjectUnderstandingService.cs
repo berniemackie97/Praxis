@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Praxis.Application.Projects;
 using Praxis.Application.Agents.Runtime;
+using Praxis.Application.Projects;
 
 namespace Praxis.Worker.Hosting;
 

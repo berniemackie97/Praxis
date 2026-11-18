@@ -196,7 +196,10 @@ public sealed class AgentRuntime(
 
         RunState state = new(useTools, toolsUnavailable);
         AgentMessage? readOnlyEvidence = null;
-        string memoryQuery = ChatMemoryQuery.Build(userText);
+        string? previousPrompt = conversations.ReadMessages(conversationId).Reverse().Skip(1)
+            .FirstOrDefault(message => message.Role == AgentRoles.User)?.Content;
+        string memoryQuery = AgentBrainContext.IsSourceIndependent(userText, previousPrompt)
+            ? "" : ChatMemoryQuery.Build(userText);
         ChatMemoryMatch[] recalledChats = profile.IsLocal && memory is not null && dream is null && memoryQuery.Length > 0
             ? memory.Search(memoryQuery, conversationId, 3).ToArray() : [];
         AgentMessage? chatEvidence = recalledChats.Length == 0 ? null : AgentMessage.FromUser(
@@ -223,7 +226,8 @@ public sealed class AgentRuntime(
         if (brainSearch is not null && dream != "")
         {
             (string outcome, int considered, int withheld, SearchHit[] selected) = AgentBrainContext.Recall(
-                brainSearch, userText, scope.MayDisclose, AgentContextPreset.BriefLimit(conversation.ContextPreset, profile.IsLocal));
+                brainSearch, userText, scope.MayDisclose, AgentContextPreset.BriefLimit(conversation.ContextPreset, profile.IsLocal),
+                previousPrompt);
             AgentCitation[] citations = selected.Select(hit =>
                 new AgentCitation(hit.SourceId, hit.ItemId, hit.Revision, "brain-search", Path.GetFileName(hit.SourceLocator))).ToArray();
             recallJournal?.Record(conversationId, new AgentRecallReceipt(Guid.NewGuid(), profile.BackendId, outcome, considered,
@@ -701,6 +705,10 @@ public sealed class AgentRuntime(
                 state.CitationEvidence[number] = call.Name == KnowledgeOpenTool.ToolName
                     ? output.Content
                     : result.GetProperty("results")[index].GetProperty("snippet").GetString() ?? "";
+                if (call.Name == KnowledgeSearchTool.ToolName)
+                {
+                    state.SearchPreviews.Add(number);
+                }
             }
         }
 
@@ -748,7 +756,7 @@ public sealed class AgentRuntime(
         AnswerVerifier.Check(text,
             state.FinalEvidenceResults ?? (state.OpenedCitations.Count > 0 ? state.VerificationResults : state.ToolResults),
             userText, state.Citations.All.Count > 0, repaired, state.Citations.All.Count,
-            state.ForwardedOpenedCitations ?? state.OpenedCitations, state.CitationEvidence);
+            state.ForwardedOpenedCitations ?? state.OpenedCitations, state.CitationEvidence, state.SearchPreviews);
 
     /// <summary>The transcript from the latest compaction summary onward.</summary>
     /// <summary>
@@ -806,6 +814,7 @@ public sealed class AgentRuntime(
         public List<string> ToolResults { get; } = [];
         public List<string> VerificationResults { get; } = [];
         public Dictionary<int, string> CitationEvidence { get; } = [];
+        public HashSet<int> SearchPreviews { get; } = [];
         public HashSet<int> OpenedCitations { get; } = [];
         public HashSet<int>? ForwardedOpenedCitations { get; set; }
         public IReadOnlyList<string>? FinalEvidenceResults { get; set; }
