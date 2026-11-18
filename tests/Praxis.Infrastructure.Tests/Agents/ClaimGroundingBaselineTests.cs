@@ -24,6 +24,7 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
         Assert.Equal(5, cases.Select(entry => entry.GetProperty("sourceGroup").GetString())
             .Distinct(StringComparer.Ordinal).Count());
 
+        List<(string Domain, string Expected, bool Accepted)> observations = [];
         int acceptedSupported = 0, acceptedUnsupported = 0, acceptedContradicted = 0, rejectedSupported = 0;
         foreach (JsonElement entry in cases)
         {
@@ -44,6 +45,7 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
             HashSet<int> opened = Enumerable.Range(1, evidence.Length).ToHashSet();
             bool accepted = AnswerVerifier.Check(answer, evidence, question, true, false,
                 evidence.Length, opened, passages).Clean;
+            observations.Add((entry.GetProperty("domain").GetString()!, expected, accepted));
             if (accepted)
             {
                 if (expected == "supported") acceptedSupported++;
@@ -56,6 +58,13 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
             }
 
             output.WriteLine($"case={id} expected={expected} accepted={accepted}");
+        }
+
+        foreach (var group in observations.GroupBy(item => item.Domain).OrderBy(group => group.Key))
+        {
+            int trueSupport = group.Count(item => item.Expected == "supported" && item.Accepted);
+            int falseSupport = group.Count(item => item.Expected != "supported" && item.Accepted);
+            output.WriteLine($"domain={group.Key} supported_accepted={trueSupport} false_supported={falseSupport}");
         }
 
         int falseSupported = acceptedUnsupported + acceptedContradicted;
