@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Praxis.Application.Inference;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
