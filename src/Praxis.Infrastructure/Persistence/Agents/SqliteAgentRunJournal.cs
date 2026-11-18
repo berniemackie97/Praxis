@@ -62,7 +62,7 @@ public sealed partial class SqliteAgentRunJournal : IAgentRunJournal
             throw new ArgumentException("The terminal run state is invalid.");
         }
         bool eligible = state == AgentRunStatus.Completed && reply is { StopReason: AgentReply.Completed, Check.Clean: true } &&
-            reply.ToolCalls.Count >= 2 && reply.ToolCalls.Any(call => LearningToolReceipt.KindFor(call.Name) is not null);
+            reply.WithheldResults == 0 && reply.ToolCalls.Count >= 2 && reply.ToolCalls.Any(call => LearningToolReceipt.KindFor(call.Name) is not null);
         using var transaction = connection.BeginTransaction();
         int changed = connection.Run(transaction, """
             UPDATE agent_runs SET state=$state,reply=$reply,error=$error,completed_utc=$now,
