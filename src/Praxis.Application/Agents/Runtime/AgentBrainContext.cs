@@ -101,7 +101,7 @@ internal static partial class AgentBrainContext
     [GeneratedRegex(@"(?<![\w.])\d+(?:\.\d+)?\s*[-+*/]\s*\d+(?:\.\d+)?(?![\w.])", RegexOptions.CultureInvariant)]
     private static partial Regex ArithmeticExpression();
 
-    [GeneratedRegex(@"\b(?:source|document|file|notes|library|repository|repo|dataset|attachment|uploaded|linked|website|webpage)\b|\b\S+\.(?:md|txt|pdf|csv|json|cs|fs|swift)\b|https?://",
+    [GeneratedRegex(@"\b(?:source|document|file|notes|library|repository|repo|dataset|attachment|uploaded|linked|website|webpage|url)\b|\b[\w.-]+\.[a-z]{1,8}\b|https?://",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SourceReference();
 
