@@ -27,10 +27,14 @@ public static class UnderstandingPrompt
               amounts, obligations). No speculation.
             - documentType: a short noun phrase.
             - topics: up to 8 subjects the document is about.
-            - entities: up to 20 notable named people, organizations, projects, artifacts, symbols and other things. type is one of:
-              {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
+            - entities: up to 20 notable named things. Use a specific lower_snake_case type (up to 32 characters)
+              supported by the document. Common examples: {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
+              These are examples, not an exhaustive list. Distinguish games and products from software projects.
+              A new label is an inferred classification, not approval of a new canonical type definition.
             - {KnowledgeVocabulary.TechnicalTypeGuide}
-            - up to 12 explicit relations between named entities. predicate is one of: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
+            - up to 12 explicit relations between named entities. Use a precise lower_snake_case predicate
+              supported by the quote. Examples: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
+              Do not invent relationships from mere co-occurrence.
             - records: {(records.Count == 0 ? "none; return an empty array." : "only these kinds — " + string.Join("; ", records.Select(record => record.PromptFields)) + ".")}
               Dates must be written in the document; resolve a missing year from the document's own dates. Never infer relative dates.
             Every item needs "quote": an exact, contiguous excerpt of at most 200 characters copied from the document that states it.
@@ -68,8 +72,8 @@ public static class UnderstandingPrompt
                 "summary": { "type": "string" },
                 "documentType": { "type": "string" },
                 "topics": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "quote": { "type": "string" } }, "required": ["name", "quote"] } },
-                "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string", "enum": [{{string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal).Select(type => $"\"{type}\""))}}] }, "quote": { "type": "string" } }, "required": ["name", "type", "quote"] } },
-                "relations": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string", "enum": [{{string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal).Select(predicate => $"\"{predicate}\""))}}] }, "object": { "type": "string" }, "quote": { "type": "string" } }, "required": ["subject", "predicate", "object", "quote"] } },
+                "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string", "maxLength": 32 }, "quote": { "type": "string" } }, "required": ["name", "type", "quote"] } },
+                "relations": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string", "maxLength": 32 }, "object": { "type": "string" }, "quote": { "type": "string" } }, "required": ["subject", "predicate", "object", "quote"] } },
                 "records": { "type": "array", "items": {{recordItem}} }
               },
               "required": ["summary", "documentType", "topics", "entities", "relations", "records"]
@@ -96,9 +100,11 @@ public static class UnderstandingPrompt
               "quote" of at most 200 characters copied from the document. Do not repeat items the draft already has.
             - summary: 2-4 sentences, at most 900 characters, only if the draft's summary is wrong or weak; otherwise "".
             - documentType: only if the draft's is wrong; otherwise "".
-            Entity types: {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
+            Use evidence-backed lower_snake_case types and predicates of at most 32 characters. Existing examples:
+            types: {string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}.
             {KnowledgeVocabulary.TechnicalTypeGuide}
-            Relation predicates: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
+            predicates: {string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}.
+            Distinguish games/products from development projects; do not infer relations from co-occurrence.
             Records: {(records.Count == 0 ? "none." : string.Join("; ", records.Select(record => record.PromptFields)) + ".")}
             Dates must be written in the document. Prefer fewer, correct items. An empty correction is a good answer when the draft is right.
             """),
