@@ -46,7 +46,10 @@ public sealed partial class AgentRuntimeTests
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
 
-        AgentReply answer = await runtime.RunAsync(conversation.ConversationId, prompt, (_, _, _) => { }, CancellationToken.None);
+        AgentRunCoordinator coordinator = new(runtime, clock, catalog.AgentRuns);
+        AgentRunStatus finished = await Poll(coordinator, coordinator.Start(conversation.ConversationId, prompt));
+        Assert.Equal(AgentRunStatus.Completed, finished.State);
+        AgentReply answer = Assert.IsType<AgentReply>(finished.Reply);
 
         Assert.Equal(AgentReply.Completed, answer.StopReason);
         Assert.True(answer.Check.Clean);
@@ -55,6 +58,7 @@ public sealed partial class AgentRuntimeTests
         Assert.All(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10),
             audit => Assert.Equal("ok", audit.Outcome));
         Assert.Equal("not_needed", Assert.Single(catalog.AgentRecalls.Read(conversation.ConversationId, 10)).Outcome);
+        Assert.Equal("pending", Assert.Single(catalog.AgentRuns.LearningHistory(10)).State);
     }
 
     [Fact]
