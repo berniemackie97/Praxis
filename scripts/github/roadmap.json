@@ -403,6 +403,20 @@
       ]
     },
     {
+      "issue": 552,
+      "epic": 287,
+      "area": "knowledge",
+      "children": [
+        553,
+        554,
+        555,
+        556,
+        557,
+        558,
+        559
+      ]
+    },
+    {
       "issue": 294,
       "epic": 288,
       "area": "automation",
@@ -928,7 +942,8 @@
       173,
       176,
       179,
-      388
+      388,
+      559
     ],
     "171": [
       25,
@@ -1394,6 +1409,37 @@
     ],
     "538": [
       523
+    ],
+    "553": [
+      507
+    ],
+    "554": [
+      553
+    ],
+    "555": [
+      554
+    ],
+    "556": [
+      553
+    ],
+    "557": [
+      553,
+      554,
+      555,
+      556
+    ],
+    "558": [
+      507
+    ],
+    "559": [
+      553,
+      554,
+      555,
+      556,
+      557,
+      558,
+      315,
+      379
     ]
   },
   "priorities": {
@@ -1591,7 +1637,15 @@
     "523": "P1",
     "535": "P1",
     "538": "P1",
-    "545": "P1"
+    "545": "P1",
+    "552": "P1",
+    "553": "P0",
+    "554": "P1",
+    "555": "P1",
+    "556": "P1",
+    "557": "P1",
+    "558": "P1",
+    "559": "P1"
   },
   "area_overrides": {
     "24": "clients",
@@ -1943,9 +1997,17 @@
         538,
         383,
         388,
-        455
+        455,
+        552,
+        553,
+        554,
+        555,
+        556,
+        557,
+        558,
+        559
       ],
-      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate secure, accessible native interactive knowledge graph with exact source/relation provenance (#383/#388), semantic/structural retrieval, bounded agent investigation, approved actions, efficient contexts, measured local-or-consented-remote model routing, provider outage/denial and privacy/revocation/cost tests. Optional Obsidian/Markdown portability #57/#171 is not a release gate."
+      "exit": "Owner-run, local-first end-to-end proof across at least three representative supported knowledge domains: (1) cross-artifact technical research, (2) relevant timecoded video segment playable inside chat with full-source navigation, and (3) verified editable monthly budgeting from explicitly authorized bills, income and transaction data. Also demonstrate secure, accessible native interactive knowledge graph with exact source/relation provenance (#383/#388), semantic/structural retrieval, bounded agent investigation, approved actions, efficient contexts, measured local-or-consented-remote model routing, provider outage/denial and privacy/revocation/cost tests. Optional Obsidian/Markdown portability #57/#171 is not a release gate. Intake Golden #552 requires independent #559 certification of structured-first parsing, source-safe cross-format reuse, bounded token/memory usage, resilient reprocessing and correct cited retrieval against mixed/sensitive sources before the #170 release gate."
     },
     {
       "id": "L7",
