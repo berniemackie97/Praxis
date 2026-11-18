@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "reviewStatus": "provisional",
+  "purpose": "Diagnose claim-to-cited-passage support without model inference or private owner data.",
+  "cases": [
+    {
+      "id": "lease-check-supported",
+      "domain": "finance",
+      "sourceGroup": "lease-payment",
+      "question": "What payment method does the lease require?",
+      "answer": "The lease requires rent to be paid by check [1].",
+      "evidence": [
+        "Monthly rent must be paid by check."
+      ],
+      "expected": "supported",
+      "rationale": "The cited passage explicitly requires payment by check."
+    },
+    {
+      "id": "lease-check-topical",
+      "domain": "finance",
+      "sourceGroup": "lease-payment",
+      "question": "What payment method does the lease require?",
+      "answer": "The lease requires rent to be paid by check [1].",
+      "evidence": [
+        "The lease covers rent payments, due dates, and overdue notices."
+      ],
+      "expected": "unsupported",
+      "rationale": "A rent-payment topic match does not identify the payment method."
+    },
+    {
+      "id": "lease-check-opposite",
+      "domain": "finance",
+      "sourceGroup": "lease-payment",
+      "question": "What payment method does the lease require?",
+      "answer": "The lease requires rent to be paid by check [1].",
+      "evidence": [
+        "Monthly rent is payable by electronic transfer; paper checks are not accepted."
+      ],
+      "expected": "contradicted",
+      "rationale": "The cited passage explicitly excludes checks."
+    },
+    {
+      "id": "nonce-replay-supported",
+      "domain": "protocol",
+      "sourceGroup": "login-nonce",
+      "question": "Are repeated login nonces rejected?",
+      "answer": "The server rejects a replayed login nonce [1].",
+      "evidence": [
+        "Login verification rejects a nonce that has already been used."
+      ],
+      "expected": "supported",
+      "rationale": "Reused login nonces are directly rejected."
+    },
+    {
+      "id": "nonce-replay-topical",
+      "domain": "protocol",
+      "sourceGroup": "login-nonce",
+      "question": "Are repeated login nonces rejected?",
+      "answer": "The server rejects a replayed login nonce [1].",
+      "evidence": [
+        "A login handshake includes a nonce generated for the current session."
+      ],
+      "expected": "unsupported",
+      "rationale": "A nonce being present does not establish replay handling."
+    },
+    {
+      "id": "nonce-replay-opposite",
+      "domain": "protocol",
+      "sourceGroup": "login-nonce",
+      "question": "Are repeated login nonces rejected?",
+      "answer": "The server rejects a replayed login nonce [1].",
+      "evidence": [
+        "Authentication permits the same nonce to be reused on multiple logins."
+      ],
+      "expected": "contradicted",
+      "rationale": "The cited behavior permits, rather than rejects, replay."
+    },
+    {
+      "id": "movement-owner-supported",
+      "domain": "technical",
+      "sourceGroup": "movement-origin",
+      "question": "Who sends the movement request?",
+      "answer": "The client sends movement requests to the server [1].",
+      "evidence": [
+        "Each movement request originates at the client and is processed by the server."
+      ],
+      "expected": "supported",
+      "rationale": "The source specifies the client as the requester."
+    },
+    {
+      "id": "movement-owner-topical",
+      "domain": "technical",
+      "sourceGroup": "movement-origin",
+      "question": "Who sends the movement request?",
+      "answer": "The client sends movement requests to the server [1].",
+      "evidence": [
+        "The movement protocol validates directions and map boundaries."
+      ],
+      "expected": "unsupported",
+      "rationale": "Movement validation is unrelated to request origin."
+    },
+    {
+      "id": "movement-owner-opposite",
+      "domain": "technical",
+      "sourceGroup": "movement-origin",
+      "question": "Who sends the movement request?",
+      "answer": "The client sends movement requests to the server [1].",
+      "evidence": [
+        "The server initiates movement requests, and the client responds with confirmation."
+      ],
+      "expected": "contradicted",
+      "rationale": "The source assigns initiation to the server."
+    },
+    {
+      "id": "build-order-supported",
+      "domain": "operations",
+      "sourceGroup": "build-order",
+      "question": "When do tests run in the pipeline?",
+      "answer": "Tests run after dependency restore [1].",
+      "evidence": [
+        "The pipeline restores dependencies before executing the test suite."
+      ],
+      "expected": "supported",
+      "rationale": "Restore precedes tests."
+    },
+    {
+      "id": "build-order-topical",
+      "domain": "operations",
+      "sourceGroup": "build-order",
+      "question": "When do tests run in the pipeline?",
+      "answer": "Tests run after dependency restore [1].",
+      "evidence": [
+        "The pipeline has restore, test, packaging, and deployment stages."
+      ],
+      "expected": "unsupported",
+      "rationale": "Listing stages alone does not specify their ordering."
+    },
+    {
+      "id": "build-order-opposite",
+      "domain": "operations",
+      "sourceGroup": "build-order",
+      "question": "When do tests run in the pipeline?",
+      "answer": "Tests run after dependency restore [1].",
+      "evidence": [
+        "The pipeline runs tests before attempting dependency restore."
+      ],
+      "expected": "contradicted",
+      "rationale": "The order of stages is reversed."
+    },
+    {
+      "id": "video-door-supported",
+      "domain": "media",
+      "sourceGroup": "video-motion",
+      "question": "What happens in the scene?",
+      "answer": "A person walks through the doorway [1].",
+      "evidence": [
+        "The clip shows a person crossing the threshold into the next room."
+      ],
+      "expected": "supported",
+      "rationale": "Crossing the threshold into the room supports the paraphrase."
+    },
+    {
+      "id": "video-door-topical",
+      "domain": "media",
+      "sourceGroup": "video-motion",
+      "question": "What happens in the scene?",
+      "answer": "A person walks through the doorway [1].",
+      "evidence": [
+        "The frame shows a doorway beside a stationary figure. Background music continues."
+      ],
+      "expected": "unsupported",
+      "rationale": "A stationary figure beside a doorway does not establish traversal."
+    },
+    {
+      "id": "video-door-opposite",
+      "domain": "media",
+      "sourceGroup": "video-motion",
+      "question": "What happens in the scene?",
+      "answer": "A person walks through the doorway [1].",
+      "evidence": [
+        "Nobody crosses the doorway; the only person remains motionless."
+      ],
+      "expected": "contradicted",
+      "rationale": "The passage explicitly denies the described action."
+    }
+  ]
+}
