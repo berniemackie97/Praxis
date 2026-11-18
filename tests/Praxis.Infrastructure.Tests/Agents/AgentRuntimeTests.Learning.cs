@@ -251,7 +251,7 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal("daily_call_limit", reviewer.RequestManual());
         reviewer.Configure(new LearningSettings(LearningSettings.Manual, 4, 6_000));
         Assert.Equal("daily_token_limit", reviewer.RequestManual());
-        Assert.Equal("pending", Assert.Single(catalog.AgentRuns.LearningHistory(10).Where(item => item.State == "pending")).State);
+        Assert.Equal("pending", Assert.Single(catalog.AgentRuns.LearningHistory(10), item => item.State == "pending").State);
     }
 
     [Fact]
