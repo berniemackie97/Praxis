@@ -8,15 +8,44 @@ namespace Praxis.Infrastructure.Persistence.Agents;
 
 public sealed partial class SqliteAgentRunJournal
 {
+    public string LearningReadiness(int dailyCalls, int dailyTokens) => database.ExecuteRead(connection =>
+    {
+        (int calls, int tokens) = LearningBudget(connection, null);
+        if (calls >= dailyCalls)
+        {
+            return "daily_call_limit";
+        }
+        if (tokens + 6_000 > dailyTokens)
+        {
+            return "daily_token_limit";
+        }
+        using var query = connection.CreateCommand("""
+            SELECT EXISTS(SELECT 1 FROM agent_runs
+                WHERE learning_state='pending' AND learning_attempt<2 AND completed_utc <= $now)
+            """);
+        query.Parameters.AddWithValue("$now", Now());
+        return Convert.ToInt32(query.ExecuteScalar(), CultureInfo.InvariantCulture) == 1 ? "ready" : "no_pending_work";
+    });
+
+    private (int Calls, int Tokens) LearningBudget(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        string day = CatalogValues.Timestamp(new DateTimeOffset(clock.GetUtcNow().UtcDateTime.Date, TimeSpan.Zero));
+        using var query = connection.CreateCommand("""
+            SELECT COUNT(*), COALESCE(SUM(MAX(6000,input_tokens+output_tokens)),0)
+            FROM agent_learning_attempts WHERE started_utc >= $day
+            """);
+        query.Transaction = transaction;
+        query.Parameters.AddWithValue("$day", day);
+        using var rows = query.ExecuteReader();
+        rows.Read();
+        return (rows.GetInt32(0), rows.GetInt32(1));
+    }
+
     public AgentLearningEpisode? ClaimLearning(int dailyCalls, int dailyTokens, DateTimeOffset? completedBefore = null) => database.Execute(connection =>
     {
         using SqliteTransaction transaction = connection.BeginTransaction();
-        string day = CatalogValues.Timestamp(new DateTimeOffset(clock.GetUtcNow().UtcDateTime.Date, TimeSpan.Zero));
-        using var budget = connection.CreateCommand("SELECT COUNT(*),COALESCE(SUM(MAX(6000,input_tokens+output_tokens)),0) FROM agent_learning_attempts WHERE started_utc >= $day");
-        budget.Transaction = transaction; budget.Parameters.AddWithValue("$day", day);
-        using var used = budget.ExecuteReader(); used.Read();
-        bool exhausted = used.GetInt32(0) >= dailyCalls || used.GetInt32(1) + 6_000 > dailyTokens;
-        used.Close();
+        (int calls, int tokens) = LearningBudget(connection, transaction);
+        bool exhausted = calls >= dailyCalls || tokens + 6_000 > dailyTokens;
         if (exhausted)
         {
             return null;
