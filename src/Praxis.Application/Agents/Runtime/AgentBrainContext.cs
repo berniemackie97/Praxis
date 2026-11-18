@@ -16,7 +16,12 @@ internal static partial class AgentBrainContext
 
     internal static bool IsSourceIndependent(string prompt, string? previousPrompt = null) =>
         DirectReply().IsMatch(prompt) || Greeting().IsMatch(prompt) ||
+        SelfContainedComputation(prompt) ||
         GeneralQuestion().IsMatch(prompt) && !OwnerScope().IsMatch(prompt) && !IsOwnerFollowUp(prompt, previousPrompt);
+
+    private static bool SelfContainedComputation(string prompt) =>
+        ComputeTool().IsMatch(prompt) && ArithmeticExpression().IsMatch(prompt) &&
+        !OwnerScope().IsMatch(prompt) && !SourceReference().IsMatch(prompt);
 
     private static bool IsOwnerFollowUp(string prompt, string? previousPrompt) =>
         previousPrompt is not null && OwnerScope().IsMatch(previousPrompt) && SourceFollowUp().IsMatch(prompt);
@@ -89,6 +94,16 @@ internal static partial class AgentBrainContext
     [GeneratedRegex(@"^\s*(?:and\s+(?:what|how|why|when|where|who|does|is|are)\b|what\s+about\b|how\s+about\b|what\s+is\s+(?:its|their)\b|(?:does|is|was)\s+(?:it|that)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SourceFollowUp();
+
+    [GeneratedRegex(@"\bcompute_evaluate\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ComputeTool();
+
+    [GeneratedRegex(@"(?<![\w.])\d+(?:\.\d+)?\s*[-+*/]\s*\d+(?:\.\d+)?(?!\w|\.\d)", RegexOptions.CultureInvariant)]
+    private static partial Regex ArithmeticExpression();
+
+    [GeneratedRegex(@"\b(?:source|document|file|notes|library|repository|repo|dataset|attachment|uploaded|linked|website|webpage|url)\b|\b[\w.-]+\.[a-z]{1,8}\b|https?://",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SourceReference();
 
     [GeneratedRegex(@"[\p{L}\p{N}][\p{L}\p{N}_-]{3,23}")]
     private static partial Regex Terms();

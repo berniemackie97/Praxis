@@ -88,3 +88,28 @@ Regression coverage includes the reported Codex exposure bug, zero-inference per
 
 
 The #545 candidate compiled in Release with zero warnings/errors using cached dependency metadata. Direct focused Fact/InlineData invocation passed 326 cases; three existing socket/nested-sandbox cases remain environment-blocked. Eight architecture checks and 31 roadmap tests passed. Swift app/test parsing, Xcode project/source-membership validation, and executable checks over the actual command/memory DTOs and windowed transcript projection passed. Full SwiftUI typechecking stops at the SDK macro subprocess in this restricted environment; a packaged app build, command keyboard/focus checks, Privacy round trip, and real Codex/local-model workflow acceptance remain required. No measured token or billing savings are claimed.
+
+
+## Retrospective evidence admission — #514
+
+Completed Chat turns are candidates for learning, not proof that the user's goal succeeded. The local learning reviewer must correlate each tool-result message with an actual successful, non-withheld tool audit record from that run. Computations require nonempty results; data queries require returned rows/groups; source openings require nonblank text; media lookups require a returned moment and citations. A privacy-withheld run is ineligible. Unmatched, failed and empty observations yield `no_verified_evidence` without a model call or skill draft.
+
+This is a conservative gate on **observed evidence**, not independent verification of task success or generalization. Learned skills remain owner-reviewed proposals.
+
+The live calculator smoke exposed an unrelated Chat failure tracked by #549: a self-contained `compute_evaluate` request with literal arithmetic must not pull in incidental Brain excerpts and then demand source citations for a tool-only status answer. Explicit source/file references and owner-scoped calculations still use normal Brain retrieval and citation checks. This does not force models to make two calls or certify failed tool outcomes. The owner-Mac Gemma retests subsequently produced two calculator calls and clean answers; the original failure's raw receipts were not preserved. Failed-attempt retrospective lessons, independent outcome evaluation, safe reuse and rollback remain open under #514. No model weights, new storage or remote permissions are changed.
+
+Manual learning acceptance on the same packaged build produced two `failed` reviews after successful Chat calculator runs. The selected local review model was Gemma 4B; its exact failure is not recoverable from the former generic `failed` state. Review failures now preserve a bounded category: `failed_inference`, `failed_invalid_json`, `failed_invalid_proposal`, `failed_timeout`, or `failed_runtime`. These labels never include raw model responses or private source text. No failure should silently install a skill or be misreported as a successful `no_change`. The owner must test the chosen local reviewer with new eligible work after rebuilding, accounting for previously consumed daily review slots. A distinct UI acknowledgement for empty queue/budget remains open under #550.
+
+At a reviewed branch head, run:
+
+```sh
+dotnet restore Praxis.slnx --locked-mode
+dotnet build Praxis.slnx -c Release --no-restore
+dotnet test tests/Praxis.Infrastructure.Tests/Praxis.Infrastructure.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~AgentRuntimeTests"
+dotnet test Praxis.slnx -c Release --no-build --no-restore
+dotnet format Praxis.slnx --no-restore --verify-no-changes
+bash scripts/macos/build-desktop.sh --archive-existing
+bash scripts/macos/test-worker-session.sh
+```
+
+In addition to prior learning tests, check forged transcript-only receipts, nonempty audited computation controls, empty computation output and privacy-withheld runs. Model/provider acceptance and measured improvement are separate gates.

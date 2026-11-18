@@ -21,7 +21,7 @@ public sealed partial class SqliteAgentRunJournal
         {
             return null;
         }
-        using var next = connection.CreateCommand("SELECT run_id,conversation_id,request,reply,message_start,message_end FROM agent_runs WHERE learning_state='pending' AND learning_attempt<2 AND completed_utc <= $before ORDER BY completed_utc LIMIT 1");
+        using var next = connection.CreateCommand("SELECT run_id,conversation_id,request,reply,message_start,message_end,started_utc,completed_utc FROM agent_runs WHERE learning_state='pending' AND learning_attempt<2 AND completed_utc <= $before ORDER BY completed_utc LIMIT 1");
         next.Transaction = transaction;
         next.Parameters.AddWithValue("$before", CatalogValues.Timestamp(completedBefore ?? clock.GetUtcNow()));
         using var row = next.ExecuteReader();
@@ -33,6 +33,7 @@ public sealed partial class SqliteAgentRunJournal
         string request = row.GetString(2);
         AgentReply reply = JsonSerializer.Deserialize<AgentReply>(row.GetString(3), Json)!;
         int first = row.GetInt32(4), last = row.GetInt32(5);
+        string started = row.GetString(6), completed = row.GetString(7);
         row.Close();
         connection.Run(transaction, "UPDATE agent_runs SET learning_state='running',learning_attempt=learning_attempt+1,learning_started_utc=$now WHERE run_id=$run",
             ("$run", Id(run)), ("$now", Now()));
@@ -47,8 +48,24 @@ public sealed partial class SqliteAgentRunJournal
             transcript.Add(new(rows.GetString(0), rows.GetString(1), JsonSerializer.Deserialize<AgentToolCall[]>(rows.GetString(2), Json)!,
             rows.IsDBNull(3) ? null : rows.GetString(3), JsonSerializer.Deserialize<AgentCitation[]>(rows.GetString(4), Json)!));
         }
-        rows.Close(); transaction.Commit();
-        return new AgentLearningEpisode(run, conversation, request, reply, transcript);
+        rows.Close();
+        using var audited = connection.CreateCommand("""
+            SELECT call_id,tool FROM agent_tool_calls
+            WHERE conversation_id=$conversation AND started_utc >= $started AND started_utc <= $completed
+              AND outcome='ok' AND withheld=0
+            """);
+        audited.Transaction = transaction;
+        audited.Parameters.AddWithValue("$conversation", Id(conversation));
+        audited.Parameters.AddWithValue("$started", started);
+        audited.Parameters.AddWithValue("$completed", completed);
+        using var checks = audited.ExecuteReader();
+        HashSet<(string CallId, string Tool)> auditedCalls = [];
+        while (checks.Read())
+        {
+            auditedCalls.Add((checks.GetString(0), checks.GetString(1)));
+        }
+        checks.Close(); transaction.Commit();
+        return new AgentLearningEpisode(run, conversation, request, reply, transcript, auditedCalls);
     });
 
     public bool EvidenceCurrent(Guid runId) => database.ExecuteRead(connection =>

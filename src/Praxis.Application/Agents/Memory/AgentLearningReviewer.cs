@@ -138,7 +138,15 @@ public sealed class AgentLearningReviewer(IAgentRunJournal journal, ISettingsSto
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested && exception is InferenceException or JsonException or ArgumentException or InvalidOperationException or OperationCanceledException)
         {
-            journal.FinishLearning(episode.RunId, "failed", null, input, output, identity);
+            string outcome = exception switch
+            {
+                InferenceException => "failed_inference",
+                JsonException => "failed_invalid_json",
+                ArgumentException => "failed_invalid_proposal",
+                OperationCanceledException => "failed_timeout",
+                _ => "failed_runtime"
+            };
+            journal.FinishLearning(episode.RunId, outcome, null, input, output, identity);
         }
         return true;
     }
@@ -161,18 +169,34 @@ public sealed class AgentLearningReviewer(IAgentRunJournal journal, ISettingsSto
         foreach (AgentToolCall call in episode.Reply.ToolCalls.Where(call => LearningToolReceipt.KindFor(call.Name) is not null).Take(4))
         {
             AgentMessage[] matches = episode.Messages.Where(message => message.Role == AgentRoles.Tool && message.ToolCallId == call.CallId).ToArray();
-            if (matches.Length != 1 || LearningToolReceipt.KindFor(call.Name) == "source_observation" && matches[0].Citations.Count == 0)
+            if (!episode.AuditedCalls.Contains((call.CallId, call.Name)) || matches.Length != 1 ||
+                LearningToolReceipt.KindFor(call.Name) == "source_observation" && matches[0].Citations.Count == 0)
             {
                 continue;
             }
             using JsonDocument document = JsonDocument.Parse(matches[0].Content);
             if (document.RootElement.TryGetProperty("result", out JsonElement result) && result.ValueKind == JsonValueKind.Object &&
-                !result.TryGetProperty("error", out _) && !result.TryGetProperty("truncated", out _))
+                !result.TryGetProperty("error", out _) && !result.TryGetProperty("truncated", out _) &&
+                HasObservedContent(call.Name, result))
             {
                 yield return new LearningToolReceipt(call.CallId, call.Name, LearningToolReceipt.KindFor(call.Name)!, Bound(call.ArgumentsJson, 600), Bound(result.GetRawText(), 600));
             }
         }
     }
+
+    private static bool HasObservedContent(string tool, JsonElement result) => tool switch
+    {
+        "compute_evaluate" => result.TryGetProperty("results", out JsonElement values) &&
+            values.ValueKind == JsonValueKind.Object && values.EnumerateObject().Any(),
+        "data_query" => result.TryGetProperty("dataset", out _) &&
+            (result.TryGetProperty("rows", out JsonElement rows) && rows.ValueKind == JsonValueKind.Array && rows.GetArrayLength() > 0 ||
+             result.TryGetProperty("groups", out JsonElement groups) && groups.ValueKind == JsonValueKind.Array && groups.GetArrayLength() > 0),
+        "knowledge_open" => result.TryGetProperty("text", out JsonElement excerpt) &&
+            excerpt.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(excerpt.GetString()),
+        "media_find" => result.TryGetProperty("moments", out JsonElement moments) &&
+            moments.ValueKind == JsonValueKind.Array && moments.GetArrayLength() > 0,
+        _ => false
+    };
 
     private static string Bound(string text, int limit) => text[..Math.Min(text.Length, limit)];
 }
