@@ -24,6 +24,9 @@ internal static class DreamCommand
         Preserve owner-confirmed decisions. Separate owner assertions, source observations, hypotheses and verified results.
         Look for duplicates, contradictions, stale classifications, unsupported relationships and useful organizational changes.
         Use knowledge_propose for supported minimal repairs. Every change waits for owner review, even when normal Chat allows edits.
+        If an entity is a game, product, or other specific kind absent from existing labels, propose an accurate
+        lower_snake_case type instead of forcing other or project. Proposing an unfamiliar type does not register
+        the definition or apply the classification until owner approval. Do not create duplicate identities.
         For reusable procedures learned from an actual verified run, use the existing skill_propose review path when available.
         Do not invent tools, install software, browse the web, change permissions, delete records, or claim model weights were trained.
         Stop when evidence is insufficient or no useful change is supported. Do not create a proposal just to show activity.
