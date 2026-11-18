@@ -39,7 +39,7 @@ public static class SemanticExtractionPrompt
                 "type": "object",
                 "properties": {
                   "name": { "type": "string" },
-                  "type": { "type": "string", "enum": [{{Quoted(KnowledgeVocabulary.EntityTypes)}}] },
+                  "type": { "type": "string", "maxLength": 32 },
                   "quote": { "type": "string" }
                 },
                 "required": ["name", "type", "quote"]
@@ -51,7 +51,7 @@ public static class SemanticExtractionPrompt
                 "type": "object",
                 "properties": {
                   "subject": { "type": "string" },
-                  "predicate": { "type": "string", "enum": [{{Quoted(KnowledgeVocabulary.Predicates)}}] },
+                  "predicate": { "type": "string", "maxLength": 32 },
                   "object": { "type": "string" },
                   "quote": { "type": "string" }
                 },
@@ -72,13 +72,17 @@ public static class SemanticExtractionPrompt
         - topics: up to 5 main subjects the excerpt is about, as short noun phrases.
         - entities: up to 12 specific named things the excerpt states facts about, with the name exactly as written.
           {{KnowledgeVocabulary.TechnicalTypeGuide}}
-          Types: person (a named individual); organization (a company, institution or team); project (a software
-          project, codebase, repository, product, game or initiative); technology (a language, library, file
-          format, protocol, tool, model or device); concept (a named technical or domain idea); place; document;
-          event (a named occurrence). Use "other" only if none fit.
+          Type each entity precisely from its quoted evidence with a short lower_snake_case identifier.
+          Existing examples: {{string.Join(", ", KnowledgeVocabulary.EntityTypes.Order(StringComparer.Ordinal))}}.
+          These are not exhaustive; distinguish an actual game or product from the project developing it.
+          Unfamiliar types are inferred labels, never owner-approved schema definitions. Do not choose "other"
+          merely because the evidence calls for a more specific type.
         - relations: up to 6 facts the excerpt states between two entities you listed, as subject, predicate and
-          object using the entity names exactly as you listed them. Predicates read "subject predicate object",
-          for example "C3Reader parses PHY". Only include relations the excerpt states directly.
+          object using the entity names exactly as you listed them. Use a precise lower_snake_case predicate
+          when evidence supports the relationship. Existing examples:
+          {{string.Join(", ", KnowledgeVocabulary.Predicates.Order(StringComparer.Ordinal))}}.
+          Predicates read "subject predicate object", for example "C3Reader parses PHY".
+          Only include relations the excerpt states directly; avoid generic related_to by default.
         - Do not list amounts of money, dates, times, quantities, file extensions, headings or generic common
           nouns as entities.
         - Every item needs "quote": a short verbatim passage copied from the excerpt that supports it. A relation's
@@ -108,6 +112,4 @@ public static class SemanticExtractionPrompt
         return [new ChatMessage(ChatRole.System, Instructions), new ChatMessage(ChatRole.User, user.ToString())];
     }
 
-    private static string Quoted(IEnumerable<string> values) =>
-        string.Join(", ", values.Order(StringComparer.Ordinal).Select(value => $"\"{value}\""));
 }
