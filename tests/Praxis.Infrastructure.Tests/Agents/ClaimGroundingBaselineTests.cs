@@ -83,11 +83,11 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
         }
 
         int falseSupported = acceptedUnsupported + acceptedContradicted;
-        int accepted = acceptedSupported + falseSupported;
+        int acceptedClaims = acceptedSupported + falseSupported;
         output.WriteLine($"claim_support_baseline=v1 reviewed=false cases={cases.Length} " +
             $"accepted_supported={acceptedSupported} accepted_unsupported={acceptedUnsupported} " +
             $"accepted_contradicted={acceptedContradicted} rejected_supported={rejectedSupported} " +
-            $"citation_precision={(accepted == 0 ? 0d : (double)acceptedSupported / accepted).ToString("F3", CultureInfo.InvariantCulture)} " +
+            $"citation_precision={(acceptedClaims == 0 ? 0d : (double)acceptedSupported / acceptedClaims).ToString("F3", CultureInfo.InvariantCulture)} " +
             "model_tokens=n/a provider_latency=n/a");
     }
 }
