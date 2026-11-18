@@ -19,9 +19,9 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
 
         JsonElement[] cases = fixture.GetProperty("cases").EnumerateArray().ToArray();
         Assert.Equal(15, cases.Length);
-        Assert.Equal(cases.Length, cases.Select(entry => entry.GetProperty("id").GetString())
+        Assert.Equal(cases.Length, cases.Select(entry => entry.GetProperty("id").GetString()!)
             .Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(5, cases.Select(entry => entry.GetProperty("sourceGroup").GetString())
+        Assert.Equal(5, cases.Select(entry => entry.GetProperty("sourceGroup").GetString()!)
             .Distinct(StringComparer.Ordinal).Count());
 
         List<(string Domain, string Expected, bool Accepted)> observations = [];
