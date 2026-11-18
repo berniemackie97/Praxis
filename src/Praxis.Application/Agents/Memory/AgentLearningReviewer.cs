@@ -138,7 +138,15 @@ public sealed class AgentLearningReviewer(IAgentRunJournal journal, ISettingsSto
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested && exception is InferenceException or JsonException or ArgumentException or InvalidOperationException or OperationCanceledException)
         {
-            journal.FinishLearning(episode.RunId, "failed", null, input, output, identity);
+            string outcome = exception switch
+            {
+                InferenceException => "failed_inference",
+                JsonException => "failed_invalid_json",
+                ArgumentException => "failed_invalid_proposal",
+                OperationCanceledException => "failed_timeout",
+                _ => "failed_runtime"
+            };
+            journal.FinishLearning(episode.RunId, outcome, null, input, output, identity);
         }
         return true;
     }
