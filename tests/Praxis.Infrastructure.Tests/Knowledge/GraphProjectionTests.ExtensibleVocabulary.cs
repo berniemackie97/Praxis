@@ -3,7 +3,6 @@ using Praxis.Application.Agents;
 using Praxis.Application.Agents.Runtime;
 using Praxis.Application.Knowledge;
 using Praxis.Domain.Agents;
-using Praxis.Domain.Knowledge;
 using Praxis.Domain.Policy;
 using Praxis.Infrastructure.Composition;
 using Praxis.Infrastructure.Persistence;
