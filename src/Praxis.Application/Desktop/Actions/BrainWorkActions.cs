@@ -19,7 +19,7 @@ public sealed class BrainWorkActions(AgentLearningReviewer learning, IAgentRunJo
                 fields.OptionalBoolean("idleDream") ?? false, fields.IntegerOrDefault("dreamIntervalMinutes", 120, 30, 1_440)));
             return Snapshot();
         }),
-        DesktopAction.Of("brainLearningReview", _ => { learning.RequestManual(); return new { requested = true }; }),
+        DesktopAction.Of("brainLearningReview", _ => new { status = learning.RequestManual() }),
         DesktopAction.Of("processorPause", fields =>
         {
             string processor = fields.RequireString("processorKey", 64);
