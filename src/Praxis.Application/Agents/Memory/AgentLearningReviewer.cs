@@ -31,7 +31,35 @@ public sealed class AgentLearningReviewer(IAgentRunJournal journal, ISettingsSto
         settings.Write(LearningSettings.Key, JsonSerializer.Serialize(value, Json));
     }
 
-    public void RequestManual() => settings.Write("learning_manual_requested", "true");
+    public string RequestManual()
+    {
+        LearningSettings configured = Settings;
+        if (configured.Mode == LearningSettings.Off)
+        {
+            return "off";
+        }
+        if (!ToolTiers.Permits(policy.Current().ToolPermission, ToolTiers.Propose))
+        {
+            return "permission_required";
+        }
+        if (LocalProfile(configured) is null)
+        {
+            return "local_model_required";
+        }
+        if (settings.Read("learning_manual_requested") == "true")
+        {
+            return "queued";
+        }
+
+        string status = journal.LearningReadiness(configured.DailyCalls, configured.DailyTokens);
+        if (status == "ready")
+        {
+            settings.Write("learning_manual_requested", "true");
+            return "queued";
+        }
+
+        return status;
+    }
 
     public async Task<bool> RunNextAsync(CancellationToken cancellationToken)
     {
