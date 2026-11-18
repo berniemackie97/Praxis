@@ -56,6 +56,40 @@ public sealed partial class AgentRuntimeTests
     }
 
     [Fact]
+    public async Task MalformedLearningModelOutputReportsFailureWithoutCreatingASkill()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        await LearningRun(catalog);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => "No improvement to propose.");
+
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        AgentLearningReceipt receipt = Assert.Single(catalog.AgentRuns.LearningHistory(10));
+        Assert.Equal("failed_invalid_json", receipt.State);
+        Assert.Equal(10, receipt.InputTokens);
+        Assert.Equal(20, receipt.OutputTokens);
+        Assert.Empty(catalog.Skills.History(null, true, 10));
+        Assert.False(await reviewer.RunNextAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InvalidLearningSkillProposalReportsFailureWithoutInstallingIt()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        AgentRunStatus completed = await LearningRun(catalog);
+        AgentLearningReviewer reviewer = LearningReviewer(catalog, _ => JsonSerializer.Serialize(new
+        {
+            action = "propose_skill",
+            markdown = "This is not a skill document.",
+            rationale = "A supposed reusable method.",
+            evidenceCallIds = new[] { completed.Reply!.ToolCalls[0].CallId }
+        }));
+
+        Assert.True(await reviewer.RunNextAsync(CancellationToken.None));
+        Assert.Equal("failed_invalid_proposal", Assert.Single(catalog.AgentRuns.LearningHistory(10)).State);
+        Assert.Empty(catalog.Skills.History(null, true, 10));
+    }
+
+    [Fact]
     public async Task ExperienceCanReviseOnlyTheSuppliedCurrentSkillAndStillNeedsOwnerApproval()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
