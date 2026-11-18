@@ -54,9 +54,18 @@ public sealed class ClaimGroundingBaselineTests(ITestOutputHelper output)
             observations.Add((entry.GetProperty("domain").GetString()!, expected, accepted));
             if (accepted)
             {
-                if (expected == "supported") acceptedSupported++;
-                else if (expected == "unsupported") acceptedUnsupported++;
-                else acceptedContradicted++;
+                if (expected == "supported")
+                {
+                    acceptedSupported++;
+                }
+                else if (expected == "unsupported")
+                {
+                    acceptedUnsupported++;
+                }
+                else
+                {
+                    acceptedContradicted++;
+                }
             }
             else if (expected == "supported")
             {
