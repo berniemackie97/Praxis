@@ -17,8 +17,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
         $$"""
         Propose a correction: kind = entity_type {entityId, entityType} | entity_rename {entityId, name} | entity_merge {entityId, intoEntityId} |
         relation {entityId, predicate, objectEntityId} | source_category {sourceId, category}. Entity types: {{string.Join(", ", KnowledgeVocabulary.EntityTypes)}}.
-        Predicates: {{string.Join(", ", KnowledgeVocabulary.Predicates)}}. Always give a rationale citing evidence. Applies immediately only if the
-        owner allows edits (never for source_category); otherwise it is queued for the owner to review.
+        Predicates: {{string.Join(", ", KnowledgeVocabulary.Predicates)}}. Precise new lower_snake_case types and predicates
+        may be proposed when existing labels are inaccurate and the opened evidence supports the new term. Do not use
+        other or related_to merely because a specific term is missing. Newly proposed definitions always await
+        owner review even when edits are permitted. Always cite evidence and preserve distinct entity identities.
         """,
         ToolArguments.Schema("""
             {"type":"object","properties":{"kind":{"type":"string","enum":["entity_type","entity_rename","entity_merge","relation","source_category"]},
@@ -38,10 +40,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
         string kind = args.Choice("kind", AgentProposal.Kinds, "");
         object payload = kind switch
         {
-            AgentProposal.EntityType => new { entityId = args.RequireGuid("entityId"), entityType = Vocabulary(args.RequireText("entityType", 32), KnowledgeVocabulary.EntityTypes, "entityType") },
+            AgentProposal.EntityType => new { entityId = args.RequireGuid("entityId"), entityType = Identifier(args.RequireText("entityType", 32), "entityType") },
             AgentProposal.EntityRename => new { entityId = args.RequireGuid("entityId"), name = args.RequireText("name", 128) },
             AgentProposal.EntityMerge => new { entityId = args.RequireGuid("entityId"), intoEntityId = args.RequireGuid("intoEntityId") },
-            AgentProposal.Relation => new { entityId = args.RequireGuid("entityId"), predicate = Vocabulary(args.RequireText("predicate", 32), KnowledgeVocabulary.Predicates, "predicate"), objectEntityId = args.RequireGuid("objectEntityId") },
+            AgentProposal.Relation => new { entityId = args.RequireGuid("entityId"), predicate = Identifier(args.RequireText("predicate", 32), "predicate"), objectEntityId = args.RequireGuid("objectEntityId") },
             AgentProposal.SourceCategory => new { sourceId = args.RequireGuid("sourceId"), category = Vocabulary(args.RequireText("category", 32), DataCategories.All, "category") },
             _ => throw new ArgumentException($"'kind' must be one of: {string.Join(", ", AgentProposal.Kinds)}.")
         };
@@ -77,7 +79,13 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
             fenced["ownerCorrectionId"] = JsonSerializer.SerializeToNode(ownerCorrectionId);
         }
         fenced["basis"] = JsonSerializer.SerializeToNode(basis);
-        bool direct = applier.CanApplyDirectly(kind) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write);
+        bool known = kind switch
+        {
+            AgentProposal.EntityType => applier.IsKnownDefinition(kind, args.RequireText("entityType", 32)),
+            AgentProposal.Relation => applier.IsKnownDefinition("predicate", args.RequireText("predicate", 32)),
+            _ => true
+        };
+        bool direct = known && applier.CanApplyDirectly(kind) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write);
         AgentProposal proposal = repository.AddProposal(context.ConversationId, kind, fenced.ToJsonString(), args.RequireText("rationale", 1_000), AgentProposal.Pending);
         bool applied = direct && applier.Apply(proposal);
         if (applied)
@@ -92,6 +100,10 @@ public sealed class KnowledgeProposeTool(IAgentConversationRepository repository
             status = applied ? "applied" : direct ? "apply_failed" : "awaiting_owner_review"
         }));
     }
+
+    private static string Identifier(string value, string name) =>
+        KnowledgeVocabulary.ValidIdentifier(value) ? value :
+            throw new ArgumentException($"'{name}' must be a lower_snake_case identifier of at most 32 characters.");
 
     private static string Vocabulary(string value, IEnumerable<string> allowed, string name) =>
         allowed.Contains(value, StringComparer.Ordinal) ? value : throw new ArgumentException($"'{name}' must be one of: {string.Join(", ", allowed)}.");
