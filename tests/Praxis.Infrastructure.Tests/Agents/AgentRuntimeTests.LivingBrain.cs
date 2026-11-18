@@ -49,6 +49,7 @@ public sealed partial class AgentRuntimeTests
             connection.Open();
             using SqliteCommand previous = connection.CreateCommand();
             previous.CommandText = """
+                DROP TABLE knowledge_vocabulary_extensions;
                 DROP INDEX agent_runs_command_history;
                 DROP TABLE agent_run_reviews;
                 ALTER TABLE agent_memories DROP COLUMN owner_statement;
