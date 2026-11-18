@@ -1,3 +1,4 @@
+DROP TRIGGER IF EXISTS reconsolidation_source_revoked;
 DROP VIEW IF EXISTS technical_entity_types;
 -- Preserve existing evidence and identity while lifting fixed vocabulary constraints.
 DROP VIEW confirmed_entity_mentions;
@@ -155,6 +156,21 @@ JOIN eligible_enrichment_proposals p ON p.proposal_id = m.proposal_id
 WHERE p.processor_key = 'technical-evidence-v1' AND m.flags IS NULL
 GROUP BY m.entity_id HAVING COUNT(DISTINCT m.entity_type) = 1;
 
+
+CREATE TRIGGER reconsolidation_source_revoked AFTER UPDATE OF status ON sources
+WHEN NEW.status <> 'active'
+BEGIN
+    INSERT INTO reconsolidation_queue (entity_id, reason, previous_type, enqueued_utc)
+    SELECT DISTINCT m.entity_id, 'revocation', NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    FROM entity_mentions m
+    JOIN enrichment_proposals p ON p.proposal_id = m.proposal_id
+    JOIN items i ON i.item_id = p.item_id
+    WHERE i.source_id = NEW.source_id
+    ON CONFLICT(entity_id) DO NOTHING;
+
+    UPDATE processing_jobs SET state = 'canceled', lease_key = NULL, lease_until_utc = NULL, updated_utc = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE state = 'queued' AND item_id IN (SELECT item_id FROM items WHERE source_id = NEW.source_id);
+END;
 
 CREATE TRIGGER reconsolidation_owner_type AFTER UPDATE OF entity_type, type_origin ON knowledge_entities
 WHEN NEW.type_origin = 'owner' AND NEW.entity_type IS NOT NULL AND OLD.entity_type IS NOT NEW.entity_type
