@@ -111,6 +111,10 @@
 		00000000000000000000E041 /* KnowledgeRevisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E040 /* KnowledgeRevisionsView.swift */; };
 		00000000000000000000E045 /* BrainTerritories.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E044 /* BrainTerritories.swift */; };
 		00000000000000000000E038 /* GraphVisualOverview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E037 /* GraphVisualOverview.swift */; };
+		00000000000000000000F101 /* ChatCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000F100 /* ChatCommand.swift */; };
+		00000000000000000000F103 /* CommandReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000F102 /* CommandReceipt.swift */; };
+		00000000000000000000F105 /* CommandHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000F104 /* CommandHistory.swift */; };
+		00000000000000000000F107 /* CommandReceiptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000F106 /* CommandReceiptCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -229,6 +233,10 @@
 		00000000000000000000E040 /* KnowledgeRevisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnowledgeRevisionsView.swift; sourceTree = "<group>"; };
 		00000000000000000000E044 /* BrainTerritories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainTerritories.swift; sourceTree = "<group>"; };
 		00000000000000000000E037 /* GraphVisualOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphVisualOverview.swift; sourceTree = "<group>"; };
+		00000000000000000000F100 /* ChatCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCommand.swift; sourceTree = "<group>"; };
+		00000000000000000000F102 /* CommandReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandReceipt.swift; sourceTree = "<group>"; };
+		00000000000000000000F104 /* CommandHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandHistory.swift; sourceTree = "<group>"; };
+		00000000000000000000F106 /* CommandReceiptCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandReceiptCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -360,6 +368,7 @@
 				00000000000000000000A039 /* SourceDetailView.swift */,
 				00000000000000000000A03B /* VerificationView.swift */,
 				00000000000000000000C00F /* ChatView.swift */,
+				00000000000000000000F106 /* CommandReceiptCard.swift */,
 				00000000000000000000C011 /* ApprovalsView.swift */,
 				00000000000000000000D101 /* SkillsView.swift */,
 				00000000000000000000C013 /* PrivacySettingsView.swift */,
@@ -417,6 +426,9 @@
 				00000000000000000000A05D /* WorkerResponse.swift */,
 				00000000000000000000A05F /* WorkerSession.swift */,
 				00000000000000000000C001 /* AgentModels.swift */,
+				00000000000000000000F104 /* CommandHistory.swift */,
+				00000000000000000000F102 /* CommandReceipt.swift */,
+				00000000000000000000F100 /* ChatCommand.swift */,
 				00000000000000000000D023 /* ModelSetupModels.swift */,
 				00000000000000000000C003 /* PolicyModels.swift */,
 				00000000000000000000C005 /* PolicyLabels.swift */,
@@ -617,6 +629,10 @@
 				00000000000000000000C006 /* PolicyLabels.swift in Sources */,
 				00000000000000000000C004 /* PolicyModels.swift in Sources */,
 				00000000000000000000C002 /* AgentModels.swift in Sources */,
+				00000000000000000000F107 /* CommandReceiptCard.swift in Sources */,
+				00000000000000000000F105 /* CommandHistory.swift in Sources */,
+				00000000000000000000F103 /* CommandReceipt.swift in Sources */,
+				00000000000000000000F101 /* ChatCommand.swift in Sources */,
 				00000000000000000000D024 /* ModelSetupModels.swift in Sources */,
 				00000000000000000000A03E /* IntelligenceSettingsModel.swift in Sources */,
 				00000000000000000000A040 /* KnowledgeWorkbenchModel.swift in Sources */,

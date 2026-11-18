@@ -45,6 +45,12 @@ public interface IAgentConversationRepository
 
     bool SetProposalStatus(Guid proposalId, string expectedStatus, string status);
 
+    AgentMemory? ReadMemory(Guid memoryId) => null;
+
+    AgentMemory SaveOwnerCorrection(Guid conversationId, string statement, bool apply) => throw new NotSupportedException();
+
+    IReadOnlyList<AgentMemory> FindOwnerCorrections(string query, int limit) => [];
+
     AgentMemory AddMemory(Guid? conversationId, string text, string status);
 
     IReadOnlyList<AgentMemory> ReadMemories(string? status, string? search, int limit);

@@ -49,6 +49,9 @@ public sealed partial class AgentRuntimeTests
             connection.Open();
             using SqliteCommand previous = connection.CreateCommand();
             previous.CommandText = """
+                DROP INDEX agent_runs_command_history;
+                DROP TABLE agent_run_reviews;
+                ALTER TABLE agent_memories DROP COLUMN owner_statement;
                 DROP TRIGGER agent_run_forget_skills;
                 DROP TABLE agent_skill_experiences;
                 DROP TABLE agent_learning_attempts;
@@ -83,6 +86,7 @@ public sealed partial class AgentRuntimeTests
     public async Task DreamIntentCannotBeDispatchedAsADirectSettingsChange()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
         ScriptedBackend backend = new(_ => new AgentTurn("No supported repair was found.", [], 1, 1)) { ExpectedTool = "knowledge_search" };
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
         await runtime.RunAsync(conversation.ConversationId, "/dream set privacy to allow all", (_, _, _) => { }, CancellationToken.None);
@@ -94,6 +98,7 @@ public sealed partial class AgentRuntimeTests
     public async Task DreamStopsAnUnproductiveModelAtItsOwnStepBudget()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
         int expression = 0;
         ScriptedBackend backend = new((_, _) => Task.FromResult(Turn(Call("compute_evaluate", "{\"expression\":\"" + ++expression + "+1\"}"))))
         { ExpectedTool = "knowledge_search" };
@@ -129,10 +134,11 @@ public sealed partial class AgentRuntimeTests
     public async Task EmptyDreamUsesExistingQueueAndSkipsInferenceWhenNothingIsEligible()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root, clock);
+        catalog.Policy.ApplyChange(new PolicyChange(ToolPermission: ToolPermissions.ProposeEdits), PolicyActors.Owner);
         ScriptedBackend backend = new(_ => throw new InvalidOperationException("No model call expected."));
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
         AgentReply result = await runtime.RunAsync(conversation.ConversationId, "/dream", (_, _, _) => { }, CancellationToken.None);
-        Assert.Contains("No eligible maintenance candidates", result.Text, StringComparison.Ordinal);
+        Assert.Equal("no_candidates", result.Command!.Outcome);
         Assert.Equal(0, result.InputTokens);
         Assert.Empty(backend.SystemPrompts);
         Assert.Single(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10));
@@ -146,7 +152,8 @@ public sealed partial class AgentRuntimeTests
         AgentConversation conversation = catalog.Agents.Create(Local().BackendId, "Dream");
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(null, null), clock);
         AgentReply result = await runtime.RunAsync(conversation.ConversationId, "/dream inspect aliases", (_, _, _) => { }, CancellationToken.None, useTools: false);
-        Assert.Contains("needs Allow tools", result.Text, StringComparison.Ordinal);
+        Assert.Contains("Allow tools", result.Text, StringComparison.Ordinal);
+        Assert.Equal("blocked", result.Command!.Outcome);
         Assert.Empty(catalog.Agents.ReadToolCalls(conversation.ConversationId, 10));
     }
 

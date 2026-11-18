@@ -72,18 +72,20 @@ struct AgentCitation: Decodable, Equatable, Identifiable {
 }
 
 struct AgentMessage: Decodable, Equatable {
+    var sequence: Int? = nil
     let role: String
     let content: String
     let toolCalls: [AgentToolCall]
     let toolCallId: String?
     let citations: [AgentCitation]?
 
-    init(role: String, content: String, toolCalls: [AgentToolCall], toolCallId: String?, citations: [AgentCitation]? = nil) {
+    init(role: String, content: String, toolCalls: [AgentToolCall], toolCallId: String?, citations: [AgentCitation]? = nil, sequence: Int? = nil) {
         self.role = role
         self.content = content
         self.toolCalls = toolCalls
         self.toolCallId = toolCallId
         self.citations = citations
+        self.sequence = sequence
     }
 }
 
@@ -112,6 +114,7 @@ struct AgentTurnUsage: Decodable, Equatable, Identifiable {
     let request: AgentRequestFootprint?
     var automaticRecallBytes: Int? = nil
     var recapBytes: Int? = nil
+    var cachedInputTokens: Int? = nil
     var id: Int { turn }
 }
 
@@ -130,6 +133,7 @@ struct AgentReply: Decodable, Equatable {
     var turnUsage: [AgentTurnUsage]? = nil
     var searchCalls: Int? = nil
     var sourceReads: Int? = nil
+    var command: CommandReceipt? = nil
 }
 
 struct AgentRunEvent: Decodable, Equatable, Identifiable {
@@ -170,6 +174,7 @@ struct AgentProposal: Decodable, Identifiable, Equatable {
 }
 
 struct AgentMemory: Decodable, Identifiable, Equatable {
+    var ownerStatement: String? = nil
     let memoryId: String
     let text: String
     let status: String
@@ -182,7 +187,11 @@ struct ChatNoteCaptureData: Decodable {
     let capture: Capture
 }
 
-struct AgentBackendsData: Decodable { let backends: [AgentBackendProfile] }
+struct AgentBackendsData: Decodable {
+    let backends: [AgentBackendProfile]
+    let commands: [ChatCommand]?
+    let toolPermission: String?
+}
 struct AgentConversationsData: Decodable { let conversations: [AgentConversation] }
 struct BrainRecallReceipt: Decodable, Identifiable {
     let id: String
@@ -219,6 +228,7 @@ struct AgentConversationData: Decodable {
     let messages: [AgentMessage]
     let toolCalls: [AgentToolCallRecord]
     let brainRecalls: [BrainRecallReceipt]?
+    var commandHistory: [CommandHistory]? = nil
 }
 struct AgentRecapData: Decodable { let recap: String? }
 struct AgentRunStartedData: Decodable { let runId: String }

@@ -37,6 +37,9 @@ final class ChatWorkbenchModel: ObservableObject {
     @Published private var states: [String: ConversationState] = [:]
     private var pollTask: Task<Void, Never>?
 
+    @Published private(set) var commands: [ChatCommand] = []
+    @Published private(set) var toolPermission: String?
+    @Published private(set) var commandHistory: [CommandHistory] = []
     @Published private(set) var backends: [AgentBackendProfile] = []
     @Published private(set) var conversations: [AgentConversation] = []
     @Published private(set) var selectedId: String?
@@ -60,6 +63,7 @@ final class ChatWorkbenchModel: ObservableObject {
     var running: Bool { current.runId != nil }
     var busy: Bool { current.busy || running }
     var events: [AgentRunEvent] { current.events }
+    var runningCommandName: String? { current.runUserText.flatMap { ChatCommand.parse($0)?.name } }
     var latestReply: AgentReply? { current.reply }
     var error: String? {
         if case .error(let text) = current.feedback { return text }
@@ -80,8 +84,36 @@ final class ChatWorkbenchModel: ObservableObject {
     var canSend: Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         return !busy && !text.isEmpty && draft.count <= Self.maximumMessageCharacters &&
-            activeBackend?.enabled == true && !activeModel.isEmpty
+            activeBackend?.enabled == true && !activeModel.isEmpty && commandBlockReason == nil
     }
+
+    var activeCommand: ChatCommand? {
+        guard let parsed = ChatCommand.parse(draft) else { return nil }
+        return commands.first { $0.name == parsed.name }
+    }
+    var commandArguments: String {
+        get { ChatCommand.parse(draft)?.arguments ?? "" }
+        set { if let command = activeCommand { draft = "/" + command.name + " " + newValue } }
+    }
+    var commandSuggestions: [ChatCommand] {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.first == "/", activeCommand == nil, !text.contains(where: \.isWhitespace) else { return [] }
+        return commands.filter { $0.name.hasPrefix(String(text.dropFirst()).lowercased()) }
+    }
+    var commandBlockReason: String? {
+        guard let parsed = ChatCommand.parse(draft) else { return nil }
+        guard let command = activeCommand else { return "Unknown command /" + parsed.name + ". Choose from the / menu." }
+        if command.localOnly && (activeBackend?.isLocal != true || activeBackendId != ModelTool.ollama) { return "Use the managed local Ollama connection for /" + command.name + "." }
+        if command.requiresTools && !useTools { return "Enable Allow tools to run /" + command.name + "." }
+        let allowed = command.minimumTier == "read" || command.minimumTier == "propose" && ["propose_edits", "allow_edits"].contains(toolPermission ?? "") || command.minimumTier == "write" && toolPermission == "allow_edits"
+        return allowed ? nil : "Choose " + (command.minimumTier == "write" ? "Allow edits" : "Propose edits") + " in Settings → Privacy before running this command."
+    }
+    func chooseCommand(_ command: ChatCommand) {
+        guard !busy else { return }
+        draft = "/" + command.name + " "
+        if command.requiresTools { useTools = true }
+    }
+    func removeCommand() { draft = commandArguments }
 
     func hasWork(_ id: String) -> Bool { states[id]?.busy == true || states[id]?.runId != nil }
 
@@ -94,7 +126,7 @@ final class ChatWorkbenchModel: ObservableObject {
         }
         return ChatLine.lines(messages, after: state.runMessageCount,
                               prompt: state.runUserText, reply: state.reply,
-                              events: state.events, liveActivity: (state.runId != nil || state.reply != nil) && !savedReply)
+                              events: state.events, commands: commandHistory, liveActivity: (state.runId != nil || state.reply != nil) && !savedReply)
     }
 
     var activeBackendId: String { selected?.backendId ?? backendChoice }
@@ -182,12 +214,21 @@ final class ChatWorkbenchModel: ObservableObject {
                      as: ChatNoteCaptureData.self, failed: { completion($0) }) { _ in completion(nil) }
     }
 
+    func refreshCommandCatalog() {
+        channel.send("agentBackends", as: AgentBackendsData.self, scope: "chatCommands", failed: { _ in }) { [weak self] data in
+            self?.commands = data.commands ?? []
+            self?.toolPermission = data.toolPermission
+        }
+    }
+
     func refresh() {
         channel.reset("chatBackends")
         channel.send("agentBackends", as: AgentBackendsData.self, scope: "chatBackends", failed: reportListError) { [weak self] data in
             guard let self else { return }
             let previous = backends.first(where: { $0.backendId == backendChoice })
             backends = data.backends
+            commands = data.commands ?? []
+            toolPermission = data.toolPermission
             if backendChoice.isEmpty || !data.backends.contains(where: { $0.backendId == backendChoice && $0.enabled }) {
                 let preferred = UserDefaults.standard.string(forKey: "defaultChatBackend") ?? ""
                 let connection = data.backends.first { $0.backendId == preferred && $0.enabled }
@@ -236,6 +277,7 @@ final class ChatWorkbenchModel: ObservableObject {
         guard selectedId != conversation.id else { return }
         selectedId = conversation.id
         recap = nil
+        commandHistory = []
         messages = []
         brainRecalls = []
         loadMessages()
@@ -245,6 +287,7 @@ final class ChatWorkbenchModel: ObservableObject {
     func newConversation() {
         selectedId = nil
         recap = nil
+        commandHistory = []
         messages = []
         channel.reset("conversation")
     }
@@ -510,6 +553,7 @@ final class ChatWorkbenchModel: ObservableObject {
                      failed: { [weak self] in self?.feedback(.error($0), for: id) }) { [weak self] data in
             self?.messages = data.messages
             self?.brainRecalls = data.brainRecalls ?? []
+            self?.commandHistory = data.commandHistory ?? []
         }
     }
 
@@ -556,10 +600,11 @@ struct ChatLine: Identifiable, Equatable {
     let kind: Kind
     let text: String
     var citations: [AgentCitation] = []
+    var command: CommandReceipt? = nil
 
     static func lines(_ messages: [AgentMessage], after start: Int = 0,
                       prompt: String? = nil, reply: AgentReply? = nil,
-                      events: [AgentRunEvent] = [], liveActivity: Bool = false) -> [ChatLine] {
+                      events: [AgentRunEvent] = [], commands: [CommandHistory] = [], liveActivity: Bool = false) -> [ChatLine] {
         var lines: [ChatLine] = []
         let currentStart = prompt.flatMap { current in
             messages.lastIndex { $0.role == "user" && $0.content == current }
@@ -574,7 +619,7 @@ struct ChatLine: Identifiable, Equatable {
                         lines.append(ChatLine(id: index * 2, kind: .activity, text: "Used " + message.toolCalls.map { ChatActivity.label($0.name) }.joined(separator: ", ")))
                     }
                 } else if !message.content.isEmpty {
-                    lines.append(ChatLine(id: index * 2 + 1, kind: .agent, text: message.content, citations: message.citations ?? []))
+                    lines.append(ChatLine(id: index * 2 + 1, kind: .agent, text: message.content, citations: message.citations ?? [], command: commands.first { $0.messageSequence == (message.sequence ?? index + 1) }?.receipt ?? (reply?.text == message.content && index >= start ? reply?.command : nil)))
                 }
             case "summary":
                 lines.append(ChatLine(id: index * 2, kind: .summary, text: "Earlier conversation summarized."))
@@ -597,7 +642,7 @@ struct ChatLine: Identifiable, Equatable {
             }
         }
         if let reply, needsReply, !reply.text.isEmpty {
-            lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations))
+            lines.append(ChatLine(id: messages.count * 2 + 1, kind: .agent, text: reply.text, citations: reply.citations, command: reply.command))
         }
         return lines
     }
@@ -613,6 +658,7 @@ enum ChatActivity {
         case "knowledge_entity": "entity lookup"
         case "knowledge_related": "connections"
         case "knowledge_timeline": "timeline"
+        case "knowledge_maintenance": "Brain review candidates"
         case "knowledge_propose": "a knowledge suggestion"
         case "data_describe": "data overview"
         case "data_query": "exact data query"
@@ -633,6 +679,10 @@ enum ChatActivity {
     static func progress(_ event: AgentRunEvent?) -> String {
         guard let event else { return "Starting…" }
         switch event.kind {
+        case "dream_started": return "Dream · reviewing Brain evidence…"
+        case "owner_correction_saved": return "Recording your correction…"
+        case "mapping_owner_correction": return "Connecting your correction to existing knowledge…"
+        case "command_finished": return "Saving the command result…"
         case "recalling_brain": return "Finding relevant library notes…"
         case "recalling_media": return "Finding playable moments…"
         case "thinking", "usage_turn": return "Thinking…"

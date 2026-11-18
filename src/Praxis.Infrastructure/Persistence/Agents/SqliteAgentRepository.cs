@@ -7,7 +7,7 @@ using Praxis.Domain.Models;
 namespace Praxis.Infrastructure.Persistence.Agents;
 
 /// <summary>Owner-private agent state: backends, conversations, messages, tool-call audit, proposals, memories and artifacts.</summary>
-public sealed class SqliteAgentRepository : IAgentConversationRepository
+public sealed partial class SqliteAgentRepository : IAgentConversationRepository
 {
     private const int MaximumMessages = 2_000;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -146,7 +146,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentMessage> ReadMessages(Guid conversationId) => database.ExecuteRead(connection =>
     {
         using SqliteCommand command = connection.CreateCommand("""
-            SELECT role, content, tool_calls, tool_call_id, citations FROM agent_messages WHERE conversation_id = $id ORDER BY sequence DESC LIMIT $limit
+            SELECT role, content, tool_calls, tool_call_id, citations, sequence FROM agent_messages WHERE conversation_id = $id ORDER BY sequence DESC LIMIT $limit
             """);
         command.Parameters.AddWithValue("$id", conversationId.ToString("D"));
         command.Parameters.AddWithValue("$limit", MaximumMessages);
@@ -156,7 +156,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
         {
             messages.Add(new AgentMessage(reader.GetString(0), reader.GetString(1),
                 JsonSerializer.Deserialize<AgentToolCall[]>(reader.GetString(2), Json) ?? [], Text(reader, 3),
-                JsonSerializer.Deserialize<AgentCitation[]>(reader.GetString(4), Json) ?? []));
+                JsonSerializer.Deserialize<AgentCitation[]>(reader.GetString(4), Json) ?? [], reader.GetInt32(5)));
         }
 
         messages.Reverse();
@@ -265,7 +265,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
     public IReadOnlyList<AgentMemory> ReadMemories(string? status, string? search, int limit) => database.ExecuteRead(connection =>
     {
         using SqliteCommand command = connection.CreateCommand("""
-            SELECT memory_id, text, status, conversation_id, created_utc FROM agent_memories
+            SELECT memory_id, text, status, conversation_id, created_utc, owner_statement FROM agent_memories
             WHERE ($status IS NULL OR status = $status) AND ($search IS NULL OR instr(lower(text), lower($search)) > 0)
             ORDER BY created_utc DESC LIMIT $limit
             """);
@@ -372,7 +372,7 @@ public sealed class SqliteAgentRepository : IAgentConversationRepository
 
     private static AgentMemory ReadMemory(SqliteDataReader reader) =>
         new(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-            reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4)));
+            reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)), CatalogValues.ParseTimestamp(reader.GetString(4)), reader.FieldCount > 5 ? Text(reader, 5) : null);
 
     public void SaveArtifact(AgentArtifact artifact) => Write("""
         INSERT INTO agent_artifacts (artifact_id, title, source_id, revision, path, conversation_id, updated_utc)

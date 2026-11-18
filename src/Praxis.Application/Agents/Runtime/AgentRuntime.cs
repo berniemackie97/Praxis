@@ -8,6 +8,7 @@ using Praxis.Application.Policy;
 using Praxis.Application.Search;
 using Praxis.Domain.Agents;
 using Praxis.Domain.Models;
+using Praxis.Domain.Knowledge;
 using Praxis.Domain.Policy;
 using Praxis.Domain.Search;
 using Praxis.Domain.Verification;
@@ -24,7 +25,7 @@ namespace Praxis.Application.Agents.Runtime;
 public sealed class AgentRuntime(
     IAgentConversationRepository conversations, AgentToolRegistry registry, IAgentBackendFactory backends, PolicyService policy,
     DisclosureGate gate, TimeProvider clock, ITextSearchIndex? brainSearch = null, IChatMemoryStore? memory = null, SkillLibrary? skills = null,
-    IAgentRecallJournal? recallJournal = null, ModelActivity? activity = null)
+    IAgentRecallJournal? recallJournal = null, ModelActivity? activity = null, OwnerCorrectionService? ownerCorrections = null)
 {
     private const int MaximumCliToolCalls = 12;
     private const string NoProgressNotice = "I stopped because repeated source reads made no progress. The available evidence was insufficient for a verified answer.";
@@ -48,7 +49,9 @@ public sealed class AgentRuntime(
         bool managedLocal = profile.IsLocal && profile.BackendId == VerificationProvider.Ollama;
         string permission = policy.Current().ToolPermission;
         string command = userText.Trim();
+        AgentCommandRequest? parsedCommand = AgentCommands.Parse(command);
         string? dream = DreamCommand.Parse(command);
+        RunState? commandState = dream is null ? null : new(false, false) { IsDream = true };
         if (dream is not null)
         {
             bounds = DreamCommand.Bound(bounds);
@@ -57,7 +60,7 @@ public sealed class AgentRuntime(
         using IDisposable? dreamActivity = dream is null ? null : activity?.Begin(
             new ActiveModelCall("dream", profile.BackendId, profile.Model, "knowledge-maintenance", null, clock.GetUtcNow()));
         if (dream is null && managedLocal && memory is not null &&
-            (command.StartsWith("/name ", StringComparison.OrdinalIgnoreCase) || MemoryText.ChooseNameRequest(command)))
+            (parsedCommand?.Name == "name" || MemoryText.ChooseNameRequest(command)))
         {
             AgentReply named = await NameAsync(conversationId, userText, command, profile, permission, memory, report, cancellationToken);
             return named;
@@ -66,14 +69,34 @@ public sealed class AgentRuntime(
         conversations.Append(conversationId, AgentMessage.FromUser(userText));
         AgentReply CompleteLocally(string text, RunState? completed = null)
         {
-            RunState result = completed ?? new(false, false);
+            RunState result = completed ?? commandState ?? new(false, false);
             conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(text, []) with { Citations = result.Citations.All.ToArray() });
             return Finish(conversationId, userText, text, AgentReply.Completed, result, report, repaired: false);
         }
 
-        if (dream is not null && !useTools)
+        if (parsedCommand is not null && !AgentCommands.All.Any(item => item.Name == parsedCommand.Name))
         {
-            return CompleteLocally("Dream needs Allow tools to inspect current evidence. Nothing was changed.");
+            return CompleteLocally($"Unknown command /{parsedCommand.Name}. Choose a command from the slash menu.");
+        }
+        if (parsedCommand is not null && AgentCommands.All.FirstOrDefault(item => item.Name == parsedCommand.Name) is { LocalOnly: true } && !managedLocal)
+        {
+            RunState blocked = new(false, false) { Command = new(parsedCommand.Name, "blocked", 0, [], [], 0, "Use the managed local Ollama connection for this private command. Nothing changed.") };
+            return CompleteLocally(blocked.Command.Summary, blocked);
+        }
+        if (parsedCommand?.Name == "correct" && ownerCorrections is null)
+        {
+            RunState blocked = new(false, false) { Command = new("correction", "blocked", 0, [], [], 0, "Owner correction storage is unavailable in this worker. Nothing changed.") };
+            return CompleteLocally(blocked.Command.Summary, blocked);
+        }
+        if (parsedCommand?.Name == "remember-name" && OwnerNameCorrection.Parse(command) is null)
+        {
+            return CompleteLocally("Use /remember-name \"Old name\" -> \"Current name\". Nothing changed.");
+        }
+        if (dream is not null && (!useTools || !ToolTiers.Permits(permission, ToolTiers.Propose) || !registry.Definitions.Any(tool => tool.Name == "knowledge_propose")))
+        {
+            string reason = !useTools ? "Enable Allow tools to run Dream." : !ToolTiers.Permits(permission, ToolTiers.Propose) ? "Dream needs Propose edits in Settings → Privacy so it can queue review items." : "The knowledge repair tool is unavailable in this worker. Dream cannot queue repairs.";
+            commandState!.Command = new("dream", "blocked", 0, [], [], 0, reason + " No model was called and nothing changed.");
+            return CompleteLocally(commandState.Command.Summary);
         }
 
         if (dream is null && SettingsProposeTool.ReadDirectRequest(command) is { } requested)
@@ -109,9 +132,22 @@ public sealed class AgentRuntime(
 
             bool apply = ToolTiers.Permits(permission, ToolTiers.Write);
             AgentMemory saved = conversations.SaveNameCorrection(conversationId, correction, apply);
-            return CompleteLocally(saved.Status == AgentMemory.Active
+            string savedText = saved.Status == AgentMemory.Active
                 ? $"Saved **{correction.Current}** as the current name. I’ll recognize the old label when it appears in sources."
-                : $"I queued the exact name correction to **{correction.Current}** in Approvals → Things to remember. It will take effect after you approve it.");
+                : $"I queued the exact name correction to **{correction.Current}** in Approvals → Things to remember. It will take effect after you approve it.";
+            RunState nameState = new(false, false) { Command = new("remember-name", apply ? "applied" : "proposals_ready", 0, [], apply ? [] : [saved.MemoryId], apply ? 1 : 0, savedText, saved.MemoryId) };
+            return CompleteLocally(savedText, nameState);
+        }
+
+        if (dream is null && ownerCorrections is not null && (parsedCommand?.Name == "correct" || OwnerCorrectionService.IsRequest(command)))
+        {
+            DisclosureScope correctionScope = new(gate, profile.BackendId, profile.IsLocal);
+            string statement = parsedCommand?.Name == "correct" ? parsedCommand.Arguments : userText;
+            if (statement.Length == 0)
+            {
+                return CompleteLocally("Describe the correction after /correct. Nothing changed.");
+            }
+            return await ownerCorrections.ApplyAsync(conversationId, statement, profile, permission, useTools, correctionScope.MayDisclose, report, cancellationToken);
         }
 
         IReadOnlyList<AgentNameCorrection> corrections = managedLocal ? conversations.ReadNameCorrections() : [];
@@ -128,7 +164,7 @@ public sealed class AgentRuntime(
 
         DisclosureScope scope = new(gate, profile.BackendId, profile.IsLocal);
         AgentToolContext context = new(conversationId, profile.BackendId, profile.IsLocal, permission, scope.MayDisclose, userText,
-            conversation.ContextPreset, dream is null ? null : DreamCommand.Tools);
+            dream is null ? conversation.ContextPreset : AgentContextPreset.Compact, dream is null ? null : DreamCommand.Tools);
         if (dream is null && registry.Definitions.Any(tool => tool.Name == MediaFindTool.ToolName) && ClipRequest(conversationId, command) is { } clipRequest)
         {
             RunState clipState = new(false, false);
@@ -170,19 +206,18 @@ public sealed class AgentRuntime(
             return CompleteLocally("This model cannot inspect Brain tools. Choose a tool-capable model for Dream. Nothing was changed.");
         }
 
-        string system = useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
-            profile.IsLocal ? conversations.ReadMemories(AgentMemory.Active, null, 12) : [],
+        string system = dream is not null ? DreamCommand.Instructions : useTools ? AgentSystemPrompt.Build(clock.GetUtcNow(), permission,
+            profile.IsLocal ? conversations.FindOwnerCorrections(userText, 3).Concat(conversations.ReadMemories(AgentMemory.Active, null, 12).Where(item => item.OwnerStatement is null)).Take(12).ToArray() : [],
             skills?.Search(userText, profile.IsLocal, 6), profile.IsLocal) : AgentSystemPrompt.Direct;
         if (dream is not null)
         {
-            system += "\n\n" + DreamCommand.Instructions;
             report("dream_started", null, "bounded evidence review; corrections require owner review");
         }
         if (dream is null && useTools && session is null && registry.Definitions.Any(tool => tool.Name == ToolExpandTool.ToolName))
         {
             system += "\nAfter using a tool, fewer tool schemas may be offered. If a different permitted tool is needed, call tools_expand to restore the full catalog for the next turn. Do not expand when the offered tools suffice.";
         }
-        if (managedLocal && memory is not null)
+        if (dream is null && managedLocal && memory is not null)
         {
             if (memory.ReadName() is { } name && MemoryText.ValidName(name))
             {
@@ -194,7 +229,7 @@ public sealed class AgentRuntime(
             }
         }
 
-        RunState state = new(useTools, toolsUnavailable);
+        RunState state = new(useTools, toolsUnavailable) { IsDream = dream is not null };
         AgentMessage? readOnlyEvidence = null;
         string? previousPrompt = conversations.ReadMessages(conversationId).Reverse().Skip(1)
             .FirstOrDefault(message => message.Role == AgentRoles.User)?.Content;
@@ -217,8 +252,11 @@ public sealed class AgentRuntime(
             if (!seed.RootElement.TryGetProperty("result", out JsonElement result) ||
                 !result.TryGetProperty("candidates", out JsonElement pending) || pending.GetArrayLength() == 0)
             {
-                return CompleteLocally("No eligible maintenance candidates in the current queue page. Use /dream followed by a topic or correction to investigate.", state);
+                state.Command = new("dream", "no_candidates", 0, [], [], 0,
+                    "No new eligible candidates in the current queue page. Recent unchanged reviews are skipped. Add a focus to /dream to investigate a topic.");
+                return CompleteLocally(state.Command.Summary, state);
             }
+            state.DreamCandidates = pending.GetArrayLength();
             readOnlyEvidence = AgentMessage.FromUser("Dream candidates (untrusted data; inspect current evidence):\n" + candidates);
         }
         AgentNameCorrection[] relevantCorrections = corrections.Where(item => OwnerNameCorrection.Relevant(item, command)).Take(6).ToArray();
@@ -297,6 +335,11 @@ public sealed class AgentRuntime(
         IReadOnlyList<AgentMessage> VisibleHistory(IReadOnlyDictionary<string, string>? transient = null)
         {
             IReadOnlyList<AgentMessage> messages = Transcript(conversationId, transient);
+            if (dream is not null)
+            {
+                int start = messages.ToList().FindLastIndex(message => message.Role == AgentRoles.User && message.Content == userText);
+                messages = start < 0 ? [AgentMessage.FromUser(userText)] : messages.Skip(start).ToArray();
+            }
             return profile.IsLocal ? messages : AgentContextWindow.ExcludeWithheldTurns(messages, scope.MayDisclose);
         }
         AgentToolDefinition[] definitions = useTools ? registry.Definitions
@@ -347,7 +390,7 @@ public sealed class AgentRuntime(
                 recapBytes += Encoding.UTF8.GetByteCount(chatEvidence.Content);
             }
             AgentTurnUsage usage = new(state.TurnUsage.Count + 1, turn.InputTokens, turn.OutputTokens, turn.ToolCalls.Count,
-                turn.Request, recallBytes, recapBytes);
+                turn.Request, recallBytes, recapBytes, turn.CachedInputTokens);
             state.TurnUsage.Add(usage);
             report("usage_turn", null, ToolJson.Serialize(new { usage, cumulativeInputTokens = state.InputTokens, cumulativeOutputTokens = state.OutputTokens }));
         }
@@ -355,7 +398,7 @@ public sealed class AgentRuntime(
         if (session is not null)
         {
             report("thinking", null, profile.BackendId);
-            int toolLimit = useTools ? Math.Min(bounds.MaximumToolCalls, MaximumCliToolCalls) : 0;
+            int toolLimit = useTools ? Math.Min(bounds.MaximumToolCalls, dream is null ? MaximumCliToolCalls : 16) : 0;
             SemaphoreSlim toolGate = new(1);
             async Task<string> InvokeSessionTool(AgentToolCall call, CancellationToken token)
             {
@@ -644,6 +687,7 @@ public sealed class AgentRuntime(
         Action<string, string?, string?> report, CancellationToken cancellationToken)
     {
         RunState state = new(false, false);
+        int changes = 0;
         conversations.Append(conversationId, AgentMessage.FromUser(userText));
         string text;
         if (!ToolTiers.Permits(permission, ToolTiers.Write))
@@ -675,6 +719,7 @@ public sealed class AgentRuntime(
             if (MemoryText.ValidName(name))
             {
                 identity.SaveName(name);
+                changes = 1;
                 text = $"I saved my name as {name}.";
             }
             else
@@ -683,6 +728,7 @@ public sealed class AgentRuntime(
             }
         }
 
+        state.Command = new("name", changes == 1 ? "applied" : "blocked", 0, [], [], changes, text);
         conversations.AppendFinal(conversationId, AgentMessage.FromAssistant(text, []));
         return Finish(conversationId, userText, text, AgentReply.Completed, state, report, repaired: false);
     }
@@ -690,8 +736,30 @@ public sealed class AgentRuntime(
     private async Task<string> InvokeAsync(AgentToolCall call, AgentToolContext context, RunState state, Action<string, string?, string?> report, CancellationToken cancellationToken)
     {
         report("tool_started", call.Name, null);
+        string currentPermission = policy.Current().ToolPermission;
+        if (!ToolTiers.Permits(currentPermission, ToolTiers.Propose))
+        {
+            context = context with { ToolPermission = ToolPermissions.ReadOnly };
+        }
+        else if (!ToolTiers.Permits(currentPermission, ToolTiers.Write) && ToolTiers.Permits(context.ToolPermission, ToolTiers.Write))
+        {
+            context = context with { ToolPermission = ToolPermissions.ProposeEdits };
+        }
         AgentToolOutput output = await registry.InvokeAsync(call, context, cancellationToken, state.Reads);
         state.ToolCalls.Add(call);
+        if (state.IsDream)
+        {
+            if (output.InspectedEntity is { } entity)
+            {
+                state.DreamEntities[entity.EntityId] = (entity, output.Citations);
+            }
+            using JsonDocument effect = JsonDocument.Parse(output.Content);
+            if (call.Name == "knowledge_propose" && effect.RootElement.TryGetProperty("proposalId", out JsonElement id) && id.TryGetGuid(out Guid proposal) &&
+                effect.RootElement.TryGetProperty("status", out JsonElement status) && status.GetString() == "awaiting_owner_review")
+            {
+                state.DreamProposals.Add(proposal);
+            }
+        }
         state.Withheld += output.Withheld.Sum(notice => notice.Count);
         string wrapped = state.Citations.Wrap(output);
         if (output.Citations.Count > 0 && (call.Name is KnowledgeSearchTool.ToolName or KnowledgeOpenTool.ToolName))
@@ -744,12 +812,27 @@ public sealed class AgentRuntime(
         }
 
         AnswerCheck check = state.RejectedCheck ?? (hasEvidence ? Check(text, userText, state, repaired) : new AnswerCheck([], false, false));
+        if (state.IsDream && state.Command is null)
+        {
+            KnowledgeSnapshot[] reviewed = stop == AgentReply.Completed && check.Clean ? state.DreamEntities.Values
+                .Where(entity => entity.Citations.Any(citation => state.OpenedCitations.Any(number =>
+                    state.Citations.All[number - 1] is { } opened && opened.SourceId == citation.SourceId && opened.ItemId == citation.ItemId && opened.Revision == citation.Revision)))
+                .Select(entity => entity.Snapshot).Take(3).ToArray() : [];
+            string outcome = stop != AgentReply.Completed || !check.Clean ? "incomplete" : state.DreamProposals.Count > 0 ? "proposals_ready" : reviewed.Length > 0 ? "reviewed" : "incomplete";
+            state.Command = new("dream", outcome, state.DreamCandidates, reviewed, state.DreamProposals.ToArray(), 0,
+                outcome == "incomplete" ? "Dream did not complete an evidence review. No corrections were applied." :
+                state.DreamProposals.Count > 0 ? "Supported repairs are ready in Approvals. No corrections were applied." : "Current evidence was reviewed; no supported repair was queued. No corrections were applied.");
+        }
+        if (state.Command is not null)
+        {
+            report("command_finished", null, ToolJson.Serialize(state.Command));
+        }
         report("completed", null, check.Clean ? null : "answer verification failed");
         return new AgentReply(conversationId, text, stop, state.ToolCalls,
             state.SuppressCitations ? [] : state.Citations.All, state.Withheld, check, state.InputTokens, state.OutputTokens,
             state.OmittedMessages, state.ToolsUnavailable, state.TurnUsage.ToArray(),
             state.ToolCalls.Count(call => call.Name == KnowledgeSearchTool.ToolName),
-            state.ToolCalls.Count(call => call.Name == KnowledgeOpenTool.ToolName));
+            state.ToolCalls.Count(call => call.Name == KnowledgeOpenTool.ToolName), state.Command);
     }
 
     private static AnswerCheck Check(string text, string userText, RunState state, bool repaired) =>
@@ -807,6 +890,11 @@ public sealed class AgentRuntime(
     {
         public bool UseTools { get; } = useTools;
         public bool ToolsUnavailable { get; } = toolsUnavailable;
+        public bool IsDream { get; init; }
+        public int DreamCandidates { get; set; }
+        public AgentCommandReceipt? Command { get; set; }
+        public Dictionary<Guid, (KnowledgeSnapshot Snapshot, IReadOnlyList<AgentCitation> Citations)> DreamEntities { get; } = [];
+        public HashSet<Guid> DreamProposals { get; } = [];
         public CitationLedger Citations { get; } = new();
         public AgentReadProgress Reads { get; } = new();
         public List<AgentToolCall> ToolCalls { get; } = [];

@@ -228,13 +228,13 @@ public sealed partial class AgentRuntimeTests
     [Fact]
     public void CodexUsageIsProviderReportedAndFailureDetailsStayPrivate()
     {
-        var (input, output, failure) = CodexSessionBackend.ReadEvents("""
+        var (input, output, cached, failure) = CodexSessionBackend.ReadEvents("""
             missing-telemetry-is-fine
             {"type":"item.completed","item":{"type":"agent_message","text":"approval required"}}
             {"type":"turn.completed","usage":{"input_tokens":222,"cached_input_tokens":111,"output_tokens":19}}
             """);
-        Assert.Equal((222, 19, null), (input, output, failure));
-        (_, _, failure) = CodexSessionBackend.ReadEvents("""
+        Assert.Equal((222, 19, 111, null), (input, output, cached, failure));
+        (_, _, _, failure) = CodexSessionBackend.ReadEvents("""
             {"type":"turn.failed","error":{"message":"tool requires approval: sensitive-source"}}
             """);
         var error = CodexSessionBackend.ClassifyFailure(failure, "");

@@ -4,7 +4,7 @@ namespace Praxis.Domain.Agents;
 /// One persisted conversation message: user text, assistant text and/or tool calls, or one tool
 /// result answering <see cref="ToolCallId"/>.
 /// </summary>
-public sealed record AgentMessage(string Role, string Content, IReadOnlyList<AgentToolCall> ToolCalls, string? ToolCallId, IReadOnlyList<AgentCitation> Citations)
+public sealed record AgentMessage(string Role, string Content, IReadOnlyList<AgentToolCall> ToolCalls, string? ToolCallId, IReadOnlyList<AgentCitation> Citations, int? Sequence = null)
 {
     public static AgentMessage FromUser(string text) => new(AgentRoles.User, text, [], null, []);
 

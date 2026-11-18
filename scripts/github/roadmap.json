@@ -304,7 +304,8 @@
         452,
         463,
         510,
-        535
+        535,
+        545
       ]
     },
     {
@@ -1589,7 +1590,8 @@
     "504": "P1",
     "523": "P1",
     "535": "P1",
-    "538": "P1"
+    "538": "P1",
+    "545": "P1"
   },
   "area_overrides": {
     "24": "clients",
@@ -1639,7 +1641,8 @@
     "512": "clients",
     "523": "intelligence",
     "535": "intelligence",
-    "538": "intelligence"
+    "538": "intelligence",
+    "545": "intelligence"
   },
   "decision_queue": [
     30,
@@ -1968,7 +1971,8 @@
         492,
         493,
         494,
-        535
+        535,
+        545
       ],
       "exit": "Owner-run evidence that approved sources keep living topic pages current with reviewable diffs, that decisions resume across two authorized providers via supported lifecycle events, that a paused or revoked connector or grant is visible and blocks dependent routines before their next effect, and that lexical-first ranking beats the current path on the owner gold sets for quality, outdated-answer rate, tokens and latency. Owner-evaluated post-task learning must produce a verified, reviewable lesson/skill change that improves a later task without silently changing authority or model weights; proactive exploration must discover and safely investigate one previously unasked, valuable source-grounded question with a truthful abstention case. Nothing here gates #130 or #170."
     },

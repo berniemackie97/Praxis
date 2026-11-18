@@ -58,8 +58,7 @@ internal sealed class AgentMaintenanceService(AgentRunCoordinator runs, AgentLea
             return;
         }
         long watermark = revisions.Watermark().LatestRevisionId;
-        if (settings.Read("idle_dream_watermark") == watermark.ToString(System.Globalization.CultureInfo.InvariantCulture) ||
-            revisions.Revisions(RevisionVocabulary.Suggested, 1).Count == 0)
+        if (revisions.Revisions(RevisionVocabulary.Suggested, 1).Count == 0)
         {
             return;
         }

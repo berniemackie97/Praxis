@@ -26,6 +26,7 @@ public sealed class MemoryRecallTool(IAgentConversationRepository repository, IC
         {
             memories = repository.ReadMemories(AgentMemory.Active, query, args.Integer("limit", 20, 1, 50))
                 .Select(memory => new { memory.MemoryId, memory.Text, created = memory.CreatedUtc }),
+            ownerCorrections = query is null ? [] : repository.FindOwnerCorrections(query, 3),
             conversations = query is null ? [] : chats?.Search(query, context.ConversationId, 3) ?? [],
             recapBasis = "Generated summaries of retained dialogue; verify claims against original evidence."
         }));

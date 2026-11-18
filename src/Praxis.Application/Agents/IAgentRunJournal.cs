@@ -16,6 +16,8 @@ public interface IAgentRunJournal
     bool CancelPending(Guid runId);
     bool HasPending(Guid conversationId);
     bool HasActiveDream();
+    bool RecentlyReviewed(Praxis.Domain.Knowledge.KnowledgeSnapshot snapshot);
+    IReadOnlyList<AgentCommandHistory> CommandHistory(Guid conversationId, int limit);
     AgentLearningEpisode? ClaimLearning(int dailyCalls, int dailyTokens, DateTimeOffset? completedBefore = null);
     bool EvidenceCurrent(Guid runId);
     void FinishLearning(Guid runId, string outcome, Guid? skillRevision, int inputTokens, int outputTokens, string? model);

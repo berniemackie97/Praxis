@@ -50,10 +50,10 @@ public static class AgentComposition
             new MediaFindTool(retriever, moments, catalog.Sources, catalog.Agents),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
-            new KnowledgeMaintenanceTool(catalog.Reconsolidation, catalog.Knowledge),
+            new KnowledgeMaintenanceTool(catalog.Reconsolidation, catalog.Knowledge, catalog.AgentRuns),
             new KnowledgeProjectTool(catalog.Projects),
             new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),
-            new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy)),
+            new KnowledgeProposeTool(catalog.Agents, new ProposalApplier(catalog.Knowledge, catalog.Policy, catalog.Agents)),
             new DataDescribeTool(datasets),
             new DataQueryTool(datasets),
             new ComputeEvaluateTool(),
@@ -75,5 +75,6 @@ public static class AgentComposition
 
     public static AgentRuntime Runtime(SqliteCatalog catalog, IReadOnlyList<IAgentTool> tools, IAgentBackendFactory backends, TimeProvider clock, SkillLibrary? skills = null) =>
         new(catalog.Agents, new AgentToolRegistry(tools, catalog.Agents, clock), backends, new PolicyService(catalog.Policy),
-            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog), catalog.AgentRecalls, CatalogProcessing.Activity);
+            new DisclosureGate(catalog.Policy, clock), clock, catalog.Search, catalog.ChatMemory, skills ?? Skills(catalog), catalog.AgentRecalls, CatalogProcessing.Activity,
+            new OwnerCorrectionService(catalog.Agents, catalog.Knowledge, new ProposalApplier(catalog.Knowledge, catalog.Policy, catalog.Agents), backends, clock, new PolicyService(catalog.Policy)));
 }

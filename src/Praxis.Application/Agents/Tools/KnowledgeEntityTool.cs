@@ -55,6 +55,7 @@ public sealed class KnowledgeEntityTool(IKnowledgeRepository knowledge) : IAgent
             mentions = shown.Select(mention => new { mention.SourceId, mention.ItemId, mention.Revision, source = mention.SourceName, quote = mention.Evidence, mention.Verdict })
         },
         shown.Select(mention => new AgentCitation(mention.SourceId, mention.ItemId, mention.Revision, $"chars:{mention.EvidenceOffset}-{mention.EvidenceOffset + mention.Evidence.Length}", mention.SourceName)).ToArray(),
-        withheld > 0 ? [new WithheldNotice(withheld, WithheldNotice.DisclosurePolicy)] : null));
+        withheld > 0 ? [new WithheldNotice(withheld, WithheldNotice.DisclosurePolicy)] : null) with
+        { InspectedEntity = KnowledgeSnapshot.Capture(detail) });
     }
 }

@@ -72,7 +72,9 @@ struct WorkbenchSplitView: View {
     @ViewBuilder
     private var workspace: some View {
         switch section {
-        case .chat: ChatView(model: model.chat, setup: model.modelSetup) { SettingsOpener.open(.models) }
+        case .chat: ChatView(model: model.chat, setup: model.modelSetup,
+            openAgentSettings: { SettingsOpener.open(.models) }, openApprovals: { section = .approvals },
+            openPrivacy: { SettingsOpener.open(.privacy) })
         case .approvals: ApprovalsView(model: model.approvals)
         case .skills: SkillsView(model: model.skills) { prompt in
             if model.chat.prepareDraft(prompt) { section = .chat }
