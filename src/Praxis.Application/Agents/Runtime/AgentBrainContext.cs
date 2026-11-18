@@ -98,7 +98,7 @@ internal static partial class AgentBrainContext
     [GeneratedRegex(@"\bcompute_evaluate\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ComputeTool();
 
-    [GeneratedRegex(@"(?<![\w.])\d+(?:\.\d+)?\s*[-+*/]\s*\d+(?:\.\d+)?(?![\w.])", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\w.])\d+(?:\.\d+)?\s*[-+*/]\s*\d+(?:\.\d+)?(?!\w|\.\d)", RegexOptions.CultureInvariant)]
     private static partial Regex ArithmeticExpression();
 
     [GeneratedRegex(@"\b(?:source|document|file|notes|library|repository|repo|dataset|attachment|uploaded|linked|website|webpage|url)\b|\b[\w.-]+\.[a-z]{1,8}\b|https?://",
