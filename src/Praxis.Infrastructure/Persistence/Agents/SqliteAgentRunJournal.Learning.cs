@@ -10,6 +10,11 @@ public sealed partial class SqliteAgentRunJournal
 {
     public string LearningReadiness(int dailyCalls, int dailyTokens) => database.ExecuteRead(connection =>
     {
+        using var running = connection.CreateCommand("SELECT EXISTS(SELECT 1 FROM agent_runs WHERE learning_state='running')");
+        if (Convert.ToInt32(running.ExecuteScalar(), CultureInfo.InvariantCulture) == 1)
+        {
+            return "review_running";
+        }
         (int calls, int tokens) = LearningBudget(connection, null);
         if (calls >= dailyCalls)
         {
