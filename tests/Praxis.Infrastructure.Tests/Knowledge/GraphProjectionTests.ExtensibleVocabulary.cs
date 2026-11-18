@@ -59,10 +59,13 @@ public sealed partial class GraphProjectionTests
         catalog.Agents.SaveBackend(profile);
         Guid chat = catalog.Agents.Create(profile.BackendId, "New classification").ConversationId;
         const string statement = "Conquer Online is a game. OpenConquer is a software project. Update your brain with that.";
-        var mapping = JsonSerializer.Serialize(new { changes = new[]
+        var mapping = JsonSerializer.Serialize(new
+        {
+            changes = new[]
         {
             new { kind = "entity_type", entityId = game, entityType = "game", quote = statement }
-        } });
+        }
+        });
         AgentRuntime runtime = AgentComposition.Runtime(catalog, [], new DynamicMappingModel(mapping), TimeProvider.System);
         AgentReply result = await runtime.RunAsync(chat, statement, (_, _, _) => { }, CancellationToken.None);
 
