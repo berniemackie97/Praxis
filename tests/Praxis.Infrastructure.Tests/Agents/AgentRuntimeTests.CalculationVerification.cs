@@ -76,8 +76,10 @@ public sealed partial class AgentRuntimeTests
         Assert.Equal(2, answer.ToolCalls.Count);
     }
 
-    [Fact]
-    public async Task SourceDependentCalculationStillRequiresTheSourceCitation()
+    [Theory]
+    [InlineData("Using compute_evaluate, explain the procedure in my calculation-workflow.md for 17 * 23.")]
+    [InlineData("Use compute_evaluate to calculate 17 * 23 based on the source document calculation-workflow.md.")]
+    public async Task SourceDependentCalculationStillRequiresTheSourceCitation(string prompt)
     {
         using SqliteCatalog catalog = await SeededAsync();
         await Capture(catalog, "calculation-workflow.md", Encoding.UTF8.GetBytes(
@@ -92,7 +94,7 @@ public sealed partial class AgentRuntimeTests
         AgentRuntime runtime = AgentComposition.Runtime(catalog, Tools(catalog), new FixedFactory(backend, null), clock);
 
         AgentReply answer = await runtime.RunAsync(chat.ConversationId,
-            "Using compute_evaluate, explain the procedure in my calculation-workflow.md.", (_, _, _) => { }, CancellationToken.None);
+            prompt, (_, _, _) => { }, CancellationToken.None);
 
         Assert.Equal(AgentReply.EvidenceInsufficient, answer.StopReason);
         Assert.True(answer.Check.MissingCitations);
