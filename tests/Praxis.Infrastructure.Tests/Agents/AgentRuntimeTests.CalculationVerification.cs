@@ -90,7 +90,7 @@ public sealed partial class AgentRuntimeTests
     {
         using SqliteCatalog catalog = await SeededAsync();
         await Capture(catalog, "calculation-workflow.md", Encoding.UTF8.GetBytes(
-            "Using compute_evaluate, explain the procedure in my calculation-workflow.md: multiply 17 by 23, then add 29."));
+            "Source document calculation-workflow.md. Use compute_evaluate to calculate 17 * 23 based on the source document calculation-workflow.md. Using compute_evaluate, explain the procedure in my calculation-workflow.md: multiply 17 by 23, then add 29."));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         AgentBackendProfile profile = Local() with { BackendId = "ollama" };
         catalog.Agents.SaveBackend(profile);
@@ -103,10 +103,12 @@ public sealed partial class AgentRuntimeTests
         AgentReply answer = await runtime.RunAsync(chat.ConversationId,
             prompt, (_, _, _) => { }, CancellationToken.None);
 
+        AgentRecallReceipt recalled = Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10));
+        Assert.NotEmpty(recalled.Selected);
         Assert.Equal(AgentReply.EvidenceInsufficient, answer.StopReason);
         Assert.True(answer.Check.MissingCitations);
         Assert.NotEmpty(answer.Citations);
-        Assert.NotEqual("not_needed", Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10)).Outcome);
+        Assert.NotEqual("not_needed", recalled.Outcome);
     }
 
     private static string CalculatorResult(AgentMessage message, string label)
