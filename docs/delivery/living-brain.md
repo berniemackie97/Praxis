@@ -94,7 +94,9 @@ The #545 candidate compiled in Release with zero warnings/errors using cached de
 
 Completed Chat turns are candidates for learning, not proof that the user's goal succeeded. The local learning reviewer must correlate each tool-result message with an actual successful, non-withheld tool audit record from that run. Computations require nonempty results; data queries require returned rows/groups; source openings require nonblank text; media lookups require a returned moment and citations. A privacy-withheld run is ineligible. Unmatched, failed and empty observations yield `no_verified_evidence` without a model call or skill draft.
 
-This is a conservative gate on **observed evidence**, not independent verification of task success or generalization. Learned skills remain owner-reviewed proposals. Failed-attempt retrospective lessons, independent outcome evaluation, safe reuse and rollback remain open under #514. No model weights, new storage or remote permissions are changed.
+This is a conservative gate on **observed evidence**, not independent verification of task success or generalization. Learned skills remain owner-reviewed proposals.
+
+The live calculator smoke exposed an unrelated Chat failure tracked by #549: a self-contained `compute_evaluate` request with literal arithmetic must not pull in incidental Brain excerpts and then demand source citations for a tool-only status answer. Explicit source/file references and owner-scoped calculations still use normal Brain retrieval and citation checks. This does not force models to make two calls, certify failed tool outcomes, or resolve the initial Gemma numeric-verification symptom without its raw receipts. Failed-attempt retrospective lessons, independent outcome evaluation, safe reuse and rollback remain open under #514. No model weights, new storage or remote permissions are changed.
 
 At a reviewed branch head, run:
 
