@@ -51,7 +51,7 @@ public static class VerdictReader
                 string? note = Text(item, "note");
                 if (verdict is not ("supported" or "unsupported" or "uncertain") ||
                     corrected is null || note is null || result.ContainsKey(ordinal) ||
-                    (corrected != VerificationPrompt.NoTypeChange && !KnowledgeVocabulary.EntityTypes.Contains(corrected)))
+                    (corrected != VerificationPrompt.NoTypeChange && !KnowledgeVocabulary.ValidIdentifier(corrected)))
                 {
                     throw Invalid();
                 }
