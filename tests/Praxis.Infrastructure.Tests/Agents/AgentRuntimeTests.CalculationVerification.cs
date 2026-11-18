@@ -36,12 +36,12 @@ public sealed partial class AgentRuntimeTests
             },
             transcript =>
             {
-                Assert.Equal("391", Value(transcript.Last(message => message.Role == AgentRoles.Tool), "first"));
+                Assert.Equal("391", CalculatorResult(transcript.Last(message => message.Role == AgentRoles.Tool), "first"));
                 return Turn(Call("compute_evaluate", """{"expressions":{"second":"391 + 29"}}"""));
             },
             transcript =>
             {
-                Assert.Equal("420", Value(transcript.Last(message => message.Role == AgentRoles.Tool), "second"));
+                Assert.Equal("420", CalculatorResult(transcript.Last(message => message.Role == AgentRoles.Tool), "second"));
                 return new AgentTurn("Both calculations completed successfully.", [], 10, 5);
             });
         (AgentRuntime runtime, AgentConversation conversation) = Runtime(catalog, Local(), backend);
@@ -81,7 +81,7 @@ public sealed partial class AgentRuntimeTests
     {
         using SqliteCatalog catalog = await SeededAsync();
         await Capture(catalog, "calculation-workflow.md", Encoding.UTF8.GetBytes(
-            "My calculation workflow: multiply 17 by 23, then add 29."));
+            "Using compute_evaluate, explain the procedure in my calculation-workflow.md: multiply 17 by 23, then add 29."));
         Assert.True(await ProcessingDriver.Text(catalog).ProcessNextAsync());
         AgentBackendProfile profile = Local() with { BackendId = "ollama" };
         catalog.Agents.SaveBackend(profile);
@@ -100,7 +100,7 @@ public sealed partial class AgentRuntimeTests
         Assert.NotEqual("not_needed", Assert.Single(catalog.AgentRecalls.Read(chat.ConversationId, 10)).Outcome);
     }
 
-    private static string Value(AgentMessage message, string label)
+    private static string CalculatorResult(AgentMessage message, string label)
     {
         using JsonDocument receipt = JsonDocument.Parse(message.Content);
         return receipt.RootElement.GetProperty("result").GetProperty("results").GetProperty(label).GetString()!;
