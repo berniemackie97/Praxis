@@ -59,3 +59,10 @@ good score on five deliberately repetitive groups is not evidence that
 production answers are safe. Future integration requires source-currentness
 and disclosure gating, claim-to-citation alignment, bounded model retries and
 explicitly approved provider/cost policy.
+
+The local candidate also runs a separate 14-case synthetic challenge fixture
+(`claim-grounding-cases-v2.json`) for partial truth, qualified claims, disputed
+current sources, superseded policies, missing documentation, and hostile quoted
+instructions. Its labels remain provisional too. Each fixture reports its own
+baseline and candidate results; do not average them into a real-world precision
+claim or treat a disputed source as automatically resolved by a model verdict.

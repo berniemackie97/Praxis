@@ -12,8 +12,10 @@ namespace Praxis.Infrastructure.Tests.Agents;
 
 public sealed class ClaimSupportModelEvaluationTests(ITestOutputHelper output)
 {
-    [Fact]
-    public async Task MeasureInstalledLocalOllamaClaimSupportAgainstNoJudgeBaseline()
+    [Theory]
+    [InlineData("claim-grounding-cases-v1.json", 15)]
+    [InlineData("claim-grounding-cases-v2.json", 14)]
+    public async Task MeasureInstalledLocalOllamaClaimSupportAgainstNoJudgeBaseline(string fixtureName, int expectedCount)
     {
         string? modelName = Environment.GetEnvironmentVariable("PRAXIS_GROUNDING_OLLAMA_MODEL");
         if (string.IsNullOrWhiteSpace(modelName))
@@ -29,9 +31,10 @@ public sealed class ClaimSupportModelEvaluationTests(ITestOutputHelper output)
         using ModelConnection connection = new OllamaChatModelConnector().Connect(profile.Normalized());
         using CancellationTokenSource timeout = new(TimeSpan.FromMinutes(12));
         ModelIdentity identity = await connection.Model.DescribeAsync(timeout.Token);
-        string fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "claim-grounding-cases-v1.json");
+        string fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", fixtureName);
         using JsonDocument document = JsonDocument.Parse(File.ReadAllText(fixture));
         JsonElement[] cases = document.RootElement.GetProperty("cases").EnumerateArray().ToArray();
+        Assert.Equal(expectedCount, cases.Length);
         Assert.Equal("provisional", document.RootElement.GetProperty("reviewStatus").GetString());
 
         int baselineFalseSupport = 0, candidateFalseSupport = 0, supportedAccepted = 0;
@@ -89,14 +92,15 @@ public sealed class ClaimSupportModelEvaluationTests(ITestOutputHelper output)
         }
 
         double[] sorted = latencies.Order().ToArray();
+        double Percentile(int percentage) => sorted[(int)Math.Ceiling(sorted.Length * percentage / 100d) - 1];
         int predictedSupported = supportedAccepted + candidateFalseSupport;
-        output.WriteLine($"claim_support_candidate=v1 reviewed=false model={identity.Model} digest={identity.Digest} " +
+        output.WriteLine($"claim_support_candidate=v1 reviewed=false fixture={fixtureName} model={identity.Model} digest={identity.Digest} " +
             $"cases={cases.Length} correct={correct} baseline_false_support={baselineFalseSupport} " +
             $"candidate_false_support={candidateFalseSupport} supported_accepted={supportedAccepted} " +
             $"abstained={abstained} invalid={invalid} " +
             $"citation_precision={(predictedSupported == 0 ? 0d : (double)supportedAccepted / predictedSupported).ToString("F3", CultureInfo.InvariantCulture)} " +
             $"input_tokens={inputTokens} output_tokens={outputTokens} provider_ms={providerMs:F1} " +
-            $"wall_total_ms={latencies.Sum():F1} p50_ms={sorted[7]:F1} p95_ms={sorted[14]:F1}");
+            $"wall_total_ms={latencies.Sum():F1} p50_ms={Percentile(50):F1} p95_ms={Percentile(95):F1}");
         output.WriteLine("Local opt-in diagnostic only; no owner corpus or remote provider. " +
             "Fixture labels are provisional. Results are not production acceptance, hosted CI, or a promotion gate.");
     }
