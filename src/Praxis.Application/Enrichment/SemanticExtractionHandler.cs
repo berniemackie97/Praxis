@@ -45,7 +45,7 @@ public sealed class SemanticExtractionHandler(
         }
 
         // Generated artifacts already have a dedicated parser. Do not run a model on every passage.
-        if (Understanding.TechnicalEvidence.IsArtifact(input.Locator, input.Content))
+        if (Documents.PlainTextReader.IsCodeFile(input.Locator) || Understanding.TechnicalEvidence.IsArtifact(input.Locator, input.Content))
         {
             proposals.Commit(lease, input, []);
             return;

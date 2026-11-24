@@ -25,6 +25,8 @@ public sealed class PlainTextReader : IDocumentReader
     public IReadOnlyCollection<string> Extensions { get; } =
         MarkdownExtensions.Concat(SubtitleExtensions).Concat(CodeExtensions).Concat(TextExtensions).ToArray();
 
+    public static bool IsCodeFile(string path) => CodeExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
     public bool CanRead(DocumentInput input)
     {
         if (BinarySignature.Matches(input.Bytes) || BinarySignature.BinaryExtensions.Contains(input.Extension))
@@ -51,7 +53,7 @@ public sealed class PlainTextReader : IDocumentReader
 
         string format = MarkdownExtensions.Contains(input.Extension) ? DocumentFormats.Markdown
             : SubtitleExtensions.Contains(input.Extension) ? DocumentFormats.Subtitles
-            : CodeExtensions.Contains(input.Extension) ? DocumentFormats.Code
+            : IsCodeFile(input.FileName) ? DocumentFormats.Code
             : DocumentFormats.Text;
         return Task.FromResult(ReadOutcome.Read(new ReadDocument(format, text)));
     }

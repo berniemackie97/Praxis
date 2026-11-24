@@ -17,7 +17,7 @@ public sealed class CodexSessionBackend(string executable, string model, AgentRe
     // These reads are either source-disclosure checked or purely computational.
     private static readonly HashSet<string> NoninteractiveReads = new(StringComparer.Ordinal)
     {
-        "knowledge_maintenance", "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
+        "knowledge_maintenance", "knowledge_graph", "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related", "knowledge_project", "knowledge_timeline",
         "data_describe", "data_query", "compute_evaluate", "skill_search", "skill_open", "media_find", "capability_discover", "capability_result"
     };
 

@@ -13,16 +13,17 @@ namespace Praxis.Infrastructure.Intake;
 /// deterministic request key. Unchanged verified files are re-hashed only periodically.
 /// Not thread-safe; the owning intake serializes passes.
 /// </summary>
-internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report)
+internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourceIntake intake, string root, TimeSpan quietPeriod, ObservedRenameCorrelator renames, IntakeStatusTracker status, Action<string> report, int pageSize = 10_000)
 {
-    private const int MaximumFiles = 10_000;
     private const int MaximumQueuedChanges = 512;
     private const int MaximumDepth = 12;
+    private const int MaximumCachedFiles = 100_000;
     private const long MaximumFolderBytes = 256L * 1024 * 1024 * 1024;
     private const long HashBudgetPerScan = 2L * 1024 * 1024 * 1024;
     private static readonly TimeSpan FullVerificationInterval = TimeSpan.FromMinutes(30);
     private bool locatorsNormalized;
     private bool invalidateEverything;
+    private string? scanCursor;
     private readonly Lock pendingChangesGate = new();
     private readonly HashSet<string> pendingChanges = new(StringComparer.Ordinal);
 
@@ -67,6 +68,7 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             {
                 observations.Clear();
                 verified.Clear();
+                scanCursor = null;
             }
             else
             {
@@ -115,10 +117,16 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             locatorsNormalized = true;
         }
 
-        var (files, skippedLinks) = intake.InspectWatchedFolder(
-            root, MaximumFiles, MaximumDepth, MaximumFolderBytes, cancellationToken);
+        HashSet<string> unseen = verified.Keys.Concat(observations.Keys).Concat(status.FileErrorPaths()).ToHashSet(StringComparer.Ordinal);
+        var (files, skippedLinks, totalFiles, nextCursor) = intake.InspectWatchedFolder(
+            root, pageSize, MaximumDepth, MaximumFolderBytes, cancellationToken, scanCursor, path => unseen.Remove(path));
+        foreach (string missing in unseen)
+        {
+            verified.Remove(missing);
+            observations.Remove(missing);
+            status.ClearFileError(missing);
+        }
         long renameHashBytes = await renames.ReconcileAsync(files, HashBudgetPerScan, cancellationToken);
-        ForgetMissing(files);
 
         int imported = 0;
         TimeSpan? nextScanDelay = null;
@@ -128,6 +136,7 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             cancellationToken.ThrowIfCancellationRequested();
             if (IntakeFileRules.IsTemporaryName(file.SourcePath))
             {
+                status.ClearFileError(file.SourcePath);
                 continue;
             }
 
@@ -142,10 +151,18 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             FileStamp stamp = new(file.Length, file.LastWriteUtc);
             if (!observations.TryGetValue(file.SourcePath, out ObservedState? observed) || observed.Stamp != stamp)
             {
-                observations[file.SourcePath] = new ObservedState(stamp, now);
-                verified.Remove(file.SourcePath);
-                nextScanDelay = Earlier(nextScanDelay, quietPeriod);
-                continue;
+                if (verified.TryGetValue(file.SourcePath, out VerifiedState? known) && known.Stamp == stamp)
+                {
+                    observed = new ObservedState(stamp, now - quietPeriod);
+                    observations[file.SourcePath] = observed;
+                }
+                else
+                {
+                    observations[file.SourcePath] = new ObservedState(stamp, now);
+                    verified.Remove(file.SourcePath);
+                    nextScanDelay = Earlier(nextScanDelay, quietPeriod);
+                    continue;
+                }
             }
 
             TimeSpan elapsed = now - observed.FirstSeen;
@@ -155,8 +172,11 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
                 continue;
             }
 
-            if ((verified.TryGetValue(file.SourcePath, out VerifiedState? previous) && previous.Stamp == stamp && now - previous.LastVerified < FullVerificationInterval) ||
-                file.Length > remainingHashBytes)
+            if (verified.TryGetValue(file.SourcePath, out VerifiedState? previous) && previous.Stamp == stamp && now - previous.LastVerified < FullVerificationInterval)
+            {
+                continue;
+            }
+            if (file.Length > remainingHashBytes)
             {
                 continue;
             }
@@ -168,28 +188,27 @@ internal sealed class WatchedFileReconciler(ISourceRepository sources, FileSourc
             }
         }
 
-        return new WatchedScanResult(files.Count, imported, nextScanDelay, skippedLinks);
+        scanCursor = nextCursor;
+        if (verified.Count > MaximumCachedFiles)
+        {
+            foreach (string path in verified.OrderBy(entry => entry.Value.LastVerified).Take(verified.Count - MaximumCachedFiles).Select(entry => entry.Key).ToArray())
+            {
+                verified.Remove(path);
+            }
+        }
+        if (observations.Count > MaximumCachedFiles)
+        {
+            foreach (string path in observations.OrderBy(entry => entry.Value.FirstSeen).Take(observations.Count - MaximumCachedFiles).Select(entry => entry.Key).ToArray())
+            {
+                observations.Remove(path);
+            }
+        }
+
+        return new WatchedScanResult(totalFiles, imported, nextScanDelay, skippedLinks);
     }
 
     private static TimeSpan Earlier(TimeSpan? current, TimeSpan candidate) =>
         current is { } prior && prior < candidate ? prior : candidate;
-
-    private void ForgetMissing(IReadOnlyList<ObservedFile> files)
-    {
-        HashSet<string> present = files.Select(file => file.SourcePath).ToHashSet(StringComparer.Ordinal);
-        string[] removed = observations.Keys.Where(path => !present.Contains(path)).ToArray();
-        foreach (string missing in removed)
-        {
-            observations.Remove(missing);
-            verified.Remove(missing);
-            status.ClearFileError(missing);
-        }
-
-        if (removed.Length != 0)
-        {
-            report($"No longer observed: {removed.Length} paths; captured originals are preserved.");
-        }
-    }
 
     private async Task<bool> TryImportAsync(ObservedFile file, FileStamp stamp, DateTimeOffset now, CancellationToken cancellationToken)
     {

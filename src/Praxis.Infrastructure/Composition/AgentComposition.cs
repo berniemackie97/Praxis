@@ -50,6 +50,7 @@ public static class AgentComposition
             new MediaFindTool(retriever, moments, catalog.Sources, catalog.Agents),
             new KnowledgeEntityTool(catalog.Knowledge),
             new KnowledgeRelatedTool(catalog.Knowledge),
+            new KnowledgeGraphTool(catalog.Graph, catalog.Knowledge),
             new KnowledgeMaintenanceTool(catalog.Reconsolidation, catalog.Knowledge, catalog.AgentRuns),
             new KnowledgeProjectTool(catalog.Projects),
             new KnowledgeTimelineTool(catalog.Library, catalog.Sources, ledger, catalog.Understanding),

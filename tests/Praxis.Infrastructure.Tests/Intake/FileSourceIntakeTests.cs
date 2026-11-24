@@ -26,6 +26,75 @@ public sealed class FileSourceIntakeTests : IDisposable
     }
 
     [Fact]
+    public async Task ChangingAnEarlyFileCannotStarveLaterPagesOrResetTheirQuietPeriod()
+    {
+        string root = Path.Combine(workspace, "fair-pages");
+        Directory.CreateDirectory(root);
+        foreach (string name in new[] { "a.txt", "b.txt", "c.txt" })
+        {
+            File.WriteAllText(Path.Combine(root, name), "Stable content");
+        }
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
+        IntakeStatusTracker status = new();
+        ObservedRenameCorrelator renames = new(catalog.Sources, intake, root, _ => { }, () => { }, TimeProvider.System);
+        WatchedFileReconciler reconciler = new(catalog.Sources, intake, root, TimeSpan.FromSeconds(1), renames, status, _ => { }, pageSize: 2);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Assert.Equal(0, (await reconciler.ReconcileAsync(now, CancellationToken.None)).Imported);
+        Assert.Equal(0, (await reconciler.ReconcileAsync(now.AddSeconds(1), CancellationToken.None)).Imported);
+        File.WriteAllText(Path.Combine(root, "a.txt"), "Changed and still changing");
+        File.SetLastWriteTimeUtc(Path.Combine(root, "a.txt"), now.AddSeconds(2).UtcDateTime);
+        Assert.Equal(1, (await reconciler.ReconcileAsync(now.AddSeconds(2), CancellationToken.None)).Imported);
+        Assert.Equal(1, (await reconciler.ReconcileAsync(now.AddSeconds(3), CancellationToken.None)).Imported);
+        Assert.Equal(["b.txt", "c.txt"], catalog.Library.List().Select(item => Path.GetFileName(item.SourceLocator)).Order(StringComparer.Ordinal));
+        // Revisiting unchanged pages uses cached verification and creates no duplicate revision.
+        Assert.Equal(1, (await reconciler.ReconcileAsync(now.AddSeconds(4), CancellationToken.None)).Imported);
+        Assert.Equal(0, (await reconciler.ReconcileAsync(now.AddSeconds(5), CancellationToken.None)).Imported);
+        Assert.All(catalog.Library.List(), item => Assert.Equal(1, item.Revision));
+    }
+
+    [Fact]
+    public void WatchedScansPagePastTheSelectedFolderFileLimit()
+    {
+        string root = Path.Combine(workspace, "large-inbox");
+        Directory.CreateDirectory(root);
+        for (int index = 0; index < 10_003; index++)
+        {
+            File.WriteAllText(Path.Combine(root, $"{index:D5}.txt"), "");
+        }
+
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
+        var first = intake.InspectWatchedFolder(root, 10_000, 12, 1 << 20, CancellationToken.None);
+        Assert.Equal(10_003, first.TotalFiles);
+        Assert.Equal(10_000, first.Files.Count);
+        Assert.NotNull(first.NextCursor);
+        var second = intake.InspectWatchedFolder(root, 10_000, 12, 1 << 20, CancellationToken.None, first.NextCursor);
+        Assert.Equal(3, second.Files.Count);
+        Assert.Null(second.NextCursor);
+        Assert.Equal(10_003, first.Files.Concat(second.Files).Select(file => file.SourcePath).Distinct().Count());
+        Assert.Throws<InvalidDataException>(() => intake.InspectFolder(root, 10_000, 12, 1 << 20));
+    }
+
+    [Fact]
+    public void WatchedPageByteBudgetContinuesWithoutLosingLaterFiles()
+    {
+        string root = Path.Combine(workspace, "pages");
+        Directory.CreateDirectory(root);
+        foreach (string name in new[] { "c.txt", "a.txt", "b.txt" })
+        {
+            File.WriteAllText(Path.Combine(root, name), "1234");
+        }
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        FileSourceIntake intake = new(catalog.Originals, catalog.DataDirectory);
+        var first = intake.InspectWatchedFolder(root, 3, 12, 8, CancellationToken.None);
+        Assert.Equal(["a.txt", "b.txt"], first.Files.Select(file => Path.GetFileName(file.SourcePath)));
+        var second = intake.InspectWatchedFolder(root, 3, 12, 8, CancellationToken.None, first.NextCursor);
+        Assert.Equal("c.txt", Path.GetFileName(Assert.Single(second.Files).SourcePath));
+        Assert.Null(second.NextCursor);
+    }
+
+    [Fact]
     public void ScanSkipsDependenciesBuildOutputGitIgnoredFilesAndSecrets()
     {
         string root = Path.Combine(workspace, "watched");

@@ -4,6 +4,7 @@ using Praxis.Domain.Intake;
 using Praxis.Domain.Library;
 using Praxis.Domain.Originals;
 using Praxis.Infrastructure.Persistence;
+using Praxis.Infrastructure.Intake;
 using Praxis.Infrastructure.Tests.Support;
 using Xunit;
 
@@ -30,6 +31,48 @@ public sealed class IntakeHealthTests : IDisposable
             File.SetUnixFileMode(dataRoot, privateMode);
             File.SetUnixFileMode(inbox, privateMode);
         }
+    }
+
+    [Fact]
+    public async Task WatcherFaultLeavesPollingAbleToCaptureStableFiles()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        WatchedFolderIntake monitor = new(catalog.Sources, catalog.Originals, dataRoot, inbox,
+            quietPeriod: TimeSpan.FromMilliseconds(300), rescanInterval: TimeSpan.FromMilliseconds(100));
+        using CancellationTokenSource cancellation = new();
+        Task running = monitor.RunAsync(cancellation.Token);
+        try
+        {
+            await WaitForAsync(() => monitor.Snapshot().LastSuccessfulScanUtc is not null);
+            monitor.NotifyWatcherError();
+            File.WriteAllText(Path.Combine(inbox, "fallback.md"), "Capture this while notifications recover.");
+            await WaitForAsync(() => monitor.Snapshot().ImportedSinceStart == 1);
+            Assert.Single(catalog.Library.List());
+            Assert.Equal(0, monitor.Snapshot().ErrorCount);
+        }
+        finally
+        {
+            await cancellation.CancelAsync();
+            await running;
+        }
+    }
+
+    [Fact]
+    public async Task RemovingAnOversizedFileClearsItsErrorWithoutAnObservation()
+    {
+        string path = Path.Combine(inbox, "oversized.bin");
+        using (FileStream file = File.Create(path))
+        {
+            file.SetLength(2L * 1024 * 1024 * 1024 + 1);
+        }
+        using SqliteCatalog catalog = SqliteCatalog.Open(dataRoot);
+        IntakeHarness monitor = new(catalog, inbox, TimeSpan.Zero);
+        await monitor.ReconcileAsync(DateTimeOffset.UtcNow);
+        Assert.Equal(1, monitor.Snapshot().ErrorCount);
+        File.Delete(path);
+        await monitor.ReconcileAsync(DateTimeOffset.UtcNow.AddSeconds(1));
+        Assert.Equal("watching", monitor.Snapshot().State);
+        Assert.Equal(0, monitor.Snapshot().ErrorCount);
     }
 
     [Fact]
@@ -96,7 +139,7 @@ public sealed class IntakeHealthTests : IDisposable
             Assert.False(monitor.SetPaused(false).Paused);
             await WaitForAsync(() =>
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
-                monitor.Snapshot().State == "watching" &&
+                monitor.Snapshot() is { State: "watching" or "degraded", ErrorCount: 0, LastSuccessfulScanUtc: not null } &&
                 monitor.Snapshot().ImportedSinceStart == 1);
             Assert.Equal(1, monitor.Snapshot().ImportedSinceStart);
             Assert.Single(catalog.Search.Query("Written"));
@@ -147,7 +190,7 @@ public sealed class IntakeHealthTests : IDisposable
             monitor.Monitor.ApproveRoot(removable);
             await WaitForAsync(() =>
                 catalog.Library.List().FirstOrDefault()?.ProcessingState == "completed" &&
-                monitor.Snapshot().State == "watching" &&
+                monitor.Snapshot() is { State: "watching" or "degraded", ErrorCount: 0, LastSuccessfulScanUtc: not null } &&
                 monitor.Snapshot().ImportedSinceStart == 1);
             LibraryItem saved = Assert.Single(catalog.Library.List());
             Assert.NotNull(monitor.Snapshot().LastSuccessfulScanUtc);

@@ -14,12 +14,58 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
     public IReadOnlyList<ObservedFile> InspectFolder(string selectedDirectory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken = default) =>
         InspectFolderCore(selectedDirectory, maxFiles, maxDepth, maxTotalBytes, false, out _, cancellationToken);
 
-    internal (IReadOnlyList<ObservedFile> Files, int SkippedLinks) InspectWatchedFolder(
-        string directory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken)
+    internal (IReadOnlyList<ObservedFile> Files, int SkippedLinks, int TotalFiles, string? NextCursor) InspectWatchedFolder(
+        string directory, int maxFiles, int maxDepth, long maxTotalBytes, CancellationToken cancellationToken,
+        string? after = null, Action<string>? onObserved = null)
     {
-        IReadOnlyList<ObservedFile> files = InspectFolderCore(directory, maxFiles, maxDepth,
-            maxTotalBytes, true, out int skippedLinks, cancellationToken);
-        return (files, skippedLinks);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxFiles, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxFiles, 10_000);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxDepth);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxDepth, 16);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxTotalBytes);
+        string root = ValidateSourcePath(directory, expectDirectory: true);
+        PriorityQueue<ObservedFile, string> page = new(Comparer<string>.Create((left, right) => StringComparer.Ordinal.Compare(right, left)));
+        TraversalState state = new();
+        int total = 0, eligible = 0;
+        foreach (string path in WalkFiles(root, 0, false, [], maxDepth, true, state, cancellationToken))
+        {
+            onObserved?.Invoke(path);
+            total = checked(total + 1);
+            if (after is not null && StringComparer.Ordinal.Compare(path, after) <= 0)
+            {
+                continue;
+            }
+
+            eligible = checked(eligible + 1);
+            if (page.Count == maxFiles && StringComparer.Ordinal.Compare(path, page.Peek().SourcePath) >= 0)
+            {
+                continue;
+            }
+
+            FileInfo info = new(path);
+            ObservedFile file = new(path, info.Length, info.LastWriteTimeUtc);
+            page.Enqueue(file, path);
+            if (page.Count > maxFiles)
+            {
+                page.Dequeue();
+            }
+        }
+
+        ObservedFile[] files = page.UnorderedItems.Select(entry => entry.Element).OrderBy(file => file.SourcePath, StringComparer.Ordinal).ToArray();
+        // The byte budget bounds one page. A large Inbox continues on the following scan.
+        int take = 0;
+        long remaining = maxTotalBytes;
+        while (take < files.Length && files[take].Length <= remaining)
+        {
+            remaining -= files[take++].Length;
+        }
+        if (take == 0 && files.Length > 0)
+        {
+            throw new InvalidDataException("A file exceeds the watched-folder inspection byte budget.");
+        }
+
+        ObservedFile[] selected = files[..take];
+        return (selected, state.SkippedLinks, total, eligible > take ? selected[^1].SourcePath : null);
     }
 
     private IReadOnlyList<ObservedFile> InspectFolderCore(string selectedDirectory, int maxFiles, int maxDepth,
@@ -165,75 +211,94 @@ public sealed class FileSourceIntake(IOriginalStore originals, string catalogDir
     private List<string> DiscoverFiles(string directory, int maxFiles, int maxDepth,
         bool skipLinks, out int skippedLinks, CancellationToken cancellationToken)
     {
-        skippedLinks = 0;
+        TraversalState state = new() { RemainingEntries = checked(maxFiles * 4) };
         List<string> result = new();
-        Stack<(string Directory, int Depth, bool InsideProject, IReadOnlyList<GitIgnoreRules> Rules)> stack = new();
-        stack.Push((directory, 0, false, []));
-        int remainingEntries = checked(maxFiles * 4);
-        while (stack.TryPop(out (string Directory, int Depth, bool InsideProject, IReadOnlyList<GitIgnoreRules> Rules) pending))
+        foreach (string path in WalkFiles(directory, 0, false, [], maxDepth, skipLinks, state, cancellationToken))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            List<string> entries = new();
-            foreach (string entry in Directory.EnumerateFileSystemEntries(pending.Directory))
+            if (result.Count >= maxFiles)
+            {
+                throw new InvalidDataException("The folder contains too many files.");
+            }
+            result.Add(path);
+        }
+        skippedLinks = state.SkippedLinks;
+        result.Sort(StringComparer.Ordinal);
+        return result;
+    }
+
+    private sealed class TraversalState
+    {
+        public int? RemainingEntries { get; set; }
+        public int SkippedLinks { get; set; }
+    }
+
+    private IEnumerable<string> WalkFiles(string directory, int depth, bool insideProject, IReadOnlyList<GitIgnoreRules> inheritedRules,
+        int maxDepth, bool skipLinks, TraversalState state, CancellationToken cancellationToken)
+    {
+        // Enumerate lazily so a large directory cannot allocate an unbounded sorted entry list.
+        if (!insideProject)
+        {
+            foreach (string entry in Directory.EnumerateFileSystemEntries(directory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (--remainingEntries < 0)
+                if (ProjectMarkers.IsMarker(Path.GetFileName(entry)))
+                {
+                    insideProject = true;
+                    break;
+                }
+            }
+        }
+        IReadOnlyList<GitIgnoreRules> rules = GitIgnoreRules.Load(directory) is { } local ? [.. inheritedRules, local] : inheritedRules;
+        foreach (string path in Directory.EnumerateFileSystemEntries(directory))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (state.RemainingEntries is { } remaining)
+            {
+                if (remaining == 0)
                 {
                     throw new InvalidDataException("The folder contains too many entries.");
                 }
-
-                entries.Add(entry);
+                state.RemainingEntries = remaining - 1;
             }
-
-            entries.Sort(StringComparer.Ordinal);
-            bool insideProject = pending.InsideProject || entries.Any(entry => ProjectMarkers.IsMarker(Path.GetFileName(entry)));
-            IReadOnlyList<GitIgnoreRules> rules = GitIgnoreRules.Load(pending.Directory) is { } local ? [.. pending.Rules, local] : pending.Rules;
-            for (int index = entries.Count - 1; index >= 0; index--)
+            string name = Path.GetFileName(path);
+            FileAttributes attributes = File.GetAttributes(path);
+            bool isDirectory = (attributes & FileAttributes.Directory) != 0;
+            // Dependency and build output, version-control internals and secrets are never
+            // sources; skipping them before any other check keeps their links and size out of scope.
+            if ((isDirectory ? IntakeIgnoreRules.IsIgnoredDirectory(path, insideProject) : IntakeIgnoreRules.IsSecretFile(name))
+                || IntakeIgnoreRules.IsGitIgnored(rules, path, isDirectory))
             {
-                string path = entries[index];
-                string name = Path.GetFileName(path);
-                FileAttributes attributes = File.GetAttributes(path);
-                bool isDirectory = (attributes & FileAttributes.Directory) != 0;
-                // Dependency and build output, version-control internals and secrets are never
-                // sources; skipping them before any other check keeps their links and size out of scope.
-                if ((isDirectory ? IntakeIgnoreRules.IsIgnoredDirectory(path, insideProject) : IntakeIgnoreRules.IsSecretFile(name))
-                    || IntakeIgnoreRules.IsGitIgnored(rules, path, isDirectory))
-                {
-                    continue;
-                }
-
-                if ((attributes & FileAttributes.ReparsePoint) != 0)
-                {
-                    if (skipLinks)
-                    {
-                        skippedLinks++;
-                        continue;
-                    }
-
-                    throw new InvalidDataException("Folder imports cannot follow symbolic links.");
-                }
-
-                if (isDirectory)
-                {
-                    if (pending.Depth == maxDepth)
-                    {
-                        throw new InvalidDataException("The folder nesting depth exceeds the limit.");
-                    }
-
-                    stack.Push((ValidateSourcePath(path, expectDirectory: true), pending.Depth + 1, insideProject, rules));
-                    continue;
-                }
-
-                if (result.Count >= maxFiles)
-                {
-                    throw new InvalidDataException("The folder contains too many files.");
-                }
-
-                result.Add(ValidateSourcePath(path, expectDirectory: false));
+                continue;
             }
-        }
 
-        result.Sort(StringComparer.Ordinal);
-        return result;
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                if (skipLinks)
+                {
+                    state.SkippedLinks++;
+                    continue;
+                }
+
+                throw new InvalidDataException("Folder imports cannot follow symbolic links.");
+            }
+
+            if (isDirectory)
+            {
+                if (depth == maxDepth)
+                {
+                    throw new InvalidDataException("The folder nesting depth exceeds the limit.");
+                }
+
+                foreach (string child in WalkFiles(ValidateSourcePath(path, expectDirectory: true), depth + 1, insideProject, rules, maxDepth, skipLinks, state, cancellationToken))
+                {
+                    yield return child;
+                }
+                continue;
+            }
+
+            // The containing directory is already canonical and outside the catalog, and
+            // the leaf attributes above reject links. Capture validates it again before opening.
+            yield return path;
+        }
     }
 }

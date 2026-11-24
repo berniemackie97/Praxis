@@ -9,7 +9,7 @@ internal static class DreamCommand
 
     internal static readonly IReadOnlySet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
     {
-        KnowledgeMaintenanceTool.ToolName, "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related",
+        KnowledgeMaintenanceTool.ToolName, KnowledgeGraphTool.ToolName, "knowledge_search", "knowledge_open", "knowledge_entity", "knowledge_related",
         "knowledge_project", "knowledge_timeline", "knowledge_propose", "skill_search", "skill_open", "skill_propose",
         "memory_recall", "compute_evaluate"
     };
@@ -20,6 +20,7 @@ internal static class DreamCommand
 
         This is a bounded Dream knowledge-maintenance operation, explicitly requested by the owner with /dream.
         Investigate only the owner's stated topic or the supplied maintenance candidates. Work on at most three entities.
+        Use knowledge_graph to inspect current regions and pending understanding; an empty region is not proof of missing source material.
         For each candidate, call knowledge_entity first, then open its relevant current source passage. Resolve aliases without merging distinct projects or products.
         Preserve owner-confirmed decisions. Separate owner assertions, source observations, hypotheses and verified results.
         Look for duplicates, contradictions, stale classifications, unsupported relationships and useful organizational changes.
