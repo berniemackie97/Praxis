@@ -14,6 +14,7 @@ public sealed class WatchedFolderIntake
 {
     private const string OfflineProblem = "The approved Inbox is unavailable. Reconnect it; captured originals remain preserved.";
     private static readonly TimeSpan MinimumScanSpacing = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan WatcherRetryInterval = TimeSpan.FromSeconds(30);
 
     private readonly string root;
     private readonly TimeSpan rescanInterval;
@@ -31,6 +32,7 @@ public sealed class WatchedFolderIntake
     private bool rootWasOffline;
     private int requiresApproval;
     private long approvedCreationTicks;
+    private DateTimeOffset retryWatcherAfter;
 
     public WatchedFolderIntake(ISourceRepository sources, IOriginalStore originals, string catalogDirectory, string intakeDirectory, TimeSpan? quietPeriod = null, TimeSpan? rescanInterval = null, Action<string>? status = null, Action? onCaptured = null, SemaphoreSlim? sharedScanLock = null, TimeProvider? clock = null, Action<string>? onStateTransition = null, bool requireInitialApproval = false)
     {
@@ -294,6 +296,12 @@ public sealed class WatchedFolderIntake
             watcher.Dispose();
             renames.Clear();
             reconciler.InvalidateAll();
+            retryWatcherAfter = clock.GetUtcNow() + WatcherRetryInterval;
+        }
+
+        if (clock.GetUtcNow() < retryWatcherAfter)
+        {
+            return null;
         }
 
         try
@@ -325,6 +333,7 @@ public sealed class WatchedFolderIntake
             report("Watcher setup rejected.");
         }
 
+        retryWatcherAfter = clock.GetUtcNow() + WatcherRetryInterval;
         return null;
     }
 
@@ -352,9 +361,9 @@ public sealed class WatchedFolderIntake
             status.SetState("degraded", "Intake scan access denied.");
             report("Intake scan denied.");
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException exception)
         {
-            status.SetState("degraded", "Intake scan rejected input.");
+            status.SetState("degraded", "Intake scan rejected input: " + exception.Message);
             report("Intake scan rejected input.");
         }
 

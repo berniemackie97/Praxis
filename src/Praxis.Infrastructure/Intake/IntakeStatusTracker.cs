@@ -78,6 +78,14 @@ internal sealed class IntakeStatusTracker
         }
     }
 
+    internal HashSet<string> FileErrorPaths()
+    {
+        lock (gate)
+        {
+            return fileErrors.Keys.ToHashSet(StringComparer.Ordinal);
+        }
+    }
+
     internal void RecordSuccessfulScan(DateTimeOffset now, int observedFiles, int imported, bool notificationsUnavailable = false, int skippedLinks = 0)
     {
         string? transition;

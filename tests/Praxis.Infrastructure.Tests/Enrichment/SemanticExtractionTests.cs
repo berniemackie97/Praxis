@@ -78,6 +78,19 @@ public sealed class SemanticExtractionTests : IDisposable
     }
 
     [Fact]
+    public async Task CodeFilesCompleteWithoutConnectingToThePerSegmentModel()
+    {
+        using SqliteCatalog catalog = SqliteCatalog.Open(root);
+        CapturedOriginal captured = await CaptureAndPrepare(catalog, "Program.CS", "public sealed class Example { }");
+        ScriptedChatModel model = new(_ => throw new InvalidOperationException("Code belongs to project understanding."))
+        { DescribeFailure = InferenceFailure.Unavailable };
+        Assert.True(await Extractor(catalog, model).ProcessNextAsync());
+        Assert.Equal("completed", SemanticJob(catalog).State);
+        Assert.Empty(model.Requests);
+        Assert.Empty(catalog.Proposals.List(captured.SourceId));
+    }
+
+    [Fact]
     public async Task DisabledOrUnreachableModelDefersWithoutConsumingAttempts()
     {
         using SqliteCatalog catalog = SqliteCatalog.Open(root);

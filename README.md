@@ -4,6 +4,8 @@ Praxis is a local-first, independent Second Brain for preserving and using owner
 
 ## Current state
 
+**Execution focus (November 23):** stabilize existing intake, retrieval, graph, Dream and learning before expanding capabilities. See the [reproduced failures, reference standards and acceptance order](docs/delivery/hardening.md). This work does not certify universal file support or measured model improvement.
+
 **Canonical owner-local foundation:** SQLite catalog and immutable originals with source identity/revision/receipt history; supervised watched-folder intake, bounded segmentation, FTS5/hybrid search, collections, owner corrections and verified export/backup/restore contracts. Obsidian is **not** required to ingest, explore, search or preserve knowledge.
 
 **Integrated intelligence:** [ADR 0044](docs/decisions/0044-generic-intake-engine.md) (merged #377) provides one bounded intake engine with format readers for supported text/code, Office files, PDFs, on-device OCR, HTML/email, delimited data and bank export formats. Local triage and explicitly governed strong/strongest understanding produce evidence-linked summaries, entities, relations and typed records. The financial projection and exact query/aggregate tools were delivered by #368/#377. Scripted tests do not prove universal format support or live provider quality.
